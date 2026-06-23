@@ -14,7 +14,10 @@ const encoder = new TextEncoder();
 
 function secret(): Uint8Array {
   const s = process.env.JWT_SECRET;
-  if (!s || s.length < 16) throw new Error('JWT_SECRET missing or too short');
+  // HS256 wants >=256 bits of key material. Reject anything under 32 chars.
+  if (!s || s.length < 32) {
+    throw new Error('JWT_SECRET missing or too short (>=32 chars; e.g. `openssl rand -base64 32`)');
+  }
   return encoder.encode(s);
 }
 

@@ -24,6 +24,13 @@ export interface RlsContext {
  * so Postgres row-level security can isolate by facility.
  */
 export function withRls<T>(ctx: RlsContext, fn: (tx: PrismaTx) => Promise<T>): Promise<T> {
+  // Defence: facility ids flow into a SQL int[] cast; never let a non-int through.
+  if (!ctx.facilityIds.every((id) => Number.isInteger(id) && id > 0)) {
+    throw new Error('withRls: facilityIds must be positive integers');
+  }
+  // set_config(...,true) is transaction-local: Postgres resets it at COMMIT/ROLLBACK,
+  // and Prisma holds one dedicated connection for the interactive transaction — so the
+  // GUC cannot leak to another request even under connection pooling.
   return prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(
       "SELECT set_config('app.facility_ids', $1, true), set_config('app.is_super_admin', $2, true)",

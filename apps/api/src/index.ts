@@ -11,14 +11,16 @@ import { createContext } from './context.js';
 
 const app = new Hono();
 
-// Dev frontends (Vite). credentials:true so the session cookie flows.
-app.use(
-  '*',
-  cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175'],
-    credentials: true,
-  }),
-);
+// Allowed origins from env (comma-separated); defaults to the dev Vite ports.
+// credentials:true so the session cookie flows. In production, set CORS_ORIGINS.
+const corsOrigins = (
+  process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:5174,http://localhost:5175'
+)
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+app.use('*', cors({ origin: corsOrigins, credentials: true }));
 
 app.get('/health', (c) => c.json({ ok: true }));
 

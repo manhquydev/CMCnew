@@ -2,7 +2,13 @@ import { initTRPC, TRPCError } from '@trpc/server';
 import type { RequestSession } from '@cmc/auth';
 import type { ApiContext } from './context.js';
 
-const t = initTRPC.context<ApiContext>().create();
+const t = initTRPC.context<ApiContext>().create({
+  // Never leak stack traces / absolute paths to clients, regardless of NODE_ENV.
+  errorFormatter({ shape }) {
+    const { stack: _stack, ...data } = shape.data as Record<string, unknown>;
+    return { ...shape, data };
+  },
+});
 
 export const router = t.router;
 export const publicProcedure = t.procedure;

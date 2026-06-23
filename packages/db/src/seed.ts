@@ -10,6 +10,10 @@ async function main(): Promise<void> {
   const email = process.env.SEED_SUPERADMIN_EMAIL ?? 'admin@cmc.local';
   const password = process.env.SEED_SUPERADMIN_PASSWORD ?? 'ChangeMe!123';
 
+  if (process.env.NODE_ENV === 'production' && password === 'ChangeMe!123') {
+    throw new Error('SEED_SUPERADMIN_PASSWORD phải được đổi trong production');
+  }
+
   const hq = await prisma.facility.upsert({
     where: { code: 'HQ' },
     update: {},
