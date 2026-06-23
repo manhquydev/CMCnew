@@ -29,6 +29,7 @@ import { FinancePanel } from './finance-panel';
 import { CrmPanel } from './crm-panel';
 import { CskhPanel } from './cskh-panel';
 import { CertificatePanel } from './certificate-panel';
+import { PayrollPanel } from './payroll-panel';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
@@ -856,9 +857,11 @@ function Workspace() {
   );
 }
 
-export function App() {
+function Workbench() {
+  const { me } = useSession();
+  // Payroll is HR-confidential — only show its tab to hr/ke_toan/super_admin.
+  const canPayroll = me.isSuperAdmin || me.roles.includes('hr') || me.roles.includes('ke_toan');
   return (
-    <LoginGate appTitle="Teaching / ERP">
       <Tabs defaultValue="classes" keepMounted={false}>
         <Tabs.List mb="md">
           <Tabs.Tab value="classes">Lớp học</Tabs.Tab>
@@ -869,6 +872,7 @@ export function App() {
           <Tabs.Tab value="finance">Phiếu thu</Tabs.Tab>
           <Tabs.Tab value="cskh">CSKH</Tabs.Tab>
           <Tabs.Tab value="certificate">Chứng chỉ</Tabs.Tab>
+          {canPayroll && <Tabs.Tab value="payroll">Lương</Tabs.Tab>}
         </Tabs.List>
         <Tabs.Panel value="classes">
           <Workspace />
@@ -894,7 +898,19 @@ export function App() {
         <Tabs.Panel value="certificate">
           <CertificatePanel />
         </Tabs.Panel>
+        {canPayroll && (
+          <Tabs.Panel value="payroll">
+            <PayrollPanel />
+          </Tabs.Panel>
+        )}
       </Tabs>
+  );
+}
+
+export function App() {
+  return (
+    <LoginGate appTitle="Teaching / ERP">
+      <Workbench />
     </LoginGate>
   );
 }
