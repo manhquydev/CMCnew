@@ -15,6 +15,22 @@ import {
 } from '@mantine/core';
 
 type Submission = Awaited<ReturnType<typeof trpc.submission.forStudent.query>>[number];
+type Gradebook = Awaited<ReturnType<typeof trpc.assessment.gradebook.query>>;
+type FinalGrade = Gradebook['finalGrades'][number];
+
+const PROGRAM_LABEL: Record<string, string> = {
+  UCREA: 'UCREA',
+  BRIGHT_IG: 'Bright I.G',
+  BLACK_HOLE: 'Black Hole',
+};
+const PERIOD_LABEL: Record<string, string> = {
+  MONTHLY: 'Hàng tháng',
+  END_LEVEL: 'Cuối cấp độ',
+};
+
+function fmtScore(n: number | null): string {
+  return n == null ? '—' : n.toFixed(1);
+}
 
 const STATUS_LABEL: Record<Submission['status'], string> = {
   draft: 'Nháp',
@@ -48,6 +64,7 @@ function sortNewestFirst(rows: Submission[]): Submission[] {
 function ChildDashboard({ childId, refreshKey }: { childId: string; refreshKey: number }) {
   const [balance, setBalance] = useState<number | null>(null);
   const [submissions, setSubmissions] = useState<Submission[] | null>(null);
+  const [gradebook, setGradebook] = useState<Gradebook | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -56,13 +73,16 @@ function ChildDashboard({ childId, refreshKey }: { childId: string; refreshKey: 
     setError('');
     setBalance(null);
     setSubmissions(null);
+    setGradebook(null);
     Promise.all([
       trpc.rewards.balance.query({ studentId: childId }),
       trpc.submission.forStudent.query({ studentId: childId }),
+      trpc.assessment.gradebook.query({ studentId: childId }),
     ])
-      .then(([bal, subs]) => {
+      .then(([bal, subs, gb]) => {
         setBalance(bal);
         setSubmissions(sortNewestFirst(subs));
+        setGradebook(gb);
       })
       .catch((e) => {
         setError('Không tải được dữ liệu: ' + (e instanceof Error ? e.message : ''));
@@ -151,6 +171,97 @@ function ChildDashboard({ childId, refreshKey }: { childId: string; refreshKey: 
           </Text>
         )}
       </Card>
+
+      <Card withBorder>
+        <Title order={5} mb="sm">
+          Học bạ — Điểm tổng hợp ({gradebook?.finalGrades.length ?? 0})
+        </Title>
+        {gradebook && gradebook.finalGrades.length > 0 ? (
+          <Table striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Chương trình</Table.Th>
+                <Table.Th>Kỳ</Table.Th>
+                <Table.Th>Bài tập</Table.Th>
+                <Table.Th>Kiểm tra</Table.Th>
+                <Table.Th>Chuyên cần</Table.Th>
+                <Table.Th>Định tính</Table.Th>
+                <Table.Th>Tổng kết</Table.Th>
+                <Table.Th>Kết quả</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {gradebook.finalGrades.map((g: FinalGrade) => (
+                <Table.Tr key={g.id}>
+                  <Table.Td>
+                    {PROGRAM_LABEL[g.program] ?? g.program}
+                    {g.level ? ` · ${g.level}` : ''}
+                  </Table.Td>
+                  <Table.Td>{g.periodKey}</Table.Td>
+                  <Table.Td>{fmtScore(g.homeworkAvg)}</Table.Td>
+                  <Table.Td>{fmtScore(g.testScore)}</Table.Td>
+                  <Table.Td>
+                    {g.attendanceRate == null ? '—' : `${Math.round(g.attendanceRate * 100)}%`}
+                  </Table.Td>
+                  <Table.Td>{fmtScore(g.qualitativeScore)}</Table.Td>
+                  <Table.Td>
+                    <Text fw={600}>{fmtScore(g.finalScore)}</Text>
+                  </Table.Td>
+                  <Table.Td>
+                    {!g.complete ? (
+                      <Badge size="sm" color="gray">
+                        Chưa đủ dữ liệu
+                      </Badge>
+                    ) : (
+                      <Badge size="sm" color={g.passed ? 'teal' : 'red'}>
+                        {g.passed ? 'Đạt' : 'Chưa đạt'}
+                      </Badge>
+                    )}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        ) : (
+          <Text c="dimmed" size="sm">
+            Chưa có điểm tổng hợp.
+          </Text>
+        )}
+      </Card>
+
+      {gradebook && gradebook.qualitative.length > 0 && (
+        <Card withBorder>
+          <Title order={5} mb="sm">
+            Đánh giá định tính ({gradebook.qualitative.length})
+          </Title>
+          <Stack gap="sm">
+            {gradebook.qualitative.map((q) => (
+              <div key={q.id}>
+                <Group gap="xs" mb={4}>
+                  <Text fw={600} size="sm">
+                    {q.periodKey}
+                  </Text>
+                  <Badge size="xs" variant="light">
+                    {PERIOD_LABEL[q.period] ?? q.period}
+                  </Badge>
+                </Group>
+                <Group gap="xs" mb={q.narrative ? 4 : 0}>
+                  {Object.entries(q.criteria).map(([pillar, score]) => (
+                    <Badge key={pillar} size="sm" variant="outline" color="cmc">
+                      {pillar}: {score}
+                    </Badge>
+                  ))}
+                </Group>
+                {q.narrative && (
+                  <Text size="sm" c="dimmed">
+                    {q.narrative}
+                  </Text>
+                )}
+              </div>
+            ))}
+          </Stack>
+        </Card>
+      )}
     </Stack>
   );
 }
