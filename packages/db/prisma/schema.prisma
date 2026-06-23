@@ -872,8 +872,43 @@ model Opportunity {
   closedAt    DateTime?        @map("closed_at")
   archivedAt  DateTime?        @map("archived_at")
   createdAt   DateTime         @default(now()) @map("created_at")
+  tests       TestAppointment[]
 
   @@index([facilityId])
   @@index([contactId])
   @@map("opportunity")
+}
+
+/// Lịch test (S3) — facility-scoped. entrance: gắn opportunity → auto-hook O3 khi tạo, O4 khi chấm.
+/// periodic: test định kỳ trong quá trình học (không đổi stage opp).
+enum TestType {
+  entrance
+  periodic
+}
+
+enum TestStatus {
+  scheduled
+  done
+  no_show
+}
+
+model TestAppointment {
+  id            String       @id @default(uuid()) @db.Uuid
+  facilityId    Int          @map("facility_id")
+  opportunityId String?      @map("opportunity_id") @db.Uuid
+  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  studentName   String?      @map("student_name")
+  type          TestType     @default(entrance)
+  scheduledAt   DateTime     @map("scheduled_at")
+  status        TestStatus   @default(scheduled)
+  score         Float?
+  result        String?
+  gradedById    String?      @map("graded_by_id") @db.Uuid
+  gradedAt      DateTime?    @map("graded_at")
+  archivedAt    DateTime?    @map("archived_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  @@index([facilityId])
+  @@index([opportunityId])
+  @@map("test_appointment")
 }

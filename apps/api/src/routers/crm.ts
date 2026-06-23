@@ -1,11 +1,24 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { withRls, Program, OpportunityStage, type RlsContext } from '@cmc/db';
+import { withRls, Program, OpportunityStage, TestType, type RlsContext } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, publicProcedure, requireRole, Role } from '../trpc.js';
 
 const CRM_ROLES = [Role.sale, Role.cskh, Role.quan_ly] as const;
+const TEST_GRADE_ROLES = [Role.giao_vien, Role.head_teacher, Role.quan_ly] as const;
+
+const STAGE_ORDER: OpportunityStage[] = [
+  OpportunityStage.O1_LEAD,
+  OpportunityStage.O2_CONTACTED,
+  OpportunityStage.O3_TEST_SCHEDULED,
+  OpportunityStage.O4_TESTED,
+  OpportunityStage.O5_ENROLLED,
+];
+/** Only ever move an opportunity forward (auto-hooks never regress a manually-advanced opp). */
+function advanceTo(current: OpportunityStage, target: OpportunityStage): OpportunityStage {
+  return STAGE_ORDER.indexOf(target) > STAGE_ORDER.indexOf(current) ? target : current;
+}
 
 /** Normalise a VN phone to +84 so dedup (1 opportunity = 1 SĐT) is format-agnostic. */
 function normalizePhone(raw: string): string {
@@ -196,6 +209,115 @@ export const crmRouter = router({
           actorId: ctx.session.userId,
         });
         return opp;
+      }),
+    ),
+
+  // ── Test appointments (S3) — entrance test auto-advances its opportunity ─────
+  testList: requireRole(...CRM_ROLES)
+    .input(z.object({ facilityId: z.number().int().positive() }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.testAppointment.findMany({
+          where: { facilityId: input.facilityId, archivedAt: null },
+          orderBy: { scheduledAt: 'desc' },
+          take: 200,
+        }),
+      ),
+    ),
+
+  // Schedule a test. An entrance test linked to an opportunity auto-advances it to O3.
+  testCreate: requireRole(...CRM_ROLES)
+    .input(
+      z.object({
+        facilityId: z.number().int().positive(),
+        opportunityId: z.string().uuid().optional(),
+        studentName: z.string().optional(),
+        type: z.nativeEnum(TestType).default(TestType.entrance),
+        scheduledAt: z.string().datetime(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const appt = await tx.testAppointment.create({
+          data: {
+            facilityId: input.facilityId,
+            opportunityId: input.opportunityId,
+            studentName: input.studentName,
+            type: input.type,
+            scheduledAt: new Date(input.scheduledAt),
+          },
+        });
+        await logEvent(tx, {
+          facilityId: appt.facilityId,
+          entityType: 'test_appointment',
+          entityId: appt.id,
+          type: 'created',
+          body: `Lịch test (${input.type}) ${input.scheduledAt}`,
+          actorId: ctx.session.userId,
+        });
+        // Auto-hook: entrance test scheduled → opportunity to O3.
+        if (input.type === TestType.entrance && input.opportunityId) {
+          const opp = await tx.opportunity.findUnique({ where: { id: input.opportunityId } });
+          if (opp && !opp.closedAt) {
+            const next = advanceTo(opp.stage, OpportunityStage.O3_TEST_SCHEDULED);
+            if (next !== opp.stage) {
+              await tx.opportunity.update({ where: { id: opp.id }, data: { stage: next } });
+              await logEvent(tx, {
+                facilityId: opp.facilityId,
+                entityType: 'opportunity',
+                entityId: opp.id,
+                type: 'status_changed',
+                body: 'Auto: đặt lịch test → O3',
+                changes: [{ field: 'stage', old: opp.stage, new: next }],
+              });
+            }
+          }
+        }
+        return appt;
+      }),
+    ),
+
+  // Record a result. An entrance test graded → opportunity auto-advances to O4.
+  testGrade: requireRole(...TEST_GRADE_ROLES)
+    .input(z.object({ id: z.string().uuid(), score: z.number(), result: z.string().optional() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const appt = await tx.testAppointment.update({
+          where: { id: input.id },
+          data: {
+            status: 'done',
+            score: input.score,
+            result: input.result,
+            gradedById: ctx.session.userId,
+            gradedAt: new Date(),
+          },
+        });
+        await logEvent(tx, {
+          facilityId: appt.facilityId,
+          entityType: 'test_appointment',
+          entityId: appt.id,
+          type: 'status_changed',
+          body: `Chấm test: ${input.score}${input.result ? ' · ' + input.result : ''}`,
+          actorId: ctx.session.userId,
+        });
+        if (appt.type === TestType.entrance && appt.opportunityId) {
+          const opp = await tx.opportunity.findUnique({ where: { id: appt.opportunityId } });
+          if (opp && !opp.closedAt) {
+            const next = advanceTo(opp.stage, OpportunityStage.O4_TESTED);
+            if (next !== opp.stage) {
+              await tx.opportunity.update({ where: { id: opp.id }, data: { stage: next } });
+              await logEvent(tx, {
+                facilityId: opp.facilityId,
+                entityType: 'opportunity',
+                entityId: opp.id,
+                type: 'status_changed',
+                body: 'Auto: chấm xong test → O4',
+                changes: [{ field: 'stage', old: opp.stage, new: next }],
+              });
+            }
+          }
+        }
+        return appt;
       }),
     ),
 
