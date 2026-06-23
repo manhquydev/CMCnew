@@ -16,6 +16,7 @@ import { submissionRouter } from './submission.js';
 import { gradeRouter } from './grade.js';
 import { rewardsRouter } from './rewards.js';
 import { notificationRouter } from './notification.js';
+import { assessmentRouter } from './assessment.js';
 
 export const appRouter = router({
   health: publicProcedure.query(() => ({ ok: true, ts: new Date().toISOString() })),
@@ -36,6 +37,7 @@ export const appRouter = router({
   grade: gradeRouter,
   rewards: rewardsRouter,
   notification: notificationRouter,
+  assessment: assessmentRouter,
 });
 
 export type AppRouter = typeof appRouter;
