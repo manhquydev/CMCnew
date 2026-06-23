@@ -9,6 +9,10 @@ export interface NotifPayload {
   score?: number;
   exercise?: string;
   starsEarned?: number;
+  badgeId?: string;
+  badge?: string;
+  fromLevel?: string | null;
+  toLevel?: string;
 }
 
 export const notificationRouter = router({

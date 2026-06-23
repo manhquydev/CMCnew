@@ -5,6 +5,7 @@ import {
   PdfAnnotator,
   BadgeShelf,
   Leaderboard,
+  NotificationCenter,
   type LmsPrincipal,
   type LiveNotification,
   type AnnotationData,
@@ -537,7 +538,10 @@ export function StudentView({ principal }: { principal: LmsPrincipal }) {
 
   return (
     <Stack>
-      <Title order={3}>Xin chào, {principal.displayName}</Title>
+      <Group justify="space-between" align="center">
+        <Title order={3}>Xin chào, {principal.displayName}</Title>
+        <NotificationCenter pulse={refreshKey} />
+      </Group>
       {banner && (
         <Alert color="green" withCloseButton onClose={() => setBanner(null)}>
           {banner}

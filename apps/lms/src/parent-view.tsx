@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, useNotificationStream, BadgeShelf, Leaderboard, type LmsPrincipal, type LiveNotification } from '@cmc/ui';
+import { trpc, useNotificationStream, BadgeShelf, Leaderboard, NotificationCenter, type LmsPrincipal, type LiveNotification } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -372,7 +372,9 @@ export function ParentView({ principal }: { principal: LmsPrincipal }) {
             Xin chào {principal.displayName}.
           </Text>
         </div>
-        <Select
+        <Group gap="sm" align="flex-end">
+          <NotificationCenter pulse={refreshKey} />
+          <Select
           label="Học sinh"
           w={260}
           allowDeselect={false}
@@ -380,6 +382,7 @@ export function ParentView({ principal }: { principal: LmsPrincipal }) {
           value={childId}
           onChange={(v) => v && setChildId(v)}
         />
+        </Group>
       </Group>
 
       {banner && (

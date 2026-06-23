@@ -11,3 +11,4 @@ export { LmsLoginGate, useLmsSession, type LmsPrincipal } from './lms-login-gate
 export { Chatter } from './chatter.js';
 export { BadgeShelf } from './badge-shelf.js';
 export { Leaderboard } from './leaderboard.js';
+export { NotificationCenter } from './notification-center.js';
