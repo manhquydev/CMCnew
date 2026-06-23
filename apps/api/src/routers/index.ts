@@ -26,6 +26,7 @@ import { guardianRouter } from './guardian.js';
 import { dashboardRouter } from './dashboard.js';
 import { afterSaleRouter } from './aftersale.js';
 import { certificateRouter } from './certificate.js';
+import { payrollRouter } from './payroll.js';
 
 export const appRouter = router({
   health: publicProcedure.query(() => ({ ok: true, ts: new Date().toISOString() })),
@@ -56,6 +57,7 @@ export const appRouter = router({
   dashboard: dashboardRouter,
   afterSale: afterSaleRouter,
   certificate: certificateRouter,
+  payroll: payrollRouter,
 });
 
 export type AppRouter = typeof appRouter;

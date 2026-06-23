@@ -84,6 +84,9 @@ importers:
       '@cmc/domain-grading':
         specifier: workspace:*
         version: link:../../packages/domain-grading
+      '@cmc/domain-payroll':
+        specifier: workspace:*
+        version: link:../../packages/domain-payroll
       '@cmc/domain-rewards':
         specifier: workspace:*
         version: link:../../packages/domain-rewards
