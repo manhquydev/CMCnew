@@ -10,11 +10,36 @@ const t = initTRPC.context<ApiContext>().create({
   },
 });
 
+/** A row-level-security denial from Postgres: a write that violates a policy's WITH CHECK
+ * (cross-facility / cross-principal) surfaces as SQLSTATE 42501 (insufficient_privilege).
+ * Reads under RLS just return no rows, so only the write path raises here. */
+function isRlsDenial(cause: unknown): boolean {
+  if (!cause || typeof cause !== 'object') return false;
+  const c = cause as { code?: unknown; message?: unknown; meta?: { code?: unknown } };
+  const code = c.code ?? c.meta?.code;
+  const msg = String(c.message ?? '');
+  return code === '42501' || /row-level security|insufficient_privilege/i.test(msg);
+}
+
+/** Turn a raw RLS denial into a clean FORBIDDEN instead of a generic 500. Applied to every
+ * procedure so any tenant-isolation violation answers consistently. */
+const mapRlsErrors = t.middleware(async ({ next }) => {
+  const res = await next();
+  if (!res.ok && isRlsDenial(res.error.cause)) {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Không có quyền trên tài nguyên này',
+      cause: res.error.cause,
+    });
+  }
+  return res;
+});
+
 export const router = t.router;
-export const publicProcedure = t.procedure;
+export const publicProcedure = t.procedure.use(mapRlsErrors);
 
 /** Requires a valid session; narrows ctx.session to non-null. */
-export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
+export const protectedProcedure = publicProcedure.use(({ ctx, next }) => {
   if (!ctx.session) throw new TRPCError({ code: 'UNAUTHORIZED' });
   return next({ ctx: { ...ctx, session: ctx.session as RequestSession } });
 });
@@ -37,7 +62,7 @@ export function requireRole(...roles: Role[]) {
 }
 
 /** Requires a valid LMS (parent/student) session; narrows ctx.lms to non-null. */
-export const lmsProcedure = t.procedure.use(({ ctx, next }) => {
+export const lmsProcedure = publicProcedure.use(({ ctx, next }) => {
   if (!ctx.lms) throw new TRPCError({ code: 'UNAUTHORIZED' });
   return next({ ctx: { ...ctx, lms: ctx.lms as LmsSession } });
 });
