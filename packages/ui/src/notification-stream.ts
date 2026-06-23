@@ -12,6 +12,8 @@ export interface LiveNotification {
     starsEarned?: number;
     badgeId?: string;
     badge?: string;
+    fromLevel?: string | null;
+    toLevel?: string;
   };
   createdAt: string;
 }

@@ -61,6 +61,48 @@ function sortNewestFirst(rows: Submission[]): Submission[] {
   });
 }
 
+type LevelRow = Awaited<ReturnType<typeof trpc.levelProgress.forStudent.query>>[number];
+const LEVEL_STATUS: Record<string, { label: string; color: string }> = {
+  pending: { label: 'Chờ duyệt', color: 'yellow' },
+  approved: { label: 'Đã duyệt', color: 'teal' },
+  rejected: { label: 'Từ chối', color: 'red' },
+};
+
+function LevelHistoryCard({ childId, refreshKey }: { childId: string; refreshKey: number }) {
+  const [rows, setRows] = useState<LevelRow[] | null>(null);
+  useEffect(() => {
+    setRows(null);
+    trpc.levelProgress.forStudent
+      .query({ studentId: childId })
+      .then(setRows)
+      .catch(() => setRows([]));
+  }, [childId, refreshKey]);
+
+  if (!rows || rows.length === 0) return null;
+  return (
+    <Card withBorder>
+      <Title order={5} mb="sm">
+        Tiến trình cấp độ
+      </Title>
+      <Stack gap="xs">
+        {rows.map((r) => (
+          <Group key={r.id} gap="xs">
+            <Badge variant="light">{r.fromLevel ?? '—'} → {r.toLevel}</Badge>
+            <Badge size="sm" color={LEVEL_STATUS[r.status]?.color}>
+              {LEVEL_STATUS[r.status]?.label ?? r.status}
+            </Badge>
+            {r.reason && (
+              <Text size="sm" c="dimmed">
+                {r.reason}
+              </Text>
+            )}
+          </Group>
+        ))}
+      </Stack>
+    </Card>
+  );
+}
+
 function ChildDashboard({ childId, refreshKey }: { childId: string; refreshKey: number }) {
   const [balance, setBalance] = useState<number | null>(null);
   const [submissions, setSubmissions] = useState<Submission[] | null>(null);
@@ -186,6 +228,8 @@ function ChildDashboard({ childId, refreshKey }: { childId: string; refreshKey: 
         <Leaderboard studentId={childId} refreshKey={refreshKey} />
       </Card>
 
+      <LevelHistoryCard childId={childId} refreshKey={refreshKey} />
+
       <Card withBorder>
         <Title order={5} mb="sm">
           Học bạ — Điểm tổng hợp ({gradebook?.finalGrades.length ?? 0})
@@ -288,6 +332,9 @@ function liveMessage(n: LiveNotification): string {
   }
   if (n.type === 'badge_awarded') {
     return `🏅 Con vừa đạt huy hiệu "${n.payload.badge ?? ''}"!`;
+  }
+  if (n.type === 'level_up') {
+    return `🎉 Con vừa được lên cấp độ ${n.payload.toLevel ?? ''}!`;
   }
   return '🔔 Có thông báo mới về con của bạn';
 }

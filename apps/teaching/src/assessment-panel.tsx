@@ -186,6 +186,8 @@ function StudentAssessment({ student }: { student: StudentT }) {
         </Alert>
       )}
 
+      <LevelProposeCard studentId={student.id} program={student.program} />
+
       {result && (
         <Card withBorder>
           <Title order={6} mb="xs">
@@ -207,6 +209,64 @@ function StudentAssessment({ student }: { student: StudentT }) {
         </Card>
       )}
     </Stack>
+  );
+}
+
+// Teacher proposes a level-up for the selected student → head_teacher approves elsewhere.
+function LevelProposeCard({ studentId, program }: { studentId: string; program: string }) {
+  const [toLevel, setToLevel] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  async function propose() {
+    if (!toLevel.trim()) {
+      setMsg({ kind: 'err', text: 'Nhập cấp độ đề xuất.' });
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    try {
+      await trpc.levelProgress.propose.mutate({ studentId, toLevel: toLevel.trim(), reason: reason.trim() || undefined });
+      setMsg({ kind: 'ok', text: 'Đã gửi đề xuất, chờ head_teacher duyệt.' });
+      setToLevel('');
+      setReason('');
+    } catch (e) {
+      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card withBorder>
+      <Title order={6} mb="xs">
+        Đề xuất lên cấp độ ({PROGRAM_LABEL[program] ?? program})
+      </Title>
+      <Group align="flex-end">
+        <TextInput
+          label="Cấp độ mới"
+          placeholder="vd L2"
+          value={toLevel}
+          onChange={(e) => setToLevel(e.currentTarget.value)}
+          w={140}
+        />
+        <TextInput
+          label="Lý do (tùy chọn)"
+          style={{ flex: 1 }}
+          value={reason}
+          onChange={(e) => setReason(e.currentTarget.value)}
+        />
+        <Button variant="light" onClick={propose} loading={busy}>
+          Gửi đề xuất
+        </Button>
+      </Group>
+      {msg && (
+        <Text size="sm" mt="xs" c={msg.kind === 'ok' ? 'green' : 'red'}>
+          {msg.text}
+        </Text>
+      )}
+    </Card>
   );
 }
 
