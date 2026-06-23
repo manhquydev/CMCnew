@@ -77,6 +77,24 @@ export const submissionRouter = router({
       ),
     ),
 
+  // Staff: both annotation layers for grading a submission — the student's marks (rendered
+  // read-only under the teacher's) and any existing grade layer to keep editing. RLS scopes
+  // to facility. Json cast to AnnotationData so the client output type is concrete.
+  layerForGrading: requireRole(Role.giao_vien, Role.quan_ly)
+    .input(z.object({ submissionId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const sub = await tx.submission.findUniqueOrThrow({
+          where: { id: input.submissionId },
+          select: { annotationLayer: true, grade: { select: { annotationLayer: true } } },
+        });
+        return {
+          student: (sub.annotationLayer ?? null) as AnnotationData | null,
+          teacher: (sub.grade?.annotationLayer ?? null) as AnnotationData | null,
+        };
+      }),
+    ),
+
   // Student saves their working copy (answer text + annotation layer over the base PDF).
   save: studentProcedure
     .input(

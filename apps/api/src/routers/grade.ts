@@ -5,6 +5,7 @@ import { logEvent } from '@cmc/audit';
 import { earnEntry } from '@cmc/domain-rewards';
 import { router, requireRole, Role } from '../trpc.js';
 import { emitNotification } from '../events.js';
+import { annotationDataSchema } from '../annotation.js';
 
 const ENTITY = 'grade';
 
@@ -28,7 +29,7 @@ export const gradeRouter = router({
         score: z.number().min(0),
         feedback: z.string().optional(),
         rubric: z.unknown().optional(),
-        annotationLayer: z.unknown().optional(),
+        annotationLayer: annotationDataSchema.optional(),
       }),
     )
     .mutation(({ ctx, input }) =>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, uploadExercisePdf } from '@cmc/ui';
+import { trpc, uploadExercisePdf, PdfAnnotator, type AnnotationData } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -168,7 +168,161 @@ function CreateExerciseModal({
   );
 }
 
-function GradeRow({ submission, maxScore, onChanged }: { submission: Submission; maxScore: number; onChanged: () => void }) {
+// Full-page grade-on-PDF: render the student's annotation layer (read-only) under the teacher's
+// editable layer, set score/feedback, save (grade.grade with annotationLayer), then publish.
+function GradePdfModal({
+  submission,
+  maxScore,
+  basePdfRef,
+  opened,
+  onClose,
+  onChanged,
+}: {
+  submission: Submission;
+  maxScore: number;
+  basePdfRef: string;
+  opened: boolean;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [studentLayer, setStudentLayer] = useState<AnnotationData | null>(null);
+  const [teacherLayer, setTeacherLayer] = useState<AnnotationData | null>(null);
+  const [score, setScore] = useState<number | string>(submission.grade?.score ?? '');
+  const [feedback, setFeedback] = useState(submission.grade?.feedback ?? '');
+  const [hasGrade, setHasGrade] = useState(!!submission.grade);
+  const [busy, setBusy] = useState<'grade' | 'publish' | null>(null);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    if (!opened) return;
+    setMsg('');
+    setErr('');
+    trpc.submission.layerForGrading
+      .query({ submissionId: submission.id })
+      .then(({ student, teacher }) => {
+        setStudentLayer(student);
+        setTeacherLayer(teacher);
+      })
+      .catch(() => {
+        /* missing layer → start blank */
+      });
+  }, [opened, submission.id]);
+
+  async function doGrade() {
+    if (typeof score !== 'number') {
+      setErr('Nhập điểm');
+      return;
+    }
+    setBusy('grade');
+    setErr('');
+    setMsg('');
+    try {
+      await trpc.grade.grade.mutate({
+        submissionId: submission.id,
+        score,
+        feedback: feedback.trim() || undefined,
+        annotationLayer: teacherLayer ?? undefined,
+      });
+      setHasGrade(true);
+      setMsg('Đã chấm (kèm chú thích).');
+      onChanged();
+    } catch (e) {
+      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function doPublish() {
+    setBusy('publish');
+    setErr('');
+    setMsg('');
+    try {
+      const r = await trpc.grade.publish.mutate({ submissionId: submission.id });
+      setMsg(`Đã công bố · +${r.starsEarned} sao`);
+      onChanged();
+    } catch (e) {
+      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Modal opened={opened} onClose={onClose} title={`Chấm bài: ${submission.student.fullName}`} size="xl">
+      <Stack>
+        <Group gap="xs" align="flex-end" wrap="nowrap">
+          <NumberInput
+            size="xs"
+            w={120}
+            label="Điểm"
+            placeholder={`0 - ${maxScore}`}
+            value={score}
+            onChange={setScore}
+            min={0}
+            max={maxScore}
+            clampBehavior="strict"
+          />
+          <Button size="compact-sm" onClick={doGrade} loading={busy === 'grade'} disabled={busy !== null}>
+            Chấm
+          </Button>
+          <Button
+            size="compact-sm"
+            variant="light"
+            color="teal"
+            onClick={doPublish}
+            loading={busy === 'publish'}
+            disabled={!hasGrade || busy !== null}
+          >
+            Công bố
+          </Button>
+        </Group>
+        <Textarea
+          size="xs"
+          label="Nhận xét (tùy chọn)"
+          autosize
+          minRows={1}
+          value={feedback}
+          onChange={(e) => setFeedback(e.currentTarget.value)}
+        />
+        {msg && (
+          <Text size="sm" c="green">
+            {msg}
+          </Text>
+        )}
+        {err && (
+          <Text size="sm" c="red">
+            {err}
+          </Text>
+        )}
+        <Text size="xs" c="dimmed">
+          Nét xanh nhạt là bài làm của học sinh; chấm/ghi chú của bạn vẽ chồng lên trên.
+        </Text>
+        <PdfAnnotator
+          pdfRef={basePdfRef}
+          value={teacherLayer}
+          onChange={setTeacherLayer}
+          editable
+          readOnlyLayers={studentLayer ? [{ items: studentLayer.items, opacity: 0.6 }] : []}
+        />
+      </Stack>
+    </Modal>
+  );
+}
+
+function GradeRow({
+  submission,
+  maxScore,
+  basePdfRef,
+  onChanged,
+}: {
+  submission: Submission;
+  maxScore: number;
+  basePdfRef?: string | null;
+  onChanged: () => void;
+}) {
+  const [pdfOpen, { open: openPdf, close: closePdf }] = useDisclosure(false);
   const [score, setScore] = useState<number | string>(submission.grade?.score ?? '');
   const [feedback, setFeedback] = useState(submission.grade?.feedback ?? '');
   const [grade, setGrade] = useState<Grade | null>(submission.grade);
@@ -271,7 +425,22 @@ function GradeRow({ submission, maxScore, onChanged }: { submission: Submission;
             >
               Công bố
             </Button>
+            {basePdfRef && (
+              <Button size="compact-sm" variant="light" onClick={openPdf}>
+                Chấm trên đề
+              </Button>
+            )}
           </Group>
+          {basePdfRef && (
+            <GradePdfModal
+              submission={submission}
+              maxScore={maxScore}
+              basePdfRef={basePdfRef}
+              opened={pdfOpen}
+              onClose={closePdf}
+              onChanged={onChanged}
+            />
+          )}
           <Textarea
             size="xs"
             placeholder="Nhận xét (tùy chọn)"
@@ -369,7 +538,13 @@ function SubmissionsPanel({ exercise }: { exercise: Exercise }) {
           </Table.Thead>
           <Table.Tbody>
             {submissions.map((s) => (
-              <GradeRow key={s.id} submission={s} maxScore={exercise.maxScore} onChanged={load} />
+              <GradeRow
+                key={s.id}
+                submission={s}
+                maxScore={exercise.maxScore}
+                basePdfRef={exercise.basePdfRef}
+                onChanged={load}
+              />
             ))}
           </Table.Tbody>
         </Table>
