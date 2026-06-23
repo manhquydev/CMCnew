@@ -78,6 +78,9 @@ importers:
       '@cmc/domain-academic':
         specifier: workspace:*
         version: link:../../packages/domain-academic
+      '@cmc/domain-grading':
+        specifier: workspace:*
+        version: link:../../packages/domain-grading
       '@cmc/domain-rewards':
         specifier: workspace:*
         version: link:../../packages/domain-rewards
@@ -236,6 +239,15 @@ importers:
         version: 5.9.3
 
   packages/domain-academic:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.0)
+
+  packages/domain-finance:
     devDependencies:
       typescript:
         specifier: ^5.7.2
