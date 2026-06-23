@@ -3,6 +3,7 @@ import {
   trpc,
   useNotificationStream,
   PdfAnnotator,
+  BadgeShelf,
   type LmsPrincipal,
   type LiveNotification,
   type AnnotationData,
@@ -518,6 +519,9 @@ function liveMessage(n: LiveNotification): string {
     const stars = n.payload.starsEarned ? ` · +${n.payload.starsEarned} sao ⭐` : '';
     return `🔔 Bài "${n.payload.exercise ?? ''}" đã có điểm:${score}${stars}`;
   }
+  if (n.type === 'badge_awarded') {
+    return `🏅 Bạn vừa đạt huy hiệu "${n.payload.badge ?? ''}"!`;
+  }
   return '🔔 Bạn có thông báo mới';
 }
 
@@ -542,12 +546,20 @@ export function StudentView({ principal }: { principal: LmsPrincipal }) {
         <Tabs.List>
           <Tabs.Tab value="exercises">Bài tập</Tabs.Tab>
           <Tabs.Tab value="rewards">Phần thưởng</Tabs.Tab>
+          <Tabs.Tab value="badges">Huy hiệu</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="exercises">
           <ExercisesTab refreshKey={refreshKey} />
         </Tabs.Panel>
         <Tabs.Panel value="rewards">
           <RewardsTab refreshKey={refreshKey} />
+        </Tabs.Panel>
+        <Tabs.Panel value="badges" pt="md">
+          {principal.studentIds[0] ? (
+            <BadgeShelf studentId={principal.studentIds[0]} refreshKey={refreshKey} />
+          ) : (
+            <Text c="dimmed">Không có học sinh liên kết.</Text>
+          )}
         </Tabs.Panel>
       </Tabs>
     </Stack>

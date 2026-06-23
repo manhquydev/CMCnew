@@ -5,7 +5,14 @@ import { API_URL } from './client.js';
 export interface LiveNotification {
   id: string;
   type: string;
-  payload: { submissionId?: string; score?: number; exercise?: string; starsEarned?: number };
+  payload: {
+    submissionId?: string;
+    score?: number;
+    exercise?: string;
+    starsEarned?: number;
+    badgeId?: string;
+    badge?: string;
+  };
   createdAt: string;
 }
 

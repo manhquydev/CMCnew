@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, useNotificationStream, type LmsPrincipal, type LiveNotification } from '@cmc/ui';
+import { trpc, useNotificationStream, BadgeShelf, type LmsPrincipal, type LiveNotification } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -174,6 +174,13 @@ function ChildDashboard({ childId, refreshKey }: { childId: string; refreshKey: 
 
       <Card withBorder>
         <Title order={5} mb="sm">
+          Huy hiệu
+        </Title>
+        <BadgeShelf studentId={childId} refreshKey={refreshKey} />
+      </Card>
+
+      <Card withBorder>
+        <Title order={5} mb="sm">
           Học bạ — Điểm tổng hợp ({gradebook?.finalGrades.length ?? 0})
         </Title>
         {gradebook && gradebook.finalGrades.length > 0 ? (
@@ -271,6 +278,9 @@ function liveMessage(n: LiveNotification): string {
     const score = n.payload.score != null ? ` ${n.payload.score} điểm` : '';
     const stars = n.payload.starsEarned ? ` · +${n.payload.starsEarned} sao ⭐` : '';
     return `🔔 Con vừa có điểm bài "${n.payload.exercise ?? ''}":${score}${stars}`;
+  }
+  if (n.type === 'badge_awarded') {
+    return `🏅 Con vừa đạt huy hiệu "${n.payload.badge ?? ''}"!`;
   }
   return '🔔 Có thông báo mới về con của bạn';
 }

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { earnEntry } from '@cmc/domain-rewards';
+import { earnEntry, evaluateBadges } from '@cmc/domain-rewards';
 import { router, requireRole, Role } from '../trpc.js';
 import { emitNotification } from '../events.js';
 import { annotationDataSchema } from '../annotation.js';
@@ -119,7 +119,70 @@ export const gradeRouter = router({
           changes: [{ field: 'isPublished', old: false, new: true }],
           actorId: ctx.session.userId,
         });
-        return { grade, starsEarned, studentId: sub.studentId, notif, payload };
+
+        // Auto-award badges: publishing a grade just changed the student's stats, so re-evaluate
+        // the facility's active badges and award any newly-earned ones. @@unique(studentId,badgeId)
+        // makes it idempotent; we diff against owned badges so each award notifies exactly once.
+        const badgeNotifs: { id: string; type: string; payload: object; createdAt: Date }[] = [];
+        const starAgg = await tx.starTransaction.aggregate({
+          where: { studentId: sub.studentId },
+          _sum: { amount: true },
+        });
+        const homeworkCount = await tx.submission.count({
+          where: {
+            studentId: sub.studentId,
+            exercise: { type: 'homework' },
+            grade: { isPublished: true },
+          },
+        });
+        const badges = await tx.badge.findMany({
+          where: { facilityId: sub.facilityId, isActive: true, archivedAt: null },
+          select: { id: true, name: true, unlockCriteria: true },
+        });
+        const owned = new Set(
+          (await tx.studentBadge.findMany({ where: { studentId: sub.studentId }, select: { badgeId: true } })).map(
+            (o) => o.badgeId,
+          ),
+        );
+        const wonIds = evaluateBadges(badges, {
+          starsTotal: starAgg._sum.amount ?? 0,
+          homeworkCount,
+        }).filter((id) => !owned.has(id));
+        if (wonIds.length > 0) {
+          await tx.studentBadge.createMany({
+            data: wonIds.map((badgeId) => ({
+              facilityId: sub.facilityId,
+              studentId: sub.studentId,
+              badgeId,
+              source: 'auto' as const,
+            })),
+            skipDuplicates: true,
+          });
+          for (const b of badges.filter((x) => wonIds.includes(x.id))) {
+            const bp = { badgeId: b.id, badge: b.name };
+            const bn = await tx.notification.create({
+              data: {
+                facilityId: sub.facilityId,
+                recipientType: 'student',
+                recipientId: sub.studentId,
+                type: 'badge_awarded',
+                payload: bp,
+              },
+              select: { id: true, type: true, createdAt: true },
+            });
+            badgeNotifs.push({ ...bn, payload: bp });
+            await logEvent(tx, {
+              facilityId: sub.facilityId,
+              entityType: 'student_badge',
+              entityId: b.id,
+              type: 'created',
+              body: `Đạt huy hiệu: ${b.name}`,
+              actorId: ctx.session.userId,
+            });
+          }
+        }
+
+        return { grade, starsEarned, studentId: sub.studentId, notif, payload, badgeNotifs };
       });
 
       // Fan out to live SSE subscribers AFTER commit (never push a row that rolled back).
@@ -132,6 +195,12 @@ export const gradeRouter = router({
           createdAt: result.notif.createdAt.toISOString(),
         },
       });
-      return { grade: result.grade, starsEarned: result.starsEarned };
+      for (const bn of result.badgeNotifs) {
+        emitNotification({
+          studentId: result.studentId,
+          notification: { id: bn.id, type: bn.type, payload: bn.payload, createdAt: bn.createdAt.toISOString() },
+        });
+      }
+      return { grade: result.grade, starsEarned: result.starsEarned, badgesAwarded: result.badgeNotifs.length };
     }),
 });

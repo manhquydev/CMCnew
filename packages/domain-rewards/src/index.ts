@@ -9,3 +9,11 @@ export {
   type GiftLike,
   type RedeemCheck,
 } from './stars.js';
+export {
+  parseCriteria,
+  criteriaMet,
+  evaluateBadges,
+  type BadgeCriteria,
+  type BadgeStats,
+  type BadgeLike,
+} from './badges.js';

@@ -162,6 +162,7 @@ model Student {
   rewards         Reward[]
   qualitativeAssessments QualitativeAssessment[]
   finalGrades     FinalGrade[]
+  badges          StudentBadge[]
 
   @@index([facilityId])
   @@map("student")
@@ -354,6 +355,11 @@ enum StarTxnType {
   homework_completed
   gift_redeemed
   gift_rejected_refund
+  manual
+}
+
+enum BadgeSource {
+  auto
   manual
 }
 
@@ -553,6 +559,43 @@ model Notification {
   @@index([recipientType, recipientId, readAt])
   @@index([facilityId])
   @@map("notification")
+}
+
+/// Huy hiệu (S3) — danh mục facility-scoped. unlockCriteria (Json) do @cmc/domain-rewards diễn giải.
+model Badge {
+  id             String         @id @default(uuid()) @db.Uuid
+  facilityId     Int            @map("facility_id")
+  code           String         @map("code")
+  name           String
+  description    String?
+  iconUrl        String?        @map("icon_url")
+  unlockCriteria Json           @map("unlock_criteria")
+  isActive       Boolean        @default(true) @map("is_active")
+  archivedAt     DateTime?      @map("archived_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  awards         StudentBadge[]
+
+  @@unique([facilityId, code])
+  @@index([facilityId])
+  @@map("badge")
+}
+
+/// Huy hiệu HS đã đạt (S3). 1 lần/(student, badge). source = auto (đạt tiêu chí) | manual (GV cấp).
+model StudentBadge {
+  id          String      @id @default(uuid()) @db.Uuid
+  facilityId  Int         @map("facility_id")
+  studentId   String      @map("student_id") @db.Uuid
+  student     Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  badgeId     String      @map("badge_id") @db.Uuid
+  badge       Badge       @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  source      BadgeSource @default(auto)
+  awardedById String?     @map("awarded_by_id") @db.Uuid
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  @@unique([studentId, badgeId])
+  @@index([studentId])
+  @@index([facilityId])
+  @@map("student_badge")
 }
 
 /// Học bạ & tổng hợp (Phase 2 / S2). Logic số nằm ở @cmc/domain-grading.

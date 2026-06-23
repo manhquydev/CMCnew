@@ -175,11 +175,31 @@ async function seedGradedClass(opts: {
   }
 }
 
+// Badge catalog per facility (S3). Minimal taxonomy: stars_total + homework_count thresholds.
+const BADGES = [
+  { code: 'HW_1', name: 'Khởi động', description: 'Hoàn thành bài tập đầu tiên', criteria: { kind: 'homework_count', gte: 1 } },
+  { code: 'HW_5', name: 'Chăm chỉ', description: 'Hoàn thành 5 bài tập', criteria: { kind: 'homework_count', gte: 5 } },
+  { code: 'STAR_10', name: 'Ngôi sao đầu tiên', description: 'Đạt 10 sao', criteria: { kind: 'stars_total', gte: 10 } },
+  { code: 'STAR_100', name: 'Siêu sao', description: 'Đạt 100 sao', criteria: { kind: 'stars_total', gte: 100 } },
+];
+
+async function seedBadges(facilityId: number) {
+  for (const b of BADGES) {
+    await prisma.badge.upsert({
+      where: { facilityId_code: { facilityId, code: b.code } },
+      update: { name: b.name, description: b.description, unlockCriteria: b.criteria },
+      create: { facilityId, code: b.code, name: b.name, description: b.description, unlockCriteria: b.criteria },
+    });
+  }
+}
+
 async function main(): Promise<void> {
   const hq = await prisma.facility.findUniqueOrThrow({ where: { code: 'HQ' } });
   const cs2 = await prisma.facility.findUniqueOrThrow({ where: { code: 'CS2' } });
 
   const teacher = await ensureTeacher('gv@cmc.local', 'Cô Lan (GV)', hq.id);
+  await seedBadges(hq.id);
+  await seedBadges(cs2.id);
 
   // One student per program at HQ so the 3 weightings (UCREA 100/0, BI 60/40, BH 30/70) are
   // all walkable. HS-0001/0003 exist from seed:demo; HS-0005 (BLACK_HOLE) is new here.
