@@ -1,0 +1,67 @@
+// CMCnew — canonical schema (single source of truth).
+// Phase 0: identity + multi-facility tenancy foundation. Later phases extend this.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// Business roles. Facility scope is enforced via RLS, not via role.
+enum Role {
+  super_admin
+  quan_ly
+  giao_vien
+  ke_toan
+  hr
+  sale
+  cskh
+  ctv_mkt
+}
+
+/// A training center (cơ sở). Tenancy boundary — RLS isolates rows by facility.
+model Facility {
+  id        Int            @id @default(autoincrement())
+  code      String         @unique
+  name      String
+  timezone  String         @default("Asia/Ho_Chi_Minh")
+  address   String?
+  isActive  Boolean        @default(true) @map("is_active")
+  createdAt DateTime       @default(now()) @map("created_at")
+  users     UserFacility[]
+
+  @@map("facility")
+}
+
+/// A staff/admin account. Students & parents get their own models in later phases.
+model AppUser {
+  id           String         @id @default(uuid()) @db.Uuid
+  email        String         @unique
+  phone        String?
+  displayName  String         @map("display_name")
+  passwordHash String         @map("password_hash")
+  roles        Role[]
+  primaryRole  Role           @map("primary_role")
+  isActive     Boolean        @default(true) @map("is_active")
+  /// Bumped on deactivate / role / facility change → invalidates outstanding JWTs.
+  tokenVersion Int            @default(0) @map("token_version")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  facilities   UserFacility[]
+
+  @@map("app_user")
+}
+
+/// Many-to-many: which facilities a user may access.
+model UserFacility {
+  userId     String   @map("user_id") @db.Uuid
+  facilityId Int      @map("facility_id")
+  user       AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@id([userId, facilityId])
+  @@map("user_facility")
+}

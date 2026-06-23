@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cmc
+          POSTGRES_PASSWORD: cmc
+          POSTGRES_DB: cmc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cmc -d cmc"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://cmc_app:cmc_app@localhost:5432/cmc?schema=public
+      DIRECT_URL: postgresql://cmc:cmc@localhost:5432/cmc?schema=public
+      JWT_SECRET: ci-only-secret-aaaaaaaaaaaaaaaaaaaaaaaa
+      AUTH_COOKIE_NAME: cmc.session
+      SEED_SUPERADMIN_EMAIL: admin@cmc.local
+      SEED_SUPERADMIN_PASSWORD: ChangeMe!123
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.24.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate
+        run: pnpm --filter @cmc/db generate
+
+      - name: Apply migrations (schema + RLS)
+        run: pnpm --filter @cmc/db migrate
+
+      - name: Seed super_admin + facilities
+        run: pnpm --filter @cmc/db seed
+
+      - name: Verify RLS isolation (done-evidence)
+        run: pnpm --filter @cmc/db exec tsx src/verify-rls.ts
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Build apps
+        run: pnpm -r build

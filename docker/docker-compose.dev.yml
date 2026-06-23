@@ -1,0 +1,26 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cmcnew-postgres-dev
+    environment:
+      POSTGRES_USER: cmc
+      POSTGRES_PASSWORD: cmc
+      POSTGRES_DB: cmc
+    ports:
+      - '5433:5432'
+    volumes:
+      - cmcnew_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U cmc -d cmc']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: cmcnew-redis-dev
+    ports:
+      - '6380:6379'
+
+volumes:
+  cmcnew_pgdata:

@@ -1,0 +1,31 @@
+/* CMCnew design tokens — single source for color/spacing/type across all 3 apps. */
+:root {
+  --cmc-brand: #0066cc;
+  --cmc-brand-ink: #004a96;
+  --cmc-bg: #f6f8fb;
+  --cmc-surface: #ffffff;
+  --cmc-border: #e3e8ef;
+  --cmc-text: #1a2330;
+  --cmc-text-muted: #5b6776;
+  --cmc-danger: #d92d20;
+  --cmc-ok: #15803d;
+
+  --cmc-radius: 10px;
+  --cmc-space-1: 4px;
+  --cmc-space-2: 8px;
+  --cmc-space-3: 16px;
+  --cmc-space-4: 24px;
+  --cmc-space-5: 32px;
+  --cmc-shadow: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.06);
+  --cmc-font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family: var(--cmc-font);
+  background: var(--cmc-bg);
+  color: var(--cmc-text);
+}
