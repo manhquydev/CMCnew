@@ -14,6 +14,7 @@ import { lmsAuthRouter } from './lms-auth.js';
 import { exerciseRouter } from './exercise.js';
 import { submissionRouter } from './submission.js';
 import { gradeRouter } from './grade.js';
+import { rewardsRouter } from './rewards.js';
 
 export const appRouter = router({
   health: publicProcedure.query(() => ({ ok: true, ts: new Date().toISOString() })),
@@ -32,6 +33,7 @@ export const appRouter = router({
   exercise: exerciseRouter,
   submission: submissionRouter,
   grade: gradeRouter,
+  rewards: rewardsRouter,
 });
 
 export type AppRouter = typeof appRouter;
