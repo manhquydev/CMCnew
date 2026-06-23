@@ -15,12 +15,68 @@ datasource db {
 enum Role {
   super_admin
   quan_ly
+  head_teacher
   giao_vien
   ke_toan
   hr
   sale
   cskh
   ctv_mkt
+  bgd
+}
+
+/// The 3 CMC programs. Global (not facility-scoped).
+enum Program {
+  UCREA
+  BRIGHT_IG
+  BLACK_HOLE
+}
+
+enum StudentLifecycle {
+  admitted
+  active
+  on_hold
+  transferred
+  withdrawn
+  completed
+}
+
+enum ClassStatus {
+  planned
+  open
+  running
+  closed
+  cancelled
+}
+
+enum SessionStatus {
+  planned
+  confirmed
+  cancelled
+}
+
+enum EnrollmentStatus {
+  active
+  completed
+  reserved
+  transferred
+  withdrawn
+}
+
+enum AttendanceStatus {
+  present
+  absent
+  late
+}
+
+/// Audit/chatter timeline entry kinds (Odoo-style record log).
+enum RecordEventType {
+  created
+  updated
+  status_changed
+  archived
+  restored
+  note
 }
 
 /// A training center (cơ sở). Tenancy boundary — RLS isolates rows by facility.
@@ -64,4 +120,199 @@ model UserFacility {
 
   @@id([userId, facilityId])
   @@map("user_facility")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 1 — Academic core. Program + Course are GLOBAL (shared catalog, no RLS).
+// Everything from ClassBatch down carries facility_id and is RLS-scoped.
+// Soft-delete everywhere via `archivedAt` (null = active). Never hard-delete.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Course catalog — GLOBAL (dùng chung mọi cơ sở). No facility_id, no RLS.
+model Course {
+  id          String       @id @default(uuid()) @db.Uuid
+  code        String       @unique
+  name        String
+  program     Program
+  description String?
+  archivedAt  DateTime?    @map("archived_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  batches     ClassBatch[]
+
+  @@map("course")
+}
+
+/// Học sinh — facility-scoped.
+model Student {
+  id          String           @id @default(uuid()) @db.Uuid
+  facilityId  Int              @map("facility_id")
+  studentCode String           @unique @map("student_code")
+  fullName    String           @map("full_name")
+  dateOfBirth DateTime?        @map("date_of_birth") @db.Date
+  program     Program
+  level       String? // mô hình level chốt ở Phase 2
+  lifecycle   StudentLifecycle @default(admitted)
+  archivedAt  DateTime?        @map("archived_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  enrollments Enrollment[]
+
+  @@index([facilityId])
+  @@map("student")
+}
+
+/// Lớp/khóa cụ thể — facility-scoped. Mã B-YYYY-NNNN (sinh nguyên tử).
+model ClassBatch {
+  id         String         @id @default(uuid()) @db.Uuid
+  facilityId Int            @map("facility_id")
+  code       String         @unique
+  courseId   String         @map("course_id") @db.Uuid
+  course     Course         @relation(fields: [courseId], references: [id])
+  name       String
+  startDate  DateTime?      @map("start_date") @db.Date
+  endDate    DateTime?      @map("end_date") @db.Date
+  capacity   Int?
+  status     ClassStatus    @default(planned)
+  archivedAt DateTime?      @map("archived_at")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  slots      ScheduleSlot[]
+  sessions   ClassSession[]
+  enrollments Enrollment[]
+
+  @@index([facilityId])
+  @@map("class_batch")
+}
+
+/// Phòng học — facility-scoped.
+model Room {
+  id         String    @id @default(uuid()) @db.Uuid
+  facilityId Int       @map("facility_id")
+  code       String
+  name       String
+  capacity   Int?
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@unique([facilityId, code])
+  @@index([facilityId])
+  @@map("room")
+}
+
+/// Khung lịch tuần của lớp → dùng để sinh Session.
+model ScheduleSlot {
+  id           String     @id @default(uuid()) @db.Uuid
+  facilityId   Int        @map("facility_id")
+  classBatchId String     @map("class_batch_id") @db.Uuid
+  batch        ClassBatch @relation(fields: [classBatchId], references: [id], onDelete: Cascade)
+  dayOfWeek    Int        @map("day_of_week") // 0=CN .. 6=T7
+  startTime    String     @map("start_time") // HH:mm (ICT)
+  endTime      String     @map("end_time")
+  roomId       String?    @map("room_id") @db.Uuid
+  teacherId    String?    @map("teacher_id") @db.Uuid
+  archivedAt   DateTime?  @map("archived_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@index([facilityId])
+  @@index([classBatchId])
+  @@map("schedule_slot")
+}
+
+/// Buổi học cụ thể — sinh từ slot, hoặc buổi bù.
+model ClassSession {
+  id           String        @id @default(uuid()) @db.Uuid
+  facilityId   Int           @map("facility_id")
+  classBatchId String        @map("class_batch_id") @db.Uuid
+  batch        ClassBatch    @relation(fields: [classBatchId], references: [id], onDelete: Cascade)
+  sessionDate  DateTime      @map("session_date") @db.Date
+  startTime    String        @map("start_time")
+  endTime      String        @map("end_time")
+  roomId       String?       @map("room_id") @db.Uuid
+  teacherId    String?       @map("teacher_id") @db.Uuid
+  status       SessionStatus @default(planned)
+  isMakeup     Boolean       @default(false) @map("is_makeup")
+  archivedAt   DateTime?     @map("archived_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  attendances  Attendance[]
+
+  @@unique([classBatchId, sessionDate, startTime])
+  @@index([facilityId])
+  @@map("class_session")
+}
+
+/// Ghi danh học sinh vào lớp.
+model Enrollment {
+  id            String           @id @default(uuid()) @db.Uuid
+  facilityId    Int              @map("facility_id")
+  classBatchId  String           @map("class_batch_id") @db.Uuid
+  batch         ClassBatch       @relation(fields: [classBatchId], references: [id], onDelete: Cascade)
+  studentId     String           @map("student_id") @db.Uuid
+  student       Student          @relation(fields: [studentId], references: [id])
+  status        EnrollmentStatus @default(active)
+  opportunityId String?          @map("opportunity_id") // truy vết CRM (Phase 3)
+  archivedAt    DateTime?        @map("archived_at")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  attendances   Attendance[]
+
+  @@unique([classBatchId, studentId])
+  @@index([facilityId])
+  @@map("enrollment")
+}
+
+/// Điểm danh — 1 bản ghi / (session, enrollment).
+model Attendance {
+  id             String           @id @default(uuid()) @db.Uuid
+  facilityId     Int              @map("facility_id")
+  classSessionId String           @map("class_session_id") @db.Uuid
+  session        ClassSession     @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  enrollmentId   String           @map("enrollment_id") @db.Uuid
+  enrollment     Enrollment       @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  status         AttendanceStatus
+  excused        Boolean          @default(false)
+  note           String?
+  markedById     String?          @map("marked_by_id") @db.Uuid
+  markedAt       DateTime?        @map("marked_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  @@unique([classSessionId, enrollmentId])
+  @@index([facilityId])
+  @@map("attendance")
+}
+
+/// Bộ đếm sinh mã lớp nguyên tử theo (cơ sở, năm).
+model BatchCodeCounter {
+  facilityId Int @map("facility_id")
+  year       Int
+  lastSeq    Int @default(0) @map("last_seq")
+
+  @@id([facilityId, year])
+  @@map("batch_code_counter")
+}
+
+// ── Audit / Chatter (Odoo-style) — cross-cutting timeline on every record ──
+
+/// Một dòng timeline cho một record bất kỳ (thay đổi field/trạng thái hoặc ghi chú).
+model RecordEvent {
+  id         String          @id @default(uuid()) @db.Uuid
+  facilityId Int?            @map("facility_id") // null cho record global (vd Course)
+  entityType String          @map("entity_type")
+  entityId   String          @map("entity_id")
+  type       RecordEventType
+  changes    Json? // [{ field, old, new }]
+  body       String? // nội dung ghi chú / lý do (vd lý do hủy lớp)
+  actorId    String?         @map("actor_id") @db.Uuid
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([facilityId])
+  @@map("record_event")
+}
+
+/// Người theo dõi một record (nhận thông báo — Phase sau).
+model RecordFollower {
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  userId     String   @map("user_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@id([entityType, entityId, userId])
+  @@map("record_follower")
 }

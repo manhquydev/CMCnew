@@ -14,6 +14,7 @@
 - **Xếp lịch:** chặn cứng trùng phòng + trùng giáo viên.
 - **Điểm danh:** present/absent/late + cờ `excused`; streak chỉ tính present.
 - **🆕 Audit/Chatter đầy đủ kiểu Odoo** — hạ tầng **cross-cutting làm ngay Phase 1**, mọi record có log thay đổi + ghi chú tay + người theo dõi + timeline.
+- **UI = Mantine** (3 app). **Soft-delete/archive mọi nơi** (active/archivedAt + log), không xóa cứng. **Student.level** để nullable, chốt mô hình ở Phase 2.
 
 ---
 

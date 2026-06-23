@@ -22,6 +22,8 @@ Ràng buộc: parity nghiệp vụ hệ cũ; thêm realtime push; mobile app (nh
 | ORM/Schema | Prisma 7 (nguồn schema + migration) | Đã chứng minh ở hệ cũ; type-safe |
 | API | **tRPC trên Hono** | Type-safe client↔server không codegen; Hono nhẹ, hỗ trợ SSE/WS |
 | Frontend | **React + Vite SPA** ×3 (lms/teaching/admin) | Cả 3 là cổng đăng nhập (không cần SEO/SSR); khớp phần internal đang tốt |
+| UI kit | **Mantine** (DataTable/Form/Calendar/Modal/Notifications) | ERP nhiều bảng/form/lịch → kit đầy đủ build nhanh, nhất quán; nhận design token brand |
+| Xóa dữ liệu | **Soft-delete/archive mọi nơi** (active/archivedAt) + audit log | Minh bạch kiểu Odoo: giữ lịch sử, khôi phục được (quyết định 2026-06-23) |
 | Realtime | SSE (tRPC subscriptions) | Thay polling cho thông báo/chat |
 | Auth | JWT cookie chia sẻ subdomain + `tokenVersion` + role/facility resolve từ DB | Thu hồi tức thì; scope không nằm trong token |
 | Background jobs | BullMQ + Redis (worker riêng) | Cron họp PH, KPI snapshot, chứng chỉ, fan-out thông báo |
