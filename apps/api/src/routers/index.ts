@@ -11,6 +11,9 @@ import { enrollmentRouter } from './enrollment.js';
 import { attendanceRouter } from './attendance.js';
 import { auditRouter } from './audit.js';
 import { lmsAuthRouter } from './lms-auth.js';
+import { exerciseRouter } from './exercise.js';
+import { submissionRouter } from './submission.js';
+import { gradeRouter } from './grade.js';
 
 export const appRouter = router({
   health: publicProcedure.query(() => ({ ok: true, ts: new Date().toISOString() })),
@@ -26,6 +29,9 @@ export const appRouter = router({
   enrollment: enrollmentRouter,
   attendance: attendanceRouter,
   audit: auditRouter,
+  exercise: exerciseRouter,
+  submission: submissionRouter,
+  grade: gradeRouter,
 });
 
 export type AppRouter = typeof appRouter;

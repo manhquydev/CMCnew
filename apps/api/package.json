@@ -16,6 +16,7 @@
     "@cmc/auth": "workspace:*",
     "@cmc/db": "workspace:*",
     "@cmc/domain-academic": "workspace:*",
+    "@cmc/domain-rewards": "workspace:*",
     "@hono/node-server": "^1.13.7",
     "@hono/trpc-server": "^0.3.4",
     "@trpc/server": "^11.0.0-rc.660",

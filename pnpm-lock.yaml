@@ -78,6 +78,9 @@ importers:
       '@cmc/domain-academic':
         specifier: workspace:*
         version: link:../../packages/domain-academic
+      '@cmc/domain-rewards':
+        specifier: workspace:*
+        version: link:../../packages/domain-rewards
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.14(hono@4.12.27)

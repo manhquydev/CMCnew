@@ -424,6 +424,7 @@ model Exercise {
   description  String?
   basePdfRef   String?        @map("base_pdf_ref")
   maxScore     Float          @default(10) @map("max_score")
+  starReward   Int            @default(10) @map("star_reward")
   dueAt        DateTime?      @map("due_at")
   type         ExerciseType   @default(homework)
   status       ExerciseStatus @default(draft)
