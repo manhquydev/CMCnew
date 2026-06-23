@@ -31,7 +31,7 @@ Mục tiêu: xương sống học thuật + giá trị LMS đầu tiên.
 - Dashboard học sinh (điểm/bài tập), Dashboard phụ huynh (gradebook/học bạ).
 - `domain-rewards`: Sao (ledger atomic) + Quà + Huy hiệu + Leaderboard.
 - **Thông báo realtime (SSE)** + Level progress + duyệt head-teacher.
-- **Done-evidence:** nộp bài → chấm → điểm + sao hiện realtime; redeem quà không double-spend.
+- **Done-evidence:** nộp bài → chấm → điểm + sao hiện realtime; redeem quà không double-spend. Spec chi tiết: `specs/phase-02-assessment-lms.md`.
 
 ## Phase 3 — Doanh thu & CRM
 
