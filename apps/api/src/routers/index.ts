@@ -10,10 +10,12 @@ import { scheduleRouter } from './schedule.js';
 import { enrollmentRouter } from './enrollment.js';
 import { attendanceRouter } from './attendance.js';
 import { auditRouter } from './audit.js';
+import { lmsAuthRouter } from './lms-auth.js';
 
 export const appRouter = router({
   health: publicProcedure.query(() => ({ ok: true, ts: new Date().toISOString() })),
   auth: authRouter,
+  lmsAuth: lmsAuthRouter,
   facility: facilityRouter,
   user: userRouter,
   course: courseRouter,

@@ -42,3 +42,31 @@ export async function verifySession(token: string): Promise<SessionClaims | null
     return null;
   }
 }
+
+/** LMS principal (parent/student) token. Student ownership is resolved from the DB
+ * on every request (like facility scope), so it is NOT baked into the token. */
+export interface LmsClaims {
+  sub: string;
+  kind: 'parent' | 'student';
+  tokenVersion: number;
+}
+
+export async function signLmsSession(claims: LmsClaims, ttl = '12h'): Promise<string> {
+  return new SignJWT({ kind: claims.kind, tokenVersion: claims.tokenVersion })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(claims.sub)
+    .setIssuedAt()
+    .setExpirationTime(ttl)
+    .sign(secret());
+}
+
+export async function verifyLmsToken(token: string): Promise<LmsClaims | null> {
+  try {
+    const { payload } = await jwtVerify(token, secret());
+    const kind = payload.kind;
+    if (kind !== 'parent' && kind !== 'student') return null;
+    return { sub: String(payload.sub), kind, tokenVersion: Number(payload.tokenVersion) };
+  } catch {
+    return null;
+  }
+}

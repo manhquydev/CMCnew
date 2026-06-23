@@ -1,5 +1,5 @@
 import { initTRPC, TRPCError } from '@trpc/server';
-import { Role, type RequestSession } from '@cmc/auth';
+import { Role, type RequestSession, type LmsSession } from '@cmc/auth';
 import type { ApiContext } from './context.js';
 
 const t = initTRPC.context<ApiContext>().create({
@@ -35,5 +35,23 @@ export function requireRole(...roles: Role[]) {
     return next();
   });
 }
+
+/** Requires a valid LMS (parent/student) session; narrows ctx.lms to non-null. */
+export const lmsProcedure = t.procedure.use(({ ctx, next }) => {
+  if (!ctx.lms) throw new TRPCError({ code: 'UNAUTHORIZED' });
+  return next({ ctx: { ...ctx, lms: ctx.lms as LmsSession } });
+});
+
+/** Parent-only. */
+export const parentProcedure = lmsProcedure.use(({ ctx, next }) => {
+  if (ctx.lms.kind !== 'parent') throw new TRPCError({ code: 'FORBIDDEN' });
+  return next();
+});
+
+/** Student-only. */
+export const studentProcedure = lmsProcedure.use(({ ctx, next }) => {
+  if (ctx.lms.kind !== 'student') throw new TRPCError({ code: 'FORBIDDEN' });
+  return next();
+});
 
 export { Role };
