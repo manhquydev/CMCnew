@@ -23,6 +23,7 @@ import { levelProgressRouter } from './level-progress.js';
 import { financeRouter } from './finance.js';
 import { crmRouter } from './crm.js';
 import { guardianRouter } from './guardian.js';
+import { dashboardRouter } from './dashboard.js';
 
 export const appRouter = router({
   health: publicProcedure.query(() => ({ ok: true, ts: new Date().toISOString() })),
@@ -50,6 +51,7 @@ export const appRouter = router({
   finance: financeRouter,
   crm: crmRouter,
   guardian: guardianRouter,
+  dashboard: dashboardRouter,
 });
 
 export type AppRouter = typeof appRouter;
