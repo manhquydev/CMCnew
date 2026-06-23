@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, type LmsPrincipal } from '@cmc/ui';
+import { trpc, useNotificationStream, type LmsPrincipal, type LiveNotification } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -45,7 +45,7 @@ function sortNewestFirst(rows: Submission[]): Submission[] {
   });
 }
 
-function ChildDashboard({ childId }: { childId: string }) {
+function ChildDashboard({ childId, refreshKey }: { childId: string; refreshKey: number }) {
   const [balance, setBalance] = useState<number | null>(null);
   const [submissions, setSubmissions] = useState<Submission[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,8 +70,9 @@ function ChildDashboard({ childId }: { childId: string }) {
       .finally(() => setLoading(false));
   }, [childId]);
 
-  // Reload whenever the selected child changes.
-  useEffect(load, [load]);
+  // Reload on child change, and on each realtime notification (refreshKey bump) so a newly
+  // published grade / star earn surfaces without a manual refresh.
+  useEffect(load, [load, refreshKey]);
 
   if (loading) {
     return (
@@ -154,9 +155,25 @@ function ChildDashboard({ childId }: { childId: string }) {
   );
 }
 
+function liveMessage(n: LiveNotification): string {
+  if (n.type === 'grade_published') {
+    const score = n.payload.score != null ? ` ${n.payload.score} điểm` : '';
+    const stars = n.payload.starsEarned ? ` · +${n.payload.starsEarned} sao ⭐` : '';
+    return `🔔 Con vừa có điểm bài "${n.payload.exercise ?? ''}":${score}${stars}`;
+  }
+  return '🔔 Có thông báo mới về con của bạn';
+}
+
 export function ParentView({ principal }: { principal: LmsPrincipal }) {
   const students = principal.students;
   const [childId, setChildId] = useState<string | null>(students[0]?.id ?? null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [banner, setBanner] = useState<string | null>(null);
+
+  useNotificationStream((n) => {
+    setBanner(liveMessage(n));
+    setRefreshKey((k) => k + 1);
+  });
 
   if (students.length === 0) {
     return (
@@ -190,7 +207,13 @@ export function ParentView({ principal }: { principal: LmsPrincipal }) {
         />
       </Group>
 
-      {childId && <ChildDashboard key={childId} childId={childId} />}
+      {banner && (
+        <Alert color="green" withCloseButton onClose={() => setBanner(null)}>
+          {banner}
+        </Alert>
+      )}
+
+      {childId && <ChildDashboard key={childId} childId={childId} refreshKey={refreshKey} />}
     </Stack>
   );
 }

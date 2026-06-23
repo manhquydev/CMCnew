@@ -1,7 +1,9 @@
 import { createTRPCClient, httpBatchLink, type TRPCClient } from '@trpc/client';
 import type { AppRouter } from '@cmc/api/router';
 
-const API_URL = (import.meta as { env?: Record<string, string> }).env?.VITE_API_URL ?? 'http://localhost:4000';
+/** API origin (no trailing /trpc). Exported for non-tRPC transports e.g. the SSE stream. */
+export const API_URL =
+  (import.meta as { env?: Record<string, string> }).env?.VITE_API_URL ?? 'http://localhost:4000';
 
 /** Shared typed tRPC client. credentials:'include' so the session cookie flows. */
 export const trpc: TRPCClient<AppRouter> = createTRPCClient<AppRouter>({

@@ -4,6 +4,7 @@ import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { earnEntry } from '@cmc/domain-rewards';
 import { router, requireRole, Role } from '../trpc.js';
+import { emitNotification } from '../events.js';
 
 const ENTITY = 'grade';
 
@@ -74,8 +75,8 @@ export const gradeRouter = router({
   // Publish the grade → student/parent can see it + earn stars (idempotent) + notify.
   publish: requireRole(Role.giao_vien, Role.quan_ly)
     .input(z.object({ submissionId: z.string().uuid() }))
-    .mutation(({ ctx, input }) =>
-      withRls(rlsContextOf(ctx.session), async (tx) => {
+    .mutation(async ({ ctx, input }) => {
+      const result = await withRls(rlsContextOf(ctx.session), async (tx) => {
         const grade = await tx.grade.update({
           where: { submissionId: input.submissionId },
           data: { isPublished: true },
@@ -97,14 +98,16 @@ export const gradeRouter = router({
           starsEarned = res.count > 0 ? sub.exercise.starReward : 0;
         }
 
-        await tx.notification.create({
+        const payload = { submissionId: sub.id, score: grade.score, exercise: sub.exercise.title, starsEarned };
+        const notif = await tx.notification.create({
           data: {
             facilityId: sub.facilityId,
             recipientType: 'student',
             recipientId: sub.studentId,
             type: 'grade_published',
-            payload: { submissionId: sub.id, score: grade.score, exercise: sub.exercise.title, starsEarned },
+            payload,
           },
+          select: { id: true, type: true, createdAt: true },
         });
         await logEvent(tx, {
           facilityId: grade.facilityId,
@@ -115,7 +118,19 @@ export const gradeRouter = router({
           changes: [{ field: 'isPublished', old: false, new: true }],
           actorId: ctx.session.userId,
         });
-        return { grade, starsEarned };
-      }),
-    ),
+        return { grade, starsEarned, studentId: sub.studentId, notif, payload };
+      });
+
+      // Fan out to live SSE subscribers AFTER commit (never push a row that rolled back).
+      emitNotification({
+        studentId: result.studentId,
+        notification: {
+          id: result.notif.id,
+          type: result.notif.type,
+          payload: result.payload,
+          createdAt: result.notif.createdAt.toISOString(),
+        },
+      });
+      return { grade: result.grade, starsEarned: result.starsEarned };
+    }),
 });

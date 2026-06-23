@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { trpc, type LmsPrincipal } from '@cmc/ui';
+import { trpc, useNotificationStream, type LmsPrincipal, type LiveNotification } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -203,7 +203,7 @@ function ExerciseModal({
   );
 }
 
-function ExercisesTab() {
+function ExercisesTab({ refreshKey }: { refreshKey: number }) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -228,9 +228,10 @@ function ExercisesTab() {
     }
   }, []);
 
+  // refreshKey bumps when a realtime notification arrives → re-fetch so a freshly published grade appears live.
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   // Index submissions by exercise for an O(1) join.
   const subByExercise = useMemo(() => {
@@ -338,7 +339,7 @@ function ExercisesTab() {
   );
 }
 
-function RewardsTab() {
+function RewardsTab({ refreshKey }: { refreshKey: number }) {
   const [balance, setBalance] = useState<number | null>(null);
   const [gifts, setGifts] = useState<Gift[]>([]);
   const [loading, setLoading] = useState(true);
@@ -364,9 +365,10 @@ function RewardsTab() {
     }
   }, []);
 
+  // refreshKey bumps on a realtime star earn → the balance updates without a manual reload.
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   async function redeem(gift: Gift) {
     setRedeemingId(gift.id);
@@ -467,20 +469,42 @@ function RewardsTab() {
   );
 }
 
+function liveMessage(n: LiveNotification): string {
+  if (n.type === 'grade_published') {
+    const score = n.payload.score != null ? ` ${n.payload.score} điểm` : '';
+    const stars = n.payload.starsEarned ? ` · +${n.payload.starsEarned} sao ⭐` : '';
+    return `🔔 Bài "${n.payload.exercise ?? ''}" đã có điểm:${score}${stars}`;
+  }
+  return '🔔 Bạn có thông báo mới';
+}
+
 export function StudentView({ principal }: { principal: LmsPrincipal }) {
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [banner, setBanner] = useState<string | null>(null);
+
+  useNotificationStream((n) => {
+    setBanner(liveMessage(n));
+    setRefreshKey((k) => k + 1);
+  });
+
   return (
     <Stack>
       <Title order={3}>Xin chào, {principal.displayName}</Title>
+      {banner && (
+        <Alert color="green" withCloseButton onClose={() => setBanner(null)}>
+          {banner}
+        </Alert>
+      )}
       <Tabs defaultValue="exercises">
         <Tabs.List>
           <Tabs.Tab value="exercises">Bài tập</Tabs.Tab>
           <Tabs.Tab value="rewards">Phần thưởng</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="exercises">
-          <ExercisesTab />
+          <ExercisesTab refreshKey={refreshKey} />
         </Tabs.Panel>
         <Tabs.Panel value="rewards">
-          <RewardsTab />
+          <RewardsTab refreshKey={refreshKey} />
         </Tabs.Panel>
       </Tabs>
     </Stack>
