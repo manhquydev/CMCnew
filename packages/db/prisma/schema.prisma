@@ -167,6 +167,7 @@ model Student {
   badges          StudentBadge[]
   levelProgresses LevelProgress[]
   receipts        Receipt[]
+  afterSaleCases  AfterSaleCase[]
 
   @@index([facilityId])
   @@map("student")
@@ -911,4 +912,43 @@ model TestAppointment {
   @@index([facilityId])
   @@index([opportunityId])
   @@map("test_appointment")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 5 — After-sale (CSKH). Support cases linked to a student, with a status
+// lifecycle + audit/chatter. Facility-scoped (RLS staff-by-facility).
+// ─────────────────────────────────────────────────────────────────────────────
+enum CaseStatus {
+  open
+  in_progress
+  resolved
+  closed
+}
+
+enum CasePriority {
+  low
+  normal
+  high
+}
+
+model AfterSaleCase {
+  id           String       @id @default(uuid()) @db.Uuid
+  facilityId   Int          @map("facility_id")
+  studentId    String?      @map("student_id") @db.Uuid
+  student      Student?     @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  contactPhone String?      @map("contact_phone")
+  subject      String
+  description  String?
+  category     String? // complaint | request | inquiry | refund | other (free-text)
+  priority     CasePriority @default(normal)
+  status       CaseStatus   @default(open)
+  assignedToId String?      @map("assigned_to_id") @db.Uuid
+  resolvedAt   DateTime?    @map("resolved_at")
+  createdById  String?      @map("created_by_id") @db.Uuid
+  archivedAt   DateTime?    @map("archived_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  @@index([facilityId])
+  @@index([studentId])
+  @@map("after_sale_case")
 }
