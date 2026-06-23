@@ -51,7 +51,10 @@
 ### 1.2 Auth & RBAC
 - Role mới (ngoài 10 role nhân sự): `student`, `parent` — **chỉ truy cập app LMS**, không bao giờ vào Teaching/Admin.
 - Phiên riêng (JWT + `tokenVersion`) như `AppUser`; thu hồi tức thì khi khóa tài khoản.
-- **Phạm vi dữ liệu:** PH chỉ thấy HS mình giám hộ (qua `Guardian`); HS chỉ thấy chính mình. Enforce bằng **RLS** (không chỉ tầng app) — pattern như Phase 1.
+- **Phạm vi dữ liệu — RLS principal-aware** (đã chốt 2026-06-23, security-class): RLS facility hiện tại chỉ cô lập theo cơ sở — chưa đủ mịn cho PH↔con / HS↔chính mình. Bổ sung 2 GUC mỗi request: `app.principal_kind` (`staff`|`parent`|`student`, mặc định `staff` → tương thích ngược) + `app.student_ids` (uuid[]). Helper `app_principal_kind()`, `app_student_ids()`.
+  - Policy trên bảng HS sở hữu: `super OR (principal='staff' AND facility=ANY(facility_ids)) OR (principal IN (parent,student) AND <student-link> = ANY(student_ids))`.
+  - **Liên kết student theo bảng:** trực tiếp `student_id` (submission, reward, enrollment, star_transaction); `student.id` (bảng student); gián tiếp `grade`→submission, `attendance`→enrollment, `exercise`→enrollment-cùng-lớp, `notification`→`recipient_id`. Vì khác nhau nên **làm cùng router** để USING + WITH CHECK khớp luồng ghi (HS tự nộp bài/đổi quà; GV/system cộng sao).
+  - `withRls` mở rộng nhận `principalKind?`/`studentIds?` (mặc định staff) — staff không đổi hành vi.
 - `giao_vien` **không** vào LMS (charter bất biến); GV chấm bài ở app Teaching.
 
 ### 1.3 Bất biến tenancy
@@ -147,7 +150,7 @@
 | Phạm vi | Spec cả Phase 2; build theo slice S1→S4; S1 = submit→grade→star→redeem |
 | Tài khoản HS/PH | Model riêng `StudentAccount`/`ParentAccount`; PH login chính; `Guardian` tối thiểu ngay |
 | Role | + `student`, `parent` — chỉ LMS; GV không vào LMS |
-| Phạm vi dữ liệu | RLS: PH thấy con (qua Guardian); HS thấy mình; chặn xuyên facility |
+| Phạm vi dữ liệu | **RLS principal-aware** (GUC `app.principal_kind`+`app.student_ids`): staff→facility, parent/student→student ownership; chặn xuyên facility + PH↔PH. Làm cùng router để khớp WITH CHECK |
 | Bài nộp | PDF đề gốc 1 lần + **annotation lớp riêng** (JSON); không lưu PDF phẳng |
 | Annotate tool | **Build tự** trên PDF.js (Submitty ref); S1 tối thiểu ink+text+highlight |
 | Lưu trữ | MinIO content-addressed (dedup); flatten chỉ khi xuất |
