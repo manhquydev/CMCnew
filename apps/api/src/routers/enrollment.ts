@@ -23,6 +23,8 @@ export const enrollmentRouter = router({
         facilityId: z.number().int().positive(),
         classBatchId: z.string().uuid(),
         studentId: z.string().uuid(),
+        // CRM seam: when the enrollment closes an opportunity (O5 won), record the link.
+        opportunityId: z.string().uuid().optional(),
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -37,6 +39,7 @@ export const enrollmentRouter = router({
             classBatchId: input.classBatchId,
             studentId: input.studentId,
             status: 'active',
+            opportunityId: input.opportunityId,
           },
         });
         // HS có enrollment → chuyển lifecycle sang active.

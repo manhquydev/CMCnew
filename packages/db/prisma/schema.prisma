@@ -829,3 +829,51 @@ model ReceiptCodeCounter {
   @@id([facilityId, year])
   @@map("receipt_code_counter")
 }
+
+/// CRM pipeline (S2): O1 lead → O2 contacted → O3 test scheduled → O4 tested → O5 enrolled.
+/// O3/O4 set bởi auto-hook (S3, từ TestAppointment); O2/O5 manual; cho lùi/re-open (audit).
+enum OpportunityStage {
+  O1_LEAD
+  O2_CONTACTED
+  O3_TEST_SCHEDULED
+  O4_TESTED
+  O5_ENROLLED
+}
+
+/// Khách tiềm năng — facility-scoped. phone chuẩn hóa +84, dedup theo (cơ sở, phone).
+model Contact {
+  id            String        @id @default(uuid()) @db.Uuid
+  facilityId    Int           @map("facility_id")
+  fullName      String        @map("full_name")
+  phone         String
+  email         String?
+  source        String? // web | walk_in | referral | ...
+  note          String?
+  archivedAt    DateTime?     @map("archived_at")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  opportunities Opportunity[]
+
+  @@unique([facilityId, phone])
+  @@index([facilityId])
+  @@map("contact")
+}
+
+/// Cơ hội bán hàng — facility-scoped. 1 opp = 1 HS/SĐT (nhiều con cùng SĐT → nhiều opp, phân biệt
+/// studentName). lost = closedAt + lostReason; won = stage O5_ENROLLED + closedAt + nối enrollment.
+model Opportunity {
+  id          String           @id @default(uuid()) @db.Uuid
+  facilityId  Int              @map("facility_id")
+  contactId   String           @map("contact_id") @db.Uuid
+  contact     Contact          @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  studentName String?          @map("student_name")
+  program     Program?
+  stage       OpportunityStage @default(O1_LEAD)
+  lostReason  String?          @map("lost_reason")
+  closedAt    DateTime?        @map("closed_at")
+  archivedAt  DateTime?        @map("archived_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  @@index([facilityId])
+  @@index([contactId])
+  @@map("opportunity")
+}
