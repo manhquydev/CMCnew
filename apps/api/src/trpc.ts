@@ -1,5 +1,5 @@
 import { initTRPC, TRPCError } from '@trpc/server';
-import type { RequestSession } from '@cmc/auth';
+import { Role, type RequestSession } from '@cmc/auth';
 import type { ApiContext } from './context.js';
 
 const t = initTRPC.context<ApiContext>().create({
@@ -24,3 +24,16 @@ export const superAdminProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (!ctx.session.isSuperAdmin) throw new TRPCError({ code: 'FORBIDDEN' });
   return next();
 });
+
+/** Require any of the given roles (super_admin always passes). */
+export function requireRole(...roles: Role[]) {
+  return protectedProcedure.use(({ ctx, next }) => {
+    if (ctx.session.isSuperAdmin) return next();
+    if (!roles.some((r) => ctx.session.roles.includes(r))) {
+      throw new TRPCError({ code: 'FORBIDDEN' });
+    }
+    return next();
+  });
+}
+
+export { Role };

@@ -1,0 +1,164 @@
+import { z } from 'zod';
+import { TRPCError } from '@trpc/server';
+import { withRls, ClassStatus } from '@cmc/db';
+import { rlsContextOf } from '@cmc/auth';
+import { logEvent, logStatusChange, addFollower } from '@cmc/audit';
+import { router, protectedProcedure, requireRole, Role } from '../trpc.js';
+import { nextBatchCode } from '../services/batch-code.js';
+
+const ENTITY = 'class_batch';
+
+export const classBatchRouter = router({
+  list: protectedProcedure.query(({ ctx }) =>
+    withRls(rlsContextOf(ctx.session), (tx) =>
+      tx.classBatch.findMany({
+        where: { archivedAt: null },
+        orderBy: { createdAt: 'desc' },
+        include: { course: { select: { code: true, name: true, program: true } } },
+      }),
+    ),
+  ),
+
+  get: protectedProcedure.input(z.object({ id: z.string().uuid() })).query(({ ctx, input }) =>
+    withRls(rlsContextOf(ctx.session), (tx) =>
+      tx.classBatch.findUniqueOrThrow({
+        where: { id: input.id },
+        include: { course: true, _count: { select: { enrollments: true, sessions: true } } },
+      }),
+    ),
+  ),
+
+  create: requireRole(Role.quan_ly)
+    .input(
+      z.object({
+        facilityId: z.number().int().positive(),
+        courseId: z.string().uuid(),
+        name: z.string().min(1),
+        startDate: z.string().date().optional(),
+        endDate: z.string().date().optional(),
+        capacity: z.number().int().positive().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const year = input.startDate
+          ? new Date(input.startDate).getUTCFullYear()
+          : new Date().getUTCFullYear();
+        const code = await nextBatchCode(tx, input.facilityId, year);
+        const batch = await tx.classBatch.create({
+          data: {
+            facilityId: input.facilityId,
+            courseId: input.courseId,
+            code,
+            name: input.name,
+            startDate: input.startDate ? new Date(input.startDate) : null,
+            endDate: input.endDate ? new Date(input.endDate) : null,
+            capacity: input.capacity ?? null,
+            status: 'planned',
+          },
+        });
+        await logEvent(tx, {
+          facilityId: batch.facilityId,
+          entityType: ENTITY,
+          entityId: batch.id,
+          type: 'created',
+          actorId: ctx.session.userId,
+        });
+        await addFollower(tx, ENTITY, batch.id, ctx.session.userId);
+        return batch;
+      }),
+    ),
+
+  setStatus: requireRole(Role.quan_ly)
+    .input(z.object({ id: z.string().uuid(), status: z.nativeEnum(ClassStatus) }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const before = await tx.classBatch.findUniqueOrThrow({ where: { id: input.id } });
+        const batch = await tx.classBatch.update({
+          where: { id: input.id },
+          data: { status: input.status },
+        });
+        await logStatusChange(
+          tx,
+          { facilityId: batch.facilityId, entityType: ENTITY, entityId: batch.id, actorId: ctx.session.userId },
+          'status',
+          before.status,
+          batch.status,
+        );
+        return batch;
+      }),
+    ),
+
+  // Hủy lớp linh hoạt: từ bất kỳ trạng thái, BẮT BUỘC lý do; buổi học tương lai → cancelled.
+  cancel: requireRole(Role.quan_ly)
+    .input(z.object({ id: z.string().uuid(), reason: z.string().min(1) }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const before = await tx.classBatch.findUniqueOrThrow({ where: { id: input.id } });
+        if (before.status === 'cancelled') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Lớp đã ở trạng thái hủy' });
+        }
+        const batch = await tx.classBatch.update({
+          where: { id: input.id },
+          data: { status: 'cancelled' },
+        });
+        // Cascade: buổi học chưa diễn ra → cancelled (buổi đã qua giữ nguyên để audit/điểm danh).
+        const today = new Date(new Date().toISOString().slice(0, 10));
+        const cancelled = await tx.classSession.updateMany({
+          where: { classBatchId: batch.id, status: { not: 'cancelled' }, sessionDate: { gte: today } },
+          data: { status: 'cancelled' },
+        });
+        await logStatusChange(
+          tx,
+          { facilityId: batch.facilityId, entityType: ENTITY, entityId: batch.id, actorId: ctx.session.userId },
+          'status',
+          before.status,
+          'cancelled',
+        );
+        await logEvent(tx, {
+          facilityId: batch.facilityId,
+          entityType: ENTITY,
+          entityId: batch.id,
+          type: 'note',
+          body: `Lý do hủy: ${input.reason} (huỷ ${cancelled.count} buổi chưa diễn ra)`,
+          actorId: ctx.session.userId,
+        });
+        return { batch, cancelledSessions: cancelled.count };
+      }),
+    ),
+
+  // Mở lại lớp đã hủy.
+  reopen: requireRole(Role.quan_ly)
+    .input(z.object({ id: z.string().uuid(), toStatus: z.nativeEnum(ClassStatus), reason: z.string().min(1) }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const before = await tx.classBatch.findUniqueOrThrow({ where: { id: input.id } });
+        if (before.status !== 'cancelled') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Chỉ mở lại được lớp đang hủy' });
+        }
+        if (input.toStatus === 'cancelled') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'toStatus không hợp lệ' });
+        }
+        const batch = await tx.classBatch.update({
+          where: { id: input.id },
+          data: { status: input.toStatus },
+        });
+        await logStatusChange(
+          tx,
+          { facilityId: batch.facilityId, entityType: ENTITY, entityId: batch.id, actorId: ctx.session.userId },
+          'status',
+          'cancelled',
+          batch.status,
+        );
+        await logEvent(tx, {
+          facilityId: batch.facilityId,
+          entityType: ENTITY,
+          entityId: batch.id,
+          type: 'note',
+          body: `Mở lại lớp: ${input.reason}`,
+          actorId: ctx.session.userId,
+        });
+        return batch;
+      }),
+    ),
+});

@@ -51,12 +51,18 @@ importers:
 
   apps/api:
     dependencies:
+      '@cmc/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
       '@cmc/auth':
         specifier: workspace:*
         version: link:../../packages/auth
       '@cmc/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@cmc/domain-academic':
+        specifier: workspace:*
+        version: link:../../packages/domain-academic
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.14(hono@4.12.27)
