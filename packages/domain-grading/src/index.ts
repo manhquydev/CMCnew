@@ -1,0 +1,15 @@
+export {
+  programWeights,
+  qualitativeScore,
+  quantitativeScore,
+  computeFinalGrade,
+  scoreToPercent,
+  gradeFromPercent,
+  type Program,
+  type ProgramWeights,
+  type QuantComponents,
+  type QuantFormula,
+  type FinalGradeInput,
+  type FinalGradeResult,
+  type Threshold,
+} from './grading.js';
