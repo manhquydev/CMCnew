@@ -25,6 +25,7 @@ import { crmRouter } from './crm.js';
 import { guardianRouter } from './guardian.js';
 import { dashboardRouter } from './dashboard.js';
 import { afterSaleRouter } from './aftersale.js';
+import { certificateRouter } from './certificate.js';
 
 export const appRouter = router({
   health: publicProcedure.query(() => ({ ok: true, ts: new Date().toISOString() })),
@@ -54,6 +55,7 @@ export const appRouter = router({
   guardian: guardianRouter,
   dashboard: dashboardRouter,
   afterSale: afterSaleRouter,
+  certificate: certificateRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -168,6 +168,7 @@ model Student {
   levelProgresses LevelProgress[]
   receipts        Receipt[]
   afterSaleCases  AfterSaleCase[]
+  certificates    Certificate[]
 
   @@index([facilityId])
   @@map("student")
@@ -951,4 +952,24 @@ model AfterSaleCase {
   @@index([facilityId])
   @@index([studentId])
   @@map("after_sale_case")
+}
+
+/// Chứng chỉ (Phase 5) — cấp tay bởi head_teacher/quan_ly (auto-gen theo hoàn thành cấp độ là
+/// nâng cấp sau). Facility-scoped; render bản in HTML tại /files/certificate/:id.
+model Certificate {
+  id          String    @id @default(uuid()) @db.Uuid
+  facilityId  Int       @map("facility_id")
+  studentId   String    @map("student_id") @db.Uuid
+  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  program     Program
+  level       String?
+  title       String
+  issuedById  String?   @map("issued_by_id") @db.Uuid
+  issuedAt    DateTime  @default(now()) @map("issued_at")
+  archivedAt  DateTime? @map("archived_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([facilityId])
+  @@index([studentId])
+  @@map("certificate")
 }

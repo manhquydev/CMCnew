@@ -15,6 +15,7 @@ import { createContext, COOKIE_NAME, LMS_COOKIE_NAME } from './context.js';
 import { onNotification } from './events.js';
 import { putPdf, readPdf, pdfExists, PdfStoreError, MAX_PDF_BYTES } from './services/pdf-store.js';
 import { renderReceiptHtml } from './services/receipt-html.js';
+import { renderCertificateHtml } from './services/certificate-html.js';
 
 const app = new Hono();
 
@@ -116,6 +117,38 @@ app.get('/files/receipt/:id', async (c) => {
     status: r.status,
     createdAt: r.createdAt,
     approvedAt: r.approvedAt,
+  });
+  c.header('Content-Type', 'text/html; charset=utf-8');
+  return c.html(html);
+});
+
+// Printable certificate (chứng chỉ) — staff only, authorized via the certificate RLS policy.
+app.get('/files/certificate/:id', async (c) => {
+  const staffTok = getCookie(c, COOKIE_NAME);
+  const staff = staffTok ? await resolveSession(staffTok) : null;
+  if (!staff) return c.text('unauthorized', 401);
+
+  const id = c.req.param('id');
+  const data = await withRls(rlsContextOf(staff), async (tx) => {
+    const cert = await tx.certificate.findUnique({ where: { id } });
+    if (!cert) return null;
+    const [student, facility] = await Promise.all([
+      tx.student.findUnique({ where: { id: cert.studentId }, select: { fullName: true } }),
+      tx.facility.findUnique({ where: { id: cert.facilityId }, select: { name: true } }),
+    ]);
+    return { cert, student, facility };
+  });
+  if (!data) return c.text('forbidden', 403);
+
+  const { cert, student, facility } = data;
+  const html = renderCertificateHtml({
+    id: cert.id,
+    facilityName: facility?.name ?? '',
+    studentName: student?.fullName ?? cert.studentId.slice(0, 8),
+    program: cert.program,
+    level: cert.level,
+    title: cert.title,
+    issuedAt: cert.issuedAt,
   });
   c.header('Content-Type', 'text/html; charset=utf-8');
   return c.html(html);
