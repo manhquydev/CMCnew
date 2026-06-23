@@ -78,6 +78,9 @@ importers:
       '@cmc/domain-academic':
         specifier: workspace:*
         version: link:../../packages/domain-academic
+      '@cmc/domain-finance':
+        specifier: workspace:*
+        version: link:../../packages/domain-finance
       '@cmc/domain-grading':
         specifier: workspace:*
         version: link:../../packages/domain-grading

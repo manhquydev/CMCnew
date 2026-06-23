@@ -74,6 +74,23 @@ export function effectiveDiscountPercent(
   return Math.min(tierPercent + voucherPercent, cap);
 }
 
+/** Gross = annual tuition × prepaid years (the more years prepaid, the bigger the year-tier discount). */
+export function grossForYears(annualPrice: number, years: number): number {
+  assertVndAmount(annualPrice, 'annualPrice');
+  if (!Number.isInteger(years) || years <= 0) {
+    throw new Error(`years must be a positive integer, got ${years}`);
+  }
+  return annualPrice * years;
+}
+
+/** Receipt number PT-YYYY-NNNN (seq zero-padded to 4). Allocated atomically per (facility, year). */
+export function formatReceiptCode(year: number, seq: number): string {
+  if (!Number.isInteger(year) || !Number.isInteger(seq) || seq <= 0) {
+    throw new Error(`invalid receipt code parts: year=${year} seq=${seq}`);
+  }
+  return `PT-${year}-${String(seq).padStart(4, '0')}`;
+}
+
 /** Net = gross × (1 − effectiveDiscount/100), rounded to the nearest VND. */
 export function netAmount(gross: number, effectiveDiscount: number): number {
   assertVndAmount(gross, 'gross');

@@ -17,6 +17,7 @@
     "@cmc/auth": "workspace:*",
     "@cmc/db": "workspace:*",
     "@cmc/domain-academic": "workspace:*",
+    "@cmc/domain-finance": "workspace:*",
     "@cmc/domain-grading": "workspace:*",
     "@cmc/domain-rewards": "workspace:*",
     "@hono/node-server": "^1.13.7",

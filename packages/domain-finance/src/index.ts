@@ -5,6 +5,8 @@ export {
   tierPercentForYears,
   effectiveDiscountPercent,
   netAmount,
+  grossForYears,
+  formatReceiptCode,
   priceReceipt,
   type DiscountTier,
   type CoursePriceLike,

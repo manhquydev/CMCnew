@@ -138,6 +138,8 @@ model Course {
   archivedAt  DateTime?    @map("archived_at")
   createdAt   DateTime     @default(now()) @map("created_at")
   batches     ClassBatch[]
+  prices      CoursePrice[]
+  receipts    Receipt[]
 
   @@map("course")
 }
@@ -164,6 +166,7 @@ model Student {
   finalGrades     FinalGrade[]
   badges          StudentBadge[]
   levelProgresses LevelProgress[]
+  receipts        Receipt[]
 
   @@index([facilityId])
   @@map("student")
@@ -711,4 +714,118 @@ model FinalGrade {
   @@unique([studentId, program, periodKey])
   @@index([facilityId])
   @@map("final_grade")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 3 — Doanh thu & CRM. Slice S1: giá khóa (effective-dated) + discount tier +
+// voucher (consume nguyên tử, sửa M2) + phiếu thu. Logic số ở @cmc/domain-finance.
+// Spec: phase-03-revenue-crm. Tất cả facility-scoped (RLS staff-by-facility).
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ReceiptStatus {
+  draft
+  approved
+  sent
+  reconciled
+  cancelled
+}
+
+/// Giá khóa học theo thời điểm (effective-dated). amount = học phí/năm (VND integer).
+/// Giá áp cho phiếu = bản mới nhất có effectiveFrom <= ngày lập phiếu.
+model CoursePrice {
+  id            String    @id @default(uuid()) @db.Uuid
+  facilityId    Int       @map("facility_id")
+  courseId      String    @map("course_id") @db.Uuid
+  course        Course    @relation(fields: [courseId], references: [id])
+  amount        Int // VND/năm
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  archivedAt    DateTime? @map("archived_at")
+  createdById   String?   @map("created_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([facilityId])
+  @@index([courseId, effectiveFrom])
+  @@map("course_price")
+}
+
+/// Bậc giảm giá theo số năm đóng trước (config theo cơ sở). Mặc định 1→15,2→20,3→30
+/// (router fallback @cmc/domain-finance DEFAULT_DISCOUNT_TIERS nếu cơ sở chưa cấu hình).
+model DiscountTier {
+  id         String    @id @default(uuid()) @db.Uuid
+  facilityId Int       @map("facility_id")
+  years      Int
+  percent    Int
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@unique([facilityId, years])
+  @@index([facilityId])
+  @@map("discount_tier")
+}
+
+/// Voucher khuyến mãi — scope theo cơ sở; multi-use (maxUses). Consume nguyên tử tại
+/// receipt.approve: UPDATE ... WHERE used_count < max_uses → 0-row = CONFLICT (sửa M2).
+model Voucher {
+  id         String    @id @default(uuid()) @db.Uuid
+  facilityId Int       @map("facility_id")
+  code       String
+  percent    Int // 0..100
+  maxUses    Int       @default(1) @map("max_uses")
+  usedCount  Int       @default(0) @map("used_count")
+  validFrom  DateTime? @map("valid_from") @db.Date
+  validTo    DateTime? @map("valid_to") @db.Date
+  active     Boolean   @default(true)
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  receipts   Receipt[]
+
+  @@unique([facilityId, code])
+  @@index([facilityId])
+  @@map("voucher")
+}
+
+/// Phiếu thu — facility-scoped. net = gross × (1 − min(tier+voucher, 35)/100). Mã PT-YYYY-NNNN
+/// cấp tại approve. draft→approved→sent→reconciled (+cancelled). Voucher consume tại approve.
+model Receipt {
+  id                       String        @id @default(uuid()) @db.Uuid
+  facilityId               Int           @map("facility_id")
+  code                     String?       @unique
+  studentId                String        @map("student_id") @db.Uuid
+  student                  Student       @relation(fields: [studentId], references: [id])
+  courseId                 String        @map("course_id") @db.Uuid
+  course                   Course        @relation(fields: [courseId], references: [id])
+  period                   String?
+  yearsPrepaid             Int           @map("years_prepaid")
+  annualPrice              Int           @map("annual_price")
+  grossAmount              Int           @map("gross_amount")
+  tierPercent              Int           @map("tier_percent")
+  voucherId                String?       @map("voucher_id") @db.Uuid
+  voucher                  Voucher?      @relation(fields: [voucherId], references: [id])
+  voucherPercent           Int           @default(0) @map("voucher_percent")
+  effectiveDiscountPercent Int           @map("effective_discount_percent")
+  netAmount                Int           @map("net_amount")
+  status                   ReceiptStatus @default(draft)
+  collectedById            String?       @map("collected_by_id") @db.Uuid
+  approvedById             String?       @map("approved_by_id") @db.Uuid
+  approvedAt               DateTime?     @map("approved_at")
+  sentAt                   DateTime?     @map("sent_at")
+  reconciledAt             DateTime?     @map("reconciled_at")
+  reconcileNote            String?       @map("reconcile_note")
+  cancelledAt              DateTime?     @map("cancelled_at")
+  cancelReason             String?       @map("cancel_reason")
+  createdAt                DateTime      @default(now()) @map("created_at")
+
+  @@index([facilityId])
+  @@index([studentId])
+  @@map("receipt")
+}
+
+/// Bộ đếm sinh mã phiếu thu nguyên tử theo (cơ sở, năm).
+model ReceiptCodeCounter {
+  facilityId Int @map("facility_id")
+  year       Int
+  lastSeq    Int @default(0) @map("last_seq")
+
+  @@id([facilityId, year])
+  @@map("receipt_code_counter")
 }

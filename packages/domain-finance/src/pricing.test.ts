@@ -5,6 +5,8 @@ import {
   tierPercentForYears,
   effectiveDiscountPercent,
   netAmount,
+  grossForYears,
+  formatReceiptCode,
   priceReceipt,
   type CoursePriceLike,
 } from './pricing.js';
@@ -93,6 +95,26 @@ describe('netAmount', () => {
 
   it('rejects a non-integer gross', () => {
     expect(() => netAmount(100.5, 10)).toThrow();
+  });
+});
+
+describe('grossForYears', () => {
+  it('multiplies annual price by years', () => {
+    expect(grossForYears(10_000_000, 3)).toBe(30_000_000);
+    expect(grossForYears(10_000_000, 1)).toBe(10_000_000);
+  });
+  it('rejects non-positive years', () => {
+    expect(() => grossForYears(10_000_000, 0)).toThrow();
+  });
+});
+
+describe('formatReceiptCode', () => {
+  it('zero-pads the sequence to 4', () => {
+    expect(formatReceiptCode(2026, 1)).toBe('PT-2026-0001');
+    expect(formatReceiptCode(2026, 1234)).toBe('PT-2026-1234');
+  });
+  it('rejects a non-positive sequence', () => {
+    expect(() => formatReceiptCode(2026, 0)).toThrow();
   });
 });
 
