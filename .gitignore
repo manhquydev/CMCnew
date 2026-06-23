@@ -13,3 +13,6 @@ coverage/
 
 # test/automation artifacts
 .playwright-mcp/
+
+# flow harness local telemetry/workspaces
+.flow/
