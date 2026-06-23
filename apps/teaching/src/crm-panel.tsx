@@ -7,6 +7,7 @@ import {
   Card,
   Group,
   Modal,
+  NumberInput,
   Select,
   Stack,
   Table,
@@ -15,9 +16,11 @@ import {
   Textarea,
   Title,
 } from '@mantine/core';
+import { DateTimePicker } from '@mantine/dates';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Opp = Awaited<ReturnType<typeof trpc.crm.opportunityList.query>>[number];
+type TestAppt = Awaited<ReturnType<typeof trpc.crm.testList.query>>[number];
 
 const STAGES = [
   { value: 'O1_LEAD', label: 'O1 · Lead' },
@@ -50,6 +53,12 @@ export function CrmPanel() {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [lostTarget, setLostTarget] = useState<Opp | null>(null);
   const [lostReason, setLostReason] = useState('');
+  const [tests, setTests] = useState<TestAppt[]>([]);
+  const [testTarget, setTestTarget] = useState<Opp | null>(null);
+  const [testAt, setTestAt] = useState<Date | null>(null);
+  const [gradeTarget, setGradeTarget] = useState<TestAppt | null>(null);
+  const [gradeScore, setGradeScore] = useState<number | string>('');
+  const [gradeResult, setGradeResult] = useState('');
 
   useEffect(() => {
     trpc.facility.list.query().then((fs) => {
@@ -61,8 +70,41 @@ export function CrmPanel() {
   const load = useCallback(() => {
     if (!facilityId) return;
     trpc.crm.opportunityList.query({ facilityId }).then(setOpps).catch(() => setOpps([]));
+    trpc.crm.testList.query({ facilityId }).then(setTests).catch(() => setTests([]));
   }, [facilityId]);
   useEffect(load, [load]);
+
+  async function scheduleTest() {
+    if (!facilityId || !testTarget || !testAt) return;
+    try {
+      await trpc.crm.testCreate.mutate({
+        facilityId,
+        opportunityId: testTarget.id,
+        studentName: testTarget.studentName ?? undefined,
+        type: 'entrance',
+        scheduledAt: testAt.toISOString(),
+      });
+      setMsg({ kind: 'ok', text: 'Đã đặt lịch test (cơ hội tự lên O3).' });
+      setTestTarget(null);
+      setTestAt(null);
+      load();
+    } catch (e) {
+      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+    }
+  }
+  async function doGrade() {
+    if (!gradeTarget || typeof gradeScore !== 'number') return;
+    try {
+      await trpc.crm.testGrade.mutate({ id: gradeTarget.id, score: gradeScore, result: gradeResult.trim() || undefined });
+      setMsg({ kind: 'ok', text: 'Đã chấm test (cơ hội tự lên O4).' });
+      setGradeTarget(null);
+      setGradeScore('');
+      setGradeResult('');
+      load();
+    } catch (e) {
+      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+    }
+  }
 
   async function createLead() {
     if (!facilityId || !fullName.trim() || !phone.trim()) {
@@ -205,6 +247,11 @@ export function CrmPanel() {
                     </Table.Td>
                     <Table.Td>
                       <Group gap="xs" justify="flex-end">
+                        {!closed && (
+                          <Button size="compact-xs" variant="light" onClick={() => setTestTarget(o)}>
+                            Đặt test
+                          </Button>
+                        )}
                         {closed ? (
                           <Button size="compact-xs" variant="light" onClick={() => reopen(o)}>
                             Mở lại
@@ -228,6 +275,84 @@ export function CrmPanel() {
           </Table>
         )}
       </Card>
+
+      <Card withBorder>
+        <Title order={6} mb="sm">
+          Lịch test
+        </Title>
+        {tests.length === 0 ? (
+          <Text c="dimmed" size="sm">
+            Chưa có lịch test.
+          </Text>
+        ) : (
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Học sinh</Table.Th>
+                <Table.Th>Loại</Table.Th>
+                <Table.Th>Lịch</Table.Th>
+                <Table.Th>Trạng thái</Table.Th>
+                <Table.Th>Điểm</Table.Th>
+                <Table.Th />
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {tests.map((t) => (
+                <Table.Tr key={t.id}>
+                  <Table.Td>{t.studentName || '—'}</Table.Td>
+                  <Table.Td>{t.type === 'entrance' ? 'Đầu vào' : 'Định kỳ'}</Table.Td>
+                  <Table.Td>{new Date(t.scheduledAt).toLocaleString('vi-VN')}</Table.Td>
+                  <Table.Td>
+                    <Badge color={t.status === 'done' ? 'teal' : t.status === 'no_show' ? 'red' : 'gray'}>
+                      {t.status === 'done' ? 'Đã test' : t.status === 'no_show' ? 'Vắng' : 'Đã đặt'}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td>{t.score ?? '—'}</Table.Td>
+                  <Table.Td>
+                    {t.status === 'scheduled' && (
+                      <Button size="compact-xs" variant="light" onClick={() => setGradeTarget(t)}>
+                        Chấm
+                      </Button>
+                    )}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
+      </Card>
+
+      <Modal opened={!!testTarget} onClose={() => setTestTarget(null)} title="Đặt lịch test đầu vào">
+        <Stack>
+          <Text size="sm">
+            {testTarget?.studentName || testTarget?.contact.fullName} — cơ hội sẽ tự chuyển sang O3.
+          </Text>
+          <DateTimePicker label="Thời gian test" value={testAt} onChange={(v) => setTestAt(v ? new Date(v) : null)} />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setTestTarget(null)}>
+              Đóng
+            </Button>
+            <Button disabled={!testAt} onClick={scheduleTest}>
+              Đặt lịch
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal opened={!!gradeTarget} onClose={() => setGradeTarget(null)} title="Chấm test">
+        <Stack>
+          <NumberInput label="Điểm" min={0} max={10} step={0.5} value={gradeScore} onChange={setGradeScore} />
+          <TextInput label="Kết quả (tùy chọn)" placeholder="đạt / chưa đạt" value={gradeResult} onChange={(e) => setGradeResult(e.currentTarget.value)} />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setGradeTarget(null)}>
+              Đóng
+            </Button>
+            <Button disabled={typeof gradeScore !== 'number'} onClick={doGrade}>
+              Lưu điểm
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Modal opened={!!lostTarget} onClose={() => setLostTarget(null)} title="Đánh dấu cơ hội mất">
         <Stack>
