@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc } from '@cmc/ui';
+import { trpc, uploadExercisePdf } from '@cmc/ui';
 import {
   Alert,
   Badge,
   Button,
   Card,
   Center,
+  FileInput,
   Group,
   Loader,
   Modal,
@@ -66,6 +67,7 @@ function CreateExerciseModal({
   const [maxScore, setMaxScore] = useState<number | string>(10);
   const [starReward, setStarReward] = useState<number | string>(10);
   const [type, setType] = useState<string | null>('homework');
+  const [pdf, setPdf] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -77,11 +79,14 @@ function CreateExerciseModal({
     setBusy(true);
     setErr('');
     try {
+      // Upload the base PDF first (content-addressed) so the exercise carries its basePdfRef.
+      const basePdfRef = pdf ? await uploadExercisePdf(pdf) : undefined;
       await trpc.exercise.create.mutate({
         facilityId,
         classBatchId,
         title: title.trim(),
         description: description.trim() || undefined,
+        basePdfRef,
         maxScore: typeof maxScore === 'number' ? maxScore : undefined,
         starReward: typeof starReward === 'number' ? starReward : undefined,
         type: (type as 'homework' | 'test_entrance' | 'test_periodic') ?? undefined,
@@ -92,6 +97,7 @@ function CreateExerciseModal({
       setMaxScore(10);
       setStarReward(10);
       setType('homework');
+      setPdf(null);
       onCreated();
     } catch (e) {
       setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
@@ -135,6 +141,19 @@ function CreateExerciseModal({
             <NumberInput label="Điểm tối đa" value={maxScore} onChange={setMaxScore} min={1} />
             <NumberInput label="Sao thưởng" value={starReward} onChange={setStarReward} min={0} />
           </Group>
+          <FileInput
+            label="Đề gốc PDF (tùy chọn)"
+            placeholder="Chọn file PDF"
+            accept="application/pdf"
+            value={pdf}
+            onChange={setPdf}
+            clearable
+          />
+          {pdf && pdf.type !== 'application/pdf' && (
+            <Text c="red" size="xs">
+              File phải là PDF.
+            </Text>
+          )}
           {err && (
             <Text c="red" size="sm">
               {err}

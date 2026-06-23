@@ -16,7 +16,8 @@
     "@mantine/form": "^7.15.2",
     "@mantine/hooks": "^7.15.2",
     "@tabler/icons-react": "^3.26.0",
-    "@trpc/client": "^11.0.0"
+    "@trpc/client": "^11.0.0",
+    "pdfjs-dist": "^6.0.227"
   },
   "peerDependencies": {
     "react": "^19.0.0",

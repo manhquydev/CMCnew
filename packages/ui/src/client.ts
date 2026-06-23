@@ -16,3 +16,16 @@ export const trpc: TRPCClient<AppRouter> = createTRPCClient<AppRouter>({
 });
 
 export type { AppRouter };
+
+/** Upload an exercise base PDF (staff session). Returns its content-address ref for basePdfRef. */
+export async function uploadExercisePdf(file: File): Promise<string> {
+  const res = await fetch(`${API_URL}/upload/exercise-pdf`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/pdf' },
+    body: file,
+  });
+  if (!res.ok) throw new Error(`Tải đề PDF thất bại (${res.status}): ${await res.text()}`);
+  const { ref } = (await res.json()) as { ref: string };
+  return ref;
+}

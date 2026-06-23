@@ -14,5 +14,8 @@ coverage/
 # test/automation artifacts
 .playwright-mcp/
 
+# local content-addressed PDF store (S1.7; swaps to MinIO later)
+.data/
+
 # flow harness local telemetry/workspaces
 .flow/

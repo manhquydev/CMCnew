@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { trpc, useNotificationStream, type LmsPrincipal, type LiveNotification } from '@cmc/ui';
+import { trpc, useNotificationStream, PdfViewer, type LmsPrincipal, type LiveNotification } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -159,6 +159,15 @@ function ExerciseModal({
               )}
             </Stack>
           </Alert>
+        )}
+
+        {exercise.basePdfRef && (
+          <Stack gap={4}>
+            <Text size="sm" fw={600}>
+              Đề bài
+            </Text>
+            <PdfViewer pdfRef={exercise.basePdfRef} />
+          </Stack>
         )}
 
         <Textarea
