@@ -23,6 +23,7 @@ import {
 import { DateInput } from '@mantine/dates';
 import { useDisclosure } from '@mantine/hooks';
 import { GradingPanel } from './grading';
+import { AssessmentPanel } from './assessment-panel';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
@@ -857,12 +858,16 @@ export function App() {
         <Tabs.List mb="md">
           <Tabs.Tab value="classes">Lớp học</Tabs.Tab>
           <Tabs.Tab value="grading">Chấm bài</Tabs.Tab>
+          <Tabs.Tab value="assessment">Học bạ</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="classes">
           <Workspace />
         </Tabs.Panel>
         <Tabs.Panel value="grading">
           <GradingPanel />
+        </Tabs.Panel>
+        <Tabs.Panel value="assessment">
+          <AssessmentPanel />
         </Tabs.Panel>
       </Tabs>
     </LoginGate>

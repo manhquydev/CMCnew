@@ -15,6 +15,25 @@ const DEFAULT_FORMULA: QuantFormula = { homework: 0.5, test: 0.3, attendance: 0.
 const norm10 = (score: number, max: number) => (max > 0 ? (score / max) * 10 : 0);
 
 export const assessmentRouter = router({
+  // Pillars + quant formula a teacher needs to fill a qualitative assessment / read a final grade.
+  // Pillars come from the program's GradingTemplate (seed), not the client — keeps the form
+  // aligned with the configured rubric. Falls back to an empty pillar list + default formula.
+  template: requireRole(Role.giao_vien, Role.head_teacher, Role.quan_ly)
+    .input(z.object({ program: z.nativeEnum(Program), level: z.string().optional() }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const tpl = await tx.gradingTemplate.findFirst({
+          where: { program: input.program, level: input.level ?? null },
+          select: { criteria: true, formula: true },
+        });
+        const criteria = (tpl?.criteria as { pillars?: string[] } | undefined) ?? {};
+        return {
+          pillars: Array.isArray(criteria.pillars) ? criteria.pillars : [],
+          formula: (tpl?.formula as QuantFormula | undefined) ?? DEFAULT_FORMULA,
+        };
+      }),
+    ),
+
   // Teacher / head-teacher records a qualitative assessment for a (student, period). 1 per key.
   upsertQualitative: requireRole(Role.giao_vien, Role.head_teacher, Role.quan_ly)
     .input(
