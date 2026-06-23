@@ -100,7 +100,33 @@ export const levelProgressRouter = router({
         let notif: { id: string; type: string; createdAt: Date } | null = null;
         let payload: object | null = null;
         if (approved) {
-          await tx.student.update({ where: { id: lp.studentId }, data: { level: lp.toLevel } });
+          const student = await tx.student.update({ where: { id: lp.studentId }, data: { level: lp.toLevel } });
+          // Completing a level auto-issues its certificate (idempotent per student+level), so the
+          // head_teacher's single approval both promotes and certifies — no separate manual step.
+          const already = await tx.certificate.findFirst({
+            where: { studentId: lp.studentId, level: lp.toLevel, archivedAt: null },
+            select: { id: true },
+          });
+          if (!already) {
+            const cert = await tx.certificate.create({
+              data: {
+                facilityId: lp.facilityId,
+                studentId: lp.studentId,
+                program: student.program,
+                level: lp.toLevel,
+                title: `Hoàn thành cấp độ ${lp.toLevel}`,
+                issuedById: ctx.session.userId,
+              },
+            });
+            await logEvent(tx, {
+              facilityId: lp.facilityId,
+              entityType: 'certificate',
+              entityId: cert.id,
+              type: 'created',
+              body: `Tự cấp chứng chỉ "Hoàn thành cấp độ ${lp.toLevel}" cho ${student.fullName}`,
+              actorId: ctx.session.userId,
+            });
+          }
           payload = { fromLevel: lp.fromLevel, toLevel: lp.toLevel };
           notif = await tx.notification.create({
             data: {
