@@ -19,8 +19,10 @@ Mục tiêu: xương sống học thuật + giá trị LMS đầu tiên.
 - Admin: quản lý Facility / User / Role / gán facility.
 - Teaching: Course catalog, Class batch (**mã B-YYYY-NNNN nguyên tử**), Room, Schedule slot → sinh Session, Timetable, gán giáo viên/phòng.
 - Enrollment + student lifecycle.
-- Điểm danh (Teaching) → LMS học sinh xem điểm danh + streak (ICT).
-- **Done-evidence:** tạo lớp → xếp lịch → điểm danh; học sinh thấy streak đúng timezone.
+- Điểm danh (Teaching) — present/absent/late + excused.
+- **🆕 Hạ tầng Audit/Chatter kiểu Odoo (cross-cutting)** — gắn vào mọi thực thể giáo vụ ngay từ Phase 1.
+- (Cổng học sinh xem điểm danh/streak → Phase 2.)
+- **Done-evidence:** tạo lớp → xếp lịch → điểm danh; đổi trạng thái lớp ghi đầy đủ vào chatter (ai/khi/cũ→mới + lý do). Spec chi tiết: `specs/phase-01-academic-core.md`.
 
 ## Phase 2 — Đánh giá & trải nghiệm LMS học sinh
 
@@ -51,7 +53,7 @@ Mục tiêu: xương sống học thuật + giá trị LMS đầu tiên.
 - **Guardian link backend + UI** (sửa lỗ A3 hệ cũ).
 - Dashboard BGĐ/MAES.
 - Cron họp phụ huynh (cadence), Chứng chỉ auto-gen, Chat CSKH (FAQ + Gemini).
-- Activity log/audit polymorphic xuyên record.
+- (Audit/Chatter đã làm nền từ Phase 1 — Phase 5 chỉ mở rộng cho các module after-sale/exec.)
 - **Done-evidence:** phụ huynh thấy đủ con; MAES tính đúng; case đổi lifecycle học sinh.
 
 ## Nhánh song song
