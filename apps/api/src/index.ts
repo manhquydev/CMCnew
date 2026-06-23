@@ -8,7 +8,8 @@ import { cors } from 'hono/cors';
 import { getCookie } from 'hono/cookie';
 import { streamSSE } from 'hono/streaming';
 import { trpcServer } from '@hono/trpc-server';
-import { resolveLmsSession, resolveSession } from '@cmc/auth';
+import { resolveLmsSession, resolveSession, rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
+import { withRls } from '@cmc/db';
 import { appRouter } from './routers/index.js';
 import { createContext, COOKIE_NAME, LMS_COOKIE_NAME } from './context.js';
 import { onNotification } from './events.js';
@@ -47,16 +48,25 @@ app.post('/upload/exercise-pdf', async (c) => {
   }
 });
 
-// Serve: any authenticated principal (staff or LMS). NOTE (DEBT): coarse auth — does not yet
-// check that this principal may see this specific exercise. Tighten to per-principal access
-// (staff facility / student enrolled in the class) before production. Ref is content-addressed
-// (sha256), so it is unguessable, but that is not an access-control substitute.
+// Serve: per-principal access. Authorization reuses the exercise RLS policy as the single source
+// of truth — staff see their facility's exercises, a parent/student only exercises in a class their
+// owned student is enrolled in. We look for an RLS-visible exercise that uses this base PDF; if none
+// is visible the principal may not see it. Authorization is checked BEFORE existence on disk so the
+// endpoint never reveals whether a ref exists to a principal who is not entitled to it.
 app.get('/files/exercise/:ref', async (c) => {
   const staffTok = getCookie(c, COOKIE_NAME);
   const lmsTok = getCookie(c, LMS_COOKIE_NAME);
-  const authed = (staffTok && (await resolveSession(staffTok))) || (lmsTok && (await resolveLmsSession(lmsTok)));
-  if (!authed) return c.text('unauthorized', 401);
+  const staff = staffTok ? await resolveSession(staffTok) : null;
+  const lms = !staff && lmsTok ? await resolveLmsSession(lmsTok) : null;
+  if (!staff && !lms) return c.text('unauthorized', 401);
+
   const ref = c.req.param('ref');
+  const rlsCtx = staff ? rlsContextOf(staff) : lmsRlsContextOf(lms!);
+  const visible = await withRls(rlsCtx, (tx) =>
+    tx.exercise.findFirst({ where: { basePdfRef: ref, archivedAt: null }, select: { id: true } }),
+  );
+  if (!visible) return c.text('forbidden', 403);
+
   if (!(await pdfExists(ref))) return c.text('not found', 404);
   try {
     const buf = await readPdf(ref);
