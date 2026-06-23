@@ -26,6 +26,7 @@ import { GradingPanel } from './grading';
 import { AssessmentPanel } from './assessment-panel';
 import { LevelApprovalPanel } from './level-approval-panel';
 import { FinancePanel } from './finance-panel';
+import { CrmPanel } from './crm-panel';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
@@ -862,6 +863,7 @@ export function App() {
           <Tabs.Tab value="grading">Chấm bài</Tabs.Tab>
           <Tabs.Tab value="assessment">Học bạ</Tabs.Tab>
           <Tabs.Tab value="levelup">Duyệt cấp độ</Tabs.Tab>
+          <Tabs.Tab value="crm">CRM</Tabs.Tab>
           <Tabs.Tab value="finance">Phiếu thu</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="classes">
@@ -875,6 +877,9 @@ export function App() {
         </Tabs.Panel>
         <Tabs.Panel value="levelup">
           <LevelApprovalPanel />
+        </Tabs.Panel>
+        <Tabs.Panel value="crm">
+          <CrmPanel />
         </Tabs.Panel>
         <Tabs.Panel value="finance">
           <FinancePanel />
