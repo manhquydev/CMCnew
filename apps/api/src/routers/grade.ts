@@ -7,6 +7,17 @@ import { router, requireRole, Role } from '../trpc.js';
 
 const ENTITY = 'grade';
 
+// Scalar fields only — never select the Json columns (rubric/annotationLayer) into a
+// client-facing shape (recursive JsonValue blows tRPC's TS instantiation depth).
+const gradeSelect = {
+  id: true,
+  facilityId: true,
+  score: true,
+  maxScore: true,
+  feedback: true,
+  isPublished: true,
+} as const;
+
 export const gradeRouter = router({
   // Teacher grades a submission (creates/updates the grade, marks submission graded).
   grade: requireRole(Role.giao_vien, Role.quan_ly)
@@ -45,6 +56,7 @@ export const gradeRouter = router({
             annotationLayer: (input.annotationLayer ?? undefined) as object | undefined,
             gradedById: ctx.session.userId,
           },
+          select: gradeSelect,
         });
         await tx.submission.update({ where: { id: input.submissionId }, data: { status: 'graded' } });
         await logEvent(tx, {
@@ -67,6 +79,7 @@ export const gradeRouter = router({
         const grade = await tx.grade.update({
           where: { submissionId: input.submissionId },
           data: { isPublished: true },
+          select: gradeSelect,
         });
         const sub = await tx.submission.findUniqueOrThrow({
           where: { id: input.submissionId },

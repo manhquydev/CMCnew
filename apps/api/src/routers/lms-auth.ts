@@ -10,6 +10,7 @@ function publicLms(s: LmsSession) {
     kind: s.kind,
     accountId: s.accountId,
     displayName: s.displayName,
+    students: s.students,
     studentIds: s.studentIds,
     facilityIds: s.facilityIds,
   };

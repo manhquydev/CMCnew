@@ -7,6 +7,8 @@ export interface LmsSession {
   accountId: string;
   displayName: string;
   /** Students this principal owns: a parent's guardianed children, or a student themselves. */
+  students: { id: string; fullName: string }[];
+  /** Ids only — convenience for RLS context + client lookups. Mirror of students.map(id). */
   studentIds: string[];
   /** Distinct facilities of those students — the tenant scope for facility-only tables. */
   facilityIds: number[];
@@ -33,7 +35,9 @@ async function parentSession(accountId: string): Promise<ResolvedLms | null> {
   return withRls(SYSTEM_RLS, async (tx) => {
     const acc = await tx.parentAccount.findUnique({
       where: { id: accountId },
-      include: { guardians: { include: { student: { select: { id: true, facilityId: true } } } } },
+      include: {
+        guardians: { include: { student: { select: { id: true, fullName: true, facilityId: true } } } },
+      },
     });
     if (!acc || !acc.isActive) return null;
     const students = acc.guardians.map((g) => g.student);
@@ -41,6 +45,7 @@ async function parentSession(accountId: string): Promise<ResolvedLms | null> {
       kind: 'parent' as const,
       accountId: acc.id,
       displayName: acc.displayName,
+      students: students.map((s) => ({ id: s.id, fullName: s.fullName })),
       studentIds: students.map((s) => s.id),
       facilityIds: [...new Set(students.map((s) => s.facilityId))],
       _tokenVersion: acc.tokenVersion,
@@ -59,6 +64,7 @@ async function studentSession(accountId: string): Promise<ResolvedLms | null> {
       kind: 'student' as const,
       accountId: acc.id,
       displayName: acc.student.fullName,
+      students: [{ id: acc.student.id, fullName: acc.student.fullName }],
       studentIds: [acc.student.id],
       facilityIds: [acc.student.facilityId],
       _tokenVersion: acc.tokenVersion,

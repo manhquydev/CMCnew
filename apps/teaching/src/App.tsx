@@ -22,6 +22,7 @@ import {
 } from '@mantine/core';
 import { DateInput } from '@mantine/dates';
 import { useDisclosure } from '@mantine/hooks';
+import { GradingPanel } from './grading';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
@@ -852,7 +853,18 @@ function Workspace() {
 export function App() {
   return (
     <LoginGate appTitle="Teaching / ERP">
-      <Workspace />
+      <Tabs defaultValue="classes" keepMounted={false}>
+        <Tabs.List mb="md">
+          <Tabs.Tab value="classes">Lớp học</Tabs.Tab>
+          <Tabs.Tab value="grading">Chấm bài</Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel value="classes">
+          <Workspace />
+        </Tabs.Panel>
+        <Tabs.Panel value="grading">
+          <GradingPanel />
+        </Tabs.Panel>
+      </Tabs>
     </LoginGate>
   );
 }
