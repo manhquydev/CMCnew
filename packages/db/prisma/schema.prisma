@@ -160,6 +160,8 @@ model Student {
   submissions     Submission[]
   starTransactions StarTransaction[]
   rewards         Reward[]
+  qualitativeAssessments QualitativeAssessment[]
+  finalGrades     FinalGrade[]
 
   @@index([facilityId])
   @@map("student")
@@ -551,4 +553,91 @@ model Notification {
   @@index([recipientType, recipientId, readAt])
   @@index([facilityId])
   @@map("notification")
+}
+
+/// Học bạ & tổng hợp (Phase 2 / S2). Logic số nằm ở @cmc/domain-grading.
+
+enum AssessmentPeriod {
+  MONTHLY
+  END_LEVEL
+}
+
+/// Cấu hình chấm theo chương trình — facility-scoped catalog. formula = trọng số định lượng
+/// { homework, test, attendance }; criteria = danh sách pillar định tính.
+model GradingTemplate {
+  id         String             @id @default(uuid()) @db.Uuid
+  facilityId Int                @map("facility_id")
+  program    Program
+  level      String?
+  formula    Json
+  criteria   Json?
+  thresholds GradingThreshold[]
+  archivedAt DateTime?          @map("archived_at")
+  createdAt  DateTime           @default(now()) @map("created_at")
+
+  @@unique([facilityId, program, level])
+  @@index([facilityId])
+  @@map("grading_template")
+}
+
+/// Ngưỡng % → điểm chữ + kết quả (đạt/chưa), theo template. sequence để sắp xếp.
+model GradingThreshold {
+  id         String          @id @default(uuid()) @db.Uuid
+  facilityId Int             @map("facility_id")
+  templateId String          @map("template_id") @db.Uuid
+  template   GradingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  minPercent Float           @map("min_percent")
+  maxPercent Float           @map("max_percent")
+  grade      String
+  result     String
+  sequence   Int             @default(0)
+
+  @@index([templateId])
+  @@index([facilityId])
+  @@map("grading_threshold")
+}
+
+/// Đánh giá định tính theo (student, period). criteria = { pillar: 0..10 }. 1/(student, periodKey).
+model QualitativeAssessment {
+  id           String           @id @default(uuid()) @db.Uuid
+  facilityId   Int              @map("facility_id")
+  studentId    String           @map("student_id") @db.Uuid
+  student      Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  program      Program?
+  level        String?
+  period       AssessmentPeriod
+  periodKey    String           @map("period_key")
+  criteria     Json
+  narrative    String?
+  assessedById String?          @map("assessed_by_id") @db.Uuid
+  archivedAt   DateTime?        @map("archived_at")
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  @@unique([studentId, periodKey])
+  @@index([facilityId])
+  @@map("qualitative_assessment")
+}
+
+/// FinalGrade tổng hợp theo (student, program, period). Idempotent theo khóa; complete=false khi
+/// còn thiếu phần có trọng số (điểm provisional).
+model FinalGrade {
+  id               String   @id @default(uuid()) @db.Uuid
+  facilityId       Int      @map("facility_id")
+  studentId        String   @map("student_id") @db.Uuid
+  student          Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  program          Program
+  level            String?
+  periodKey        String   @map("period_key")
+  homeworkAvg      Float?   @map("homework_avg")
+  attendanceRate   Float?   @map("attendance_rate")
+  testScore        Float?   @map("test_score")
+  qualitativeScore Float?   @map("qualitative_score")
+  finalScore       Float?   @map("final_score")
+  passed           Boolean  @default(false)
+  complete         Boolean  @default(false)
+  computedAt       DateTime @default(now()) @map("computed_at")
+
+  @@unique([studentId, program, periodKey])
+  @@index([facilityId])
+  @@map("final_grade")
 }

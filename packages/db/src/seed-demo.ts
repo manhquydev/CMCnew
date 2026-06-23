@@ -40,7 +40,42 @@ async function main(): Promise<void> {
     });
   }
 
-  console.log(`✓ Demo seed: ${courses.length} khóa, 2 phòng, ${students.length} học sinh @ ${hq.code}`);
+  // Grading templates per program (facility-scoped). formula = quantitative blend weights;
+  // the qual/quant program split lives in @cmc/domain-grading. Idempotent (find-then-create —
+  // the (facility,program,level) unique can't dedupe on a NULL level).
+  const THRESHOLDS = [
+    { minPercent: 0, maxPercent: 49.999, grade: 'Cần cố gắng', result: 'fail', sequence: 0 },
+    { minPercent: 50, maxPercent: 64.999, grade: 'Đạt', result: 'pass', sequence: 1 },
+    { minPercent: 65, maxPercent: 79.999, grade: 'Khá', result: 'pass', sequence: 2 },
+    { minPercent: 80, maxPercent: 89.999, grade: 'Giỏi', result: 'pass', sequence: 3 },
+    { minPercent: 90, maxPercent: 100, grade: 'Xuất sắc', result: 'pass', sequence: 4 },
+  ];
+  const PILLARS: Record<Program, string[]> = {
+    UCREA: ['sáng tạo', 'tập trung', 'hợp tác', 'tự tin'],
+    BRIGHT_IG: ['tư duy', 'diễn đạt', 'hợp tác', 'kỷ luật'],
+    BLACK_HOLE: ['lập luận', 'phản biện', 'trình bày', 'kiên trì'],
+  };
+  let templateCount = 0;
+  for (const program of ['UCREA', 'BRIGHT_IG', 'BLACK_HOLE'] as Program[]) {
+    const existing = await prisma.gradingTemplate.findFirst({
+      where: { facilityId: hq.id, program, level: null },
+    });
+    if (existing) continue;
+    await prisma.gradingTemplate.create({
+      data: {
+        facilityId: hq.id,
+        program,
+        formula: { homework: 0.5, test: 0.3, attendance: 0.2 },
+        criteria: { pillars: PILLARS[program] },
+        thresholds: { create: THRESHOLDS.map((t) => ({ facilityId: hq.id, ...t })) },
+      },
+    });
+    templateCount++;
+  }
+
+  console.log(
+    `✓ Demo seed: ${courses.length} khóa, 2 phòng, ${students.length} học sinh, ${templateCount} grading template mới @ ${hq.code}`,
+  );
 }
 
 main()

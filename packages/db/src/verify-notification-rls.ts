@@ -7,7 +7,7 @@
  */
 import { prisma, withRls } from './index.js';
 
-const SUPER = { facilityIds: [], isSuperAdmin: true } as const;
+const SUPER = { facilityIds: [], isSuperAdmin: true };
 
 async function main(): Promise<void> {
   // Two students in the SAME facility (#1) → the exact case the old facility-only policy leaked.
