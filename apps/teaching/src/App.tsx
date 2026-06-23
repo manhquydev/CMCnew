@@ -6,6 +6,7 @@ import {
   Badge,
   Button,
   Card,
+  Checkbox,
   Grid,
   Group,
   Modal,
@@ -313,6 +314,67 @@ function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Roo
   );
 }
 
+function CreateStudentModal({ facilityId, onCreated }: { facilityId: number; onCreated: () => void }) {
+  const [opened, { open, close }] = useDisclosure(false);
+  const [studentCode, setStudentCode] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [program, setProgram] = useState<string | null>('UCREA');
+  const [dob, setDob] = useState<Date | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function create() {
+    setBusy(true);
+    setErr('');
+    try {
+      await trpc.student.create.mutate({
+        facilityId,
+        studentCode,
+        fullName,
+        program: program as 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE',
+        dateOfBirth: toApiDate(dob),
+      });
+      close();
+      setStudentCode('');
+      setFullName('');
+      setDob(null);
+      onCreated();
+    } catch (e) {
+      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Button variant="default" onClick={open}>
+        + Tạo học sinh
+      </Button>
+      <Modal opened={opened} onClose={close} title="Tạo học sinh">
+        <Stack>
+          <TextInput
+            label="Mã học sinh"
+            value={studentCode}
+            onChange={(e) => setStudentCode(e.currentTarget.value)}
+          />
+          <TextInput label="Họ tên" value={fullName} onChange={(e) => setFullName(e.currentTarget.value)} />
+          <Select label="Chương trình" data={['UCREA', 'BRIGHT_IG', 'BLACK_HOLE']} value={program} onChange={setProgram} />
+          <DateInput label="Ngày sinh" value={dob} onChange={setDob} valueFormat="DD/MM/YYYY" clearable />
+          {err && (
+            <Text c="red" size="sm">
+              {err}
+            </Text>
+          )}
+          <Button onClick={create} loading={busy} disabled={!studentCode || !fullName}>
+            Tạo
+          </Button>
+        </Stack>
+      </Modal>
+    </>
+  );
+}
+
 function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [students, setStudents] = useState<StudentT[]>([]);
@@ -337,6 +399,15 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
     }
   }
 
+  async function complete(id: string) {
+    await trpc.enrollment.complete.mutate({ id });
+    load();
+  }
+
+  // Enroll only students not already in this batch.
+  const enrolledIds = new Set(enrollments.map((e) => e.studentId));
+  const enrollable = students.filter((s) => !enrolledIds.has(s.id));
+
   return (
     <Stack>
       <Group align="flex-end">
@@ -344,13 +415,15 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
           label="Học sinh"
           style={{ flex: 1 }}
           searchable
-          data={students.map((s) => ({ value: s.id, label: `${s.studentCode} — ${s.fullName}` }))}
+          placeholder={enrollable.length ? 'Chọn học sinh' : 'Không còn học sinh để ghi danh'}
+          data={enrollable.map((s) => ({ value: s.id, label: `${s.studentCode} — ${s.fullName}` }))}
           value={studentId}
           onChange={setStudentId}
         />
         <Button onClick={enroll} disabled={!studentId}>
           Ghi danh
         </Button>
+        <CreateStudentModal facilityId={facilityId} onCreated={load} />
       </Group>
       {msg && (
         <Text size="sm" c={msg.startsWith('Lỗi') ? 'red' : msg.startsWith('⚠') ? 'orange' : 'green'}>
@@ -364,7 +437,16 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
               <Table.Td>{e.student.studentCode}</Table.Td>
               <Table.Td>{e.student.fullName}</Table.Td>
               <Table.Td>
-                <Badge size="sm">{e.status}</Badge>
+                <Badge size="sm" color={e.status === 'completed' ? 'teal' : undefined}>
+                  {e.status}
+                </Badge>
+              </Table.Td>
+              <Table.Td w={110}>
+                {e.status === 'active' && (
+                  <Button size="compact-xs" variant="subtle" onClick={() => complete(e.id)}>
+                    Hoàn tất
+                  </Button>
+                )}
               </Table.Td>
             </Table.Tr>
           ))}
@@ -378,7 +460,7 @@ function AttendanceTab({ batch, facilityId }: { batch: Batch; facilityId: number
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
-  const [marks, setMarks] = useState<Record<string, string>>({});
+  const [marks, setMarks] = useState<Record<string, { status: string; excused: boolean }>>({});
 
   useEffect(() => {
     trpc.schedule.listSessions.query({ classBatchId: batch.id }).then(setSessions).catch(() => {});
@@ -388,21 +470,22 @@ function AttendanceTab({ batch, facilityId }: { batch: Batch; facilityId: number
   useEffect(() => {
     if (!sessionId) return;
     trpc.attendance.listBySession.query({ classSessionId: sessionId }).then((rows) => {
-      const m: Record<string, string> = {};
-      for (const r of rows) m[r.enrollmentId] = r.status;
+      const m: Record<string, { status: string; excused: boolean }> = {};
+      for (const r of rows) m[r.enrollmentId] = { status: r.status, excused: r.excused };
       setMarks(m);
     });
   }, [sessionId]);
 
-  async function mark(enrollmentId: string, status: string) {
-    if (!sessionId) return;
+  async function mark(enrollmentId: string, status: string, excused: boolean) {
+    if (!sessionId || !status) return;
     await trpc.attendance.mark.mutate({
       facilityId,
       classSessionId: sessionId,
       enrollmentId,
       status: status as 'present' | 'absent' | 'late',
+      excused,
     });
-    setMarks((m) => ({ ...m, [enrollmentId]: status }));
+    setMarks((m) => ({ ...m, [enrollmentId]: { status, excused } }));
   }
 
   return (
@@ -416,24 +499,41 @@ function AttendanceTab({ batch, facilityId }: { batch: Batch; facilityId: number
       />
       {sessionId && (
         <Table>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Học sinh</Table.Th>
+              <Table.Th>Điểm danh</Table.Th>
+              <Table.Th>Có phép</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
           <Table.Tbody>
-            {enrollments.map((e) => (
-              <Table.Tr key={e.id}>
-                <Table.Td>{e.student.fullName}</Table.Td>
-                <Table.Td>
-                  <SegmentedControl
-                    size="xs"
-                    data={[
-                      { value: 'present', label: 'Có mặt' },
-                      { value: 'late', label: 'Muộn' },
-                      { value: 'absent', label: 'Vắng' },
-                    ]}
-                    value={marks[e.id] ?? ''}
-                    onChange={(v) => mark(e.id, v)}
-                  />
-                </Table.Td>
-              </Table.Tr>
-            ))}
+            {enrollments.map((e) => {
+              const cur = marks[e.id];
+              return (
+                <Table.Tr key={e.id}>
+                  <Table.Td>{e.student.fullName}</Table.Td>
+                  <Table.Td>
+                    <SegmentedControl
+                      size="xs"
+                      data={[
+                        { value: 'present', label: 'Có mặt' },
+                        { value: 'late', label: 'Muộn' },
+                        { value: 'absent', label: 'Vắng' },
+                      ]}
+                      value={cur?.status ?? ''}
+                      onChange={(v) => mark(e.id, v, cur?.excused ?? false)}
+                    />
+                  </Table.Td>
+                  <Table.Td>
+                    <Checkbox
+                      checked={cur?.excused ?? false}
+                      disabled={!cur?.status}
+                      onChange={(ev) => mark(e.id, cur?.status ?? '', ev.currentTarget.checked)}
+                    />
+                  </Table.Td>
+                </Table.Tr>
+              );
+            })}
           </Table.Tbody>
         </Table>
       )}
