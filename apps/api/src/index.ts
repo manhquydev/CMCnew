@@ -14,6 +14,7 @@ import { appRouter } from './routers/index.js';
 import { createContext, COOKIE_NAME, LMS_COOKIE_NAME } from './context.js';
 import { onNotification } from './events.js';
 import { putPdf, readPdf, pdfExists, PdfStoreError, MAX_PDF_BYTES } from './services/pdf-store.js';
+import { renderReceiptHtml } from './services/receipt-html.js';
 
 const app = new Hono();
 
@@ -76,6 +77,48 @@ app.get('/files/exercise/:ref', async (c) => {
   } catch {
     return c.text('not found', 404);
   }
+});
+
+// Printable receipt (phiếu thu) — staff only, authorized via the receipt's RLS policy
+// (a receipt is visible only to staff of its facility). Returns styled HTML for print-to-PDF.
+app.get('/files/receipt/:id', async (c) => {
+  const staffTok = getCookie(c, COOKIE_NAME);
+  const staff = staffTok ? await resolveSession(staffTok) : null;
+  if (!staff) return c.text('unauthorized', 401);
+
+  const id = c.req.param('id');
+  const data = await withRls(rlsContextOf(staff), async (tx) => {
+    const r = await tx.receipt.findUnique({ where: { id } });
+    if (!r) return null;
+    const [student, course, facility] = await Promise.all([
+      tx.student.findUnique({ where: { id: r.studentId }, select: { fullName: true, studentCode: true } }),
+      tx.course.findUnique({ where: { id: r.courseId }, select: { code: true, name: true } }),
+      tx.facility.findUnique({ where: { id: r.facilityId }, select: { name: true } }),
+    ]);
+    return { r, student, course, facility };
+  });
+  if (!data) return c.text('forbidden', 403); // RLS-invisible or missing — don't distinguish
+
+  const { r, student, course, facility } = data;
+  const html = renderReceiptHtml({
+    code: r.code,
+    facilityName: facility?.name ?? '',
+    studentName: student ? `${student.fullName} (${student.studentCode})` : r.studentId.slice(0, 8),
+    courseLabel: course ? `${course.code} — ${course.name}` : r.courseId.slice(0, 8),
+    period: r.period,
+    yearsPrepaid: r.yearsPrepaid,
+    annualPrice: r.annualPrice,
+    grossAmount: r.grossAmount,
+    tierPercent: r.tierPercent,
+    voucherPercent: r.voucherPercent,
+    effectiveDiscountPercent: r.effectiveDiscountPercent,
+    netAmount: r.netAmount,
+    status: r.status,
+    createdAt: r.createdAt,
+    approvedAt: r.approvedAt,
+  });
+  c.header('Content-Type', 'text/html; charset=utf-8');
+  return c.html(html);
 });
 
 // Realtime notifications for LMS principals (parent/student). The connection is authenticated

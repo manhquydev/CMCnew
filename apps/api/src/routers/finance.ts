@@ -239,6 +239,58 @@ export const financeRouter = router({
       }),
     ),
 
+  // Mark an approved receipt as sent (manual delivery — no online payment in scope).
+  receiptMarkSent: requireRole(Role.ke_toan, Role.quan_ly)
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const r = await tx.receipt.findUniqueOrThrow({ where: { id: input.id } });
+        if (r.status !== 'approved') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Chỉ gửi được phiếu đã duyệt' });
+        }
+        const sent = await tx.receipt.update({
+          where: { id: r.id },
+          data: { status: 'sent', sentAt: new Date() },
+        });
+        await logEvent(tx, {
+          facilityId: sent.facilityId,
+          entityType: 'receipt',
+          entityId: sent.id,
+          type: 'status_changed',
+          body: `Đã gửi phiếu ${sent.code}`,
+          changes: [{ field: 'status', old: 'approved', new: 'sent' }],
+          actorId: ctx.session.userId,
+        });
+        return sent;
+      }),
+    ),
+
+  // Reconcile against the cash/bank ledger (manual — no payment gateway).
+  receiptReconcile: requireRole(Role.ke_toan, Role.quan_ly)
+    .input(z.object({ id: z.string().uuid(), note: z.string().optional() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const r = await tx.receipt.findUniqueOrThrow({ where: { id: input.id } });
+        if (r.status !== 'approved' && r.status !== 'sent') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Chỉ đối soát phiếu đã duyệt/đã gửi' });
+        }
+        const rec = await tx.receipt.update({
+          where: { id: r.id },
+          data: { status: 'reconciled', reconciledAt: new Date(), reconcileNote: input.note },
+        });
+        await logEvent(tx, {
+          facilityId: rec.facilityId,
+          entityType: 'receipt',
+          entityId: rec.id,
+          type: 'status_changed',
+          body: `Đối soát phiếu ${rec.code}${input.note ? ': ' + input.note : ''}`,
+          changes: [{ field: 'status', old: r.status, new: 'reconciled' }],
+          actorId: ctx.session.userId,
+        });
+        return rec;
+      }),
+    ),
+
   // Cancel: refund the voucher use if the receipt had already consumed one.
   receiptCancel: requireRole(Role.ke_toan, Role.quan_ly)
     .input(z.object({ id: z.string().uuid(), reason: z.string().min(1) }))

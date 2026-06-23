@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc } from '@cmc/ui';
+import { trpc, API_URL } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -106,6 +106,30 @@ export function FinancePanel() {
     } catch (e) {
       setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
     }
+  }
+
+  async function markSent(id: string) {
+    setMsg(null);
+    try {
+      await trpc.finance.receiptMarkSent.mutate({ id });
+      setMsg({ kind: 'ok', text: 'Đã đánh dấu gửi phiếu.' });
+      loadReceipts();
+    } catch (e) {
+      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+    }
+  }
+  async function reconcile(id: string) {
+    setMsg(null);
+    try {
+      await trpc.finance.receiptReconcile.mutate({ id });
+      setMsg({ kind: 'ok', text: 'Đã đối soát phiếu.' });
+      loadReceipts();
+    } catch (e) {
+      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+    }
+  }
+  function printReceipt(id: string) {
+    window.open(`${API_URL}/files/receipt/${id}`, '_blank', 'noopener');
   }
 
   async function doCancel() {
@@ -221,6 +245,21 @@ export function FinancePanel() {
                         {r.status === 'draft' && (
                           <Button size="compact-xs" onClick={() => approve(r.id)}>
                             Duyệt
+                          </Button>
+                        )}
+                        {r.status === 'approved' && (
+                          <Button size="compact-xs" variant="light" onClick={() => markSent(r.id)}>
+                            Gửi
+                          </Button>
+                        )}
+                        {(r.status === 'approved' || r.status === 'sent') && (
+                          <Button size="compact-xs" variant="light" color="green" onClick={() => reconcile(r.id)}>
+                            Đối soát
+                          </Button>
+                        )}
+                        {r.code && (
+                          <Button size="compact-xs" variant="subtle" onClick={() => printReceipt(r.id)}>
+                            In
                           </Button>
                         )}
                         {(r.status === 'draft' || r.status === 'approved') && (
