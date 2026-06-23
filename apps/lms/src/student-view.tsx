@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { trpc, useNotificationStream, PdfViewer, type LmsPrincipal, type LiveNotification } from '@cmc/ui';
+import {
+  trpc,
+  useNotificationStream,
+  PdfAnnotator,
+  type LmsPrincipal,
+  type LiveNotification,
+  type AnnotationData,
+} from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -80,6 +87,8 @@ function ExerciseModal({
   onChanged: () => void | Promise<void>;
 }) {
   const [answer, setAnswer] = useState('');
+  const [annotation, setAnnotation] = useState<AnnotationData | null>(null);
+  const [teacherLayer, setTeacherLayer] = useState<AnnotationData | null>(null);
   const [busy, setBusy] = useState<'save' | 'submit' | null>(null);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
@@ -87,21 +96,36 @@ function ExerciseModal({
   const status = workStatus(submission);
   const isGraded = status === 'graded';
 
-  // Reset the editor from the latest submission each time the modal opens.
+  // Reset the editor from the latest submission each time the modal opens; pull the saved
+  // annotation layer (and the teacher's, once published) for the base PDF.
   useEffect(() => {
-    if (opened) {
-      setAnswer(submission?.answerText ?? '');
-      setMsg('');
-      setErr('');
+    if (!opened) return;
+    setAnswer(submission?.answerText ?? '');
+    setMsg('');
+    setErr('');
+    if (exercise.basePdfRef) {
+      trpc.submission.myLayer
+        .query({ exerciseId: exercise.id })
+        .then(({ mine, teacher }) => {
+          setAnnotation(mine);
+          setTeacherLayer(teacher);
+        })
+        .catch(() => {
+          /* a missing layer is fine — start blank */
+        });
     }
-  }, [opened, submission?.answerText]);
+  }, [opened, exercise.id, exercise.basePdfRef, submission?.answerText]);
 
   async function saveDraft() {
     setBusy('save');
     setMsg('');
     setErr('');
     try {
-      await trpc.submission.save.mutate({ exerciseId: exercise.id, answerText: answer });
+      await trpc.submission.save.mutate({
+        exerciseId: exercise.id,
+        answerText: answer,
+        annotationLayer: annotation ?? undefined,
+      });
       setMsg('Đã lưu nháp.');
       await onChanged();
     } catch (e) {
@@ -116,8 +140,12 @@ function ExerciseModal({
     setMsg('');
     setErr('');
     try {
-      // Persist the current text before turning the work in.
-      await trpc.submission.save.mutate({ exerciseId: exercise.id, answerText: answer });
+      // Persist the current text + annotation layer before turning the work in.
+      await trpc.submission.save.mutate({
+        exerciseId: exercise.id,
+        answerText: answer,
+        annotationLayer: annotation ?? undefined,
+      });
       await trpc.submission.submit.mutate({ exerciseId: exercise.id });
       await onChanged();
       onClose();
@@ -164,9 +192,15 @@ function ExerciseModal({
         {exercise.basePdfRef && (
           <Stack gap={4}>
             <Text size="sm" fw={600}>
-              Đề bài
+              {isGraded ? 'Đề bài & bài làm' : 'Đề bài — làm trực tiếp lên đề'}
             </Text>
-            <PdfViewer pdfRef={exercise.basePdfRef} />
+            <PdfAnnotator
+              pdfRef={exercise.basePdfRef}
+              value={annotation}
+              onChange={setAnnotation}
+              editable={!isGraded}
+              readOnlyLayers={teacherLayer ? [{ items: teacherLayer.items, opacity: 1 }] : []}
+            />
           </Stack>
         )}
 

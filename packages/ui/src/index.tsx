@@ -2,6 +2,8 @@ export { trpc, API_URL, uploadExercisePdf } from './client.js';
 export type { AppRouter } from './client.js';
 export { useNotificationStream, type LiveNotification } from './notification-stream.js';
 export { PdfViewer } from './pdf-viewer.js';
+export { PdfAnnotator, type Tool } from './pdf-annotator.js';
+export type { AnnotationData, AnnotationItem } from '@cmc/api/annotation';
 export { theme } from './theme.js';
 export { AppProviders } from './provider.js';
 export { LoginGate, useSession } from './login-gate.js';

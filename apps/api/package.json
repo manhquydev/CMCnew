@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./router": "./src/routers/index.ts"
+    "./router": "./src/routers/index.ts",
+    "./annotation": "./src/annotation.ts"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",

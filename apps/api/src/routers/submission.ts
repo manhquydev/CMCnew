@@ -4,6 +4,7 @@ import { withRls } from '@cmc/db';
 import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, lmsProcedure, studentProcedure, requireRole, Role } from '../trpc.js';
+import { annotationDataSchema, type AnnotationData } from '../annotation.js';
 
 const ENTITY = 'submission';
 
@@ -82,7 +83,7 @@ export const submissionRouter = router({
       z.object({
         exerciseId: z.string().uuid(),
         answerText: z.string().optional(),
-        annotationLayer: z.unknown().optional(),
+        annotationLayer: annotationDataSchema.optional(),
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -100,6 +101,26 @@ export const submissionRouter = router({
           create: { facilityId: ex.facilityId, exerciseId: input.exerciseId, studentId, ...data },
           select: submissionSelect,
         });
+      }),
+    ),
+
+  // Student reads back their own annotation layer (and, once graded+published, the teacher's
+  // layer to overlay). Json columns are cast to AnnotationData here so the client output type is
+  // concrete — selecting raw Json would blow tRPC's TS depth (see submissionSelect note).
+  myLayer: studentProcedure
+    .input(z.object({ exerciseId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      withRls(lmsRlsContextOf(ctx.lms), async (tx) => {
+        const studentId = ctx.lms.studentIds[0];
+        if (!studentId) return { mine: null, teacher: null };
+        const sub = await tx.submission.findUnique({
+          where: { exerciseId_studentId: { exerciseId: input.exerciseId, studentId } },
+          select: { annotationLayer: true, grade: { select: { annotationLayer: true, isPublished: true } } },
+        });
+        const mine = (sub?.annotationLayer ?? null) as AnnotationData | null;
+        const teacher =
+          sub?.grade?.isPublished ? ((sub.grade.annotationLayer ?? null) as AnnotationData | null) : null;
+        return { mine, teacher };
       }),
     ),
 
