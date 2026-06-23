@@ -27,6 +27,21 @@ async function ensureTeacher(email: string, displayName: string, facilityId: num
   });
 }
 
+async function ensureLeader(email: string, displayName: string, facilityId: number) {
+  const existing = await prisma.appUser.findUnique({ where: { email } });
+  if (existing) return existing;
+  return prisma.appUser.create({
+    data: {
+      email,
+      displayName,
+      passwordHash: await hashPassword(TEACHER_PW),
+      roles: [Role.quan_ly],
+      primaryRole: Role.quan_ly,
+      facilities: { create: { facilityId } },
+    },
+  });
+}
+
 async function ensureStudent(
   facilityId: number,
   studentCode: string,
@@ -223,6 +238,8 @@ async function main(): Promise<void> {
   const cs2 = await prisma.facility.findUniqueOrThrow({ where: { code: 'CS2' } });
 
   const teacher = await ensureTeacher('gv@cmc.local', 'Cô Lan (GV)', hq.id);
+  // Leadership account (quan_ly) — verifies system-wide parent/identity management without super.
+  await ensureLeader('ld@cmc.local', 'Trưởng cơ sở (QL)', hq.id);
   await seedBadges(hq.id);
   await seedBadges(cs2.id);
 

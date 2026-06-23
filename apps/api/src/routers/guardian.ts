@@ -3,13 +3,16 @@ import { TRPCError } from '@trpc/server';
 import { withRls, hashPassword, GuardianRelation } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, superAdminProcedure } from '../trpc.js';
+import { router, requireRole, Role } from '../trpc.js';
 
-// Parent accounts (LMS logins) and the parent↔student link are identity data: parent_account RLS
-// is super_admin-only (a facility-scoped staff management policy is a future security-class change).
-// So guardian management runs under the super context. Fixes legacy gap A3 (guardian had no UI).
+// Parent/student accounts are SYSTEM-WIDE identities (no facility_id) — facilities are linked
+// branches, not silos (docs/specs/facility-model-decision.md). Leadership (bgd/quan_ly, super)
+// manages them at the system level; RLS now allows any staff to read these identity rows, while
+// linking a guardian to a student still respects that student's facility (operational scoping).
+const LEAD_ROLES = [Role.bgd, Role.quan_ly] as const;
+
 export const guardianRouter = router({
-  parentList: superAdminProcedure.query(({ ctx }) =>
+  parentList: requireRole(...LEAD_ROLES).query(({ ctx }) =>
     withRls(rlsContextOf(ctx.session), (tx) =>
       tx.parentAccount.findMany({
         orderBy: { createdAt: 'desc' },
@@ -19,7 +22,7 @@ export const guardianRouter = router({
     ),
   ),
 
-  parentCreate: superAdminProcedure
+  parentCreate: requireRole(...LEAD_ROLES)
     .input(
       z
         .object({
@@ -46,7 +49,7 @@ export const guardianRouter = router({
     ),
 
   // Guardians of a student, with the parent's identity.
-  listForStudent: superAdminProcedure
+  listForStudent: requireRole(...LEAD_ROLES)
     .input(z.object({ studentId: z.string().uuid() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -58,7 +61,7 @@ export const guardianRouter = router({
     ),
 
   // Link a parent to a student (facility inherited from the student). Idempotent on the unique.
-  link: superAdminProcedure
+  link: requireRole(...LEAD_ROLES)
     .input(
       z.object({
         parentAccountId: z.string().uuid(),
@@ -91,7 +94,7 @@ export const guardianRouter = router({
       }),
     ),
 
-  unlink: superAdminProcedure
+  unlink: requireRole(...LEAD_ROLES)
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
