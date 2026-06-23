@@ -18,6 +18,7 @@ import {
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { GuardiansPanel } from './guardians-panel';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type User = Awaited<ReturnType<typeof trpc.user.list.query>>[number];
@@ -530,12 +531,16 @@ function Dashboard() {
       <Tabs.List>
         <Tabs.Tab value="courses">Khóa học</Tabs.Tab>
         <Tabs.Tab value="org">Cơ sở &amp; người dùng</Tabs.Tab>
+        <Tabs.Tab value="guardians">Phụ huynh</Tabs.Tab>
       </Tabs.List>
       <Tabs.Panel value="courses" pt="md">
         <Courses />
       </Tabs.Panel>
       <Tabs.Panel value="org" pt="md">
         <Org />
+      </Tabs.Panel>
+      <Tabs.Panel value="guardians" pt="md">
+        <GuardiansPanel />
       </Tabs.Panel>
     </Tabs>
   );
