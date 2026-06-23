@@ -155,6 +155,11 @@ model Student {
   archivedAt  DateTime?        @map("archived_at")
   createdAt   DateTime         @default(now()) @map("created_at")
   enrollments Enrollment[]
+  account         StudentAccount?
+  guardians       Guardian[]
+  submissions     Submission[]
+  starTransactions StarTransaction[]
+  rewards         Reward[]
 
   @@index([facilityId])
   @@map("student")
@@ -177,6 +182,7 @@ model ClassBatch {
   slots      ScheduleSlot[]
   sessions   ClassSession[]
   enrollments Enrollment[]
+  exercises  Exercise[]
 
   @@index([facilityId])
   @@map("class_batch")
@@ -315,4 +321,233 @@ model RecordFollower {
 
   @@id([entityType, entityId, userId])
   @@map("record_follower")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 2 — Đánh giá & LMS học sinh. HS/PH có model định danh RIÊNG (tách AppUser).
+// Slice S1: Exercise → Submission → Grade → Star → Reward. Spec: phase-02-assessment-lms.
+// Bài nộp = đề PDF gốc (1 lần) + lớp annotation JSON (không lưu PDF phẳng).
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum ExerciseType {
+  homework
+  test_entrance
+  test_periodic
+}
+
+enum ExerciseStatus {
+  draft
+  published
+  closed
+}
+
+enum SubmissionStatus {
+  draft
+  submitted
+  graded
+}
+
+/// Loại giao dịch sao: + earn / - spent. reference để chống cộng/trừ trùng.
+enum StarTxnType {
+  homework_completed
+  gift_redeemed
+  gift_rejected_refund
+  manual
+}
+
+enum RewardStatus {
+  pending
+  approved
+  rejected
+}
+
+enum GuardianRelation {
+  father
+  mother
+  guardian
+}
+
+/// Tài khoản đăng nhập của phụ huynh (login chính phía LMS). Định danh riêng, không phải AppUser.
+model ParentAccount {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String?    @unique
+  phone        String?    @unique
+  displayName  String     @map("display_name")
+  passwordHash String     @map("password_hash")
+  isActive     Boolean    @default(true) @map("is_active")
+  /// Bump khi khóa tài khoản / đổi quyền → vô hiệu JWT đang phát hành.
+  tokenVersion Int        @default(0) @map("token_version")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  guardians    Guardian[]
+
+  @@map("parent_account")
+}
+
+/// Tài khoản đăng nhập tùy chọn của học sinh (PIN/mã đơn giản; HS 3–11 tuổi).
+model StudentAccount {
+  id           String   @id @default(uuid()) @db.Uuid
+  studentId    String   @unique @map("student_id") @db.Uuid
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  loginCode    String   @unique @map("login_code")
+  passwordHash String   @map("password_hash")
+  isActive     Boolean  @default(true) @map("is_active")
+  tokenVersion Int      @default(0) @map("token_version")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("student_account")
+}
+
+/// Liên kết phụ huynh ↔ học sinh (sửa lỗ A3 hệ cũ). Facility-scoped qua student.
+model Guardian {
+  id              String           @id @default(uuid()) @db.Uuid
+  facilityId      Int              @map("facility_id")
+  parentAccountId String           @map("parent_account_id") @db.Uuid
+  parent          ParentAccount    @relation(fields: [parentAccountId], references: [id], onDelete: Cascade)
+  studentId       String           @map("student_id") @db.Uuid
+  student         Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  relation        GuardianRelation @default(guardian)
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  @@unique([parentAccountId, studentId])
+  @@index([facilityId])
+  @@index([studentId])
+  @@map("guardian")
+}
+
+/// Bài tập GV giao theo lớp. Đề gốc PDF lưu 1 lần (content-addressed) ở MinIO.
+model Exercise {
+  id           String         @id @default(uuid()) @db.Uuid
+  facilityId   Int            @map("facility_id")
+  classBatchId String         @map("class_batch_id") @db.Uuid
+  batch        ClassBatch     @relation(fields: [classBatchId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  basePdfRef   String?        @map("base_pdf_ref")
+  maxScore     Float          @default(10) @map("max_score")
+  dueAt        DateTime?      @map("due_at")
+  type         ExerciseType   @default(homework)
+  status       ExerciseStatus @default(draft)
+  createdById  String?        @map("created_by_id") @db.Uuid
+  archivedAt   DateTime?      @map("archived_at")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  submissions  Submission[]
+
+  @@index([facilityId])
+  @@index([classBatchId])
+  @@map("exercise")
+}
+
+/// Bài nộp của HS = answerText? + lớp annotation JSON (HS làm bài trên đề gốc). Không lưu PDF phẳng.
+model Submission {
+  id              String           @id @default(uuid()) @db.Uuid
+  facilityId      Int              @map("facility_id")
+  exerciseId      String           @map("exercise_id") @db.Uuid
+  exercise        Exercise         @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  studentId       String           @map("student_id") @db.Uuid
+  student         Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  answerText      String?          @map("answer_text")
+  annotationLayer Json?            @map("annotation_layer")
+  version         Int              @default(1)
+  status          SubmissionStatus @default(draft)
+  submittedAt     DateTime?        @map("submitted_at")
+  archivedAt      DateTime?        @map("archived_at")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  grade           Grade?
+
+  @@unique([exerciseId, studentId])
+  @@index([facilityId])
+  @@map("submission")
+}
+
+/// Điểm 1 bài nộp. GV chấm trên bài qua lớp annotation riêng. Publish → HS/PH thấy + cộng sao.
+model Grade {
+  id              String     @id @default(uuid()) @db.Uuid
+  facilityId      Int        @map("facility_id")
+  submissionId    String     @unique @map("submission_id") @db.Uuid
+  submission      Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  score           Float
+  maxScore        Float      @default(10) @map("max_score")
+  feedback        String?
+  rubric          Json?
+  annotationLayer Json?      @map("annotation_layer")
+  gradedById      String?    @map("graded_by_id") @db.Uuid
+  gradedAt        DateTime   @default(now()) @map("graded_at")
+  isPublished     Boolean    @default(false) @map("is_published")
+  createdAt       DateTime   @default(now()) @map("created_at")
+
+  @@index([facilityId])
+  @@map("grade")
+}
+
+/// Quà đổi sao — facility-scoped (mỗi cơ sở tự quản kho). stock -1 = vô hạn.
+model Gift {
+  id            String    @id @default(uuid()) @db.Uuid
+  facilityId    Int       @map("facility_id")
+  name          String
+  description   String?
+  imageUrl      String?   @map("image_url")
+  starsRequired Int       @map("stars_required")
+  stock         Int       @default(-1)
+  program       Program?
+  minLevel      String?   @map("min_level")
+  isActive      Boolean   @default(true) @map("is_active")
+  archivedAt    DateTime? @map("archived_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  rewards       Reward[]
+
+  @@index([facilityId])
+  @@map("gift")
+}
+
+/// Sổ cái sao (số dư = SUM(amount)). @@unique(type, reference) → earn/redeem idempotent.
+model StarTransaction {
+  id         String      @id @default(uuid()) @db.Uuid
+  facilityId Int         @map("facility_id")
+  studentId  String      @map("student_id") @db.Uuid
+  student    Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  amount     Int
+  type       StarTxnType
+  reference  String?
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  @@unique([type, reference])
+  @@index([studentId, createdAt])
+  @@index([facilityId])
+  @@map("star_transaction")
+}
+
+/// Đổi quà: trừ sao + kho nguyên tử; pending → duyệt; rejected → hoàn sao.
+model Reward {
+  id           String       @id @default(uuid()) @db.Uuid
+  facilityId   Int          @map("facility_id")
+  studentId    String       @map("student_id") @db.Uuid
+  student      Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  giftId       String       @map("gift_id") @db.Uuid
+  gift         Gift         @relation(fields: [giftId], references: [id])
+  starsSpent   Int          @map("stars_spent")
+  status       RewardStatus @default(pending)
+  reviewedById String?      @map("reviewed_by_id") @db.Uuid
+  reviewedAt   DateTime?    @map("reviewed_at")
+  reason       String?
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  @@index([studentId])
+  @@index([facilityId])
+  @@map("reward")
+}
+
+/// Thông báo (polymorphic recipient). Fan-out realtime qua SSE. type mở rộng dần tới 16 loại.
+model Notification {
+  id            String    @id @default(uuid()) @db.Uuid
+  facilityId    Int?      @map("facility_id")
+  recipientType String    @map("recipient_type")
+  recipientId   String    @map("recipient_id") @db.Uuid
+  type          String
+  payload       Json?
+  readAt        DateTime? @map("read_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([recipientType, recipientId, readAt])
+  @@index([facilityId])
+  @@map("notification")
 }
