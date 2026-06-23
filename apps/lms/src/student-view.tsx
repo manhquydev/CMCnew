@@ -4,6 +4,7 @@ import {
   useNotificationStream,
   PdfAnnotator,
   BadgeShelf,
+  Leaderboard,
   type LmsPrincipal,
   type LiveNotification,
   type AnnotationData,
@@ -547,6 +548,7 @@ export function StudentView({ principal }: { principal: LmsPrincipal }) {
           <Tabs.Tab value="exercises">Bài tập</Tabs.Tab>
           <Tabs.Tab value="rewards">Phần thưởng</Tabs.Tab>
           <Tabs.Tab value="badges">Huy hiệu</Tabs.Tab>
+          <Tabs.Tab value="ranking">Bảng xếp hạng</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="exercises">
           <ExercisesTab refreshKey={refreshKey} />
@@ -557,6 +559,13 @@ export function StudentView({ principal }: { principal: LmsPrincipal }) {
         <Tabs.Panel value="badges" pt="md">
           {principal.studentIds[0] ? (
             <BadgeShelf studentId={principal.studentIds[0]} refreshKey={refreshKey} />
+          ) : (
+            <Text c="dimmed">Không có học sinh liên kết.</Text>
+          )}
+        </Tabs.Panel>
+        <Tabs.Panel value="ranking" pt="md">
+          {principal.studentIds[0] ? (
+            <Leaderboard studentId={principal.studentIds[0]} refreshKey={refreshKey} />
           ) : (
             <Text c="dimmed">Không có học sinh liên kết.</Text>
           )}

@@ -193,6 +193,31 @@ async function seedBadges(facilityId: number) {
   }
 }
 
+// Add a classmate to an existing batch with a fixed star bonus — gives the leaderboard a
+// non-trivial ranking to verify (anonymized-except-self). Idempotent: enrollment unique +
+// star_transaction @@unique(type, reference).
+async function seedClassmate(opts: {
+  facilityId: number;
+  studentCode: string;
+  fullName: string;
+  program: Program;
+  batchCode: string;
+  stars: number;
+}) {
+  const student = await ensureStudent(opts.facilityId, opts.studentCode, opts.fullName, opts.program);
+  const batch = await prisma.classBatch.findUniqueOrThrow({ where: { code: opts.batchCode } });
+  await prisma.enrollment.upsert({
+    where: { classBatchId_studentId: { classBatchId: batch.id, studentId: student.id } },
+    update: {},
+    create: { facilityId: opts.facilityId, classBatchId: batch.id, studentId: student.id },
+  });
+  await prisma.starTransaction.createMany({
+    data: [{ facilityId: opts.facilityId, studentId: student.id, amount: opts.stars, type: 'manual', reference: `seed-bonus-${student.id}` }],
+    skipDuplicates: true,
+  });
+  return student;
+}
+
 async function main(): Promise<void> {
   const hq = await prisma.facility.findUniqueOrThrow({ where: { code: 'HQ' } });
   const cs2 = await prisma.facility.findUniqueOrThrow({ where: { code: 'CS2' } });
@@ -246,6 +271,10 @@ async function main(): Promise<void> {
     homeworkScore: 7,
     testScore: 9,
   });
+
+  // Classmates in An's UCREA batch so the in-class leaderboard has a real ranking to show.
+  await seedClassmate({ facilityId: hq.id, studentCode: 'HS-0002', fullName: 'Trần Thị Bình', program: 'UCREA', batchCode: 'B-2026-9001', stars: 50 });
+  await seedClassmate({ facilityId: hq.id, studentCode: 'HS-0006', fullName: 'Hoàng Văn Em', program: 'UCREA', batchCode: 'B-2026-9001', stars: 5 });
 
   console.log('✓ LMS verification seed:');
   console.log(`  GV  : gv@cmc.local / ${TEACHER_PW}`);

@@ -10,3 +10,4 @@ export { LoginGate, useSession } from './login-gate.js';
 export { LmsLoginGate, useLmsSession, type LmsPrincipal } from './lms-login-gate.js';
 export { Chatter } from './chatter.js';
 export { BadgeShelf } from './badge-shelf.js';
+export { Leaderboard } from './leaderboard.js';

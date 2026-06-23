@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, useNotificationStream, BadgeShelf, type LmsPrincipal, type LiveNotification } from '@cmc/ui';
+import { trpc, useNotificationStream, BadgeShelf, Leaderboard, type LmsPrincipal, type LiveNotification } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -177,6 +177,13 @@ function ChildDashboard({ childId, refreshKey }: { childId: string; refreshKey: 
           Huy hiệu
         </Title>
         <BadgeShelf studentId={childId} refreshKey={refreshKey} />
+      </Card>
+
+      <Card withBorder>
+        <Title order={5} mb="sm">
+          Bảng xếp hạng (trong lớp)
+        </Title>
+        <Leaderboard studentId={childId} refreshKey={refreshKey} />
       </Card>
 
       <Card withBorder>
