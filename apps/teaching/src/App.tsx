@@ -1,21 +1,572 @@
-import { LoginGate, useSession, Card } from '@cmc/ui';
+import '@mantine/dates/styles.css';
+import { useCallback, useEffect, useState } from 'react';
+import dayjs from 'dayjs';
+import { LoginGate, useSession, trpc, Chatter } from '@cmc/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  Grid,
+  Group,
+  Modal,
+  NumberInput,
+  Select,
+  SegmentedControl,
+  Stack,
+  Table,
+  Tabs,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core';
+import { DateInput } from '@mantine/dates';
+import { useDisclosure } from '@mantine/hooks';
 
-function Dashboard() {
-  const { me } = useSession();
+type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
+type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
+type Batch = Awaited<ReturnType<typeof trpc.classBatch.list.query>>[number];
+type Session = Awaited<ReturnType<typeof trpc.schedule.listSessions.query>>[number];
+type Enrollment = Awaited<ReturnType<typeof trpc.enrollment.listByBatch.query>>[number];
+type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
+
+const STATUS_COLOR: Record<string, string> = {
+  planned: 'gray',
+  open: 'blue',
+  running: 'green',
+  closed: 'dark',
+  cancelled: 'red',
+};
+const DOW = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+const fmtDate = (d: string | Date) => dayjs(d).format('DD/MM/YYYY');
+const toApiDate = (d: Date | null) => (d ? dayjs(d).format('YYYY-MM-DD') : undefined);
+
+function CreateClassModal({
+  facilityId,
+  courses,
+  onCreated,
+}: {
+  facilityId: number;
+  courses: Course[];
+  onCreated: () => void;
+}) {
+  const [opened, { open, close }] = useDisclosure(false);
+  const [courseId, setCourseId] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [capacity, setCapacity] = useState<number | string>('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function create() {
+    if (!courseId || !name) {
+      setErr('Chọn khóa học và nhập tên lớp');
+      return;
+    }
+    setBusy(true);
+    setErr('');
+    try {
+      await trpc.classBatch.create.mutate({
+        facilityId,
+        courseId,
+        name,
+        startDate: toApiDate(startDate),
+        endDate: toApiDate(endDate),
+        capacity: typeof capacity === 'number' ? capacity : undefined,
+      });
+      close();
+      setName('');
+      setCourseId(null);
+      onCreated();
+    } catch (e) {
+      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <Card title="Bảng điều khiển giảng dạy / ERP">
-      <p>
-        Xin chào <strong>{me.displayName}</strong> ({me.primaryRole}). Đây là khung Teaching/ERP
-        (Phase 0). Giáo vụ, điểm danh/chấm điểm, CRM, thu phí, lương sẽ thêm theo roadmap Phase 1–4.
-      </p>
+    <>
+      <Button size="xs" onClick={open}>
+        + Tạo lớp
+      </Button>
+      <Modal opened={opened} onClose={close} title="Tạo lớp học">
+        <Stack>
+          <Select
+            label="Khóa học"
+            placeholder={courses.length ? 'Chọn khóa' : 'Chưa có khóa học (tạo ở Admin)'}
+            data={courses.map((c) => ({ value: c.id, label: `${c.code} — ${c.name} (${c.program})` }))}
+            value={courseId}
+            onChange={setCourseId}
+          />
+          <TextInput label="Tên lớp" value={name} onChange={(e) => setName(e.currentTarget.value)} />
+          <Group grow>
+            <DateInput label="Khai giảng" value={startDate} onChange={setStartDate} valueFormat="DD/MM/YYYY" clearable />
+            <DateInput label="Kết thúc" value={endDate} onChange={setEndDate} valueFormat="DD/MM/YYYY" clearable />
+          </Group>
+          <NumberInput label="Sĩ số tối đa (tùy chọn)" value={capacity} onChange={setCapacity} min={1} />
+          {err && (
+            <Text c="red" size="sm">
+              {err}
+            </Text>
+          )}
+          <Button onClick={create} loading={busy}>
+            Tạo
+          </Button>
+        </Stack>
+      </Modal>
+    </>
+  );
+}
+
+function ScheduleTab({ batch, facilityId }: { batch: Batch; facilityId: number }) {
+  const [slots, setSlots] = useState<Awaited<ReturnType<typeof trpc.schedule.listSlots.query>>>([]);
+  const [day, setDay] = useState<string | null>('1');
+  const [start, setStart] = useState('18:00');
+  const [end, setEnd] = useState('19:30');
+  const [range, setRange] = useState<{ from: Date | null; to: Date | null }>({ from: null, to: null });
+  const [msg, setMsg] = useState('');
+  const load = useCallback(() => {
+    trpc.schedule.listSlots.query({ classBatchId: batch.id }).then(setSlots).catch(() => {});
+  }, [batch.id]);
+  useEffect(load, [load]);
+
+  async function addSlot() {
+    await trpc.schedule.addSlot.mutate({
+      facilityId,
+      classBatchId: batch.id,
+      dayOfWeek: Number(day),
+      startTime: start,
+      endTime: end,
+    });
+    load();
+  }
+  async function generate() {
+    setMsg('');
+    try {
+      const r = await trpc.schedule.generateSessions.mutate({
+        classBatchId: batch.id,
+        startDate: toApiDate(range.from)!,
+        endDate: toApiDate(range.to)!,
+      });
+      setMsg(`Đã tạo ${r.created} buổi (bỏ qua ${r.skipped}).`);
+    } catch (e) {
+      setMsg('Lỗi: ' + (e instanceof Error ? e.message : ''));
+    }
+  }
+
+  return (
+    <Stack>
+      <Card withBorder>
+        <Text fw={600} mb="xs">
+          Khung lịch tuần
+        </Text>
+        <Group align="flex-end">
+          <Select
+            label="Thứ"
+            w={110}
+            data={DOW.map((l, i) => ({ value: String(i), label: l }))}
+            value={day}
+            onChange={setDay}
+          />
+          <TextInput label="Bắt đầu" w={90} value={start} onChange={(e) => setStart(e.currentTarget.value)} />
+          <TextInput label="Kết thúc" w={90} value={end} onChange={(e) => setEnd(e.currentTarget.value)} />
+          <Button onClick={addSlot}>Thêm khung</Button>
+        </Group>
+        <Table mt="sm">
+          <Table.Tbody>
+            {slots.map((s) => (
+              <Table.Tr key={s.id}>
+                <Table.Td>{DOW[s.dayOfWeek]}</Table.Td>
+                <Table.Td>
+                  {s.startTime} - {s.endTime}
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </Card>
+      <Card withBorder>
+        <Text fw={600} mb="xs">
+          Sinh buổi học
+        </Text>
+        <Group align="flex-end">
+          <DateInput
+            label="Từ ngày"
+            value={range.from}
+            onChange={(d) => setRange((r) => ({ ...r, from: d }))}
+            valueFormat="DD/MM/YYYY"
+          />
+          <DateInput
+            label="Đến ngày"
+            value={range.to}
+            onChange={(d) => setRange((r) => ({ ...r, to: d }))}
+            valueFormat="DD/MM/YYYY"
+          />
+          <Button onClick={generate} disabled={!range.from || !range.to}>
+            Sinh lịch
+          </Button>
+        </Group>
+        {msg && (
+          <Text size="sm" mt="xs" c={msg.startsWith('Lỗi') ? 'red' : 'green'}>
+            {msg}
+          </Text>
+        )}
+      </Card>
+    </Stack>
+  );
+}
+
+function SessionsTab({ batchId }: { batchId: string }) {
+  const [sessions, setSessions] = useState<Session[]>([]);
+  useEffect(() => {
+    trpc.schedule.listSessions.query({ classBatchId: batchId }).then(setSessions).catch(() => {});
+  }, [batchId]);
+  return (
+    <Table striped>
+      <Table.Thead>
+        <Table.Tr>
+          <Table.Th>Ngày</Table.Th>
+          <Table.Th>Giờ</Table.Th>
+          <Table.Th>Trạng thái</Table.Th>
+        </Table.Tr>
+      </Table.Thead>
+      <Table.Tbody>
+        {sessions.map((s) => (
+          <Table.Tr key={s.id}>
+            <Table.Td>{fmtDate(s.sessionDate)}</Table.Td>
+            <Table.Td>
+              {s.startTime} - {s.endTime}
+            </Table.Td>
+            <Table.Td>
+              <Badge size="sm" color={STATUS_COLOR[s.status]}>
+                {s.status}
+              </Badge>
+            </Table.Td>
+          </Table.Tr>
+        ))}
+      </Table.Tbody>
+    </Table>
+  );
+}
+
+function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) {
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [students, setStudents] = useState<StudentT[]>([]);
+  const [studentId, setStudentId] = useState<string | null>(null);
+  const [msg, setMsg] = useState('');
+  const load = useCallback(() => {
+    trpc.enrollment.listByBatch.query({ classBatchId: batch.id }).then(setEnrollments).catch(() => {});
+    trpc.student.list.query().then(setStudents).catch(() => {});
+  }, [batch.id]);
+  useEffect(load, [load]);
+
+  async function enroll() {
+    if (!studentId) return;
+    setMsg('');
+    try {
+      const r = await trpc.enrollment.enroll.mutate({ facilityId, classBatchId: batch.id, studentId });
+      setMsg(r.overCapacity ? `⚠ Vượt sĩ số (${r.enrolledCount}/${r.capacity}) — vẫn ghi danh.` : 'Đã ghi danh.');
+      setStudentId(null);
+      load();
+    } catch (e) {
+      setMsg('Lỗi: ' + (e instanceof Error ? e.message : ''));
+    }
+  }
+
+  return (
+    <Stack>
+      <Group align="flex-end">
+        <Select
+          label="Học sinh"
+          style={{ flex: 1 }}
+          searchable
+          data={students.map((s) => ({ value: s.id, label: `${s.studentCode} — ${s.fullName}` }))}
+          value={studentId}
+          onChange={setStudentId}
+        />
+        <Button onClick={enroll} disabled={!studentId}>
+          Ghi danh
+        </Button>
+      </Group>
+      {msg && (
+        <Text size="sm" c={msg.startsWith('Lỗi') ? 'red' : msg.startsWith('⚠') ? 'orange' : 'green'}>
+          {msg}
+        </Text>
+      )}
+      <Table striped>
+        <Table.Tbody>
+          {enrollments.map((e) => (
+            <Table.Tr key={e.id}>
+              <Table.Td>{e.student.studentCode}</Table.Td>
+              <Table.Td>{e.student.fullName}</Table.Td>
+              <Table.Td>
+                <Badge size="sm">{e.status}</Badge>
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Stack>
+  );
+}
+
+function AttendanceTab({ batch, facilityId }: { batch: Batch; facilityId: number }) {
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [marks, setMarks] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    trpc.schedule.listSessions.query({ classBatchId: batch.id }).then(setSessions).catch(() => {});
+    trpc.enrollment.listByBatch.query({ classBatchId: batch.id }).then(setEnrollments).catch(() => {});
+  }, [batch.id]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    trpc.attendance.listBySession.query({ classSessionId: sessionId }).then((rows) => {
+      const m: Record<string, string> = {};
+      for (const r of rows) m[r.enrollmentId] = r.status;
+      setMarks(m);
+    });
+  }, [sessionId]);
+
+  async function mark(enrollmentId: string, status: string) {
+    if (!sessionId) return;
+    await trpc.attendance.mark.mutate({
+      facilityId,
+      classSessionId: sessionId,
+      enrollmentId,
+      status: status as 'present' | 'absent' | 'late',
+    });
+    setMarks((m) => ({ ...m, [enrollmentId]: status }));
+  }
+
+  return (
+    <Stack>
+      <Select
+        label="Chọn buổi học"
+        placeholder="Chọn buổi"
+        data={sessions.map((s) => ({ value: s.id, label: `${fmtDate(s.sessionDate)} ${s.startTime}` }))}
+        value={sessionId}
+        onChange={setSessionId}
+      />
+      {sessionId && (
+        <Table>
+          <Table.Tbody>
+            {enrollments.map((e) => (
+              <Table.Tr key={e.id}>
+                <Table.Td>{e.student.fullName}</Table.Td>
+                <Table.Td>
+                  <SegmentedControl
+                    size="xs"
+                    data={[
+                      { value: 'present', label: 'Có mặt' },
+                      { value: 'late', label: 'Muộn' },
+                      { value: 'absent', label: 'Vắng' },
+                    ]}
+                    value={marks[e.id] ?? ''}
+                    onChange={(v) => mark(e.id, v)}
+                  />
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      )}
+    </Stack>
+  );
+}
+
+function ClassDetail({ batch, facilityId, onChanged }: { batch: Batch; facilityId: number; onChanged: () => void }) {
+  const [cancelOpen, cancel] = useDisclosure(false);
+  const [reason, setReason] = useState('');
+
+  async function doCancel() {
+    await trpc.classBatch.cancel.mutate({ id: batch.id, reason });
+    cancel.close();
+    setReason('');
+    onChanged();
+  }
+  async function doReopen() {
+    await trpc.classBatch.reopen.mutate({ id: batch.id, toStatus: 'planned', reason: 'Mở lại từ giao diện' });
+    onChanged();
+  }
+  async function setStatus(status: string) {
+    await trpc.classBatch.setStatus.mutate({ id: batch.id, status: status as 'open' | 'running' | 'closed' });
+    onChanged();
+  }
+
+  return (
+    <Card withBorder>
+      <Group justify="space-between" mb="md">
+        <div>
+          <Group gap="xs">
+            <Title order={5}>{batch.code}</Title>
+            <Badge color={STATUS_COLOR[batch.status]}>{batch.status}</Badge>
+          </Group>
+          <Text c="dimmed" size="sm">
+            {batch.name} · {batch.course.code}
+          </Text>
+        </div>
+        <Group gap="xs">
+          {batch.status !== 'cancelled' ? (
+            <>
+              <Select
+                size="xs"
+                w={130}
+                placeholder="Đổi trạng thái"
+                data={['open', 'running', 'closed']}
+                onChange={(v) => v && setStatus(v)}
+              />
+              <Button size="xs" color="red" variant="light" onClick={cancel.open}>
+                Hủy lớp
+              </Button>
+            </>
+          ) : (
+            <Button size="xs" onClick={doReopen}>
+              Mở lại
+            </Button>
+          )}
+        </Group>
+      </Group>
+
+      <Tabs defaultValue="schedule">
+        <Tabs.List>
+          <Tabs.Tab value="schedule">Lịch</Tabs.Tab>
+          <Tabs.Tab value="sessions">Buổi học</Tabs.Tab>
+          <Tabs.Tab value="enroll">Ghi danh</Tabs.Tab>
+          <Tabs.Tab value="attendance">Điểm danh</Tabs.Tab>
+          <Tabs.Tab value="log">Nhật ký</Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel value="schedule" pt="md">
+          <ScheduleTab batch={batch} facilityId={facilityId} />
+        </Tabs.Panel>
+        <Tabs.Panel value="sessions" pt="md">
+          <SessionsTab batchId={batch.id} />
+        </Tabs.Panel>
+        <Tabs.Panel value="enroll" pt="md">
+          <EnrollTab batch={batch} facilityId={facilityId} />
+        </Tabs.Panel>
+        <Tabs.Panel value="attendance" pt="md">
+          <AttendanceTab batch={batch} facilityId={facilityId} />
+        </Tabs.Panel>
+        <Tabs.Panel value="log" pt="md">
+          <Chatter entityType="class_batch" entityId={batch.id} facilityId={facilityId} />
+        </Tabs.Panel>
+      </Tabs>
+
+      <Modal opened={cancelOpen} onClose={cancel.close} title="Hủy lớp">
+        <Stack>
+          <TextInput
+            label="Lý do hủy (bắt buộc)"
+            value={reason}
+            onChange={(e) => setReason(e.currentTarget.value)}
+          />
+          <Button color="red" onClick={doCancel} disabled={!reason}>
+            Xác nhận hủy
+          </Button>
+        </Stack>
+      </Modal>
     </Card>
+  );
+}
+
+function Workspace() {
+  const { me } = useSession();
+  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [facilityId, setFacilityId] = useState<number | null>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [selected, setSelected] = useState<Batch | null>(null);
+
+  useEffect(() => {
+    trpc.facility.list.query().then((fs) => {
+      setFacilities(fs);
+      setFacilityId((cur) => cur ?? fs[0]?.id ?? null);
+    });
+    trpc.course.list.query().then(setCourses).catch(() => {});
+  }, []);
+
+  const loadBatches = useCallback(() => {
+    trpc.classBatch.list.query().then((bs) => {
+      setBatches(bs);
+      setSelected((sel) => (sel ? (bs.find((b) => b.id === sel.id) ?? null) : null));
+    });
+  }, []);
+  useEffect(loadBatches, [loadBatches]);
+
+  const visible = facilityId ? batches.filter((b) => b.facilityId === facilityId) : batches;
+
+  return (
+    <Stack>
+      <Group justify="space-between">
+        <Select
+          label="Cơ sở"
+          data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
+          value={facilityId ? String(facilityId) : null}
+          onChange={(v) => setFacilityId(v ? Number(v) : null)}
+          w={240}
+        />
+        {facilityId && <CreateClassModal facilityId={facilityId} courses={courses} onCreated={loadBatches} />}
+      </Group>
+      <Grid>
+        <Grid.Col span={{ base: 12, md: 4 }}>
+          <Card withBorder>
+            <Title order={5} mb="sm">
+              Lớp học ({visible.length})
+            </Title>
+            <Table highlightOnHover>
+              <Table.Tbody>
+                {visible.map((b) => (
+                  <Table.Tr
+                    key={b.id}
+                    style={{ cursor: 'pointer' }}
+                    bg={selected?.id === b.id ? 'var(--mantine-color-cmc-0)' : undefined}
+                    onClick={() => setSelected(b)}
+                  >
+                    <Table.Td>
+                      <Text fw={600}>{b.code}</Text>
+                      <Text size="xs" c="dimmed">
+                        {b.name}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge size="sm" color={STATUS_COLOR[b.status]}>
+                        {b.status}
+                      </Badge>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+            {visible.length === 0 && (
+              <Text c="dimmed" size="sm">
+                Chưa có lớp. Bấm “Tạo lớp”.
+              </Text>
+            )}
+          </Card>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 8 }}>
+          {selected && facilityId ? (
+            <ClassDetail batch={selected} facilityId={facilityId} onChanged={loadBatches} />
+          ) : (
+            <Card withBorder>
+              <Text c="dimmed">
+                Chọn một lớp để xem chi tiết, hoặc tạo lớp mới. Xin chào {me.displayName}.
+              </Text>
+            </Card>
+          )}
+        </Grid.Col>
+      </Grid>
+    </Stack>
   );
 }
 
 export function App() {
   return (
     <LoginGate appTitle="Teaching / ERP">
-      <Dashboard />
+      <Workspace />
     </LoginGate>
   );
 }

@@ -1,13 +1,17 @@
-import { LoginGate, useSession, Card } from '@cmc/ui';
+import { LoginGate, useSession } from '@cmc/ui';
+import { Card, Text, Title } from '@mantine/core';
 
 function Dashboard() {
   const { me } = useSession();
   return (
-    <Card title="Bảng điều khiển học sinh / phụ huynh">
-      <p>
-        Xin chào <strong>{me.displayName}</strong>. Đây là khung LMS (Phase 0). Các module học tập
-        (bài tập, điểm, điểm danh, sao thưởng…) sẽ được thêm theo roadmap Phase 1–2.
-      </p>
+    <Card withBorder>
+      <Title order={4} mb="sm">
+        Bảng điều khiển học sinh / phụ huynh
+      </Title>
+      <Text>
+        Xin chào <b>{me.displayName}</b>. Đây là khung LMS. Trải nghiệm học sinh (bài tập, điểm,
+        điểm danh, sao thưởng…) sẽ được thêm ở Phase 2.
+      </Text>
     </Card>
   );
 }

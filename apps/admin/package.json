@@ -11,6 +11,11 @@
   },
   "dependencies": {
     "@cmc/ui": "workspace:*",
+    "@mantine/core": "^7.15.2",
+    "@mantine/form": "^7.15.2",
+    "@mantine/hooks": "^7.15.2",
+    "@mantine/notifications": "^7.15.2",
+    "@tabler/icons-react": "^3.26.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

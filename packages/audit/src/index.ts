@@ -81,12 +81,33 @@ export async function addFollower(
   });
 }
 
+export interface TimelineEntry {
+  id: string;
+  type: RecordEventType;
+  body: string | null;
+  changes: unknown; // [{ field, old, new }] — kept as `unknown` so Prisma's recursive Json type
+  actorId: string | null; // doesn't leak into the tRPC client (it blows TS instantiation depth).
+  createdAt: Date;
+}
+
 /** Newest-first timeline for a record. */
-export function getTimeline(tx: Tx, entityType: string, entityId: string) {
-  return tx.recordEvent.findMany({
+export async function getTimeline(
+  tx: Tx,
+  entityType: string,
+  entityId: string,
+): Promise<TimelineEntry[]> {
+  const rows = await tx.recordEvent.findMany({
     where: { entityType, entityId },
     orderBy: { createdAt: 'desc' },
   });
+  return rows.map((r) => ({
+    id: r.id,
+    type: r.type,
+    body: r.body,
+    changes: r.changes,
+    actorId: r.actorId,
+    createdAt: r.createdAt,
+  }));
 }
 
 export function getFollowers(tx: Tx, entityType: string, entityId: string) {

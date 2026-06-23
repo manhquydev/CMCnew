@@ -1,13 +1,18 @@
+import { createContext, useContext, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from 'react';
+  AppShell,
+  Button,
+  Center,
+  Group,
+  Loader,
+  Paper,
+  PasswordInput,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core';
 import { trpc } from './client.js';
-import { Button, Card, Field } from './components.js';
 
 type Me = Awaited<ReturnType<typeof trpc.auth.me.query>>;
 type Session = NonNullable<Me>;
@@ -20,15 +25,6 @@ export function useSession() {
   return ctx;
 }
 
-function Centered({ children }: { children: ReactNode }) {
-  return (
-    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
-      {children}
-    </div>
-  );
-}
-
-/** Wraps an app: shows a login form until authenticated, then renders chrome + children. */
 export function LoginGate({ appTitle, children }: { appTitle: string; children: ReactNode }) {
   const [me, setMe] = useState<Me | undefined>(undefined);
   const [email, setEmail] = useState('');
@@ -59,65 +55,71 @@ export function LoginGate({ appTitle, children }: { appTitle: string; children: 
     setMe(null);
   }
 
-  if (me === undefined) return <Centered>Đang tải…</Centered>;
+  if (me === undefined) {
+    return (
+      <Center h="100vh">
+        <Loader />
+      </Center>
+    );
+  }
 
   if (me === null) {
     return (
-      <Centered>
-        <div style={{ width: 360 }}>
-          <h1 style={{ textAlign: 'center', color: 'var(--cmc-brand)' }}>CMC · {appTitle}</h1>
-          <Card>
-            <form onSubmit={onSubmit}>
-              <Field
+      <Center h="100vh">
+        <Paper withBorder shadow="sm" p="xl" w={380}>
+          <Title order={3} ta="center" mb="lg" c="cmc.7">
+            CMC · {appTitle}
+          </Title>
+          <form onSubmit={onSubmit}>
+            <Stack>
+              <TextInput
                 label="Email"
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="username"
+                onChange={(e) => setEmail(e.currentTarget.value)}
                 required
               />
-              <Field
+              <PasswordInput
                 label="Mật khẩu"
-                type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
+                onChange={(e) => setPassword(e.currentTarget.value)}
                 required
               />
-              {error && <p style={{ color: 'var(--cmc-danger)', margin: '0 0 12px' }}>{error}</p>}
-              <Button type="submit" disabled={busy} style={{ width: '100%' }}>
-                {busy ? 'Đang đăng nhập…' : 'Đăng nhập'}
+              {error && (
+                <Text c="red" size="sm">
+                  {error}
+                </Text>
+              )}
+              <Button type="submit" loading={busy} fullWidth>
+                Đăng nhập
               </Button>
-            </form>
-          </Card>
-        </div>
-      </Centered>
+            </Stack>
+          </form>
+        </Paper>
+      </Center>
     );
   }
 
   return (
     <SessionCtx.Provider value={{ me, logout }}>
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '12px 24px',
-          background: 'var(--cmc-surface)',
-          borderBottom: '1px solid var(--cmc-border)',
-        }}
-      >
-        <strong style={{ color: 'var(--cmc-brand)' }}>CMC · {appTitle}</strong>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ color: 'var(--cmc-text-muted)' }}>
-            {me.displayName} · {me.primaryRole}
-          </span>
-          <Button onClick={logout} style={{ background: 'var(--cmc-text-muted)' }}>
-            Đăng xuất
-          </Button>
-        </span>
-      </header>
-      <main style={{ padding: 'var(--cmc-space-4)', maxWidth: 1100, margin: '0 auto' }}>{children}</main>
+      <AppShell header={{ height: 56 }} padding="md">
+        <AppShell.Header>
+          <Group h="100%" px="md" justify="space-between">
+            <Text fw={700} c="cmc.7">
+              CMC · {appTitle}
+            </Text>
+            <Group gap="sm">
+              <Text size="sm" c="dimmed">
+                {me.displayName} · {me.primaryRole}
+              </Text>
+              <Button variant="default" size="xs" onClick={logout}>
+                Đăng xuất
+              </Button>
+            </Group>
+          </Group>
+        </AppShell.Header>
+        <AppShell.Main>{children}</AppShell.Main>
+      </AppShell>
     </SessionCtx.Provider>
   );
 }
