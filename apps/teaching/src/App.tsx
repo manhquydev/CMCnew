@@ -28,6 +28,7 @@ type Batch = Awaited<ReturnType<typeof trpc.classBatch.list.query>>[number];
 type Session = Awaited<ReturnType<typeof trpc.schedule.listSessions.query>>[number];
 type Enrollment = Awaited<ReturnType<typeof trpc.enrollment.listByBatch.query>>[number];
 type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
+type Room = Awaited<ReturnType<typeof trpc.room.list.query>>[number];
 
 const STATUS_COLOR: Record<string, string> = {
   planned: 'gray',
@@ -119,13 +120,18 @@ function CreateClassModal({
   );
 }
 
-function ScheduleTab({ batch, facilityId }: { batch: Batch; facilityId: number }) {
+function ScheduleTab({ batch, facilityId, rooms }: { batch: Batch; facilityId: number; rooms: Room[] }) {
   const [slots, setSlots] = useState<Awaited<ReturnType<typeof trpc.schedule.listSlots.query>>>([]);
   const [day, setDay] = useState<string | null>('1');
   const [start, setStart] = useState('18:00');
   const [end, setEnd] = useState('19:30');
+  const [roomId, setRoomId] = useState<string | null>(null);
   const [range, setRange] = useState<{ from: Date | null; to: Date | null }>({ from: null, to: null });
   const [msg, setMsg] = useState('');
+  const roomLabel = useCallback(
+    (id: string | null) => (id ? (rooms.find((r) => r.id === id)?.code ?? '—') : '—'),
+    [rooms],
+  );
   const load = useCallback(() => {
     trpc.schedule.listSlots.query({ classBatchId: batch.id }).then(setSlots).catch(() => {});
   }, [batch.id]);
@@ -138,6 +144,7 @@ function ScheduleTab({ batch, facilityId }: { batch: Batch; facilityId: number }
       dayOfWeek: Number(day),
       startTime: start,
       endTime: end,
+      roomId: roomId ?? undefined,
     });
     load();
   }
@@ -171,8 +178,20 @@ function ScheduleTab({ batch, facilityId }: { batch: Batch; facilityId: number }
           />
           <TextInput label="Bắt đầu" w={90} value={start} onChange={(e) => setStart(e.currentTarget.value)} />
           <TextInput label="Kết thúc" w={90} value={end} onChange={(e) => setEnd(e.currentTarget.value)} />
+          <Select
+            label="Phòng"
+            w={150}
+            clearable
+            placeholder={rooms.length ? 'Chọn phòng' : 'Chưa có phòng'}
+            data={rooms.map((r) => ({ value: r.id, label: `${r.code} — ${r.name}` }))}
+            value={roomId}
+            onChange={setRoomId}
+          />
           <Button onClick={addSlot}>Thêm khung</Button>
         </Group>
+        <Text size="xs" c="dimmed" mt={6}>
+          Gán phòng để hệ thống chặn cứng trùng phòng khi sinh lịch.
+        </Text>
         <Table mt="sm">
           <Table.Tbody>
             {slots.map((s) => (
@@ -181,6 +200,7 @@ function ScheduleTab({ batch, facilityId }: { batch: Batch; facilityId: number }
                 <Table.Td>
                   {s.startTime} - {s.endTime}
                 </Table.Td>
+                <Table.Td>{roomLabel(s.roomId)}</Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>
@@ -217,17 +237,19 @@ function ScheduleTab({ batch, facilityId }: { batch: Batch; facilityId: number }
   );
 }
 
-function SessionsTab({ batchId }: { batchId: string }) {
+function SessionsTab({ batchId, rooms }: { batchId: string; rooms: Room[] }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   useEffect(() => {
     trpc.schedule.listSessions.query({ classBatchId: batchId }).then(setSessions).catch(() => {});
   }, [batchId]);
+  const roomLabel = (id: string | null) => (id ? (rooms.find((r) => r.id === id)?.code ?? '—') : '—');
   return (
     <Table striped>
       <Table.Thead>
         <Table.Tr>
           <Table.Th>Ngày</Table.Th>
           <Table.Th>Giờ</Table.Th>
+          <Table.Th>Phòng</Table.Th>
           <Table.Th>Trạng thái</Table.Th>
         </Table.Tr>
       </Table.Thead>
@@ -238,6 +260,7 @@ function SessionsTab({ batchId }: { batchId: string }) {
             <Table.Td>
               {s.startTime} - {s.endTime}
             </Table.Td>
+            <Table.Td>{roomLabel(s.roomId)}</Table.Td>
             <Table.Td>
               <Badge size="sm" color={STATUS_COLOR[s.status]}>
                 {s.status}
@@ -378,7 +401,17 @@ function AttendanceTab({ batch, facilityId }: { batch: Batch; facilityId: number
   );
 }
 
-function ClassDetail({ batch, facilityId, onChanged }: { batch: Batch; facilityId: number; onChanged: () => void }) {
+function ClassDetail({
+  batch,
+  facilityId,
+  rooms,
+  onChanged,
+}: {
+  batch: Batch;
+  facilityId: number;
+  rooms: Room[];
+  onChanged: () => void;
+}) {
   const [cancelOpen, cancel] = useDisclosure(false);
   const [reason, setReason] = useState('');
 
@@ -440,10 +473,10 @@ function ClassDetail({ batch, facilityId, onChanged }: { batch: Batch; facilityI
           <Tabs.Tab value="log">Nhật ký</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="schedule" pt="md">
-          <ScheduleTab batch={batch} facilityId={facilityId} />
+          <ScheduleTab batch={batch} facilityId={facilityId} rooms={rooms} />
         </Tabs.Panel>
         <Tabs.Panel value="sessions" pt="md">
-          <SessionsTab batchId={batch.id} />
+          <SessionsTab batchId={batch.id} rooms={rooms} />
         </Tabs.Panel>
         <Tabs.Panel value="enroll" pt="md">
           <EnrollTab batch={batch} facilityId={facilityId} />
@@ -472,12 +505,99 @@ function ClassDetail({ batch, facilityId, onChanged }: { batch: Batch; facilityI
   );
 }
 
+function RoomsManager({
+  facilityId,
+  rooms,
+  reload,
+}: {
+  facilityId: number;
+  rooms: Room[];
+  reload: () => void;
+}) {
+  const [opened, { open, close }] = useDisclosure(false);
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [capacity, setCapacity] = useState<number | string>('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function create() {
+    setBusy(true);
+    setErr('');
+    try {
+      await trpc.room.create.mutate({
+        facilityId,
+        code,
+        name,
+        capacity: typeof capacity === 'number' ? capacity : undefined,
+      });
+      setCode('');
+      setName('');
+      setCapacity('');
+      reload();
+    } catch (e) {
+      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Button size="xs" variant="default" onClick={open}>
+        Quản lý phòng ({rooms.length})
+      </Button>
+      <Modal opened={opened} onClose={close} title="Phòng học (theo cơ sở)">
+        <Stack>
+          <Group align="flex-end">
+            <TextInput label="Mã" w={90} value={code} onChange={(e) => setCode(e.currentTarget.value)} />
+            <TextInput
+              label="Tên"
+              style={{ flex: 1 }}
+              value={name}
+              onChange={(e) => setName(e.currentTarget.value)}
+            />
+            <NumberInput label="Sức chứa" w={100} value={capacity} onChange={setCapacity} min={1} />
+            <Button onClick={create} loading={busy} disabled={!code || !name}>
+              Thêm
+            </Button>
+          </Group>
+          {err && (
+            <Text c="red" size="sm">
+              {err}
+            </Text>
+          )}
+          <Table striped>
+            <Table.Tbody>
+              {rooms.map((r) => (
+                <Table.Tr key={r.id}>
+                  <Table.Td w={80}>
+                    <b>{r.code}</b>
+                  </Table.Td>
+                  <Table.Td>{r.name}</Table.Td>
+                  <Table.Td w={80}>{r.capacity ?? '—'}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+          {rooms.length === 0 && (
+            <Text c="dimmed" size="sm">
+              Chưa có phòng cho cơ sở này.
+            </Text>
+          )}
+        </Stack>
+      </Modal>
+    </>
+  );
+}
+
 function Workspace() {
   const { me } = useSession();
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facilityId, setFacilityId] = useState<number | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [batches, setBatches] = useState<Batch[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [selected, setSelected] = useState<Batch | null>(null);
 
   useEffect(() => {
@@ -496,7 +616,13 @@ function Workspace() {
   }, []);
   useEffect(loadBatches, [loadBatches]);
 
+  const loadRooms = useCallback(() => {
+    trpc.room.list.query().then(setRooms).catch(() => {});
+  }, []);
+  useEffect(loadRooms, [loadRooms]);
+
   const visible = facilityId ? batches.filter((b) => b.facilityId === facilityId) : batches;
+  const facilityRooms = facilityId ? rooms.filter((r) => r.facilityId === facilityId) : rooms;
 
   return (
     <Stack>
@@ -508,7 +634,12 @@ function Workspace() {
           onChange={(v) => setFacilityId(v ? Number(v) : null)}
           w={240}
         />
-        {facilityId && <CreateClassModal facilityId={facilityId} courses={courses} onCreated={loadBatches} />}
+        {facilityId && (
+          <Group gap="xs" align="flex-end">
+            <RoomsManager facilityId={facilityId} rooms={facilityRooms} reload={loadRooms} />
+            <CreateClassModal facilityId={facilityId} courses={courses} onCreated={loadBatches} />
+          </Group>
+        )}
       </Group>
       <Grid>
         <Grid.Col span={{ base: 12, md: 4 }}>
@@ -549,7 +680,12 @@ function Workspace() {
         </Grid.Col>
         <Grid.Col span={{ base: 12, md: 8 }}>
           {selected && facilityId ? (
-            <ClassDetail batch={selected} facilityId={facilityId} onChanged={loadBatches} />
+            <ClassDetail
+              batch={selected}
+              facilityId={facilityId}
+              rooms={facilityRooms}
+              onChanged={loadBatches}
+            />
           ) : (
             <Card withBorder>
               <Text c="dimmed">
