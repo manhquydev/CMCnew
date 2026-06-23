@@ -29,6 +29,7 @@ type Session = Awaited<ReturnType<typeof trpc.schedule.listSessions.query>>[numb
 type Enrollment = Awaited<ReturnType<typeof trpc.enrollment.listByBatch.query>>[number];
 type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
 type Room = Awaited<ReturnType<typeof trpc.room.list.query>>[number];
+type Teacher = Awaited<ReturnType<typeof trpc.user.listTeachers.query>>[number];
 
 const STATUS_COLOR: Record<string, string> = {
   planned: 'gray',
@@ -120,17 +121,32 @@ function CreateClassModal({
   );
 }
 
-function ScheduleTab({ batch, facilityId, rooms }: { batch: Batch; facilityId: number; rooms: Room[] }) {
+function ScheduleTab({
+  batch,
+  facilityId,
+  rooms,
+  teachers,
+}: {
+  batch: Batch;
+  facilityId: number;
+  rooms: Room[];
+  teachers: Teacher[];
+}) {
   const [slots, setSlots] = useState<Awaited<ReturnType<typeof trpc.schedule.listSlots.query>>>([]);
   const [day, setDay] = useState<string | null>('1');
   const [start, setStart] = useState('18:00');
   const [end, setEnd] = useState('19:30');
   const [roomId, setRoomId] = useState<string | null>(null);
+  const [teacherId, setTeacherId] = useState<string | null>(null);
   const [range, setRange] = useState<{ from: Date | null; to: Date | null }>({ from: null, to: null });
   const [msg, setMsg] = useState('');
   const roomLabel = useCallback(
     (id: string | null) => (id ? (rooms.find((r) => r.id === id)?.code ?? '—') : '—'),
     [rooms],
+  );
+  const teacherLabel = useCallback(
+    (id: string | null) => (id ? (teachers.find((t) => t.id === id)?.displayName ?? '—') : '—'),
+    [teachers],
   );
   const load = useCallback(() => {
     trpc.schedule.listSlots.query({ classBatchId: batch.id }).then(setSlots).catch(() => {});
@@ -145,6 +161,7 @@ function ScheduleTab({ batch, facilityId, rooms }: { batch: Batch; facilityId: n
       startTime: start,
       endTime: end,
       roomId: roomId ?? undefined,
+      teacherId: teacherId ?? undefined,
     });
     load();
   }
@@ -187,12 +204,30 @@ function ScheduleTab({ batch, facilityId, rooms }: { batch: Batch; facilityId: n
             value={roomId}
             onChange={setRoomId}
           />
+          <Select
+            label="Giáo viên"
+            w={170}
+            clearable
+            searchable
+            placeholder={teachers.length ? 'Chọn GV' : 'Chưa có GV'}
+            data={teachers.map((t) => ({ value: t.id, label: t.displayName }))}
+            value={teacherId}
+            onChange={setTeacherId}
+          />
           <Button onClick={addSlot}>Thêm khung</Button>
         </Group>
         <Text size="xs" c="dimmed" mt={6}>
-          Gán phòng để hệ thống chặn cứng trùng phòng khi sinh lịch.
+          Gán phòng/giáo viên để hệ thống chặn cứng trùng phòng và trùng giáo viên khi sinh lịch.
         </Text>
         <Table mt="sm">
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Thứ</Table.Th>
+              <Table.Th>Giờ</Table.Th>
+              <Table.Th>Phòng</Table.Th>
+              <Table.Th>Giáo viên</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
           <Table.Tbody>
             {slots.map((s) => (
               <Table.Tr key={s.id}>
@@ -201,6 +236,7 @@ function ScheduleTab({ batch, facilityId, rooms }: { batch: Batch; facilityId: n
                   {s.startTime} - {s.endTime}
                 </Table.Td>
                 <Table.Td>{roomLabel(s.roomId)}</Table.Td>
+                <Table.Td>{teacherLabel(s.teacherId)}</Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>
@@ -237,12 +273,14 @@ function ScheduleTab({ batch, facilityId, rooms }: { batch: Batch; facilityId: n
   );
 }
 
-function SessionsTab({ batchId, rooms }: { batchId: string; rooms: Room[] }) {
+function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Room[]; teachers: Teacher[] }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   useEffect(() => {
     trpc.schedule.listSessions.query({ classBatchId: batchId }).then(setSessions).catch(() => {});
   }, [batchId]);
   const roomLabel = (id: string | null) => (id ? (rooms.find((r) => r.id === id)?.code ?? '—') : '—');
+  const teacherLabel = (id: string | null) =>
+    id ? (teachers.find((t) => t.id === id)?.displayName ?? '—') : '—';
   return (
     <Table striped>
       <Table.Thead>
@@ -250,6 +288,7 @@ function SessionsTab({ batchId, rooms }: { batchId: string; rooms: Room[] }) {
           <Table.Th>Ngày</Table.Th>
           <Table.Th>Giờ</Table.Th>
           <Table.Th>Phòng</Table.Th>
+          <Table.Th>Giáo viên</Table.Th>
           <Table.Th>Trạng thái</Table.Th>
         </Table.Tr>
       </Table.Thead>
@@ -261,6 +300,7 @@ function SessionsTab({ batchId, rooms }: { batchId: string; rooms: Room[] }) {
               {s.startTime} - {s.endTime}
             </Table.Td>
             <Table.Td>{roomLabel(s.roomId)}</Table.Td>
+            <Table.Td>{teacherLabel(s.teacherId)}</Table.Td>
             <Table.Td>
               <Badge size="sm" color={STATUS_COLOR[s.status]}>
                 {s.status}
@@ -405,11 +445,13 @@ function ClassDetail({
   batch,
   facilityId,
   rooms,
+  teachers,
   onChanged,
 }: {
   batch: Batch;
   facilityId: number;
   rooms: Room[];
+  teachers: Teacher[];
   onChanged: () => void;
 }) {
   const [cancelOpen, cancel] = useDisclosure(false);
@@ -473,10 +515,10 @@ function ClassDetail({
           <Tabs.Tab value="log">Nhật ký</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="schedule" pt="md">
-          <ScheduleTab batch={batch} facilityId={facilityId} rooms={rooms} />
+          <ScheduleTab batch={batch} facilityId={facilityId} rooms={rooms} teachers={teachers} />
         </Tabs.Panel>
         <Tabs.Panel value="sessions" pt="md">
-          <SessionsTab batchId={batch.id} rooms={rooms} />
+          <SessionsTab batchId={batch.id} rooms={rooms} teachers={teachers} />
         </Tabs.Panel>
         <Tabs.Panel value="enroll" pt="md">
           <EnrollTab batch={batch} facilityId={facilityId} />
@@ -621,6 +663,13 @@ function Workspace() {
   }, []);
   useEffect(loadRooms, [loadRooms]);
 
+  // Teachers are RLS-scoped to the caller's facilities; reload per selected facility.
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  useEffect(() => {
+    if (!facilityId) return;
+    trpc.user.listTeachers.query({ facilityId }).then(setTeachers).catch(() => setTeachers([]));
+  }, [facilityId]);
+
   const visible = facilityId ? batches.filter((b) => b.facilityId === facilityId) : batches;
   const facilityRooms = facilityId ? rooms.filter((r) => r.facilityId === facilityId) : rooms;
 
@@ -684,6 +733,7 @@ function Workspace() {
               batch={selected}
               facilityId={facilityId}
               rooms={facilityRooms}
+              teachers={teachers}
               onChanged={loadBatches}
             />
           ) : (
