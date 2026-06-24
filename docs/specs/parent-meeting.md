@@ -22,10 +22,19 @@
 → tạo `Notification` cho **mỗi học sinh** (1/HS): `recipientType='student'`, `recipientId=studentId`, `type='parent_meeting_reminder'`, `payload={meetingId, classBatchId, title, scheduledAt}`. Phụ huynh thấy nhắc qua feed principal-aware sẵn có (notification của HS được surface cho PH của HS đó) — không gửi trực tiếp theo `parentAccountId`.
 → set `meeting.remindedAt = now` (trong cùng giao dịch → không nhắc lại).
 
+## Đường sinh lịch tự động (auto-cadence) — chốt 2026-06-24
+- **Hệ tự sinh lịch họp theo cadence của program; KHÔNG có họp đột xuất** (mutation `create` thủ công đã bỏ; staff chỉ đánh dấu đã họp/hủy).
+- **Nhịp theo program:** UCREA = 5 tháng, BRIGHT_IG & BLACK_HOLE = 3 tháng. Map cadence trong `@cmc/domain-academic` (`PARENT_MEETING_CADENCE_MONTHS`).
+- **Neo:** buổi N tại `class.startDate + N × interval` (N = 1,2,…) — buổi đầu cách ngày khai giảng đúng một kỳ, không sinh tại ngày khai giảng. Ngày cuối tháng được clamp về cuối tháng đích (Jan-31 +1th → Feb-28) để không trôi ngày.
+- **Phạm vi:** chỉ lớp `status = running` có `startDate`. Horizon: tới `endDate` của lớp, nếu không → cuốn `now + 12 tháng`.
+- **Idempotent:** unique `(classBatchId, scheduledAt)` + `createMany skipDuplicates` — chạy lại không nhân đôi. Sinh bằng cron nhúng **hằng ngày 02:00** + `runCadence` super-only (ops/dev).
+- Việc tồn (backlog): giờ họp thực (hiện `scheduledAt` = 00:00Z → hiện 07:00 ICT); hủy lịch tương lai khi lớp rời `running`; program lạ không có cadence → sinh rỗng im lặng.
+
 ## Lộ trình build (slice dọc) — ✅ HOÀN TẤT 2026-06-24
 - **PM1 — Schema:** ✅ `ParentMeeting` + migration `20260624025523_phase5_parent_meeting` + RLS (staff-facility + parent-via-enrollment, nhân từ exercise). Commit 605c576.
 - **PM2 — Router + worker:** ✅ CRUD staff (create/list/setStatus) + `myMeetings` (lmsAuth) + service idempotent + cron nhúng (node-cron */30) + `runReminders` super-only. Commit 9f5284f. *Verified live:* tick nhắc 1 lịch → 3 notification; tick lần 2 → 0 (remindedAt); PH HQ thấy trong feed + myMeetings; PH CS2 không thấy (RLS).
-- **PM3 — UI:** ✅ tab "Họp PH" trong chi tiết lớp (teaching): tạo/list/đã-họp/hủy. Commit 4be4bf3. PH nhận nhắc qua feed notification sẵn có (PM2). *Verified live:* list + setStatus qua tRPC.
+- **PM3 — UI:** ✅ tab "Họp PH" trong chi tiết lớp (teaching). PH nhận nhắc qua feed notification sẵn có (PM2). *Verified live:* list + setStatus qua tRPC. **Cập nhật T13:** bỏ form tạo tay → tab chỉ list + đã-họp/hủy + ghi chú lịch auto-sinh.
+- **PM4 — Auto-cadence:** ✅ sinh lịch tự động theo cadence (xem mục trên); bỏ ad-hoc `create`; cron daily 02:00 + `runCadence` super-only. int-test: lớp running UCREA → đúng buổi/horizon; chạy 2× không nhân đôi; `create` đã gỡ. Pure fn unit-test (clamp cuối tháng, biên horizon).
 
 ## Bất biến kỹ thuật
 - Worker idempotent qua `remindedAt`; tick lặp lại an toàn (đúng-một-lần mỗi lịch).
