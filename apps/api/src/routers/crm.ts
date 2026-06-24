@@ -108,6 +108,7 @@ export const crmRouter = router({
         contactId: z.string().uuid(),
         studentName: z.string().optional(),
         program: z.nativeEnum(Program).optional(),
+        ownerId: z.string().uuid().optional(),
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -119,6 +120,8 @@ export const crmRouter = router({
             contactId: contact.id,
             studentName: input.studentName,
             program: input.program,
+            // Credit the consultant who owns this opportunity — defaults to the creator (a sale).
+            ownerId: input.ownerId ?? ctx.session.userId,
           },
         });
         await logEvent(tx, {

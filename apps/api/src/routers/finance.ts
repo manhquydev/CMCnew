@@ -143,6 +143,7 @@ export const financeRouter = router({
         yearsPrepaid: z.number().int().min(1).max(3),
         period: z.string().optional(),
         voucherCode: z.string().optional(),
+        opportunityId: z.string().uuid().optional(),
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -184,6 +185,7 @@ export const financeRouter = router({
             effectiveDiscountPercent: effective,
             netAmount: netAmount(gross, effective),
             collectedById: ctx.session.userId,
+            opportunityId: input.opportunityId,
           },
         });
         await logEvent(tx, {
@@ -222,9 +224,29 @@ export const financeRouter = router({
           }
         }
         const code = await nextReceiptCode(tx, receipt.facilityId, new Date().getFullYear());
+
+        // Freeze sales-commission attribution at approve (docs/specs/payroll-v2-commission-design.md).
+        // soldById = the linked opportunity's owner (the credited CVTV). kind: a receipt linked to an
+        // opportunity that reached O5_ENROLLED counts as NEW (covers first-time AND win-back via a
+        // fresh funnel); otherwise RENEWAL if the student has any prior collected receipt, else NEW.
+        const opp = receipt.opportunityId
+          ? await tx.opportunity.findUnique({ where: { id: receipt.opportunityId }, select: { ownerId: true, stage: true } })
+          : null;
+        const priorCollected = await tx.receipt.count({
+          where: { studentId: receipt.studentId, id: { not: receipt.id }, status: { in: ['approved', 'sent', 'reconciled'] } },
+        });
+        const kind = opp?.stage === 'O5_ENROLLED' ? 'new' : priorCollected > 0 ? 'renewal' : 'new';
+
         const approved = await tx.receipt.update({
           where: { id: receipt.id },
-          data: { status: 'approved', code, approvedById: ctx.session.userId, approvedAt: new Date() },
+          data: {
+            status: 'approved',
+            code,
+            approvedById: ctx.session.userId,
+            approvedAt: new Date(),
+            soldById: opp?.ownerId ?? null,
+            kind,
+          },
         });
         await logEvent(tx, {
           facilityId: approved.facilityId,

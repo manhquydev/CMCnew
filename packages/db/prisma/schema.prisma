@@ -838,6 +838,13 @@ model Receipt {
   netAmount                Int           @map("net_amount")
   status                   ReceiptStatus @default(draft)
   collectedById            String?       @map("collected_by_id") @db.Uuid
+  /// Sales-commission attribution, FROZEN at approve (docs/specs/payroll-v2-commission-design.md):
+  /// soldById = the credited CVTV (from the linked opportunity's owner); kind = new vs renewal
+  /// (derived at approve, win-back via a fresh funnel opportunity counts as new). opportunityId
+  /// links the receipt to the sales funnel. collectedById stays = the cashier.
+  soldById                 String?       @map("sold_by_id") @db.Uuid
+  kind                     ReceiptKind?
+  opportunityId            String?       @map("opportunity_id") @db.Uuid
   approvedById             String?       @map("approved_by_id") @db.Uuid
   approvedAt               DateTime?     @map("approved_at")
   sentAt                   DateTime?     @map("sent_at")
@@ -849,6 +856,7 @@ model Receipt {
 
   @@index([facilityId])
   @@index([studentId])
+  @@index([soldById, status])
   @@map("receipt")
 }
 
@@ -900,6 +908,9 @@ model Opportunity {
   studentName String?          @map("student_name")
   program     Program?
   stage       OpportunityStage @default(O1_LEAD)
+  /// Sales consultant (CVTV) credited with this opportunity — source of commission attribution
+  /// (docs/specs/payroll-v2-commission-design.md). Flows onto the receipt's soldById at approve.
+  ownerId     String?          @map("owner_id") @db.Uuid
   lostReason  String?          @map("lost_reason")
   closedAt    DateTime?        @map("closed_at")
   archivedAt  DateTime?        @map("archived_at")
@@ -908,7 +919,14 @@ model Opportunity {
 
   @@index([facilityId])
   @@index([contactId])
+  @@index([ownerId])
   @@map("opportunity")
+}
+
+/// Doanh thu khách mới vs tái tục (PA2 hoa hồng tính khác nhau). Suy + đóng băng tại approve.
+enum ReceiptKind {
+  new
+  renewal
 }
 
 /// Lịch test (S3) — facility-scoped. entrance: gắn opportunity → auto-hook O3 khi tạo, O4 khi chấm.
