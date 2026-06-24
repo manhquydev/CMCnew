@@ -48,6 +48,15 @@ Thêm vào `.github/workflows/ci.yml` (sau seed+verify-rls):
 - WITH CHECK test match theo text lỗi PG (`/row-level security|42501/`) — có check 0-leak bù; chấp nhận.
 - Cap-35% test dựa `DEFAULT_DISCOUNT_TIERS` fallback — nếu facility 1 seed tier khác sẽ lệch; cân nhắc seed tier tường minh.
 
+## Mở rộng (commit 2) — 10 test / 5 lớp
+- **star redeem atomic** (LMS student): 2 redeem đua stock=1 → 1 OK, 1 bị chặn (advisory lock tuần tự hóa → loser BAD_REQUEST ở stock-check; guard CONFLICT là backstop); stock không âm, đúng 1 reward.
+- **CRM auto-hook**: lịch test entrance → opp tự lên O3; chấm xong → O4 (chỉ tiến); lead-ingest từ chối token sai, nhận token cấu hình.
+```
+✓ voucher-atomic (3)  ✓ rls-tenancy (3)  ✓ star-redeem (1)
+✓ crm-hooks (2)       ✓ payroll-finalize (1)
+Tests  10 passed (10)
+```
+
 ## Còn lại trong plan
-- Mở rộng test: star redeem race (LMS), CRM O3/O4 auto-hook, principal-aware parent/student read.
+- (tùy chọn) principal-aware parent READ isolation (PH chỉ thấy con) — chưa viết.
 - Phase 03 (chatter UI + chốt hoa hồng), Phase 04 (go-live backlog).
