@@ -1,12 +1,27 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls, ClassStatus } from '@cmc/db';
+import type { Prisma } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent, logStatusChange, addFollower } from '@cmc/audit';
 import { router, protectedProcedure, requireRole, Role } from '../trpc.js';
 import { nextBatchCode } from '../services/batch-code.js';
 
 const ENTITY = 'class_batch';
+const TERMINAL_STATUSES: ClassStatus[] = ['closed', 'cancelled'];
+
+/** Soft-cancel future scheduled parent meetings for a class batch. Returns cancelled count. */
+async function cancelFutureParentMeetings(
+  tx: Prisma.TransactionClient,
+  classBatchId: string,
+  now: Date,
+): Promise<number> {
+  const result = await tx.parentMeeting.updateMany({
+    where: { classBatchId, status: 'scheduled', archivedAt: null, scheduledAt: { gte: now } },
+    data: { status: 'cancelled' },
+  });
+  return result.count;
+}
 
 export const classBatchRouter = router({
   list: protectedProcedure.query(({ ctx }) =>
@@ -85,6 +100,23 @@ export const classBatchRouter = router({
           before.status,
           batch.status,
         );
+        // Soft-cancel future parent meetings when transitioning into a terminal state.
+        const nowTerminal = TERMINAL_STATUSES.includes(input.status);
+        const wasTerminal = TERMINAL_STATUSES.includes(before.status as ClassStatus);
+        if (nowTerminal && !wasTerminal) {
+          const now = new Date(new Date().toISOString().slice(0, 10));
+          const count = await cancelFutureParentMeetings(tx, batch.id, now);
+          if (count > 0) {
+            await logEvent(tx, {
+              facilityId: batch.facilityId,
+              entityType: ENTITY,
+              entityId: batch.id,
+              type: 'note',
+              body: `Hủy mềm ${count} lịch họp PH tương lai (lớp ${input.status})`,
+              actorId: ctx.session.userId,
+            });
+          }
+        }
         return batch;
       }),
     ),
@@ -108,6 +140,8 @@ export const classBatchRouter = router({
           where: { classBatchId: batch.id, status: { not: 'cancelled' }, sessionDate: { gte: today } },
           data: { status: 'cancelled' },
         });
+        // Cascade: lịch họp PH tương lai → cancelled.
+        const cancelledMeetings = await cancelFutureParentMeetings(tx, batch.id, today);
         await logStatusChange(
           tx,
           { facilityId: batch.facilityId, entityType: ENTITY, entityId: batch.id, actorId: ctx.session.userId },
@@ -115,15 +149,16 @@ export const classBatchRouter = router({
           before.status,
           'cancelled',
         );
+        const meetingNote = cancelledMeetings > 0 ? `; hủy mềm ${cancelledMeetings} lịch họp PH tương lai` : '';
         await logEvent(tx, {
           facilityId: batch.facilityId,
           entityType: ENTITY,
           entityId: batch.id,
           type: 'note',
-          body: `Lý do hủy: ${input.reason} (huỷ ${cancelled.count} buổi chưa diễn ra)`,
+          body: `Lý do hủy: ${input.reason} (huỷ ${cancelled.count} buổi chưa diễn ra${meetingNote})`,
           actorId: ctx.session.userId,
         });
-        return { batch, cancelledSessions: cancelled.count };
+        return { batch, cancelledSessions: cancelled.count, cancelledMeetings };
       }),
     ),
 
