@@ -3,7 +3,9 @@
 > Hai khoảng hở nghiệp vụ thật so với spec. Làm sau khi Phase 01 xong; độc lập với CI.
 
 ## Hạng mục 1 — Audit/Chatter UI timeline
-**Vấn đề:** Spec Phase 1 §2.8 đặt chatter kiểu Odoo là cross-cutting **bắt buộc**. Backend `record_event` (packages/audit) đã đủ và được gọi khắp router (logEvent ở finance/crm/payroll/grade...). Nhưng **UI** hiển thị timeline / followers / ghi chú tay trên màn chi tiết record gần như chưa có (chỉ 1 tham chiếu trong `apps/teaching/src/App.tsx`).
+**CẬP NHẬT 2026-06-24 (scout lại):** Phần lớn ĐÃ XONG. `packages/ui/src/chatter.tsx` là component đầy đủ (Timeline đổi-trạng-thái old→new + ghi chú tay + auto-follow + nhãn tiếng Việt); router `audit` có `timeline/followers/postNote/follow`; đã mount `<Chatter entityType="class_batch" .../>` trên màn lớp. **Khoảng hở duy nhất:** mới gắn trên ClassBatch — chưa gắn lên màn chi tiết các entity khác (Receipt, Opportunity, Student, Payslip). Nhiều panel hiện là dạng bảng/list, chưa có "màn chi tiết" để mount → cần tạo drawer/expand-row trước khi gắn.
+
+**Việc còn lại (nếu làm):** với mỗi entity ưu tiên, thêm chi tiết (drawer) + `<Chatter entityType=... entityId=... facilityId=... />`. Không đụng backend (đã đủ).
 
 **Files (dự kiến):**
 - TẠO `packages/ui/src/record-timeline.tsx` (component dùng chung: đọc record_event theo entityType+entityId, render timeline).
@@ -14,8 +16,10 @@
 - [ ] Mở chi tiết 1 lớp/phiếu thu → thấy timeline "ai · khi · trường cũ→mới + lý do".
 - [ ] Thêm ghi chú tay + theo dõi record hoạt động.
 
-## Hạng mục 2 — Chốt & (tùy quyết định) khép vòng hoa hồng vào payslip
-**Vấn đề:** `commissionForSale` (payroll.ts:110) auto-compute từ CompensationPolicy effective + receipt attributed, nhưng **mới là preview** — chưa tự ghép vào dòng `variablePay` của payslip; HR vẫn nhập tay. Spec Phase 4 **cho phép** v1 nhập tay (variablePay manual), nên đây là **quyết định mở**, không phải bug.
+## Hạng mục 2 — Hoa hồng vào payslip → CHỐT: Phương án A+ (đã có sẵn)
+**CẬP NHẬT 2026-06-24:** Chủ dự án chọn **A+**. Scout lại phát hiện nút A+ **đã tồn tại** — `payroll-panel.tsx:162` `<Button onClick={() => setVariablePay(commission.total)}>Đưa vào ô biến đổi ↓</Button>`: HR bấm "Tính hoa hồng" → preview → bấm đưa vào ô `variablePay` (vẫn sửa được) → tính lương. Đúng spec v1 nhập tay, rủi ro ~0. **Không cần làm thêm.** Phương án B (auto-ghép payslipCompute) để sau khi attribution chạy thật vài kỳ.
+
+(Lịch sử) `commissionForSale` (payroll.ts:110) auto-compute từ CompensationPolicy effective + receipt attributed.
 
 **Cần chủ dự án chốt:**
 - Phương án A (giữ spec): v1 HR xem preview rồi nhập tay vào variablePay → chỉ cần nút "áp preview vào dòng" cho tiện.

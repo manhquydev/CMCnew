@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc } from '@cmc/ui';
+import { trpc, Chatter } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -59,6 +59,7 @@ export function CrmPanel() {
   const [gradeTarget, setGradeTarget] = useState<TestAppt | null>(null);
   const [gradeScore, setGradeScore] = useState<number | string>('');
   const [gradeResult, setGradeResult] = useState('');
+  const [detailTarget, setDetailTarget] = useState<Opp | null>(null);
 
   useEffect(() => {
     trpc.facility.list.query().then((fs) => {
@@ -247,6 +248,9 @@ export function CrmPanel() {
                     </Table.Td>
                     <Table.Td>
                       <Group gap="xs" justify="flex-end">
+                        <Button size="compact-xs" variant="subtle" color="gray" onClick={() => setDetailTarget(o)}>
+                          Nhật ký
+                        </Button>
                         {!closed && (
                           <Button size="compact-xs" variant="light" onClick={() => setTestTarget(o)}>
                             Đặt test
@@ -372,6 +376,17 @@ export function CrmPanel() {
             </Button>
           </Group>
         </Stack>
+      </Modal>
+
+      <Modal
+        opened={!!detailTarget}
+        onClose={() => setDetailTarget(null)}
+        title={`Cơ hội — ${detailTarget?.studentName || detailTarget?.contact.fullName || ''}`}
+        size="lg"
+      >
+        {detailTarget && (
+          <Chatter entityType="opportunity" entityId={detailTarget.id} facilityId={detailTarget.facilityId} />
+        )}
       </Modal>
     </Stack>
   );
