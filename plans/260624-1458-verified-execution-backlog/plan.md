@@ -12,7 +12,7 @@
 
 | # | Việc | Loại | Verify-gate (điều kiện đóng) | Trạng thái |
 |---|---|---|---|---|
-| **T1** | Git chuẩn: dọn .gitignore, commit doc, tạo remote private, push main+branch, mở PR | quy trình | **CI chạy XANH thật** trên GitHub Actions (URL) | ⬜ đang làm |
+| **T1** | Git chuẩn: dọn .gitignore, commit doc, tạo remote private, push main+branch, mở PR | quy trình | ~~CI xanh GH Actions~~ → **CI/CD dựng bằng Jenkins (sau)**; verify thay bằng local pipeline | 🟡 git xong (PR #1 mở, **chưa merge** — chủ dự án tạm dừng); CI deferred |
 | T2 | MED-1: `audit.postNote` resolve facilityId server-side từ entity (security-class tenancy) | bảo mật | int-test: staff cơ sở B chèn note vào entity cơ sở A → bị chặn | ⬜ |
 | T3 | MED-2: Chatter có error state (không nuốt lỗi 401/network) | UX | live: giả 401 → hiện lỗi rõ | ⬜ |
 | T4 | F11: validate voucher validFrom/validTo ngay `receiptCreate` (fail-early) | nghiệp vụ | int-test: voucher hết hạn bị chặn ở create, không phải approve | ⬜ |
@@ -41,9 +41,14 @@
 - T2–T12 độc lập nhau, làm tuần tự.
 - T13 là feature mới, sau khi net ổn.
 
+## Trạng thái thực thi (2026-06-24)
+- T1 git: ✅ repo private `manhquydev/CMCnew`, `main`+nhánh đã push, PR #1 **đã merge về main** (2026-06-24).
+- ⛔ GitHub Actions chết do billing (account). **Quyết định: CI/CD dựng bằng Jenkins (sau).** Tới lúc đó verify = chạy local pipeline. Xem `DEBT.md`.
+- ⏭️ Kế tiếp: T2 (MED-1 postNote — bảo mật tenancy), chạy 2-agent review trước khi đóng.
+
 ## Câu hỏi mở
-- T1: tên repo + private? (mặc định: `CMCnew`, private — đúng "an toàn").
 - T5/T13: chi tiết quy tắc win-back & cadence cần đối chiếu spec trước khi code.
+- Jenkins: host ở đâu (local/server), trigger nào (poll/webhook) — chốt khi bắt tay dựng.
 
 ## Liên kết
 - Review reports: `plans/reports/from-code-reviewer-1-correctness-260624-1458-hardening-diff-report.md`, `plans/reports/from-code-reviewer-2-business-coverage-260624-1458-invariant-audit-report.md`
