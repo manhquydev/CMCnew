@@ -210,6 +210,59 @@ export const payrollRouter = router({
       }),
     ),
 
+  // Period payroll sheet: fund totals + per-status breakdown for one (facility, period).
+  // Powers the "bảng lương kỳ" view — how much is drafted vs frozen vs already paid.
+  payslipPeriodSummary: requireRole(...HR_ROLES)
+    .input(z.object({ facilityId: z.number().int().positive(), periodKey: z.string().regex(/^\d{4}-\d{2}$/) }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const where = { facilityId: input.facilityId, periodKey: input.periodKey };
+        const [totals, byStatus] = await Promise.all([
+          tx.payslip.aggregate({
+            where,
+            _count: { _all: true },
+            _sum: { grossIncome: true, netIncome: true, pitAmount: true, insuranceDeduction: true },
+          }),
+          tx.payslip.groupBy({ by: ['status'], where, _count: { _all: true }, _sum: { netIncome: true } }),
+        ]);
+        const status = (s: string) => byStatus.find((g) => g.status === s);
+        return {
+          periodKey: input.periodKey,
+          count: totals._count._all,
+          totalGross: totals._sum.grossIncome ?? 0,
+          totalNet: totals._sum.netIncome ?? 0,
+          totalPit: totals._sum.pitAmount ?? 0,
+          totalInsurance: totals._sum.insuranceDeduction ?? 0,
+          draftCount: status('draft')?._count._all ?? 0,
+          finalizedCount: status('finalized')?._count._all ?? 0,
+          paidCount: status('paid')?._count._all ?? 0,
+          finalizedNet: status('finalized')?._sum.netIncome ?? 0,
+        };
+      }),
+    ),
+
+  // Pay out a whole period at once: flip every finalized (not draft, not already-paid) slip
+  // to paid. Audited per slip so the trail stays complete. Returns how many were paid.
+  payslipBulkMarkPaid: requireRole(...HR_ROLES)
+    .input(z.object({ facilityId: z.number().int().positive(), periodKey: z.string().regex(/^\d{4}-\d{2}$/) }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const due = await tx.payslip.findMany({
+          where: { facilityId: input.facilityId, periodKey: input.periodKey, status: 'finalized' },
+          select: { id: true },
+        });
+        if (due.length === 0) return { paidCount: 0 };
+        const paidAt = new Date();
+        await tx.payslip.updateMany({ where: { id: { in: due.map((s) => s.id) } }, data: { status: 'paid', paidAt } });
+        await Promise.all(
+          due.map((s) =>
+            logEvent(tx, { facilityId: input.facilityId, entityType: 'payslip', entityId: s.id, type: 'status_changed', body: `Trả lương hàng loạt kỳ ${input.periodKey}`, changes: [{ field: 'status', old: 'finalized', new: 'paid' }], actorId: ctx.session.userId }),
+          ),
+        );
+        return { paidCount: due.length };
+      }),
+    ),
+
   // Reopen a finalized (not yet paid) slip back to draft for correction — audited.
   payslipReopen: requireRole(...HR_ROLES)
     .input(z.object({ id: z.string().uuid() }))

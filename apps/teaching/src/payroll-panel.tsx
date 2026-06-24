@@ -18,6 +18,7 @@ import {
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type RosterUser = Awaited<ReturnType<typeof trpc.payroll.roster.query>>[number];
 type Payslip = Awaited<ReturnType<typeof trpc.payroll.payslipList.query>>[number];
+type PeriodSummary = Awaited<ReturnType<typeof trpc.payroll.payslipPeriodSummary.query>>;
 
 const vnd = (n: number) => n.toLocaleString('vi-VN') + 'đ';
 const ST: Record<string, { label: string; color: string }> = {
@@ -32,6 +33,7 @@ export function PayrollPanel() {
   const [roster, setRoster] = useState<RosterUser[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [slips, setSlips] = useState<Payslip[]>([]);
+  const [summary, setSummary] = useState<PeriodSummary | null>(null);
   // rate form
   const [base, setBase] = useState<number | string>(5700000);
   const [meal, setMeal] = useState<number | string>(500000);
@@ -56,11 +58,17 @@ export function PayrollPanel() {
 
   const userName = useCallback((id: string) => roster.find((u) => u.id === id)?.displayName ?? id.slice(0, 8), [roster]);
 
+  const loadSummary = useCallback(() => {
+    if (!facilityId || !/^\d{4}-\d{2}$/.test(period)) return setSummary(null);
+    trpc.payroll.payslipPeriodSummary.query({ facilityId, periodKey: period }).then(setSummary).catch(() => setSummary(null));
+  }, [facilityId, period]);
+
   const load = useCallback(() => {
     if (!facilityId) return;
     trpc.payroll.roster.query({ facilityId }).then(setRoster).catch(() => setRoster([]));
     trpc.payroll.payslipList.query({ facilityId }).then(setSlips).catch(() => setSlips([]));
-  }, [facilityId]);
+    loadSummary();
+  }, [facilityId, loadSummary]);
   useEffect(load, [load]);
 
   const num = (v: number | string) => (typeof v === 'number' ? v : Number(v) || 0);
@@ -135,6 +143,30 @@ export function PayrollPanel() {
           <Button onClick={compute} loading={busy}>Tính (nháp)</Button>
         </Group>
       </Card>
+
+      {summary && summary.count > 0 && (
+        <Card withBorder>
+          <Group justify="space-between" mb="sm">
+            <Title order={6}>Bảng lương kỳ {summary.periodKey}</Title>
+            <Button size="compact-sm" color="teal" disabled={summary.finalizedCount === 0} loading={busy}
+              onClick={() => act(async () => {
+                setBusy(true);
+                try {
+                  const r = await trpc.payroll.payslipBulkMarkPaid.mutate({ facilityId: facilityId!, periodKey: period });
+                  setMsg({ kind: 'ok', text: `Đã trả ${r.paidCount} phiếu kỳ ${period}.` });
+                } finally { setBusy(false); }
+              })}>
+              Trả hàng loạt ({summary.finalizedCount})
+            </Button>
+          </Group>
+          <Group gap="xl">
+            <Text size="sm">Số phiếu: <b>{summary.count}</b> ({summary.draftCount} nháp · {summary.finalizedCount} chốt · {summary.paidCount} đã trả)</Text>
+            <Text size="sm">Tổng gộp: <b>{vnd(summary.totalGross)}</b></Text>
+            <Text size="sm">Tổng thuế TNCN: <b>{vnd(summary.totalPit)}</b></Text>
+            <Text size="sm">Tổng thực lĩnh: <b>{vnd(summary.totalNet)}</b></Text>
+          </Group>
+        </Card>
+      )}
 
       <Card withBorder>
         <Title order={6} mb="sm">Phiếu lương</Title>
