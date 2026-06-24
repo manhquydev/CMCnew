@@ -1058,6 +1058,8 @@ model SalaryRate {
   mealAllowance  Int       @default(0) @map("meal_allowance")
   otherAllowance Int       @default(0) @map("other_allowance")
   kpiMax         Int       @default(0) @map("kpi_max")
+  /// Chỉ tiêu doanh số tháng (VND) — mẫu số tính % đạt quota cho hoa hồng sale (PA2). 0 = không áp.
+  monthlyQuota   Int       @default(0) @map("monthly_quota")
   effectiveFrom  DateTime  @map("effective_from") @db.Date
   archivedAt     DateTime? @map("archived_at")
   createdById    String?   @map("created_by_id") @db.Uuid

@@ -3,7 +3,8 @@ import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { assemblePayslip } from '@cmc/domain-payroll';
+import { assemblePayslip, cvtvNewCustomerRate, renewalRate, commissionAmount } from '@cmc/domain-payroll';
+import { effectiveParamsAt } from './compensation.js';
 import { router, requireRole, protectedProcedure, Role } from '../trpc.js';
 
 // Payroll is HR-confidential: every procedure is role-gated to hr/ke_toan (super passes).
@@ -79,6 +80,7 @@ export const payrollRouter = router({
         mealAllowance: z.number().int().nonnegative().default(0),
         otherAllowance: z.number().int().nonnegative().default(0),
         kpiMax: z.number().int().nonnegative().default(0),
+        monthlyQuota: z.number().int().nonnegative().default(0),
         effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       }),
     )
@@ -98,6 +100,69 @@ export const payrollRouter = router({
       withRls(rlsContextOf(ctx.session), (tx) =>
         tx.salaryRate.findMany({ where: { userId: input.userId, archivedAt: null }, orderBy: { effectiveFrom: 'desc' } }),
       ),
+    ),
+
+  // Auto-compute a sale's commission for a period from collected receipts credited to them
+  // (docs/specs/payroll-v2-commission-design.md, CV4). Uses the CompensationPolicy effective at the
+  // period; quota = the sale's effective SalaryRate.monthlyQuota. v1 treats the sale as a CVTV
+  // (manager/team rollup deferred) and takes the centre retention ratio as an input (default 1 =
+  // gate met) until centre-retention is computed from CRM. A preview for HR to fill variablePay.
+  commissionForSale: requireRole(...HR_ROLES)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        facilityId: z.number().int().positive(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+        centreRetentionRatio: z.number().min(0).max(2).default(1),
+      }),
+    )
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const params = await effectiveParamsAt(tx, input.periodKey);
+        const rate = await tx.salaryRate.findFirst({
+          where: { userId: input.userId, archivedAt: null, effectiveFrom: { lte: periodEnd(input.periodKey) } },
+          orderBy: { effectiveFrom: 'desc' },
+          select: { monthlyQuota: true },
+        });
+        const quota = rate?.monthlyQuota ?? 0;
+
+        const [y, mo] = input.periodKey.split('-').map(Number);
+        const start = new Date(Date.UTC(y!, mo! - 1, 1));
+        const end = new Date(Date.UTC(y!, mo!, 1)); // exclusive next-month start
+        const grouped = await tx.receipt.groupBy({
+          by: ['kind'],
+          where: {
+            soldById: input.userId,
+            facilityId: input.facilityId,
+            status: { in: ['approved', 'sent', 'reconciled'] },
+            approvedAt: { gte: start, lt: end },
+          },
+          _sum: { netAmount: true },
+        });
+        const newRevenue = grouped.find((g) => g.kind === 'new')?._sum.netAmount ?? 0;
+        const renewalRevenue = grouped.find((g) => g.kind === 'renewal')?._sum.netAmount ?? 0;
+
+        const attainment = quota > 0 ? newRevenue / quota : 0;
+        const rateNew = cvtvNewCustomerRate(attainment, params);
+        const rateRenew = renewalRate('cvtv', input.centreRetentionRatio, params);
+        const commissionNew = commissionAmount(newRevenue, rateNew);
+        const commissionRenewal = commissionAmount(renewalRevenue, rateRenew);
+        const total = commissionNew + commissionRenewal;
+        const budgetCap = Math.round((newRevenue + renewalRevenue) * params.commission.budgetPct);
+        return {
+          quota,
+          newRevenue,
+          renewalRevenue,
+          attainment,
+          rateNew,
+          rateRenew,
+          commissionNew,
+          commissionRenewal,
+          total,
+          budgetCap,
+          overBudget: total > budgetCap,
+        };
+      }),
     ),
 
   // Compute (or recompute) a draft payslip for (employee, period). Finalize gating: a finalized
