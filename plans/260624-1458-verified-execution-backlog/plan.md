@@ -14,7 +14,7 @@
 |---|---|---|---|---|
 | **T1** | Git chuẩn: dọn .gitignore, commit doc, tạo remote private, push main+branch, mở PR | quy trình | ~~CI xanh GH Actions~~ → **CI/CD dựng bằng Jenkins (sau)**; verify thay bằng local pipeline | 🟡 git xong (PR #1 mở, **chưa merge** — chủ dự án tạm dừng); CI deferred |
 | T2 | MED-1: `audit.postNote` resolve facilityId server-side từ entity (security-class tenancy) | bảo mật | int-test: staff cơ sở B chèn note vào entity cơ sở A → bị chặn | ✅ done 2026-06-24 (`audit-postnote-tenancy.int.test.ts` 3/3 PASS, full int-suite 21/21; 2-agent review SAFE-TO-CLOSE) |
-| T3 | MED-2: Chatter có error state (không nuốt lỗi 401/network) | UX | live: giả 401 → hiện lỗi rõ | ⬜ |
+| T3 | MED-2: Chatter có error state (không nuốt lỗi 401/network) | UX | live: giả 401 → hiện lỗi rõ | ✅ code done 2026-06-24 — `chatter.tsx` thêm error state → Alert (load + post không còn nuốt lỗi); typecheck+lint xanh. ⏳ live verify (giả 401) cần app chạy. |
 | T4 | F11: validate voucher validFrom/validTo ngay `receiptCreate` (fail-early) | nghiệp vụ | int-test: voucher hết hạn bị chặn ở create, không phải approve | ✅ done 2026-06-24 — `voucher-window-fail-early.int.test.ts` 3/3 (hết hạn/chưa hiệu lực chặn ở create + 0 draft; approve vẫn re-check nguyên tử). |
 | T5 | F9: soát phân loại win-back `kind` (O5 vs entrance test mới) theo spec | nghiệp vụ | xác nhận spec → fix nếu sai + int-test | ⬜ (cần soát spec) |
 | T6 | F4: int-test `assessment.computeFinalGrade` loại grade chưa publish | coverage | test seed published+unpublished → FinalGrade chỉ tính published | ✅ done 2026-06-24 — `assessment-final-grade-publish.int.test.ts` (mutation: bỏ filter → 8.55 thay 9.6). Code đã đúng. |
