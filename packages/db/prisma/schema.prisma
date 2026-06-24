@@ -216,6 +216,7 @@ model ParentMeeting {
   location     String?
   note         String?
   status       ParentMeetingStatus @default(scheduled)
+  timeConfirmed Boolean             @default(false) @map("time_confirmed")
   remindedAt   DateTime?           @map("reminded_at")
   createdById  String?             @map("created_by_id") @db.Uuid
   createdAt    DateTime            @default(now()) @map("created_at")

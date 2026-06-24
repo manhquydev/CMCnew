@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { withRls } from '@cmc/db';
+import { TRPCError } from '@trpc/server';
+import { withRls, Prisma } from '@cmc/db';
 import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, protectedProcedure, superAdminProcedure, lmsProcedure } from '../trpc.js';
@@ -40,10 +41,41 @@ export const parentMeetingRouter = router({
         where: { status: 'scheduled', archivedAt: null },
         orderBy: { scheduledAt: 'asc' },
         take: 50,
-        select: { id: true, classBatchId: true, title: true, scheduledAt: true, location: true, note: true },
+        select: { id: true, classBatchId: true, title: true, scheduledAt: true, timeConfirmed: true, location: true, note: true },
       }),
     ),
   ),
+
+  // Staff sets the confirmed datetime for a TBD meeting; flips timeConfirmed = true.
+  setSchedule: protectedProcedure
+    .input(z.object({ id: z.string().uuid(), scheduledAt: z.coerce.date() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const before = await tx.parentMeeting.findUniqueOrThrow({ where: { id: input.id } });
+        let m;
+        try {
+          m = await tx.parentMeeting.update({
+            where: { id: input.id },
+            data: { scheduledAt: input.scheduledAt, timeConfirmed: true },
+          });
+        } catch (err) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+            throw new TRPCError({ code: 'CONFLICT', message: 'Đã có lịch họp khác trùng thời điểm này' });
+          }
+          throw err;
+        }
+        await logEvent(tx, {
+          facilityId: m.facilityId,
+          entityType: 'parent_meeting',
+          entityId: m.id,
+          type: 'status_changed',
+          body: `Chốt giờ họp PH: ${input.scheduledAt.toISOString()}`,
+          changes: [{ field: 'scheduledAt', old: before.scheduledAt.toISOString(), new: input.scheduledAt.toISOString() }],
+          actorId: ctx.session.userId,
+        });
+        return m;
+      }),
+    ),
 
   // Manual reminder tick (ops/dev) — same idempotent logic the embedded cron runs. Super-only.
   runReminders: superAdminProcedure

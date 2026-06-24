@@ -346,8 +346,15 @@ function UpcomingMeetingsCard({ refreshKey }: { refreshKey: number }) {
         {meetings.map((m) => (
           <Group key={m.id} gap="xs" wrap="nowrap">
             <Badge variant="light" color="cmc">
-              {fmtDateTime(m.scheduledAt)}
+              {m.timeConfirmed
+                ? fmtDateTime(m.scheduledAt)
+                : new Date(m.scheduledAt).toLocaleDateString('vi-VN')}
             </Badge>
+            {!m.timeConfirmed && (
+              <Text size="xs" c="dimmed">
+                (chưa chốt giờ)
+              </Text>
+            )}
             <Text fw={600} size="sm">
               {m.title}
             </Text>
