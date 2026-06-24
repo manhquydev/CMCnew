@@ -28,6 +28,7 @@ import { afterSaleRouter } from './aftersale.js';
 import { certificateRouter } from './certificate.js';
 import { payrollRouter } from './payroll.js';
 import { parentMeetingRouter } from './parent-meeting.js';
+import { compensationRouter } from './compensation.js';
 
 export const appRouter = router({
   health: publicProcedure.query(() => ({ ok: true, ts: new Date().toISOString() })),
@@ -60,6 +61,7 @@ export const appRouter = router({
   certificate: certificateRouter,
   payroll: payrollRouter,
   parentMeeting: parentMeetingRouter,
+  compensation: compensationRouter,
 });
 
 export type AppRouter = typeof appRouter;
