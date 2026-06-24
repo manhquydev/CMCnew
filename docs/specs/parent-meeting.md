@@ -10,14 +10,16 @@
 
 ## Mô hình dữ liệu
 `ParentMeeting`:
-- `id`, `facilityId`, `classBatchId` (FK → `ClassBatch`, cascade), `title`, `scheduledAt` (DateTime, giờ ICT), `location` (text, tùy chọn), `note` (tùy chọn).
-- `status`: `scheduled → done | cancelled`.
+- `id`, `facilityId`, `classBatchId` (FK → `ClassBatch`, cascade), `title`, `scheduledAt` (DateTime), `location` (text, tùy chọn), `note` (tùy chọn).
+- `timeConfirmed` (Boolean, default false) — lịch auto-sinh để **giờ TBD** (`scheduledAt` neo ngày ở 00:00Z, chỉ dùng làm NGÀY); UI hiện "(chưa chốt giờ)". Staff gọi `setSchedule` để chốt giờ thật → `timeConfirmed=true`.
+- `status`: `scheduled → done | cancelled`. Lớp rời `running` sang terminal (`closed`/`cancelled`) → lịch tương lai `scheduled` bị **hủy mềm** (`cancelled`).
 - `remindedAt` (DateTime?, null = chưa nhắc) — cờ idempotency cho worker.
 - `createdById`, `createdAt`, `archivedAt` (soft-delete). Audit/chatter mọi mutation.
 - RLS: staff theo facility (giống các thực thể staff khác: `super OR (staff AND facility match)`). Phụ huynh đọc lịch họp của lớp con mình đang học (principal-aware, qua Guardian→Enrollment).
 
 ## Đường nhắc (worker tick)
-`ParentMeeting (remindedAt=null, status=scheduled, scheduledAt ∈ [now, now+24h])`
+`ParentMeeting (remindedAt=null, status=scheduled, timeConfirmed=true, scheduledAt ∈ [now, now+24h])`
+(lịch giờ-TBD bị loại: nhắc ở 00:00 giả sẽ đốt slot `remindedAt`, khiến nhắc thật sau khi chốt giờ không chạy)
 → `ClassBatch` → `Enrollment(active)` → distinct `Student`
 → tạo `Notification` cho **mỗi học sinh** (1/HS): `recipientType='student'`, `recipientId=studentId`, `type='parent_meeting_reminder'`, `payload={meetingId, classBatchId, title, scheduledAt}`. Phụ huynh thấy nhắc qua feed principal-aware sẵn có (notification của HS được surface cho PH của HS đó) — không gửi trực tiếp theo `parentAccountId`.
 → set `meeting.remindedAt = now` (trong cùng giao dịch → không nhắc lại).
@@ -28,7 +30,8 @@
 - **Neo:** buổi N tại `class.startDate + N × interval` (N = 1,2,…) — buổi đầu cách ngày khai giảng đúng một kỳ, không sinh tại ngày khai giảng. Ngày cuối tháng được clamp về cuối tháng đích (Jan-31 +1th → Feb-28) để không trôi ngày.
 - **Phạm vi:** chỉ lớp `status = running` có `startDate`. Horizon: tới `endDate` của lớp, nếu không → cuốn `now + 12 tháng`.
 - **Idempotent:** unique `(classBatchId, scheduledAt)` + `createMany skipDuplicates` — chạy lại không nhân đôi. Sinh bằng cron nhúng **hằng ngày 02:00** + `runCadence` super-only (ops/dev).
-- Việc tồn (backlog): giờ họp thực (hiện `scheduledAt` = 00:00Z → hiện 07:00 ICT); hủy lịch tương lai khi lớp rời `running`; program lạ không có cadence → sinh rỗng im lặng.
+- **Program lạ** (không có trong `PARENT_MEETING_CADENCE_MONTHS`): sinh 0 lịch nhưng **ghi cảnh báo audit** (`class_batch`) để vận hành phát hiện cấu hình thiếu — không còn im lặng.
+- Việc đã đóng 2026-06-24 (xem `plans/260624-1936-parent-meeting-backlog-defects/`): giờ TBD (`timeConfirmed`), hủy mềm lịch tương lai khi lớp đóng, cảnh báo program lạ. Tồn LOW: reopen lớp chưa khôi phục lịch đã hủy mềm (backlog #6); warn program lạ chưa dedup theo tick (backlog #5).
 
 ## Lộ trình build (slice dọc) — ✅ HOÀN TẤT 2026-06-24
 - **PM1 — Schema:** ✅ `ParentMeeting` + migration `20260624025523_phase5_parent_meeting` + RLS (staff-facility + parent-via-enrollment, nhân từ exercise). Commit 605c576.
