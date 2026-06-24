@@ -7,6 +7,8 @@ future user-provided spec.
 
 - `HARNESS.md`: how humans and agents collaborate.
 - `FEATURE_INTAKE.md`: how prompts become tiny, normal, or high-risk work.
+- `CK_WORKFLOW.md`: how the ClaudeKit (`/ck:*`) skill suite routes through the
+  Harness lanes — which ck capability to use per phase and risk lane.
 - `ARCHITECTURE.md`: architecture discovery and boundary rules.
 - `TEST_MATRIX.md`: legacy proof map; current proof status is queried with
   `scripts/bin/harness-cli query matrix`.

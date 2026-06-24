@@ -26,3 +26,21 @@ step that could use an external tool, run `scripts/bin/harness-cli query tools
 --capability <name> --status present` to see what is equipped; an absent
 capability is a clean skip.
 <!-- HARNESS:END -->
+
+## ClaudeKit usage
+
+Skills and agents in the ClaudeKit suite (`/ck:*`) are this repo's
+execution layer. They run **inside** the Harness Task Loop, never around it:
+
+1. Classify the request with `docs/FEATURE_INTAKE.md` and record it
+   (`harness-cli intake`).
+2. Pick the ck capability for the current phase and lane from the routing table
+   in `docs/CK_WORKFLOW.md` (Intake / Planning / Implementation / Validation /
+   Trace × tiny / normal / high-risk).
+3. The Harness durable layer (`harness-cli`) stays the source of truth — **run
+   ck to do the work, record the Harness to prove it.** Never skip
+   `harness-cli trace` because a ck skill already wrote a journal.
+
+`ship` / `review-pr` / `vibe --ship` / `team` stay deferred until Jenkins CI and
+merge→`main` resume (`docs/CK_WORKFLOW.md` §5). The ELI5 output style
+(`.claude/.ck.json` `codingLevel: 0`) is an intentional operator setting; keep it.
