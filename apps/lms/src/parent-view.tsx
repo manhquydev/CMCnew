@@ -70,14 +70,21 @@ const LEVEL_STATUS: Record<string, { label: string; color: string }> = {
 
 function LevelHistoryCard({ childId, refreshKey }: { childId: string; refreshKey: number }) {
   const [rows, setRows] = useState<LevelRow[] | null>(null);
+  const [error, setError] = useState('');
   useEffect(() => {
     setRows(null);
+    setError('');
     trpc.levelProgress.forStudent
       .query({ studentId: childId })
       .then(setRows)
-      .catch(() => setRows([]));
+      .catch((e) => setError('Không tải được tiến trình cấp độ: ' + (e instanceof Error ? e.message : '')));
   }, [childId, refreshKey]);
 
+  if (error) {
+    return (
+      <Alert color="red">{error}</Alert>
+    );
+  }
   if (!rows || rows.length === 0) return null;
   return (
     <Card withBorder>
@@ -329,13 +336,20 @@ type Meeting = Awaited<ReturnType<typeof trpc.parentMeeting.myMeetings.query>>[n
 /** Upcoming parent meetings across all of this parent's children's classes (RLS-scoped). */
 function UpcomingMeetingsCard({ refreshKey }: { refreshKey: number }) {
   const [meetings, setMeetings] = useState<Meeting[] | null>(null);
+  const [error, setError] = useState('');
   useEffect(() => {
+    setError('');
     trpc.parentMeeting.myMeetings
       .query()
       .then((rows) => setMeetings(rows.filter((m) => new Date(m.scheduledAt).getTime() >= Date.now())))
-      .catch(() => setMeetings([]));
+      .catch((e) => setError('Không tải được lịch họp phụ huynh: ' + (e instanceof Error ? e.message : '')));
   }, [refreshKey]);
 
+  if (error) {
+    return (
+      <Alert color="red">{error}</Alert>
+    );
+  }
   if (!meetings || meetings.length === 0) return null;
   return (
     <Card withBorder>
