@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, API_URL } from '@cmc/ui';
+import { trpc, API_URL, Chatter } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -47,6 +47,7 @@ export function FinancePanel() {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Receipt | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+  const [detailTarget, setDetailTarget] = useState<Receipt | null>(null);
 
   const studentName = useCallback(
     (id: string) => students.find((s) => s.id === id)?.fullName ?? id.slice(0, 8),
@@ -242,6 +243,9 @@ export function FinancePanel() {
                     </Table.Td>
                     <Table.Td>
                       <Group gap="xs" justify="flex-end">
+                        <Button size="compact-xs" variant="subtle" color="gray" onClick={() => setDetailTarget(r)}>
+                          Nhật ký
+                        </Button>
                         {r.status === 'draft' && (
                           <Button size="compact-xs" onClick={() => approve(r.id)}>
                             Duyệt
@@ -304,6 +308,17 @@ export function FinancePanel() {
             </Button>
           </Group>
         </Stack>
+      </Modal>
+
+      <Modal
+        opened={!!detailTarget}
+        onClose={() => setDetailTarget(null)}
+        title={`Phiếu thu ${detailTarget?.code ?? 'nháp'}`}
+        size="lg"
+      >
+        {detailTarget && (
+          <Chatter entityType="receipt" entityId={detailTarget.id} facilityId={detailTarget.facilityId} />
+        )}
       </Modal>
     </Stack>
   );

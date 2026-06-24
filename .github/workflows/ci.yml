@@ -31,6 +31,8 @@ jobs:
       AUTH_COOKIE_NAME: cmc.session
       SEED_SUPERADMIN_EMAIL: admin@cmc.local
       SEED_SUPERADMIN_PASSWORD: ChangeMe!123
+      # Required by the lead-ingest integration test (positive path asserts a real lead is created).
+      CRM_LEAD_TOKEN: ci-only-lead-token
 
     steps:
       - uses: actions/checkout@v4
@@ -60,6 +62,12 @@ jobs:
 
       - name: Typecheck
         run: pnpm -r typecheck
+
+      - name: Unit tests (domain logic)
+        run: pnpm -r test
+
+      - name: Integration tests (router invariants — money/tenancy/payroll)
+        run: pnpm --filter @cmc/api test:int
 
       - name: Build apps
         run: pnpm -r build

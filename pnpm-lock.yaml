@@ -99,9 +99,6 @@ importers:
       '@trpc/server':
         specifier: ^11.0.0-rc.660
         version: 11.18.0(typescript@5.9.3)
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.6.1
       hono:
         specifier: ^4.6.14
         version: 4.12.27
@@ -115,12 +112,18 @@ importers:
       '@types/node-cron':
         specifier: ^3.0.11
         version: 3.0.11
+      dotenv:
+        specifier: ^16.6.1
+        version: 16.6.1
       tsx:
         specifier: ^4.19.2
         version: 4.22.4
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
+      vitest:
+        specifier: 2.1.9
+        version: 2.1.9(@types/node@22.20.0)
 
   apps/lms:
     dependencies:
