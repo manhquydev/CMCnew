@@ -465,6 +465,88 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
   );
 }
 
+type ParentMeeting = Awaited<ReturnType<typeof trpc.parentMeeting.list.query>>[number];
+
+function MeetingsTab({ batch, facilityId }: { batch: Batch; facilityId: number }) {
+  const [meetings, setMeetings] = useState<ParentMeeting[]>([]);
+  const [title, setTitle] = useState('Họp phụ huynh');
+  const [when, setWhen] = useState('');
+  const [location, setLocation] = useState('');
+  const [msg, setMsg] = useState('');
+
+  const load = useCallback(() => {
+    trpc.parentMeeting.list.query({ facilityId, classBatchId: batch.id }).then(setMeetings).catch(() => {});
+  }, [facilityId, batch.id]);
+  useEffect(load, [load]);
+
+  async function create() {
+    if (!title || !when) return setMsg('Nhập tiêu đề và thời gian.');
+    setMsg('');
+    try {
+      await trpc.parentMeeting.create.mutate({
+        facilityId,
+        classBatchId: batch.id,
+        title,
+        scheduledAt: new Date(when).toISOString(),
+        location: location || undefined,
+      });
+      setMsg('Đã tạo lịch họp — phụ huynh sẽ được nhắc trước 1 ngày.');
+      setWhen('');
+      load();
+    } catch (e) {
+      setMsg('Lỗi: ' + (e instanceof Error ? e.message : ''));
+    }
+  }
+
+  async function setStatus(id: string, status: 'done' | 'cancelled') {
+    await trpc.parentMeeting.setStatus.mutate({ id, status });
+    load();
+  }
+
+  const ST: Record<string, { label: string; color: string }> = {
+    scheduled: { label: 'Đã lên lịch', color: 'blue' },
+    done: { label: 'Đã họp', color: 'teal' },
+    cancelled: { label: 'Đã hủy', color: 'gray' },
+  };
+
+  return (
+    <Stack>
+      <Group align="flex-end">
+        <TextInput label="Tiêu đề" style={{ flex: 1 }} value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
+        <TextInput label="Thời gian" type="datetime-local" value={when} onChange={(e) => setWhen(e.currentTarget.value)} />
+        <TextInput label="Địa điểm" value={location} onChange={(e) => setLocation(e.currentTarget.value)} placeholder="P.201" />
+        <Button onClick={create}>Tạo lịch họp</Button>
+      </Group>
+      {msg && <Text size="sm" c={msg.startsWith('Lỗi') ? 'red' : 'green'}>{msg}</Text>}
+      <Table striped>
+        <Table.Tbody>
+          {meetings.map((m) => {
+            const st = ST[m.status] ?? { label: m.status, color: 'gray' };
+            return (
+            <Table.Tr key={m.id}>
+              <Table.Td>{dayjs(m.scheduledAt).format('DD/MM/YYYY HH:mm')}</Table.Td>
+              <Table.Td>{m.title}</Table.Td>
+              <Table.Td>{m.location ?? ''}</Table.Td>
+              <Table.Td>
+                <Badge size="sm" color={st.color}>{st.label}</Badge>
+              </Table.Td>
+              <Table.Td w={170}>
+                {m.status === 'scheduled' && (
+                  <Group gap="xs">
+                    <Button size="compact-xs" color="teal" variant="subtle" onClick={() => setStatus(m.id, 'done')}>Đã họp</Button>
+                    <Button size="compact-xs" color="gray" variant="subtle" onClick={() => setStatus(m.id, 'cancelled')}>Hủy</Button>
+                  </Group>
+                )}
+              </Table.Td>
+            </Table.Tr>
+            );
+          })}
+        </Table.Tbody>
+      </Table>
+    </Stack>
+  );
+}
+
 function AttendanceTab({ batch, facilityId }: { batch: Batch; facilityId: number }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -621,6 +703,7 @@ function ClassDetail({
           <Tabs.Tab value="sessions">Buổi học</Tabs.Tab>
           <Tabs.Tab value="enroll">Ghi danh</Tabs.Tab>
           <Tabs.Tab value="attendance">Điểm danh</Tabs.Tab>
+          <Tabs.Tab value="meetings">Họp PH</Tabs.Tab>
           <Tabs.Tab value="log">Nhật ký</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="schedule" pt="md">
@@ -634,6 +717,9 @@ function ClassDetail({
         </Tabs.Panel>
         <Tabs.Panel value="attendance" pt="md">
           <AttendanceTab batch={batch} facilityId={facilityId} />
+        </Tabs.Panel>
+        <Tabs.Panel value="meetings" pt="md">
+          <MeetingsTab batch={batch} facilityId={facilityId} />
         </Tabs.Panel>
         <Tabs.Panel value="log" pt="md">
           <Chatter entityType="class_batch" entityId={batch.id} facilityId={facilityId} />
