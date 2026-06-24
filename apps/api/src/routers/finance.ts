@@ -166,6 +166,13 @@ export const financeRouter = router({
             where: { facilityId: input.facilityId, code: input.voucherCode, active: true, archivedAt: null },
           });
           if (!v) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Voucher không hợp lệ' });
+          // Fail early: reject an out-of-window voucher at create, not as a surprise at approve.
+          // Compare against today at UTC midnight — the same basis @db.Date vouchers are stored on.
+          const today = new Date(new Date().toISOString().slice(0, 10));
+          if (v.validFrom && v.validFrom > today)
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Voucher chưa đến ngày hiệu lực' });
+          if (v.validTo && v.validTo < today)
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Voucher đã hết hạn' });
           voucherId = v.id;
           voucherPercent = v.percent;
         }
