@@ -107,6 +107,7 @@
 
 ### 2.10 LevelProgress (S3)
 - `fromLevel → toLevel`, `status` `PENDING → APPROVED|REJECTED`, `proposedBy` (GV) → `approvedBy` (head_teacher). Audit/chatter đầy đủ.
+- Duyệt chỉ cập nhật `Student.level` + thông báo `level_up`. **Không tự cấp chứng chỉ** — LMS là nền làm bài tập, không cấp bằng; chứng chỉ chỉ cấp tay qua `certificate.issue` (xem decision 0008).
 
 ### 2.11 Notification + SSE
 - `Notification` (polymorphic: type, payload, recipient, read). Fan-out qua **SSE** tới HS/PH đang online. S1: sự kiện điểm/sao/bài mới; mở rộng dần.

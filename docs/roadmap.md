@@ -52,7 +52,7 @@ Mục tiêu: xương sống học thuật + giá trị LMS đầu tiên.
 - After-sale case + student lifecycle. _(⬜ chưa làm)_
 - **Guardian link backend + UI** (sửa lỗ A3 hệ cũ). _(✅ done-by-evidence 2026-06-24 — backend+admin+LMS portal đã build; bất biến A3 khóa bằng int-test 11 surface, PH thấy đúng+đủ con, chặn con người khác/xuyên facility. Defer: SSE + student-self isolation.)_
 - Dashboard BGĐ/MAES. _(⬜ chưa làm — cần định nghĩa công thức MAES trước)_
-- Cron họp phụ huynh (cadence) _(✅ done — T13 auto-cadence)_, Chứng chỉ auto-gen _(⬜)_, ~~Chat CSKH~~ _(đã bỏ — operator decision, DEBT.md)_.
+- Cron họp phụ huynh (cadence) _(✅ done — T13 auto-cadence)_, ~~Chứng chỉ auto-gen~~ _(bỏ auto — chỉ cấp tay; LMS = nền làm bài tập, decision 0008)_, ~~Chat CSKH~~ _(đã bỏ — operator decision, DEBT.md)_.
 - (Audit/Chatter đã làm nền từ Phase 1 — Phase 5 chỉ mở rộng cho các module after-sale/exec.)
 - **Done-evidence:** phụ huynh thấy đủ con; MAES tính đúng; case đổi lifecycle học sinh.
 

@@ -1003,8 +1003,8 @@ model AfterSaleCase {
   @@map("after_sale_case")
 }
 
-/// Chứng chỉ (Phase 5) — cấp tay bởi head_teacher/quan_ly (auto-gen theo hoàn thành cấp độ là
-/// nâng cấp sau). Facility-scoped; render bản in HTML tại /files/certificate/:id.
+/// Chứng chỉ — cấp TAY bởi head_teacher/quan_ly (LMS là nền làm bài tập, không tự cấp bằng;
+/// duyệt level-up KHÔNG sinh chứng chỉ). Facility-scoped; render bản in HTML tại /files/certificate/:id.
 model Certificate {
   id          String    @id @default(uuid()) @db.Uuid
   facilityId  Int       @map("facility_id")
