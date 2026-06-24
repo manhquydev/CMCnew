@@ -11,7 +11,10 @@ export interface ReminderResult {
 
 /**
  * Idempotent reminder tick (docs/specs/parent-meeting.md, PM2). Picks meetings with
- * `remindedAt = null`, `status = scheduled`, `scheduledAt ∈ [now, now+windowHours]` (default T-1 day).
+ * `remindedAt = null`, `status = scheduled`, `timeConfirmed = true`, `scheduledAt ∈ [now, now+windowHours]`
+ * (default T-1 day). Time-TBD meetings sit at UTC-midnight (a placeholder, not a real hour), so reminding
+ * them would notify a fake time AND burn the `remindedAt` dedup slot before staff confirm the real time —
+ * they are excluded until `setSchedule` flips `timeConfirmed`.
  * For each, creates one notification per ACTIVE enrolled student — recipientId = studentId so the
  * existing principal-aware notification feed surfaces it to that student's parents — then stamps
  * `remindedAt` in the SAME transaction, so a repeated tick never double-sends.
@@ -20,7 +23,7 @@ export async function runParentMeetingReminders(windowHours = 24, now = new Date
   const horizon = new Date(now.getTime() + windowHours * 3_600_000);
   return withRls(SYSTEM_CTX, async (tx) => {
     const due = await tx.parentMeeting.findMany({
-      where: { status: 'scheduled', remindedAt: null, archivedAt: null, scheduledAt: { gte: now, lte: horizon } },
+      where: { status: 'scheduled', timeConfirmed: true, remindedAt: null, archivedAt: null, scheduledAt: { gte: now, lte: horizon } },
       select: { id: true, facilityId: true, classBatchId: true, title: true, scheduledAt: true, location: true },
     });
     let notificationsCreated = 0;

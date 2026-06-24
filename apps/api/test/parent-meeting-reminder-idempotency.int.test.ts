@@ -47,7 +47,7 @@ describe('parent-meeting reminder idempotency (remindedAt dedup)', () => {
     // (ad-hoc create was removed by the auto-cadence change; cadence-gen owns meeting creation).
     const scheduledAt = new Date(Date.now() + 12 * 3_600_000);
     const meeting = await withRls(SUPER, (tx) =>
-      tx.parentMeeting.create({ data: { facilityId: FACILITY, classBatchId, title: 'Họp phụ huynh định kỳ', scheduledAt } }),
+      tx.parentMeeting.create({ data: { facilityId: FACILITY, classBatchId, title: 'Họp phụ huynh định kỳ', scheduledAt, timeConfirmed: true } }),
     );
     made.meetingIds.push(meeting.id);
     expect(meeting.remindedAt).toBeNull();
@@ -67,5 +67,28 @@ describe('parent-meeting reminder idempotency (remindedAt dedup)', () => {
     expect(stampedAtAfter).toEqual(stampedAt);
     // And the second tick reminded strictly fewer meetings than the first (our meeting dropped out).
     expect(second.meetingsReminded).toBeLessThan(first.meetingsReminded);
+  });
+
+  // A time-TBD meeting (timeConfirmed=false, sitting at placeholder midnight) must NOT be reminded:
+  // reminding it would notify a fake hour AND stamp remindedAt, permanently suppressing the real
+  // reminder once staff confirm the time. It stays remindedAt=null through a tick that covers its window.
+  it('does not remind a time-TBD meeting; it stays eligible for a reminder after the time is confirmed', async () => {
+    const caller = await staffCaller();
+    const classBatchId = await seedClassBatch();
+    const scheduledAt = new Date(Date.now() + 12 * 3_600_000);
+    const tbd = await withRls(SUPER, (tx) =>
+      tx.parentMeeting.create({ data: { facilityId: FACILITY, classBatchId, title: 'Họp phụ huynh định kỳ', scheduledAt } }),
+    );
+    made.meetingIds.push(tbd.id);
+    expect(tbd.timeConfirmed).toBe(false);
+
+    // Tick over its window → TBD meeting is excluded, remindedAt untouched.
+    await caller.parentMeeting.runReminders({ windowHours: 24 });
+    expect(await remindedAtOf(tbd.id)).toBeNull();
+
+    // Staff confirm the real time → now eligible; the next tick reminds it once.
+    await caller.parentMeeting.setSchedule({ id: tbd.id, scheduledAt });
+    await caller.parentMeeting.runReminders({ windowHours: 24 });
+    expect(await remindedAtOf(tbd.id)).not.toBeNull();
   });
 });
