@@ -324,6 +324,50 @@ function ChildDashboard({ childId, refreshKey }: { childId: string; refreshKey: 
   );
 }
 
+type Meeting = Awaited<ReturnType<typeof trpc.parentMeeting.myMeetings.query>>[number];
+
+/** Upcoming parent meetings across all of this parent's children's classes (RLS-scoped). */
+function UpcomingMeetingsCard({ refreshKey }: { refreshKey: number }) {
+  const [meetings, setMeetings] = useState<Meeting[] | null>(null);
+  useEffect(() => {
+    trpc.parentMeeting.myMeetings
+      .query()
+      .then((rows) => setMeetings(rows.filter((m) => new Date(m.scheduledAt).getTime() >= Date.now())))
+      .catch(() => setMeetings([]));
+  }, [refreshKey]);
+
+  if (!meetings || meetings.length === 0) return null;
+  return (
+    <Card withBorder>
+      <Title order={5} mb="sm">
+        📅 Lịch họp phụ huynh sắp tới ({meetings.length})
+      </Title>
+      <Stack gap="xs">
+        {meetings.map((m) => (
+          <Group key={m.id} gap="xs" wrap="nowrap">
+            <Badge variant="light" color="cmc">
+              {fmtDateTime(m.scheduledAt)}
+            </Badge>
+            <Text fw={600} size="sm">
+              {m.title}
+            </Text>
+            {m.location && (
+              <Text size="sm" c="dimmed">
+                · {m.location}
+              </Text>
+            )}
+            {m.note && (
+              <Text size="sm" c="dimmed">
+                — {m.note}
+              </Text>
+            )}
+          </Group>
+        ))}
+      </Stack>
+    </Card>
+  );
+}
+
 function liveMessage(n: LiveNotification): string {
   if (n.type === 'grade_published') {
     const score = n.payload.score != null ? ` ${n.payload.score} điểm` : '';
@@ -390,6 +434,8 @@ export function ParentView({ principal }: { principal: LmsPrincipal }) {
           {banner}
         </Alert>
       )}
+
+      <UpcomingMeetingsCard refreshKey={refreshKey} />
 
       {childId && <ChildDashboard key={childId} childId={childId} refreshKey={refreshKey} />}
     </Stack>
