@@ -22,10 +22,10 @@
 → tạo `Notification` cho mỗi phụ huynh: `recipientType='parent'`, `recipientId=parentAccountId`, `type='parent_meeting_reminder'`, `payload={meetingId, classBatchId, title, scheduledAt}`
 → set `meeting.remindedAt = now` (trong cùng giao dịch → không nhắc lại).
 
-## Lộ trình build (slice dọc)
-- **PM1 — Schema:** model `ParentMeeting` + migration + RLS policy (staff-facility + parent-via-enrollment). *Done:* migrate áp được; RLS chặn đúng.
-- **PM2 — Router + worker:** CRUD staff (create/list/updateStatus/cancel) + parent-facing list (lmsAuth) + hàm tính người nhận (thuần, test được) + cron tick nhúng API + endpoint trigger thủ công (dev) để verify. *Done:* tạo lịch họp ngày mai → tick → đúng phụ huynh nhận notification → tick lần 2 không nhắc lại (remindedAt).
-- **PM3 — UI:** staff đặt/đổi/hủy lịch họp trong app teaching; phụ huynh thấy lịch họp + notification trong LMS. *Done:* live.
+## Lộ trình build (slice dọc) — ✅ HOÀN TẤT 2026-06-24
+- **PM1 — Schema:** ✅ `ParentMeeting` + migration `20260624025523_phase5_parent_meeting` + RLS (staff-facility + parent-via-enrollment, nhân từ exercise). Commit 605c576.
+- **PM2 — Router + worker:** ✅ CRUD staff (create/list/setStatus) + `myMeetings` (lmsAuth) + service idempotent + cron nhúng (node-cron */30) + `runReminders` super-only. Commit 9f5284f. *Verified live:* tick nhắc 1 lịch → 3 notification; tick lần 2 → 0 (remindedAt); PH HQ thấy trong feed + myMeetings; PH CS2 không thấy (RLS).
+- **PM3 — UI:** ✅ tab "Họp PH" trong chi tiết lớp (teaching): tạo/list/đã-họp/hủy. Commit 4be4bf3. PH nhận nhắc qua feed notification sẵn có (PM2). *Verified live:* list + setStatus qua tRPC.
 
 ## Bất biến kỹ thuật
 - Worker idempotent qua `remindedAt`; tick lặp lại an toàn (đúng-một-lần mỗi lịch).
