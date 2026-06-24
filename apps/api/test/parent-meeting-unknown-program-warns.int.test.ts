@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { withRls, SUPER, uniq } from './helpers.js';
 import { generateParentMeetings } from '../src/services/parent-meeting-cadence.js';
 import * as domainAcademic from '@cmc/domain-academic';
 
@@ -170,7 +170,7 @@ describe('parent-meeting warns on unknown program (no cadence configured)', () =
       // Still 0 meetings; idempotent (no duplicates created)
       expect(meetingsAfterSecondRun).toHaveLength(0);
 
-      // Warnings will accumulate (one per run), but that's expected behavior
+      // Dedup: only one warning even after two runs (warn once per class per program).
       const allWarnings = await withRls(SUPER, (tx) =>
         tx.recordEvent.findMany({
           where: {
@@ -180,7 +180,7 @@ describe('parent-meeting warns on unknown program (no cadence configured)', () =
           },
         }),
       );
-      expect(allWarnings.length).toBeGreaterThanOrEqual(2);
+      expect(allWarnings).toHaveLength(1);
     } finally {
       Object.assign(domainAcademic.PARENT_MEETING_CADENCE_MONTHS, originalCadence);
     }

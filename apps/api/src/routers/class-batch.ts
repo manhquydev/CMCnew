@@ -23,6 +23,19 @@ async function cancelFutureParentMeetings(
   return result.count;
 }
 
+/** Restore future soft-cancelled parent meetings when a class is reopened. Returns restored count. */
+async function restoreFutureParentMeetings(
+  tx: Prisma.TransactionClient,
+  classBatchId: string,
+  now: Date,
+): Promise<number> {
+  const result = await tx.parentMeeting.updateMany({
+    where: { classBatchId, status: 'cancelled', archivedAt: null, scheduledAt: { gte: now } },
+    data: { status: 'scheduled' },
+  });
+  return result.count;
+}
+
 export const classBatchRouter = router({
   list: protectedProcedure.query(({ ctx }) =>
     withRls(rlsContextOf(ctx.session), (tx) =>
@@ -193,6 +206,18 @@ export const classBatchRouter = router({
           body: `Mở lại lớp: ${input.reason}`,
           actorId: ctx.session.userId,
         });
+        const now = new Date(new Date().toISOString().slice(0, 10));
+        const restoredMeetings = await restoreFutureParentMeetings(tx, batch.id, now);
+        if (restoredMeetings > 0) {
+          await logEvent(tx, {
+            facilityId: batch.facilityId,
+            entityType: ENTITY,
+            entityId: batch.id,
+            type: 'note',
+            body: `Khôi phục ${restoredMeetings} lịch họp PH tương lai (mở lại lớp)`,
+            actorId: ctx.session.userId,
+          });
+        }
         return batch;
       }),
     ),

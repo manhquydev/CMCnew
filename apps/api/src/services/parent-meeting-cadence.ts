@@ -36,16 +36,24 @@ export async function generateParentMeetings(now = new Date()): Promise<CadenceR
         horizonEnd,
       });
       if (!dates.length) {
-        // Warn if program is unknown (not in cadence map). Known programs may legitimately produce 0 dates if none fall in the horizon.
+        // Warn once per class per program when program is not in the cadence map.
+        // Dedup: skip if a warning for this program already exists (program won't change at runtime).
         if (!(c.course.program in PARENT_MEETING_CADENCE_MONTHS)) {
-          await logEvent(tx, {
-            facilityId: c.facilityId,
-            entityType: 'class_batch',
-            entityId: c.id,
-            type: 'note',
-            body: `Cảnh báo: chương trình '${c.course.program}' chưa cấu hình cadence họp PH — không sinh lịch`,
-            actorId: null,
+          const warnBody = `Cảnh báo: chương trình '${c.course.program}' chưa cấu hình cadence họp PH — không sinh lịch`;
+          const alreadyWarned = await tx.recordEvent.findFirst({
+            where: { entityType: 'class_batch', entityId: c.id, type: 'note', body: warnBody },
+            select: { id: true },
           });
+          if (!alreadyWarned) {
+            await logEvent(tx, {
+              facilityId: c.facilityId,
+              entityType: 'class_batch',
+              entityId: c.id,
+              type: 'note',
+              body: warnBody,
+              actorId: null,
+            });
+          }
         }
         continue;
       }
