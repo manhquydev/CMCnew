@@ -1,73 +1,61 @@
-/** Sales-block commission + teaching overtime — pure rate tables from the 2026 income-structure
- *  decisions (source: "Cơ cấu thu nhập CMC 2026"; summarised in docs/specs/phase-04-payroll.md).
- *  Every amount is VND integer. Rates are fractions (0.01 = 1%). Tier boundaries follow the
- *  published tables; where the source leaves a gap at a boundary we take the lower band inclusive
- *  on its upper edge and the next band exclusive on its lower edge (documented per function). */
+/** Sales-block commission + teaching overtime — pure rate tables.
+ *  COMMISSION follows PA2 (the chosen policy — "Mẫu đánh giá KPI -kinh doanh" 17/06/2026,
+ *  transcribed in docs/reference/mau-kpi-kinh-doanh-2026-pa2.md): commission is a function of
+ *  QUOTA ATTAINMENT (% of monthly target), not absolute revenue. OVERTIME & PARTTIME come from
+ *  the teaching-block decision (docs/reference/co-cau-thu-nhap-khoi-dao-tao-2026.md), unaffected
+ *  by the PA1/PA2 split. All amounts VND integer; rates are fractions (0.01 = 1%).
+ *  Boundary convention follows the published bands: "100-120%" is inclusive of 1.2; ">120-≤150%"
+ *  covers (1.2, 1.5]; ">150%" is the top band. */
 
-const M = 1_000_000;
+export type SalesRole = 'cvtv' | 'tpkd' | 'gdtt';
 
-/** New-customer commission RATE for a CVTV (chuyên viên tư vấn), tiered by monthly collected
- *  revenue (VND). Bands in triệu đồng: <50→0% · 50–≤80→1% · >80–≤100→2% · >100–≤160→3% ·
- *  >160–≤240→4% · >240→5%. Boundary: an exact tier edge (e.g. 100tr) takes the lower band. */
-export function cvtvNewCustomerRate(revenueVnd: number): number {
-  const m = revenueVnd / M;
-  if (m < 50) return 0;
-  if (m <= 80) return 0.01;
-  if (m <= 100) return 0.02;
-  if (m <= 160) return 0.03;
-  if (m <= 240) return 0.04;
-  return 0.05;
+/** New-customer commission RATE by quota attainment (1 = 100% of the monthly target).
+ *  CVTV: <50%→0 · 50–<80%→1% · 80–<100%→2% · 100–120%→3% · >120–150%→4% · >150%→4.5%. */
+export function cvtvNewCustomerRate(quotaRatio: number): number {
+  if (quotaRatio < 0) throw new Error('quotaRatio must be >= 0');
+  if (quotaRatio < 0.5) return 0;
+  if (quotaRatio < 0.8) return 0.01;
+  if (quotaRatio < 1.0) return 0.02;
+  if (quotaRatio <= 1.2) return 0.03;
+  if (quotaRatio <= 1.5) return 0.04;
+  return 0.045;
 }
 
 export type ManagerRole = 'tpkd' | 'gdtt';
 
-/** New-customer commission RATE for a manager, by quota attainment ratio (1 = 100% of quota).
- *  TPKD: <80%→0 · 80–<100%→0.7% · 100–<150%→1.0% · ≥150%→1.2%.
- *  GĐTT: <80%→0 · 80–<100%→0.6% · 100–<150%→0.8% · ≥150%→1.0%. */
+/** New-customer commission RATE for a manager by quota attainment.
+ *  TPKD: <80%→0 · 80–<100%→0.6% · 100–120%→1% · >120–150%→1.2% · >150%→1.5%.
+ *  GĐTT: <80%→0 · 80–<100%→0.4% · 100–120%→0.6% · >120–150%→0.8% · >150%→1%. */
 export function managerNewCustomerRate(role: ManagerRole, quotaRatio: number): number {
   if (quotaRatio < 0) throw new Error('quotaRatio must be >= 0');
   if (quotaRatio < 0.8) return 0;
   if (role === 'tpkd') {
-    if (quotaRatio < 1.0) return 0.007;
-    if (quotaRatio < 1.5) return 0.01;
-    return 0.012;
+    if (quotaRatio < 1.0) return 0.006;
+    if (quotaRatio <= 1.2) return 0.01;
+    if (quotaRatio <= 1.5) return 0.012;
+    return 0.015;
   }
-  if (quotaRatio < 1.0) return 0.006;
-  if (quotaRatio < 1.5) return 0.008;
+  if (quotaRatio < 1.0) return 0.004;
+  if (quotaRatio <= 1.2) return 0.006;
+  if (quotaRatio <= 1.5) return 0.008;
   return 0.01;
 }
 
-export type RenewalRole = 'cvtv' | 'tpkd' | 'gdtt' | 'cskh';
+export type RenewalRole = 'cvtv' | 'tpkd' | 'gdtt' | 'gv' | 'cskh';
 
-/** Renewal (tái tục) commission RATE by retention-rate attainment (1 = 100% retention).
- *  CVTV: <50%→0 · 50–<70%→1.5% · 70–<90%→2% · ≥90%→2.2%.
- *  TPKD: <60%→0 · 60–<70%→0.7% · 70–<90%→0.8% · ≥90%→1%.
- *  GĐTT: <60%→0 · 60–<70%→0.6% · 70–<90%→0.7% · ≥90%→0.8%.
- *  CSKH: <60%→0 · 60–<70%→0.4% · 70–<90%→0.5% · ≥90%→0.6%. */
-export function renewalRate(role: RenewalRole, retentionRatio: number): number {
-  if (retentionRatio < 0) throw new Error('retentionRatio must be >= 0');
-  const r = retentionRatio;
-  if (role === 'cvtv') {
-    if (r < 0.5) return 0;
-    if (r < 0.7) return 0.015;
-    if (r < 0.9) return 0.02;
-    return 0.022;
+/** Renewal (tái tục) commission RATE — PA2 uses a FLAT rate per role, gated by the centre's
+ *  retention rate being ≥ 50% (below that, no renewal commission). Rates (primary "% Thưởng"):
+ *  CVTV 2.2% · TPKD 0.5% · GĐTT 0.5% · GV/TNGV 1% · CSKH 0.8%. */
+export function renewalRate(role: RenewalRole, centreRetentionRatio: number): number {
+  if (centreRetentionRatio < 0) throw new Error('retention ratio must be >= 0');
+  if (centreRetentionRatio < 0.5) return 0;
+  switch (role) {
+    case 'cvtv': return 0.022;
+    case 'tpkd': return 0.005;
+    case 'gdtt': return 0.005;
+    case 'gv': return 0.01;
+    case 'cskh': return 0.008;
   }
-  if (r < 0.6) return 0;
-  if (role === 'tpkd') {
-    if (r < 0.7) return 0.007;
-    if (r < 0.9) return 0.008;
-    return 0.01;
-  }
-  if (role === 'gdtt') {
-    if (r < 0.7) return 0.006;
-    if (r < 0.9) return 0.007;
-    return 0.008;
-  }
-  // cskh
-  if (r < 0.7) return 0.004;
-  if (r < 0.9) return 0.005;
-  return 0.006;
 }
 
 /** Commission amount = collected revenue × rate, rounded to VND integer. */
