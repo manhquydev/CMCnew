@@ -1,6 +1,6 @@
 import { withRls } from '@cmc/db';
 import { logEvent } from '@cmc/audit';
-import { parentMeetingSchedule } from '@cmc/domain-academic';
+import { parentMeetingSchedule, PARENT_MEETING_CADENCE_MONTHS } from '@cmc/domain-academic';
 
 // System context: cadence generation runs across all facilities (cron has no session). super bypass.
 const SYSTEM_CTX = { facilityIds: [] as number[], isSuperAdmin: true };
@@ -35,7 +35,20 @@ export async function generateParentMeetings(now = new Date()): Promise<CadenceR
         endDate: c.endDate,
         horizonEnd,
       });
-      if (!dates.length) continue;
+      if (!dates.length) {
+        // Warn if program is unknown (not in cadence map). Known programs may legitimately produce 0 dates if none fall in the horizon.
+        if (!(c.course.program in PARENT_MEETING_CADENCE_MONTHS)) {
+          await logEvent(tx, {
+            facilityId: c.facilityId,
+            entityType: 'class_batch',
+            entityId: c.id,
+            type: 'note',
+            body: `Cảnh báo: chương trình '${c.course.program}' chưa cấu hình cadence họp PH — không sinh lịch`,
+            actorId: null,
+          });
+        }
+        continue;
+      }
       const res = await tx.parentMeeting.createMany({
         data: dates.map((scheduledAt) => ({
           facilityId: c.facilityId,
