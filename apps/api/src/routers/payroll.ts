@@ -4,7 +4,7 @@ import { withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { assemblePayslip } from '@cmc/domain-payroll';
-import { router, requireRole, Role } from '../trpc.js';
+import { router, requireRole, protectedProcedure, Role } from '../trpc.js';
 
 // Payroll is HR-confidential: every procedure is role-gated to hr/ke_toan (super passes).
 // Non-HR staff have no code path to salary data. RLS adds facility isolation on top.
@@ -275,4 +275,35 @@ export const payrollRouter = router({
         return slip;
       }),
     ),
+
+  // Staff self-service: any authenticated staff may view their own finalized/paid payslips.
+  // CRITICAL: userId is taken exclusively from ctx.session — no userId input accepted (prevents IDOR).
+  // Draft slips are hidden (staff must not see un-finalized numbers).
+  myPayslips: protectedProcedure.query(({ ctx }) =>
+    withRls(rlsContextOf(ctx.session), (tx) =>
+      tx.payslip.findMany({
+        where: {
+          userId: ctx.session.userId,
+          status: { in: ['finalized', 'paid'] },
+        },
+        orderBy: { periodKey: 'desc' },
+        select: {
+          id: true,
+          periodKey: true,
+          status: true,
+          baseEarned: true,
+          allowanceEarned: true,
+          kpiBonus: true,
+          kpiGrade: true,
+          variablePay: true,
+          grossIncome: true,
+          insuranceDeduction: true,
+          pitAmount: true,
+          netIncome: true,
+          finalizedAt: true,
+          paidAt: true,
+        },
+      }),
+    ),
+  ),
 });

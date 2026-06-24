@@ -30,6 +30,7 @@ import { CrmPanel } from './crm-panel';
 import { CskhPanel } from './cskh-panel';
 import { CertificatePanel } from './certificate-panel';
 import { PayrollPanel } from './payroll-panel';
+import { MyPayslipsPanel } from './my-payslips-panel';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
@@ -872,6 +873,7 @@ function Workbench() {
           <Tabs.Tab value="finance">Phiếu thu</Tabs.Tab>
           <Tabs.Tab value="cskh">CSKH</Tabs.Tab>
           <Tabs.Tab value="certificate">Chứng chỉ</Tabs.Tab>
+          <Tabs.Tab value="my-payslips">Phiếu lương của tôi</Tabs.Tab>
           {canPayroll && <Tabs.Tab value="payroll">Lương</Tabs.Tab>}
         </Tabs.List>
         <Tabs.Panel value="classes">
@@ -897,6 +899,9 @@ function Workbench() {
         </Tabs.Panel>
         <Tabs.Panel value="certificate">
           <CertificatePanel />
+        </Tabs.Panel>
+        <Tabs.Panel value="my-payslips">
+          <MyPayslipsPanel />
         </Tabs.Panel>
         {canPayroll && (
           <Tabs.Panel value="payroll">
