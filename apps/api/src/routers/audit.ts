@@ -65,6 +65,13 @@ export const auditRouter = router({
     .input(z.object({ entityType: z.string().min(1), entityId: z.string().min(1) }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
+        const resolve = NOTE_TARGETS[input.entityType];
+        if (!resolve)
+          throw new TRPCError({ code: 'BAD_REQUEST', message: `Không hỗ trợ ghi chú cho '${input.entityType}'` });
+        // Đọc qua RLS: record ngoài phạm vi cơ sở của staff → trả null → coi như không tồn tại.
+        const entity = await resolve(tx, input.entityId);
+        if (!entity)
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy bản ghi (hoặc ngoài phạm vi cơ sở)' });
         await addFollower(tx, input.entityType, input.entityId, ctx.session.userId);
         return { ok: true };
       }),
