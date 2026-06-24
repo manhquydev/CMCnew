@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { LoginGate, useSession, trpc, Chatter } from '@cmc/ui';
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -469,34 +470,11 @@ type ParentMeeting = Awaited<ReturnType<typeof trpc.parentMeeting.list.query>>[n
 
 function MeetingsTab({ batch, facilityId }: { batch: Batch; facilityId: number }) {
   const [meetings, setMeetings] = useState<ParentMeeting[]>([]);
-  const [title, setTitle] = useState('Họp phụ huynh');
-  const [when, setWhen] = useState('');
-  const [location, setLocation] = useState('');
-  const [msg, setMsg] = useState('');
 
   const load = useCallback(() => {
     trpc.parentMeeting.list.query({ facilityId, classBatchId: batch.id }).then(setMeetings).catch(() => {});
   }, [facilityId, batch.id]);
   useEffect(load, [load]);
-
-  async function create() {
-    if (!title || !when) return setMsg('Nhập tiêu đề và thời gian.');
-    setMsg('');
-    try {
-      await trpc.parentMeeting.create.mutate({
-        facilityId,
-        classBatchId: batch.id,
-        title,
-        scheduledAt: new Date(when).toISOString(),
-        location: location || undefined,
-      });
-      setMsg('Đã tạo lịch họp — phụ huynh sẽ được nhắc trước 1 ngày.');
-      setWhen('');
-      load();
-    } catch (e) {
-      setMsg('Lỗi: ' + (e instanceof Error ? e.message : ''));
-    }
-  }
 
   async function setStatus(id: string, status: 'done' | 'cancelled') {
     await trpc.parentMeeting.setStatus.mutate({ id, status });
@@ -511,13 +489,9 @@ function MeetingsTab({ batch, facilityId }: { batch: Batch; facilityId: number }
 
   return (
     <Stack>
-      <Group align="flex-end">
-        <TextInput label="Tiêu đề" style={{ flex: 1 }} value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
-        <TextInput label="Thời gian" type="datetime-local" value={when} onChange={(e) => setWhen(e.currentTarget.value)} />
-        <TextInput label="Địa điểm" value={location} onChange={(e) => setLocation(e.currentTarget.value)} placeholder="P.201" />
-        <Button onClick={create}>Tạo lịch họp</Button>
-      </Group>
-      {msg && <Text size="sm" c={msg.startsWith('Lỗi') ? 'red' : 'green'}>{msg}</Text>}
+      <Alert color="blue" variant="light">
+        Lịch họp phụ huynh được hệ thống tự sinh theo định kỳ của chương trình (UCREA 5 tháng; Bright I.G & Black Hole 3 tháng), tính từ ngày khai giảng lớp. Không tạo họp đột xuất — nhân viên chỉ đánh dấu đã họp / hủy.
+      </Alert>
       <Table striped>
         <Table.Tbody>
           {meetings.map((m) => {

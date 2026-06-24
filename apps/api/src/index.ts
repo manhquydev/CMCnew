@@ -17,6 +17,7 @@ import { onNotification } from './events.js';
 import { putPdf, readPdf, pdfExists, PdfStoreError, MAX_PDF_BYTES } from './services/pdf-store.js';
 import { renderReceiptHtml } from './services/receipt-html.js';
 import { runParentMeetingReminders } from './services/parent-meeting-reminder.js';
+import { generateParentMeetings } from './services/parent-meeting-cadence.js';
 import { renderCertificateHtml } from './services/certificate-html.js';
 
 const app = new Hono();
@@ -206,5 +207,15 @@ if (process.env.DISABLE_CRON !== '1') {
         if (r.meetingsReminded) console.log(`↳ parent-meeting reminders: ${r.meetingsReminded} meetings → ${r.notificationsCreated} notifications`);
       })
       .catch((e) => console.error('parent-meeting reminder tick failed', e));
+  });
+
+  // Auto-cadence generation (charter §4): daily at 02:00, generate per-program meetings for running
+  // classes. Idempotent via the (classBatchId, scheduledAt) unique constraint — re-ticks add nothing new.
+  cron.schedule('0 2 * * *', () => {
+    generateParentMeetings()
+      .then((r) => {
+        if (r.meetingsCreated) console.log(`↳ parent-meeting cadence: +${r.meetingsCreated} meetings across ${r.classesScanned} running classes`);
+      })
+      .catch((e) => console.error('parent-meeting cadence tick failed', e));
   });
 }

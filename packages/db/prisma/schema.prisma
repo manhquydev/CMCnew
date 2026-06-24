@@ -221,6 +221,7 @@ model ParentMeeting {
   createdAt    DateTime            @default(now()) @map("created_at")
   archivedAt   DateTime?           @map("archived_at")
 
+  @@unique([classBatchId, scheduledAt]) // auto-cadence idempotency: re-running generation never duplicates
   @@index([facilityId])
   @@index([classBatchId])
   @@index([status, remindedAt, scheduledAt])

@@ -43,14 +43,12 @@ describe('parent-meeting reminder idempotency (remindedAt dedup)', () => {
     const caller = await staffCaller();
     const classBatchId = await seedClassBatch();
 
-    // Meeting due ~12h out → inside the default [now, now+24h] reminder window.
-    const scheduledAt = new Date(Date.now() + 12 * 3_600_000).toISOString();
-    const meeting = await caller.parentMeeting.create({
-      facilityId: FACILITY,
-      classBatchId,
-      title: 'Họp phụ huynh định kỳ',
-      scheduledAt,
-    });
+    // Meeting due ~12h out → inside the default [now, now+24h] reminder window. Seeded directly
+    // (ad-hoc create was removed by the auto-cadence change; cadence-gen owns meeting creation).
+    const scheduledAt = new Date(Date.now() + 12 * 3_600_000);
+    const meeting = await withRls(SUPER, (tx) =>
+      tx.parentMeeting.create({ data: { facilityId: FACILITY, classBatchId, title: 'Họp phụ huynh định kỳ', scheduledAt } }),
+    );
     made.meetingIds.push(meeting.id);
     expect(meeting.remindedAt).toBeNull();
 
