@@ -1050,6 +1050,24 @@ model SalaryRate {
   @@map("salary_rate")
 }
 
+/// Chính sách thu nhập effective-dated, company-wide (docs/specs/payroll-v2-commission-design.md).
+/// `params` (JSON, validate bằng Zod ở @cmc/domain-payroll) chứa TOÀN BỘ tham số tunable: bảng %
+/// hoa hồng theo bậc quota, % tái tục, KPI band theo khối, đơn giá vượt giờ, gói parttime, bậc PIT +
+/// giảm trừ. Chỉ super_admin sửa (write); payslip đọc bản hiệu lực ≤ kỳ. Finalize đóng băng số đã
+/// tính → sửa policy chỉ áp dụng kỳ sau (quá khứ an toàn). Không facility-scoped (chính sách toàn hệ).
+model CompensationPolicy {
+  id            String    @id @default(uuid()) @db.Uuid
+  effectiveFrom DateTime  @map("effective_from") @db.Date
+  params        Json
+  note          String?
+  createdById   String?   @map("created_by_id") @db.Uuid
+  createdAt     DateTime  @default(now()) @map("created_at")
+  archivedAt    DateTime? @map("archived_at")
+
+  @@index([effectiveFrom])
+  @@map("compensation_policy")
+}
+
 /// Phiếu lương theo (nhân sự, kỳ YYYY-MM). Số liệu khớp @cmc/domain-payroll. Finalize gating (M6):
 /// chỉ tính lại khi draft; finalized đóng băng; paid = đã trả.
 model Payslip {
