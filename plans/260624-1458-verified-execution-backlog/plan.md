@@ -25,7 +25,7 @@
 | T11 | F2: viết script verify RLS đa-bảng (iterate mọi bảng tenant) HOẶC sửa claim "37/37" | bảo mật/claim | script chạy chứng minh mọi bảng cô lập | ✅ done 2026-06-24 — `rls-coverage.int.test.ts` introspect schema: **39/39** bảng có `facility_id` đều bật RLS + policy (0 gap; claim "37/37" sai số, đã sửa). Guard chặn bảng mới quên RLS. |
 | T12 | F6+F7+F1-residual: charter ghi "streak chưa build"; rename test cadence; chỉnh mô tả spec parent-meeting recipient | tài liệu | doc khớp code | ✅ done 2026-06-24 — charter+phase-01: streak chưa build (verified: 0 impl); rename `parent-meeting-cadence`→`-reminder-idempotency`; parent-meeting.md sửa recipient = `recipientType='student'/recipientId=studentId` (khớp service, PH nhận qua feed). |
 | **T13** | **Feature: auto-cadence họp PH** — config cadence (UCREA 5/BI+BH 3/tháng) + auto-sinh lịch theo lớp active + chặn tạo đột xuất; cập nhật spec | feature | int-test: lớp active sinh đúng số buổi/tháng; tạo vượt cadence bị chặn; live verify | ⬜ (đã chốt nghiệp vụ) |
-| T14 | P2: dựng eslint thật + thêm step lint vào CI (bỏ script no-op) | nợ | `turbo run lint` chạy thật, CI có gate lint | ⬜ |
+| T14 | P2: dựng eslint thật + thêm step lint vào CI (bỏ script no-op) | nợ | `turbo run lint` chạy thật, CI có gate lint | 🟡 eslint xong 2026-06-24 — flat config (eslint 9 + ts-eslint + react), wire 13 workspace, `pnpm -r lint` xanh (0 err/warn), dọn dead-code thật. Gate CI chờ Jenkins (DEBT). |
 | T15 | Lên kế hoạch Phase 5 (after-sale, Guardian UI, dashboard BGĐ/MAES, certificate auto-gen) | planning | plan.md Phase 5 | ⬜ |
 
 ## Quyết định nghiệp vụ đã chốt (2026-06-24)
@@ -46,7 +46,8 @@
 - ⛔ GitHub Actions chết do billing (account). **Quyết định: CI/CD dựng bằng Jenkins (sau).** Tới lúc đó verify = chạy local pipeline. Xem `DEBT.md`.
 - ✅ T2 đóng 2026-06-24: `audit.postNote` bỏ facilityId client, resolve từ entity qua RLS (whitelist receipt/opportunity/class_batch), chặn note xuyên cơ sở + chặn lỗ `facility_id IS NULL` global. Cleanup prop `facilityId` ở `Chatter` + 3 call site. 2-agent review SAFE-TO-CLOSE. Report: `plans/reports/from-code-reviewer-to-flow-260624-1558-postnote-tenancy-med1-security-review-report.md`.
 - ✅ Cụm coverage T6–T10 đóng 2026-06-24 (5 tester-agent ck song song, mỗi agent 1 file test): +13 case, full int-suite **34/34 PASS**, typecheck sạch. KHÔNG phát hiện defect — code đã đúng, test chốt lại invariant. Reports: `plans/reports/tester-260624-16*-{...}-report.md`.
-- ⏭️ Kế tiếp: T11 (script verify RLS đa-bảng / sửa claim "37/37"), T3 (Chatter error-state), T4 (voucher fail-early); rồi T5/T13 (cần soát spec). Việc tồn LOW: `audit.follow` chưa gate entity-visibility — không phải vector MED-1, để mục riêng nếu cần.
+- ✅ Phiên 2026-06-24 (claudekit agent + verify thật): đóng **T2, T4, T6–T12, T14** — int-suite **40/40 PASS**, typecheck + `pnpm -r lint` xanh. 6 commit trên `develop` (52acb5f, 7b431d9, d1d7376, daa13ff, f9a7d81, 35447b9).
+- ⏭️ Còn lại: **T3** (Chatter error-state — frontend, cần live verify), **T5** + **T13** (cần soát spec trước — không tự quyết nghiệp vụ), **T15** (plan Phase 5). Việc tồn LOW: `audit.follow` chưa gate entity-visibility (không phải vector MED-1).
 
 ## Câu hỏi mở
 - T5/T13: chi tiết quy tắc win-back & cadence cần đối chiếu spec trước khi code.
