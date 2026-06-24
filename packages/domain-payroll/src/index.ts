@@ -11,6 +11,18 @@ export {
   kpiGradeFromScore,
   assemblePayslip,
   type KpiGrade,
+  type PayBlock,
   type PayslipInput,
   type PayslipResult,
 } from './payslip.js';
+export {
+  cvtvNewCustomerRate,
+  managerNewCustomerRate,
+  renewalRate,
+  commissionAmount,
+  overtimePay,
+  TEACHER_OVERTIME_RATE,
+  PARTTIME_PACKAGE,
+  type ManagerRole,
+  type RenewalRole,
+} from './commission.js';
