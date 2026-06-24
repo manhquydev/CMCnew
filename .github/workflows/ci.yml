@@ -61,5 +61,11 @@ jobs:
       - name: Typecheck
         run: pnpm -r typecheck
 
+      - name: Unit tests (domain logic)
+        run: pnpm -r test
+
+      - name: Integration tests (router invariants — money/tenancy/payroll)
+        run: pnpm --filter @cmc/api test:int
+
       - name: Build apps
         run: pnpm -r build

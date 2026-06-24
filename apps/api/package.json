@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:int": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@cmc/audit": "workspace:*",
@@ -24,14 +25,15 @@
     "@hono/node-server": "^1.13.7",
     "@hono/trpc-server": "^0.3.4",
     "@trpc/server": "^11.0.0-rc.660",
-    "dotenv": "^16.4.7",
     "hono": "^4.6.14",
     "node-cron": "^4.5.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@types/node-cron": "^3.0.11",
+    "dotenv": "^16.6.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "2.1.9"
   }
 }
