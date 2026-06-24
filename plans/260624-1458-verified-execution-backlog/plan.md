@@ -17,11 +17,11 @@
 | T3 | MED-2: Chatter có error state (không nuốt lỗi 401/network) | UX | live: giả 401 → hiện lỗi rõ | ⬜ |
 | T4 | F11: validate voucher validFrom/validTo ngay `receiptCreate` (fail-early) | nghiệp vụ | int-test: voucher hết hạn bị chặn ở create, không phải approve | ⬜ |
 | T5 | F9: soát phân loại win-back `kind` (O5 vs entrance test mới) theo spec | nghiệp vụ | xác nhận spec → fix nếu sai + int-test | ⬜ (cần soát spec) |
-| T6 | F4: int-test `assessment.computeFinalGrade` loại grade chưa publish | coverage | test seed published+unpublished → FinalGrade chỉ tính published | ⬜ |
-| T7 | F5: int-test grade→badge auto-award + idempotency (mutation-proven) | coverage | publish 2 lần → 1 badge; bỏ unique → test fail đúng chỗ | ⬜ |
-| T8 | F8: assert certificate được tạo trong test level-up approve | coverage | `expect(certs).toHaveLength(1)` | ⬜ |
-| T9 | F10: int-test e2e `commissionForSale` (receiptApprove→soldById→groupBy) | coverage | test tái lập 8.5tr@quota10tr | ⬜ |
-| T10 | F12: mutation test cho batch-code atomicity (mã B-YYYY-NNNN) | coverage | bỏ advisory lock → đua sinh trùng mã → test fail | ⬜ |
+| T6 | F4: int-test `assessment.computeFinalGrade` loại grade chưa publish | coverage | test seed published+unpublished → FinalGrade chỉ tính published | ✅ done 2026-06-24 — `assessment-final-grade-publish.int.test.ts` (mutation: bỏ filter → 8.55 thay 9.6). Code đã đúng. |
+| T7 | F5: int-test grade→badge auto-award + idempotency (mutation-proven) | coverage | publish 2 lần → 1 badge; bỏ unique → test fail đúng chỗ | ✅ done 2026-06-24 — `badge-auto-award-idempotency.int.test.ts` (publish 2× → 1 badge; bảo vệ 3 lớp: `@@unique` + skipDuplicates + pre-filter). |
+| T8 | F8: assert certificate được tạo trong test level-up approve | coverage | `expect(certs).toHaveLength(1)` | ✅ done 2026-06-24 — `level-up-certificate.int.test.ts` (0→1 cert qua approve; idempotent). |
+| T9 | F10: int-test e2e `commissionForSale` (receiptApprove→soldById→groupBy) | coverage | test tái lập 8.5tr@quota10tr | ✅ done 2026-06-24 — `commission-for-sale-e2e.int.test.ts` (số thật từ params: 8.5tr@quota10tr = 85% → band 2% → 170k; soldById/kind frozen ở approve). |
+| T10 | F12: mutation test cho batch-code atomicity (mã B-YYYY-NNNN) | coverage | bỏ advisory lock → đua sinh trùng mã → test fail | ✅ done 2026-06-24 — `batch-code-atomicity.int.test.ts` (15 call đua qua service + tRPC → unique+tuần tự; `pg_advisory_xact_lock`). |
 | T11 | F2: viết script verify RLS đa-bảng (iterate mọi bảng tenant) HOẶC sửa claim "37/37" | bảo mật/claim | script chạy chứng minh mọi bảng cô lập | ⬜ |
 | T12 | F6+F7+F1-residual: charter ghi "streak chưa build"; rename test cadence; chỉnh mô tả spec parent-meeting recipient | tài liệu | doc khớp code | ⬜ |
 | **T13** | **Feature: auto-cadence họp PH** — config cadence (UCREA 5/BI+BH 3/tháng) + auto-sinh lịch theo lớp active + chặn tạo đột xuất; cập nhật spec | feature | int-test: lớp active sinh đúng số buổi/tháng; tạo vượt cadence bị chặn; live verify | ⬜ (đã chốt nghiệp vụ) |
@@ -45,7 +45,8 @@
 - T1 git: ✅ repo private `manhquydev/CMCnew`, `main`+nhánh đã push, PR #1 **đã merge về main** (2026-06-24).
 - ⛔ GitHub Actions chết do billing (account). **Quyết định: CI/CD dựng bằng Jenkins (sau).** Tới lúc đó verify = chạy local pipeline. Xem `DEBT.md`.
 - ✅ T2 đóng 2026-06-24: `audit.postNote` bỏ facilityId client, resolve từ entity qua RLS (whitelist receipt/opportunity/class_batch), chặn note xuyên cơ sở + chặn lỗ `facility_id IS NULL` global. Cleanup prop `facilityId` ở `Chatter` + 3 call site. 2-agent review SAFE-TO-CLOSE. Report: `plans/reports/from-code-reviewer-to-flow-260624-1558-postnote-tenancy-med1-security-review-report.md`.
-- ⏭️ Kế tiếp: T3 (Chatter error-state) hoặc cụm coverage T6–T10. Việc tồn LOW (reviewer phát hiện): `audit.follow` chưa gate entity-visibility — không phải vector MED-1 (record_follower không có facility, RLS tắt có chủ đích), để mục riêng nếu cần.
+- ✅ Cụm coverage T6–T10 đóng 2026-06-24 (5 tester-agent ck song song, mỗi agent 1 file test): +13 case, full int-suite **34/34 PASS**, typecheck sạch. KHÔNG phát hiện defect — code đã đúng, test chốt lại invariant. Reports: `plans/reports/tester-260624-16*-{...}-report.md`.
+- ⏭️ Kế tiếp: T11 (script verify RLS đa-bảng / sửa claim "37/37"), T3 (Chatter error-state), T4 (voucher fail-early); rồi T5/T13 (cần soát spec). Việc tồn LOW: `audit.follow` chưa gate entity-visibility — không phải vector MED-1, để mục riêng nếu cần.
 
 ## Câu hỏi mở
 - T5/T13: chi tiết quy tắc win-back & cadence cần đối chiếu spec trước khi code.
