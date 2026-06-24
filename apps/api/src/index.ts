@@ -2,6 +2,7 @@ import path from 'node:path';
 import { config } from 'dotenv';
 config({ path: path.resolve(process.cwd(), '../../.env') });
 
+import cron from 'node-cron';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -15,6 +16,7 @@ import { createContext, COOKIE_NAME, LMS_COOKIE_NAME } from './context.js';
 import { onNotification } from './events.js';
 import { putPdf, readPdf, pdfExists, PdfStoreError, MAX_PDF_BYTES } from './services/pdf-store.js';
 import { renderReceiptHtml } from './services/receipt-html.js';
+import { runParentMeetingReminders } from './services/parent-meeting-reminder.js';
 import { renderCertificateHtml } from './services/certificate-html.js';
 
 const app = new Hono();
@@ -193,3 +195,16 @@ app.use(
 const port = Number(process.env.API_PORT ?? 4000);
 serve({ fetch: app.fetch, port });
 console.log(`✓ CMCnew API on http://localhost:${port}`);
+
+// Embedded reminder cron (docs/specs/parent-meeting.md): every 30 min, remind parents of
+// meetings within T-1 day. Idempotent via parent_meeting.remindedAt — re-ticks never double-send.
+// Set DISABLE_CRON=1 in tests/CI to keep the process side-effect-free.
+if (process.env.DISABLE_CRON !== '1') {
+  cron.schedule('*/30 * * * *', () => {
+    runParentMeetingReminders()
+      .then((r) => {
+        if (r.meetingsReminded) console.log(`↳ parent-meeting reminders: ${r.meetingsReminded} meetings → ${r.notificationsCreated} notifications`);
+      })
+      .catch((e) => console.error('parent-meeting reminder tick failed', e));
+  });
+}
