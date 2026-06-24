@@ -62,13 +62,13 @@ Nền tảng **ERP + LMS thống nhất** cho Creative Maieutic Center — trung
 - **Lương:** PIT 7 bậc; giảm trừ bản thân 11M/năm, người phụ thuộc 4.4M/năm; BHXH 10.5%; **input phải "finalize" trước khi tính payslip**.
 - **Họp phụ huynh:** UCREA mỗi 5 tháng; Bright I.G & Black Hole mỗi 3 tháng; auto-gen idempotent.
 - **Sao thưởng:** earn theo bài hoàn thành; redeem nguyên tử chống double-spend (advisory lock + `stock > 0`); bài giáo viên chấm (ảnh/PDF) chỉ cộng sao khi có điểm.
-- **Điểm danh streak:** chuẩn timezone ICT (UTC+7).
+- **Điểm danh:** present/absent/late + cờ excused đã có. **Streak chưa build** (kế hoạch sau; khi làm: chuẩn timezone ICT UTC+7, chỉ tính present).
 - **North star:** MAES (Monthly Active Engaged Students) — mục tiêu 65%.
 
 ## 5. Master list module (parity)
 
 ### ① LMS (học sinh + phụ huynh)
-Bài tập & nộp bài (text / annotate ảnh / annotate PDF nhiều trang) · Điểm & học bạ (Grade, FinalGrade, QualitativeAssessment) · Điểm danh + streak · Sao thưởng (ledger) + Quà + Huy hiệu + Leaderboard · Thông báo (16 loại, **realtime**) · Chat CSKH (FAQ + Gemini) · Lịch họp phụ huynh · Chứng chỉ · Level progress.
+Bài tập & nộp bài (text / annotate ảnh / annotate PDF nhiều trang) · Điểm & học bạ (Grade, FinalGrade, QualitativeAssessment) · Điểm danh (streak chưa build) · Sao thưởng (ledger) + Quà + Huy hiệu + Leaderboard · Thông báo (16 loại, **realtime**) · Chat CSKH (FAQ + Gemini) · Lịch họp phụ huynh · Chứng chỉ · Level progress.
 
 ### ② Teaching/ERP
 - **Giáo vụ:** Lớp/khóa (mã B-YYYY-NNNN nguyên tử), Enrollment + student lifecycle, Phòng, Lịch tuần → sinh buổi học, Timetable, gán giáo viên/phòng.

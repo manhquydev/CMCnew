@@ -18,8 +18,8 @@
 
 ## Đường nhắc (worker tick)
 `ParentMeeting (remindedAt=null, status=scheduled, scheduledAt ∈ [now, now+24h])`
-→ `ClassBatch` → `Enrollment(active)` → `Student` → `Guardian` → `ParentAccount` (distinct)
-→ tạo `Notification` cho mỗi phụ huynh: `recipientType='parent'`, `recipientId=parentAccountId`, `type='parent_meeting_reminder'`, `payload={meetingId, classBatchId, title, scheduledAt}`
+→ `ClassBatch` → `Enrollment(active)` → distinct `Student`
+→ tạo `Notification` cho **mỗi học sinh** (1/HS): `recipientType='student'`, `recipientId=studentId`, `type='parent_meeting_reminder'`, `payload={meetingId, classBatchId, title, scheduledAt}`. Phụ huynh thấy nhắc qua feed principal-aware sẵn có (notification của HS được surface cho PH của HS đó) — không gửi trực tiếp theo `parentAccountId`.
 → set `meeting.remindedAt = now` (trong cùng giao dịch → không nhắc lại).
 
 ## Lộ trình build (slice dọc) — ✅ HOÀN TẤT 2026-06-24
@@ -29,6 +29,6 @@
 
 ## Bất biến kỹ thuật
 - Worker idempotent qua `remindedAt`; tick lặp lại an toàn (đúng-một-lần mỗi lịch).
-- Logic chọn người nhận tách thành hàm thuần (distinct parentAccountId của enrollment active) — test độc lập.
+- Logic chọn người nhận = distinct `studentId` của enrollment active (service `parent-meeting-reminder.ts`) — recipientId theo HS, PH nhận gián tiếp qua feed.
 - Notification tái dùng hệ sẵn có (principal-aware RLS) — không thêm kênh mới.
 - Giờ ICT; soft-delete; audit mọi mutation trạng thái.
