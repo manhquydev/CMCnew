@@ -21,6 +21,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { GuardiansPanel } from './guardians-panel';
 import { OverviewPanel } from './overview-panel';
 import { CompensationConfigPanel } from './compensation-panel';
+import { PayrollPanel } from './payroll-panel';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type User = Awaited<ReturnType<typeof trpc.user.list.query>>[number];
@@ -527,8 +528,30 @@ function Org() {
   );
 }
 
+function HrPayrollTab() {
+  const { me } = useSession();
+  const [facilityId, setFacilityId] = useState<string | null>(
+    me.facilityIds.length > 0 ? String(me.facilityIds[0]) : null,
+  );
+  const facilityOptions = me.facilityIds.map((id) => ({ value: String(id), label: `Cơ sở #${id}` }));
+
+  if (me.facilityIds.length === 0) {
+    return <Text c="dimmed">Tài khoản chưa được gán cơ sở.</Text>;
+  }
+
+  return (
+    <Stack>
+      {me.facilityIds.length > 1 && (
+        <Select label="Cơ sở" data={facilityOptions} value={facilityId} onChange={setFacilityId} w={200} />
+      )}
+      {facilityId && <PayrollPanel facilityId={Number(facilityId)} />}
+    </Stack>
+  );
+}
+
 function Dashboard() {
   const { me } = useSession();
+  const canHr = me.isSuperAdmin || me.roles.includes('hr') || me.roles.includes('ke_toan');
   return (
     <Tabs defaultValue="overview">
       <Tabs.List>
@@ -536,6 +559,7 @@ function Dashboard() {
         <Tabs.Tab value="courses">Khóa học</Tabs.Tab>
         <Tabs.Tab value="org">Cơ sở &amp; người dùng</Tabs.Tab>
         <Tabs.Tab value="guardians">Phụ huynh</Tabs.Tab>
+        {canHr && <Tabs.Tab value="hr">Nhân sự &amp; Lương</Tabs.Tab>}
         {me.isSuperAdmin && <Tabs.Tab value="compensation">Cơ cấu lương</Tabs.Tab>}
       </Tabs.List>
       <Tabs.Panel value="overview" pt="md">
@@ -550,6 +574,11 @@ function Dashboard() {
       <Tabs.Panel value="guardians" pt="md">
         <GuardiansPanel />
       </Tabs.Panel>
+      {canHr && (
+        <Tabs.Panel value="hr" pt="md">
+          <HrPayrollTab />
+        </Tabs.Panel>
+      )}
       {me.isSuperAdmin && (
         <Tabs.Panel value="compensation" pt="md">
           <CompensationConfigPanel />

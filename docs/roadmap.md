@@ -46,6 +46,7 @@ Mục tiêu: xương sống học thuật + giá trị LMS đầu tiên.
 - Nghỉ phép + Lịch làm việc (mutual-exclusion guard).
 - **Payroll deferrals M4/M5/M9/M10/M11 nêu rõ là quyết định mở** (không âm thầm bỏ).
 - **Done-evidence:** tính → duyệt → đánh dấu đã trả payslip; non-HR không thấy số lương.
+- **CV5 HR UI (✅ done 2026-06-25):** Tab "Nhân sự & Lương" trong admin (hr/ke_toan/super_admin); SalaryRateCard có ô quota tháng; CommissionCard gọi `commissionForSale`, hiển thị breakdown attainment/rate/HH, nút "Đưa vào variablePay".
 
 ## Phase 5 — After-sale, Guardian, Exec & hoàn thiện
 
