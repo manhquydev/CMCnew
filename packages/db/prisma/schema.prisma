@@ -192,9 +192,39 @@ model ClassBatch {
   sessions   ClassSession[]
   enrollments Enrollment[]
   exercises  Exercise[]
+  parentMeetings ParentMeeting[]
 
   @@index([facilityId])
   @@map("class_batch")
+}
+
+/// Họp phụ huynh định kỳ theo lớp (docs/specs/parent-meeting.md). 1 lịch → nhắc mọi PH có con
+/// đang học (enrollment active) trong lớp. remindedAt = cờ idempotency cho cron nhắc T-1 ngày.
+enum ParentMeetingStatus {
+  scheduled
+  done
+  cancelled
+}
+
+model ParentMeeting {
+  id           String              @id @default(uuid()) @db.Uuid
+  facilityId   Int                 @map("facility_id")
+  classBatchId String              @map("class_batch_id") @db.Uuid
+  batch        ClassBatch          @relation(fields: [classBatchId], references: [id], onDelete: Cascade)
+  title        String
+  scheduledAt  DateTime            @map("scheduled_at")
+  location     String?
+  note         String?
+  status       ParentMeetingStatus @default(scheduled)
+  remindedAt   DateTime?           @map("reminded_at")
+  createdById  String?             @map("created_by_id") @db.Uuid
+  createdAt    DateTime            @default(now()) @map("created_at")
+  archivedAt   DateTime?           @map("archived_at")
+
+  @@index([facilityId])
+  @@index([classBatchId])
+  @@index([status, remindedAt, scheduledAt])
+  @@map("parent_meeting")
 }
 
 /// Phòng học — facility-scoped.
