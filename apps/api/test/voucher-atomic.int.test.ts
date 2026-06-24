@@ -65,6 +65,17 @@ describe('voucher atomic consume (money invariant)', () => {
     const v = await withRls(SUPER, (tx) => tx.voucher.findFirstOrThrow({ where: { code } }));
     expect(v.usedCount).toBe(1);
     expect(v.usedCount).toBeLessThanOrEqual(v.maxUses);
+
+    // Bind the count to the right winner: exactly one receipt is approved (with a code),
+    // the other stayed draft. Catches a guard that under-consumes yet still approves both.
+    const rows = await withRls(SUPER, (tx) =>
+      tx.receipt.findMany({ where: { id: { in: [r1.id, r2.id] } }, select: { status: true, code: true } }),
+    );
+    const approved = rows.filter((r) => r.status === 'approved');
+    const drafts = rows.filter((r) => r.status === 'draft');
+    expect(approved).toHaveLength(1);
+    expect(approved[0].code).toBeTruthy();
+    expect(drafts).toHaveLength(1);
   });
 
   it('cancel after approve refunds one use (used_count back to 0)', async () => {
@@ -90,6 +101,9 @@ describe('voucher atomic consume (money invariant)', () => {
     // tier for 3 years = 30%, voucher = 20% → 50% raw, must cap to 35%.
     await caller.finance.voucherCreate({ facilityId: FACILITY, code, percent: 20, maxUses: 5 });
     const r = await caller.finance.receiptCreate({ facilityId: FACILITY, studentId, courseId, yearsPrepaid: 3, voucherCode: code });
+    // Prove BOTH components actually stacked (not a single 35-yielding source), then capped.
+    expect(r.tierPercent).toBe(30);
+    expect(r.voucherPercent).toBe(20);
     expect(r.effectiveDiscountPercent).toBe(35);
   });
 });
