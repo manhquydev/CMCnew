@@ -19,3 +19,14 @@ coverage/
 
 # flow harness local telemetry/workspaces
 .flow/
+# Gemini CLI settings (contains user-specific config)
+.gemini/
+# local AI-agent harness config (Claude Code)
+.claude/
+
+# scratch verify artifacts (screenshots, playwright aria snapshots) — not source
+*-verify.png
+*-verify.yml
+cv5-commission-card.yml
+# legacy old-system export, not part of this greenfield repo
+release-manifest.json

@@ -43,8 +43,15 @@ pnpm --filter @cmc/lms dev       # http://localhost:5175
 
 Kiểm chứng RLS: `pnpm --filter @cmc/db exec tsx src/verify-rls.ts`.
 
-## Trạng thái
+## Trạng thái (cập nhật 2026-06-24)
 
 🟢 **Làm rõ phạm vi** (flow: Idea → Research → Scope) — hoàn tất.
-🟢 **Phase 0 — Nền tảng** — hoàn tất & có bằng chứng: RLS cô lập facility (verified), API login/RBAC/guards (curl), 3 app build + đăng nhập admin trên live URL, CI (`.github/workflows/ci.yml`).
-⬜ **Phase 1 — Identity & lõi giáo vụ** — kế tiếp (xem `docs/roadmap.md`).
+🟢 **Phase 0 — Nền tảng** — hoàn tất & có bằng chứng: RLS cô lập facility (verified), API login/RBAC/guards (curl), 3 app build + đăng nhập admin trên live URL.
+🟢 **Phase 1–4 — đã build** (academic core, assessment/LMS, revenue/CRM, payroll v2): 5 package domain, 112 unit-test PASS, 8 integration test khóa invariant tiền/tenancy/lương (mutation-proven).
+🟡 **Đang làm — Làm chắc nghiệp vụ** (nhánh `test/invariant-integration-harness`): lưới integration test + CI gate. Xem `plans/20260624-business-hardening/plan.md`.
+⬜ **Phase 5 — After-sale, Guardian, Exec** — chưa làm (xem `docs/roadmap.md`).
+
+> ⚠️ **Chưa chứng minh / nợ rõ:**
+> - **CI chưa chạy thật** — `.github/workflows/ci.yml` đã định nghĩa đủ step nhưng repo **chưa có git remote** → CI chưa từng thực thi. Push/PR bị chặn đến khi thêm remote.
+> - **Lint chưa dựng** — chưa có eslint; script `lint` ở root là no-op.
+> - **Cadence họp PH** (UCREA 5/BI+BH 3 buổi/tháng) ở spec, **chưa enforce trong code** — quyết định mở.
