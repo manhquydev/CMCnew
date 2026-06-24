@@ -8,6 +8,7 @@
     "./tokens.css": "./src/tokens.css"
   },
   "scripts": {
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

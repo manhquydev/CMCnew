@@ -9,7 +9,10 @@
       "cache": false,
       "persistent": true
     },
-    "lint": {},
+    "lint": {
+      "outputs": [],
+      "inputs": ["src/**/*.ts", "src/**/*.tsx", "*.ts", "*.tsx"]
+    },
     "typecheck": {
       "dependsOn": ["^build"]
     },

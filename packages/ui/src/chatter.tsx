@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Card, Group, Stack, Text, Textarea, Timeline } from '@mantine/core';
+import { Badge, Button, Card, Group, Text, Textarea, Timeline } from '@mantine/core';
 import { trpc } from './client.js';
 
 // Explicit shape (deriving via the tRPC client blows TS's instantiation depth).

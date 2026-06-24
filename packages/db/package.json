@@ -13,6 +13,7 @@
     "seed": "tsx src/seed.ts",
     "seed:demo": "tsx src/seed-demo.ts",
     "seed:lms": "tsx src/seed-lms.ts",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "studio": "prisma studio"
   },

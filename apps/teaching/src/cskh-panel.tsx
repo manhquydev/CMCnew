@@ -25,7 +25,7 @@ const STATUS = [
   { value: 'resolved', label: 'Đã xử lý' },
   { value: 'closed', label: 'Đóng' },
 ];
-const STATUS_COLOR: Record<string, string> = { open: 'gray', in_progress: 'blue', resolved: 'teal', closed: 'dark' };
+const _STATUS_COLOR: Record<string, string> = { open: 'gray', in_progress: 'blue', resolved: 'teal', closed: 'dark' };
 const PRIORITY = [
   { value: 'low', label: 'Thấp' },
   { value: 'normal', label: 'Bình thường' },

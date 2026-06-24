@@ -1,4 +1,4 @@
-import { prisma, withRls, verifyPassword, type RlsContext } from '@cmc/db';
+import { withRls, verifyPassword, type RlsContext } from '@cmc/db';
 import { signLmsSession, verifyLmsToken } from './jwt.js';
 
 /** Fully-resolved LMS identity (parent or student) for the current request. */

@@ -169,7 +169,7 @@ export function PdfAnnotator({
   }, [pdfRef]);
 
   // Pointer → normalised page coordinate.
-  function norm(e: React.PointerEvent, page: PageImg) {
+  function norm(e: React.PointerEvent, _page: PageImg) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     return {
       x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
