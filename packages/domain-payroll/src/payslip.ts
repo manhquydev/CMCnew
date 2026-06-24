@@ -1,6 +1,7 @@
 /** Pure payslip assembly: prorate by workdays, KPI grade → ratio, then gross → tax → net.
  * The DB enforces idempotency ((employee, periodKey)) and finalize gating; this is the math. */
 import { taxableIncome, computePit } from './pit.js';
+import { DEFAULT_PARAMS, type CompensationParams } from './params.js';
 
 /** Prorate a monthly amount by actual workdays over the standard workdays (rounded VND). */
 export function prorate(monthlyAmount: number, workdays: number, standardDays: number): number {
@@ -10,29 +11,26 @@ export function prorate(monthlyAmount: number, workdays: number, standardDays: n
   return Math.round((monthlyAmount * workdays) / standardDays);
 }
 
-export type KpiGrade = 'A' | 'B' | 'C' | 'D' | 'E';
+export type KpiGrade = string;
 
-/** Which income-structure block's KPI band applies — the 2026 decisions use different bands:
- *  training (khối Đào tạo) and sales (khối Kinh doanh) grade the same score differently. */
+/** Which income-structure block's KPI band applies — training (khối Đào tạo) and sales (khối Kinh
+ *  doanh) grade the same score differently. The band VALUES live in CompensationParams (editable). */
 export type PayBlock = 'training' | 'sales';
 
-/** KPI score (0–100) → grade + payout ratio. Block-specific bands (source: "Cơ cấu thu nhập CMC 2026"):
- *  - training: A 85–100→100% · B 70–<85→90% · C 50–<70→80% · D <50→0%
- *  - sales:    A 90–100→100% · B 70–<90→80% · C 50–<70→70% · D 40–<50→60% · E <40→0%
- *  Default is `training` (backward-compatible with the original single-band behaviour). */
-export function kpiGradeFromScore(score: number, block: PayBlock = 'training'): { grade: KpiGrade; ratio: number } {
+/** KPI score (0–100) → grade + payout ratio, from the policy's band for `block`. Bands are
+ *  evaluated high→low: the first band whose `minScore ≤ score` wins. Defaults to DEFAULT_PARAMS. */
+export function kpiGradeFromScore(
+  score: number,
+  block: PayBlock = 'training',
+  params: CompensationParams = DEFAULT_PARAMS,
+): { grade: KpiGrade; ratio: number } {
   if (score < 0 || score > 100) throw new Error(`kpi score must be 0..100, got ${score}`);
-  if (block === 'sales') {
-    if (score >= 90) return { grade: 'A', ratio: 1.0 };
-    if (score >= 70) return { grade: 'B', ratio: 0.8 };
-    if (score >= 50) return { grade: 'C', ratio: 0.7 };
-    if (score >= 40) return { grade: 'D', ratio: 0.6 };
-    return { grade: 'E', ratio: 0 };
+  const bands = [...params.kpi[block]].sort((a, b) => b.minScore - a.minScore);
+  for (const b of bands) {
+    if (score >= b.minScore) return { grade: b.grade, ratio: b.ratio };
   }
-  if (score >= 85) return { grade: 'A', ratio: 1.0 };
-  if (score >= 70) return { grade: 'B', ratio: 0.9 };
-  if (score >= 50) return { grade: 'C', ratio: 0.8 };
-  return { grade: 'D', ratio: 0 };
+  const last = bands[bands.length - 1]!;
+  return { grade: last.grade, ratio: last.ratio };
 }
 
 export interface PayslipInput {
@@ -66,11 +64,12 @@ export interface PayslipResult {
 }
 
 /** Assemble a full payslip from a rate + period inputs. Single source of truth so the router,
- * any preview UI, and reports agree byte-for-byte. */
-export function assemblePayslip(input: PayslipInput): PayslipResult {
+ * any preview UI, and reports agree byte-for-byte. `params` defaults to DEFAULT_PARAMS; the API
+ * passes the CompensationPolicy effective at the period so edits apply forward only. */
+export function assemblePayslip(input: PayslipInput, params: CompensationParams = DEFAULT_PARAMS): PayslipResult {
   const baseEarned = prorate(input.baseSalary, input.workdays, input.standardDays);
   const allowanceEarned = prorate(input.mealAllowance + input.otherAllowance, input.workdays, input.standardDays);
-  const { grade, ratio } = kpiGradeFromScore(input.kpiScore, input.block);
+  const { grade, ratio } = kpiGradeFromScore(input.kpiScore, input.block, params);
   if (!Number.isInteger(input.kpiMax) || input.kpiMax < 0) throw new Error('kpiMax must be a non-negative integer');
   const kpiBonus = Math.round(input.kpiMax * ratio);
   const variablePay = input.variablePay ?? 0;
@@ -78,8 +77,8 @@ export function assemblePayslip(input: PayslipInput): PayslipResult {
   const grossIncome = baseEarned + allowanceEarned + kpiBonus + variablePay;
   const insuranceDeduction = input.insuranceDeduction ?? 0;
   const dependents = input.dependents ?? 0;
-  const taxable = taxableIncome(grossIncome, insuranceDeduction, dependents);
-  const pitAmount = computePit(taxable);
+  const taxable = taxableIncome(grossIncome, insuranceDeduction, dependents, params.pit.selfRelief, params.pit.dependentRelief);
+  const pitAmount = computePit(taxable, params.pit.brackets);
   return {
     baseEarned,
     allowanceEarned,

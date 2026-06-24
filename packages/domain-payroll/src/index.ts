@@ -20,9 +20,14 @@ export {
   managerNewCustomerRate,
   renewalRate,
   commissionAmount,
+  overtimeUnitPrice,
   overtimePay,
-  TEACHER_OVERTIME_RATE,
-  PARTTIME_PACKAGE,
+  parttimePackageGross,
   type ManagerRole,
   type RenewalRole,
 } from './commission.js';
+export {
+  compensationParamsSchema,
+  DEFAULT_PARAMS,
+  type CompensationParams,
+} from './params.js';

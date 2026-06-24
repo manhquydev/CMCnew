@@ -27,12 +27,19 @@ function assertNonNegInt(n: number, label: string): void {
   if (!Number.isInteger(n) || n < 0) throw new Error(`${label} must be a non-negative integer, got ${n}`);
 }
 
-/** Taxable income = gross − insurance − self relief − dependent relief, floored at 0. */
-export function taxableIncome(gross: number, insuranceDeduction: number, dependents: number): number {
+/** Taxable income = gross − insurance − self relief − dependent relief, floored at 0.
+ *  Reliefs default to the statutory constants but may be overridden by an effective policy. */
+export function taxableIncome(
+  gross: number,
+  insuranceDeduction: number,
+  dependents: number,
+  selfRelief: number = SELF_RELIEF,
+  dependentRelief: number = DEPENDENT_RELIEF,
+): number {
   assertNonNegInt(gross, 'gross');
   assertNonNegInt(insuranceDeduction, 'insuranceDeduction');
   assertNonNegInt(dependents, 'dependents');
-  const relief = SELF_RELIEF + DEPENDENT_RELIEF * dependents;
+  const relief = selfRelief + dependentRelief * dependents;
   return Math.max(0, gross - insuranceDeduction - relief);
 }
 

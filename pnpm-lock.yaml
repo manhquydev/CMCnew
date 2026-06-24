@@ -278,6 +278,10 @@ importers:
         version: 2.1.9(@types/node@22.20.0)
 
   packages/domain-payroll:
+    dependencies:
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       typescript:
         specifier: ^5.7.2
