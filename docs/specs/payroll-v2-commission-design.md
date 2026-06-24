@@ -41,7 +41,14 @@ Ngân sách ≤6% doanh thu thực (PA2) — cảnh báo nếu vượt.
 - **Snapshot tại approve** (không suy động) — lương tái lập được, gán lại opp không dịch chuyển hoa hồng đã duyệt.
 - **Kỳ theo `approvedAt`** ("thực thu"), không theo createdAt.
 
-## 3 quyết định mở cần chủ dự án
-1. **Phạm vi config sửa-được v1:** quota vào `SalaryRate` (effective-dated ✓). Còn **bảng % hoa hồng + KPI band** — làm entity config sửa-trên-UI ngay (lớn), hay v1 để hằng số trong code (đổi qua deploy) + slice sau mới cho sửa UI?
-2. **Ca quay lại sau gián đoạn → MỚI hay TÁI TỤC?** (và nếu MỚI: quy tắc "có opp + test đầu vào mới" có đủ không, hay cần ngưỡng thời gian gián đoạn X tháng?)
-3. **Hoa hồng quản lý (TNKD/GĐTT theo team):** PA2 có, nhưng hệ chưa có cây quản lý (`EmploymentProfile` không có `managerId`). v1 chỉ cá nhân CVTV (hoãn team), hay thêm reporting-line ngay?
+## Quyết định đã chốt (chủ dự án, 2026-06-24)
+1. **Config đầy đủ sửa-được trên UI** (ưu tiên chất lượng lâu dài, không ngại thời gian): tạo entity **`CompensationPolicy` effective-dated** chứa TOÀN BỘ tham số (bảng % hoa hồng theo bậc quota, % tái tục, KPI band theo khối, đơn giá vượt giờ theo bậc, gói parttime, bậc thuế PIT + giảm trừ, quota mặc định). Chỉ `super_admin` sửa, áp dụng **về sau** (payslip đọc bản hiệu lực tại kỳ; finalize đóng băng → quá khứ an toàn). Logic `domain-payroll` tham số hóa theo policy (hằng số hiện tại thành DEFAULT seed).
+2. **Quay lại sau gián đoạn = KHÁCH MỚI (win-back)** nếu đi qua phễu test đầu vào mới (có Opportunity + TestAppointment entrance mới). Không cần ngưỡng thời gian.
+3. **Hoa hồng team (TNKD/GĐTT) HOÃN** — v1 chỉ cá nhân CVTV. Team rollup cần `managerId` (reporting-line) → slice sau khi cần.
+
+## Lộ trình build (epic — slice dọc, verify từng slice)
+- **CV1 — Config foundation:** `CompensationPolicy` effective-dated + Zod `CompensationParams` + `DEFAULT_PARAMS` (PA2 + Đào tạo) + tham số hóa `domain-payroll` (functions nhận params). *Done:* test domain với params; migrate áp được.
+- **CV2 — Config router + UI:** CRUD policy (super_admin), `getEffective(period)`; UI super_admin sửa tham số (form/JSON có validate). *Done:* tạo version mới hiệu lực tương lai; non-super bị chặn (live).
+- **CV3 — Sale attribution:** `Opportunity.ownerId` + `Receipt.soldById/kind/opportunityId` + enum `ReceiptKind`; set owner; đóng băng + suy kind (win-back=new) tại approve. *Done:* tạo opp→enroll→receipt→approve gán đúng sale + kind (live).
+- **CV4 — Quota + commission compute:** `SalaryRate.monthlyQuota`; gom doanh thu theo sale/kỳ; tính attainment→hoa hồng theo policy hiệu lực; ghi `Payslip.variablePay` (auto). Cảnh báo ngân sách ≤6%. *Done:* phiếu lương sale có hoa hồng tự tính khớp domain (live).
+- **CV5 — UI HR + verify end-to-end:** hiển thị cấu phần hoa hồng trên payslip; chốt luồng. *Done:* end-to-end live.
