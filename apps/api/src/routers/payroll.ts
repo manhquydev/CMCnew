@@ -196,18 +196,29 @@ export const payrollRouter = router({
         const profile = await tx.employmentProfile.findUnique({ where: { userId: input.userId } });
         const dependents = input.dependents ?? profile?.dependents ?? 0;
 
-        const r = assemblePayslip({
-          baseSalary: rate.baseSalary,
-          mealAllowance: rate.mealAllowance,
-          otherAllowance: rate.otherAllowance,
-          kpiMax: rate.kpiMax,
-          kpiScore: input.kpiScore,
-          workdays: input.workdays,
-          standardDays: input.standardDays,
-          variablePay: input.variablePay,
-          insuranceDeduction: input.insuranceDeduction,
-          dependents,
-        });
+        // Compute with the CompensationPolicy effective at the period (CV6 — close the config loop):
+        // PIT brackets/reliefs + KPI band come from the live policy, not hardcoded constants. KPI band
+        // is block-specific — a 'sale' is graded on the sales band, everyone else on training.
+        const params = await effectiveParamsAt(tx, input.periodKey);
+        const emp = await tx.appUser.findUnique({ where: { id: input.userId }, select: { roles: true } });
+        const block: 'training' | 'sales' = emp?.roles.includes(Role.sale) ? 'sales' : 'training';
+
+        const r = assemblePayslip(
+          {
+            baseSalary: rate.baseSalary,
+            mealAllowance: rate.mealAllowance,
+            otherAllowance: rate.otherAllowance,
+            kpiMax: rate.kpiMax,
+            kpiScore: input.kpiScore,
+            block,
+            workdays: input.workdays,
+            standardDays: input.standardDays,
+            variablePay: input.variablePay,
+            insuranceDeduction: input.insuranceDeduction,
+            dependents,
+          },
+          params,
+        );
         const data = {
           facilityId: input.facilityId,
           userId: input.userId,
