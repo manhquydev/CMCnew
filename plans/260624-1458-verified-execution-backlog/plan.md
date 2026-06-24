@@ -13,7 +13,7 @@
 | # | Việc | Loại | Verify-gate (điều kiện đóng) | Trạng thái |
 |---|---|---|---|---|
 | **T1** | Git chuẩn: dọn .gitignore, commit doc, tạo remote private, push main+branch, mở PR | quy trình | ~~CI xanh GH Actions~~ → **CI/CD dựng bằng Jenkins (sau)**; verify thay bằng local pipeline | 🟡 git xong (PR #1 mở, **chưa merge** — chủ dự án tạm dừng); CI deferred |
-| T2 | MED-1: `audit.postNote` resolve facilityId server-side từ entity (security-class tenancy) | bảo mật | int-test: staff cơ sở B chèn note vào entity cơ sở A → bị chặn | ⬜ |
+| T2 | MED-1: `audit.postNote` resolve facilityId server-side từ entity (security-class tenancy) | bảo mật | int-test: staff cơ sở B chèn note vào entity cơ sở A → bị chặn | ✅ done 2026-06-24 (`audit-postnote-tenancy.int.test.ts` 3/3 PASS, full int-suite 21/21; 2-agent review SAFE-TO-CLOSE) |
 | T3 | MED-2: Chatter có error state (không nuốt lỗi 401/network) | UX | live: giả 401 → hiện lỗi rõ | ⬜ |
 | T4 | F11: validate voucher validFrom/validTo ngay `receiptCreate` (fail-early) | nghiệp vụ | int-test: voucher hết hạn bị chặn ở create, không phải approve | ⬜ |
 | T5 | F9: soát phân loại win-back `kind` (O5 vs entrance test mới) theo spec | nghiệp vụ | xác nhận spec → fix nếu sai + int-test | ⬜ (cần soát spec) |
@@ -44,7 +44,8 @@
 ## Trạng thái thực thi (2026-06-24)
 - T1 git: ✅ repo private `manhquydev/CMCnew`, `main`+nhánh đã push, PR #1 **đã merge về main** (2026-06-24).
 - ⛔ GitHub Actions chết do billing (account). **Quyết định: CI/CD dựng bằng Jenkins (sau).** Tới lúc đó verify = chạy local pipeline. Xem `DEBT.md`.
-- ⏭️ Kế tiếp: T2 (MED-1 postNote — bảo mật tenancy), chạy 2-agent review trước khi đóng.
+- ✅ T2 đóng 2026-06-24: `audit.postNote` bỏ facilityId client, resolve từ entity qua RLS (whitelist receipt/opportunity/class_batch), chặn note xuyên cơ sở + chặn lỗ `facility_id IS NULL` global. Cleanup prop `facilityId` ở `Chatter` + 3 call site. 2-agent review SAFE-TO-CLOSE. Report: `plans/reports/from-code-reviewer-to-flow-260624-1558-postnote-tenancy-med1-security-review-report.md`.
+- ⏭️ Kế tiếp: T3 (Chatter error-state) hoặc cụm coverage T6–T10. Việc tồn LOW (reviewer phát hiện): `audit.follow` chưa gate entity-visibility — không phải vector MED-1 (record_follower không có facility, RLS tắt có chủ đích), để mục riêng nếu cần.
 
 ## Câu hỏi mở
 - T5/T13: chi tiết quy tắc win-back & cadence cần đối chiếu spec trước khi code.

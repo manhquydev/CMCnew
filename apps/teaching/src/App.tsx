@@ -722,7 +722,7 @@ function ClassDetail({
           <MeetingsTab batch={batch} facilityId={facilityId} />
         </Tabs.Panel>
         <Tabs.Panel value="log" pt="md">
-          <Chatter entityType="class_batch" entityId={batch.id} facilityId={facilityId} />
+          <Chatter entityType="class_batch" entityId={batch.id} />
         </Tabs.Panel>
       </Tabs>
 

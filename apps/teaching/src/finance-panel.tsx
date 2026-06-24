@@ -317,7 +317,7 @@ export function FinancePanel() {
         size="lg"
       >
         {detailTarget && (
-          <Chatter entityType="receipt" entityId={detailTarget.id} facilityId={detailTarget.facilityId} />
+          <Chatter entityType="receipt" entityId={detailTarget.id} />
         )}
       </Modal>
     </Stack>

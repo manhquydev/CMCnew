@@ -385,7 +385,7 @@ export function CrmPanel() {
         size="lg"
       >
         {detailTarget && (
-          <Chatter entityType="opportunity" entityId={detailTarget.id} facilityId={detailTarget.facilityId} />
+          <Chatter entityType="opportunity" entityId={detailTarget.id} />
         )}
       </Modal>
     </Stack>

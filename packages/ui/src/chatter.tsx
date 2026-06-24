@@ -29,11 +29,9 @@ function fmt(d: string | Date): string {
 export function Chatter({
   entityType,
   entityId,
-  facilityId,
 }: {
   entityType: string;
   entityId: string;
-  facilityId?: number | null;
 }) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [body, setBody] = useState('');
@@ -52,7 +50,7 @@ export function Chatter({
     if (!body.trim()) return;
     setBusy(true);
     try {
-      await trpc.audit.postNote.mutate({ entityType, entityId, facilityId: facilityId ?? undefined, body });
+      await trpc.audit.postNote.mutate({ entityType, entityId, body });
       setBody('');
       load();
     } finally {
