@@ -49,7 +49,7 @@ Mục tiêu: xương sống học thuật + giá trị LMS đầu tiên.
 
 ## Phase 5 — After-sale, Guardian, Exec & hoàn thiện
 
-- After-sale case + student lifecycle. _(⬜ chưa làm)_
+- After-sale case + student lifecycle. _(✅ done-by-evidence 2026-06-25 — AfterSaleCase CRUD + transition open→in_progress→resolved→closed + assign + setStudentLifecycle; khóa bằng aftersale-student-lifecycle.int.test.ts 3 tests.)_
 - **Guardian link backend + UI** (sửa lỗ A3 hệ cũ). _(✅ done-by-evidence 2026-06-24 — backend+admin+LMS portal đã build; bất biến A3 khóa bằng int-test 11 surface, PH thấy đúng+đủ con, chặn con người khác/xuyên facility. Defer: SSE + student-self isolation.)_
 - Dashboard BGĐ/MAES. _(⬜ chưa làm — cần định nghĩa công thức MAES trước)_
 - Cron họp phụ huynh (cadence) _(✅ done — T13 auto-cadence)_, ~~Chứng chỉ auto-gen~~ _(bỏ auto — chỉ cấp tay; LMS = nền làm bài tập, decision 0008)_, ~~Chat CSKH~~ _(đã bỏ — operator decision, DEBT.md)_.
