@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LoginGate, trpc } from '@cmc/ui';
+import { LoginGate, trpc, useSession } from '@cmc/ui';
 import {
   Badge,
   Button,
@@ -20,6 +20,7 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { GuardiansPanel } from './guardians-panel';
 import { OverviewPanel } from './overview-panel';
+import { CompensationConfigPanel } from './compensation-panel';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type User = Awaited<ReturnType<typeof trpc.user.list.query>>[number];
@@ -527,6 +528,7 @@ function Org() {
 }
 
 function Dashboard() {
+  const { me } = useSession();
   return (
     <Tabs defaultValue="overview">
       <Tabs.List>
@@ -534,6 +536,7 @@ function Dashboard() {
         <Tabs.Tab value="courses">Khóa học</Tabs.Tab>
         <Tabs.Tab value="org">Cơ sở &amp; người dùng</Tabs.Tab>
         <Tabs.Tab value="guardians">Phụ huynh</Tabs.Tab>
+        {me.isSuperAdmin && <Tabs.Tab value="compensation">Cơ cấu lương</Tabs.Tab>}
       </Tabs.List>
       <Tabs.Panel value="overview" pt="md">
         <OverviewPanel />
@@ -547,6 +550,11 @@ function Dashboard() {
       <Tabs.Panel value="guardians" pt="md">
         <GuardiansPanel />
       </Tabs.Panel>
+      {me.isSuperAdmin && (
+        <Tabs.Panel value="compensation" pt="md">
+          <CompensationConfigPanel />
+        </Tabs.Panel>
+      )}
     </Tabs>
   );
 }
