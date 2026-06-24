@@ -1,6 +1,11 @@
 # Agent Instructions
 
-Add project-specific agent instructions here.
+## Branch workflow (bắt buộc)
+
+- **Không bao giờ code/commit thẳng lên `main`.** `main` chỉ nhận thay đổi qua Pull Request đã review.
+- Nhánh làm việc mặc định là **`develop`** (tạo từ `main`). Mọi task chạy trên `develop`, hoặc trên nhánh feature/fix tạo **từ `develop`**.
+- Hoàn thành việc → PR vào `main` (hoặc PR feature→`develop` trước nếu cần gộp). Trước khi mở session làm việc, kiểm tra đang đứng đúng nhánh: không phải `main`.
+- Nếu phát hiện đang ở `main`, dừng lại và chuyển/`checkout` sang `develop` (hoặc nhánh feature) trước khi thay đổi file.
 
 <!-- HARNESS:BEGIN -->
 ## Harness
