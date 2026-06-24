@@ -28,7 +28,17 @@ export const auditRouter = router({
   followers: protectedProcedure
     .input(z.object({ entityType: z.string().min(1), entityId: z.string().min(1) }))
     .query(({ ctx, input }) =>
-      withRls(rlsContextOf(ctx.session), (tx) => getFollowers(tx, input.entityType, input.entityId)),
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        // record_follower has no facility_id / RLS, so the follower list is only tenant-safe if we
+        // first confirm the caller can see the entity itself (same gate as follow/postNote).
+        const resolve = NOTE_TARGETS[input.entityType];
+        if (!resolve)
+          throw new TRPCError({ code: 'BAD_REQUEST', message: `Không hỗ trợ ghi chú cho '${input.entityType}'` });
+        const entity = await resolve(tx, input.entityId);
+        if (!entity)
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy bản ghi (hoặc ngoài phạm vi cơ sở)' });
+        return getFollowers(tx, input.entityType, input.entityId);
+      }),
     ),
 
   postNote: protectedProcedure

@@ -61,4 +61,18 @@ describe('audit.follow — facility-scoped visibility gate (tenancy)', () => {
       caller.audit.follow({ entityType: 'app_user', entityId: batchB }),
     ).rejects.toThrow(/không hỗ trợ|BAD_REQUEST/i);
   });
+
+  // record_follower has no RLS, so `followers` must apply the same entity-visibility gate as follow:
+  // a facility-B staff must not be able to read who follows a facility-A entity.
+  it('facility-B staff CANNOT list followers of a facility-A batch → NOT_FOUND (no cross-facility leak)', async () => {
+    const uid = await superAdminUserId();
+    // Seed a real follower on the A batch so there is a list that could leak.
+    await withRls(SUPER, (tx) =>
+      tx.recordFollower.create({ data: { entityType: 'class_batch', entityId: batchA, userId: uid } }),
+    );
+    const caller = await bStaff();
+    await expect(
+      caller.audit.followers({ entityType: 'class_batch', entityId: batchA }),
+    ).rejects.toThrow(/không tìm thấy|NOT_FOUND/i);
+  });
 });
