@@ -39,7 +39,10 @@ export function PayrollPanel() {
   const [meal, setMeal] = useState<number | string>(500000);
   const [other, setOther] = useState<number | string>(2800000);
   const [kpiMax, setKpiMax] = useState<number | string>(1000000);
+  const [quota, setQuota] = useState<number | string>(0);
   const [effFrom, setEffFrom] = useState('2026-01-01');
+  // commission preview
+  const [commission, setCommission] = useState<Awaited<ReturnType<typeof trpc.payroll.commissionForSale.query>> | null>(null);
   // compute form
   const [period, setPeriod] = useState('2026-06');
   const [stdDays, setStdDays] = useState<number | string>(26);
@@ -79,11 +82,20 @@ export function PayrollPanel() {
     try {
       await trpc.payroll.rateCreate.mutate({
         userId, facilityId, baseSalary: num(base), mealAllowance: num(meal),
-        otherAllowance: num(other), kpiMax: num(kpiMax), effectiveFrom: effFrom,
+        otherAllowance: num(other), kpiMax: num(kpiMax), monthlyQuota: num(quota), effectiveFrom: effFrom,
       });
       setMsg({ kind: 'ok', text: 'Đã lưu mức lương.' });
     } catch (e) { setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') }); }
     finally { setBusy(false); }
+  }
+
+  async function previewCommission() {
+    if (!facilityId || !userId) return setMsg({ kind: 'err', text: 'Chọn cơ sở và nhân sự.' });
+    setMsg(null); setCommission(null);
+    try {
+      const c = await trpc.payroll.commissionForSale.query({ userId, facilityId, periodKey: period });
+      setCommission(c);
+    } catch (e) { setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') }); }
   }
 
   async function compute() {
@@ -125,9 +137,34 @@ export function PayrollPanel() {
         </Group>
         <Group grow mt="sm" align="flex-end">
           <NumberInput label="KPI tối đa" value={kpiMax} onChange={setKpiMax} thousandSeparator="," />
+          <NumberInput label="Chỉ tiêu DS tháng (quota)" value={quota} onChange={setQuota} thousandSeparator="," />
           <TextInput label="Hiệu lực từ" value={effFrom} onChange={(e) => setEffFrom(e.currentTarget.value)} placeholder="YYYY-MM-DD" />
           <Button onClick={saveRate} loading={busy}>Lưu mức lương</Button>
         </Group>
+      </Card>
+
+      <Card withBorder>
+        <Group justify="space-between" mb="sm">
+          <Title order={6}>Hoa hồng tự tính (kỳ {period})</Title>
+          <Button size="compact-sm" variant="light" onClick={previewCommission}>Tính hoa hồng từ phiếu thu</Button>
+        </Group>
+        {commission ? (
+          <Stack gap={4}>
+            <Group gap="xl">
+              <Text size="sm">DT khách mới: <b>{vnd(commission.newRevenue)}</b> / quota {vnd(commission.quota)} → đạt <b>{Math.round(commission.attainment * 100)}%</b> → tỷ lệ <b>{(commission.rateNew * 100).toFixed(1)}%</b></Text>
+              <Text size="sm">DT tái tục: <b>{vnd(commission.renewalRevenue)}</b> → tỷ lệ <b>{(commission.rateRenew * 100).toFixed(1)}%</b></Text>
+            </Group>
+            <Group gap="xl" align="center">
+              <Text size="sm">HH khách mới: <b>{vnd(commission.commissionNew)}</b></Text>
+              <Text size="sm">HH tái tục: <b>{vnd(commission.commissionRenewal)}</b></Text>
+              <Text size="sm">Tổng hoa hồng: <b style={{ color: 'var(--mantine-color-teal-7)' }}>{vnd(commission.total)}</b></Text>
+              {commission.overBudget && <Badge color="orange">Vượt ngân sách {vnd(commission.budgetCap)}</Badge>}
+              <Button size="compact-xs" onClick={() => setVariablePay(commission.total)}>Đưa vào ô biến đổi ↓</Button>
+            </Group>
+          </Stack>
+        ) : (
+          <Text c="dimmed" size="sm">Bấm "Tính hoa hồng" để gom doanh thu sale đã gán trong kỳ và tính theo chính sách hiệu lực.</Text>
+        )}
       </Card>
 
       <Card withBorder>

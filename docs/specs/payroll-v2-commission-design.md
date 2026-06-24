@@ -47,8 +47,8 @@ Ngân sách ≤6% doanh thu thực (PA2) — cảnh báo nếu vượt.
 3. **Hoa hồng team (TNKD/GĐTT) HOÃN** — v1 chỉ cá nhân CVTV. Team rollup cần `managerId` (reporting-line) → slice sau khi cần.
 
 ## Lộ trình build (epic — slice dọc, verify từng slice)
-- **CV1 — Config foundation:** `CompensationPolicy` effective-dated + Zod `CompensationParams` + `DEFAULT_PARAMS` (PA2 + Đào tạo) + tham số hóa `domain-payroll` (functions nhận params). *Done:* test domain với params; migrate áp được.
-- **CV2 — Config router + UI:** CRUD policy (super_admin), `getEffective(period)`; UI super_admin sửa tham số (form/JSON có validate). *Done:* tạo version mới hiệu lực tương lai; non-super bị chặn (live).
-- **CV3 — Sale attribution:** `Opportunity.ownerId` + `Receipt.soldById/kind/opportunityId` + enum `ReceiptKind`; set owner; đóng băng + suy kind (win-back=new) tại approve. *Done:* tạo opp→enroll→receipt→approve gán đúng sale + kind (live).
-- **CV4 — Quota + commission compute:** `SalaryRate.monthlyQuota`; gom doanh thu theo sale/kỳ; tính attainment→hoa hồng theo policy hiệu lực; ghi `Payslip.variablePay` (auto). Cảnh báo ngân sách ≤6%. *Done:* phiếu lương sale có hoa hồng tự tính khớp domain (live).
-- **CV5 — UI HR + verify end-to-end:** hiển thị cấu phần hoa hồng trên payslip; chốt luồng. *Done:* end-to-end live.
+- ✅ **CV1 — Config foundation** (commit 1708ece + a86df1a): `CompensationPolicy` effective-dated + Zod `CompensationParams` + `DEFAULT_PARAMS` + `domain-payroll` tham số hóa. *Verified:* 46 test.
+- ✅ **CV2 — Config router + UI** (92fe3b1 + 48fb09c): super_admin CRUD + `effective(period)` + UI editor (app admin). *Verified live + browser:* forward-only (sửa kỳ 07 không đụng kỳ 06); non-super FORBIDDEN.
+- ✅ **CV3 — Sale attribution** (6489fd9): `Opportunity.ownerId` + `Receipt.soldById/kind/opportunityId`. *Verified live:* owner mặc định người tạo; win-back=new qua phễu O5; renewal khi có lịch sử + soldById null.
+- ✅ **CV4 — Quota + commission compute** (81f6472): `SalaryRate.monthlyQuota` + `payroll.commissionForSale` (đọc policy hiệu lực + gom receipt theo sale/kỳ → attainment → bậc → hoa hồng). *Verified live:* 8.5tr@quota10tr→85%→2%→170k, math check pass.
+- ⬜ **CV5 — UI HR:** thêm ô quota vào form mức lương + card "hoa hồng tự tính" (gọi `commissionForSale`, hiển thị breakdown, nút đưa vào `variablePay`). Tiện ích HR — backend đã đủ & verified.
