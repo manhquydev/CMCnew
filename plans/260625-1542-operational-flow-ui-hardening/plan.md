@@ -35,6 +35,18 @@
 
 > **HOÀN TẤT 2026-06-25.** Toàn monorepo typecheck **13/13 xanh**, 4 app build OK, **0 `.catch(()=>{})` nuốt lỗi** toàn hệ. Tổng ~245 toast feedback. NotificationCenter cho ERP role: chưa làm (đánh giá sau, không bắt buộc giai đoạn này).
 
+## Verify pipeline local (toàn phần xanh — 2026-06-25)
+
+Chạy chuỗi verify mà DEBT.md chỉ định thay CI (Jenkins chưa dựng):
+
+- **lint** 13/13 (0 error) — đã đóng nợ 4 import thừa trong `design-showcase.tsx`
+- **typecheck** 13/13
+- **unit** 129 pass (payroll 56, finance 23, academic 15, grading 16, rewards 19)
+- **e2e smoke** 9/9 pass trên DB seed thật (login flow admin/teaching/lms) — *làm xanh harness e2e lần đầu*: sửa cred default khớp seed, gộp playwright về 1 project, sửa selector Mantine SegmentedControl
+- **build** 4/4 app
+
+Lệnh: `pnpm db:up` → seed sẵn → `pnpm lint` + `pnpm -r typecheck` + `pnpm --filter "./packages/**" test` + `pnpm test:e2e` + `pnpm -r build`.
+
 F1, F2 độc lập → song song. A/B/C/D cần F1+F2; có ranh giới file rõ → có thể song song theo app.
 
 ## Pattern mẫu (đã chốt, dùng cho A–D)
