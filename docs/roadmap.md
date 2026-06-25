@@ -46,14 +46,14 @@ Mục tiêu: xương sống học thuật + giá trị LMS đầu tiên.
 - Nghỉ phép + Lịch làm việc (mutual-exclusion guard).
 - **Payroll deferrals M4/M5/M9/M10/M11 nêu rõ là quyết định mở** (không âm thầm bỏ).
 - **Done-evidence:** tính → duyệt → đánh dấu đã trả payslip; non-HR không thấy số lương.
-- **CV5 HR UI (✅ done 2026-06-25):** Tab "Nhân sự & Lương" trong admin (hr/ke_toan/super_admin); SalaryRateCard có ô quota tháng; CommissionCard gọi `commissionForSale`, hiển thị breakdown attainment/rate/HH, nút "Đưa vào variablePay".
+- **CV5 HR UI (✅ done 2026-06-25):** Tab "Nhân sự & Lương" trong admin (hr/ke_toan/super_admin); SalaryRateCard có ô quota tháng; CommissionCard gọi `commissionForSale`, hiển thị breakdown attainment/rate/HH, nút "Đưa vào variablePay". _Harness: CV5-hr-ui · Int-test: PAY-FINALIZE, PAY-MYSLIPS, FIN-COMMISSION · E2E: admin-smoke (login gate)._
 
 ## Phase 5 — After-sale, Guardian, Exec & hoàn thiện
 
-- After-sale case + student lifecycle. _(✅ done-by-evidence 2026-06-25 — AfterSaleCase CRUD + transition open→in_progress→resolved→closed + assign + setStudentLifecycle; khóa bằng aftersale-student-lifecycle.int.test.ts 3 tests.)_
-- **Guardian link backend + UI** (sửa lỗ A3 hệ cũ). _(✅ done-by-evidence 2026-06-24 — backend+admin+LMS portal đã build; bất biến A3 khóa bằng int-test 11 surface, PH thấy đúng+đủ con, chặn con người khác/xuyên facility. Defer: SSE + student-self isolation.)_
+- After-sale case + student lifecycle. _(✅ done-by-evidence 2026-06-25 — AfterSaleCase CRUD + transition open→in_progress→resolved→closed + assign + setStudentLifecycle; khóa bằng aftersale-student-lifecycle.int.test.ts 3 tests. Harness: AFS-LIFECYCLE · E2E: teaching-smoke.)_
+- **Guardian link backend + UI** (sửa lỗ A3 hệ cũ). _(✅ done-by-evidence 2026-06-24 — backend+admin+LMS portal đã build; bất biến A3 khóa bằng int-test 11 surface, PH thấy đúng+đủ con, chặn con người khác/xuyên facility. Defer: SSE + student-self isolation. Harness: SEC-GUARDIAN · E2E: lms-smoke.)_
 - Dashboard BGĐ/MAES. _(⬜ chưa làm — cần định nghĩa công thức MAES trước)_
-- Cron họp phụ huynh (cadence) _(✅ done — T13 auto-cadence)_, ~~Chứng chỉ auto-gen~~ _(bỏ auto — chỉ cấp tay; LMS = nền làm bài tập, decision 0008)_, ~~Chat CSKH~~ _(đã bỏ — operator decision, DEBT.md)_.
+- Cron họp phụ huynh (cadence) _(✅ done — T13 auto-cadence. Harness: ACA-CADENCE, ACA-REMIND, ACA-TBD, ACA-CLOSE, ACA-REOPEN, ACA-WARN.)_, ~~Chứng chỉ auto-gen~~ _(bỏ auto — chỉ cấp tay; LMS = nền làm bài tập, decision 0008)_, ~~Chat CSKH~~ _(đã bỏ — operator decision, DEBT.md)_.
 - (Audit/Chatter đã làm nền từ Phase 1 — Phase 5 chỉ mở rộng cho các module after-sale/exec.)
 - **Done-evidence:** phụ huynh thấy đủ con; MAES tính đúng; case đổi lifecycle học sinh.
 
@@ -62,6 +62,23 @@ Mục tiêu: xương sống học thuật + giá trị LMS đầu tiên.
 - **Mobile app (HS/PH):** khởi động sau Phase 2 (API LMS ổn định). Expo/RN trên cùng tRPC.
 - **Website management:** khi cần gom website đã có vào quản lý — chỉ qua lead-ingest seam + brand, không nằm critical path.
 
-## Nguyên tắc gate
+## Nguyên tắc gate (cập nhật 2026-06-25)
 
-Mỗi phase chỉ "done" khi có **bằng chứng thế giới thật** (chạy trên URL như người dùng), không phải "test pass" hay "code merged". RLS + atomic + finalize là checklist bắt buộc ở mọi phase chạm tenant/tiền/lương.
+Mỗi phase chỉ "done" khi có **cả 3 lớp bằng chứng**:
+1. **Harness story record** — `harness-cli story add --id ... --contract ...` đã ghi, status=implemented
+2. **Integration test PASS** — `*.int.test.ts` kiểm tra tầng DB + RLS + business rule
+3. **E2E smoke PASS** — Playwright smoke test xác nhận login và landing page trên URL thật
+
+"done-by-evidence (self-reported)" không còn hợp lệ nếu không có harness story ID đi kèm.
+RLS + atomic + finalize là checklist bắt buộc ở mọi phase chạm tenant/tiền/lương.
+
+### Evidence registry (2026-06-25)
+
+| Domain | Harness IDs | E2E coverage |
+|---|---|---|
+| Security/RLS | SEC-RLS-COV, SEC-RLS-TEN, SEC-GUARD, SEC-AUD-FOL, SEC-AUD-NOTE | admin-smoke, lms-smoke |
+| Parent meetings | ACA-CADENCE, ACA-REMIND, ACA-TBD, ACA-CLOSE, ACA-REOPEN, ACA-WARN | teaching-smoke |
+| Finance | FIN-VOUCHER, FIN-VOW-WIN, FIN-RECEIPT, FIN-COMM | admin-smoke |
+| Payroll | PAY-FINAL, PAY-MYSLIP, CV5-hr-ui | admin-smoke |
+| LMS/Rewards | LMS-BADGE, LMS-ASSESS, LMS-LEVEL, LMS-NO-CERT, LMS-STAR, LMS-REWARD | lms-smoke |
+| CRM/After-sale | AFS-LIFECYCLE, CRM-HOOKS, CRM-BATCH | teaching-smoke |

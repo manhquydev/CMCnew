@@ -18,6 +18,10 @@
     },
     "test": {
       "dependsOn": ["^build"]
+    },
+    "test:e2e": {
+      "dependsOn": [],
+      "outputs": ["apps/e2e/test-results/**", "apps/e2e/playwright-report/**"]
     }
   }
 }
