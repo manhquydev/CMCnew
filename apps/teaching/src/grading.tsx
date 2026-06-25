@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, uploadExercisePdf, PdfAnnotator, type AnnotationData } from '@cmc/ui';
+import { trpc, uploadExercisePdf, PdfAnnotator, type AnnotationData, notifyError, notifySuccess } from '@cmc/ui';
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -69,15 +68,13 @@ function CreateExerciseModal({
   const [type, setType] = useState<string | null>('homework');
   const [pdf, setPdf] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
 
   async function create() {
     if (!title.trim()) {
-      setErr('Nhập tiêu đề bài tập');
+      notifyError(new Error('Nhập tiêu đề bài tập'), 'Tạo bài tập thất bại');
       return;
     }
     setBusy(true);
-    setErr('');
     try {
       // Upload the base PDF first (content-addressed) so the exercise carries its basePdfRef.
       const basePdfRef = pdf ? await uploadExercisePdf(pdf) : undefined;
@@ -91,6 +88,7 @@ function CreateExerciseModal({
         starReward: typeof starReward === 'number' ? starReward : undefined,
         type: (type as 'homework' | 'test_entrance' | 'test_periodic') ?? undefined,
       });
+      notifySuccess(`Đã tạo bài tập "${title.trim()}"`);
       close();
       setTitle('');
       setDescription('');
@@ -100,7 +98,7 @@ function CreateExerciseModal({
       setPdf(null);
       onCreated();
     } catch (e) {
-      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Tạo bài tập thất bại');
     } finally {
       setBusy(false);
     }
@@ -154,11 +152,6 @@ function CreateExerciseModal({
               File phải là PDF.
             </Text>
           )}
-          {err && (
-            <Text c="red" size="sm">
-              {err}
-            </Text>
-          )}
           <Button onClick={create} loading={busy} disabled={!title.trim()}>
             Tạo
           </Button>
@@ -191,13 +184,9 @@ function GradePdfModal({
   const [feedback, setFeedback] = useState(submission.grade?.feedback ?? '');
   const [hasGrade, setHasGrade] = useState(!!submission.grade);
   const [busy, setBusy] = useState<'grade' | 'publish' | null>(null);
-  const [msg, setMsg] = useState('');
-  const [err, setErr] = useState('');
 
   useEffect(() => {
     if (!opened) return;
-    setMsg('');
-    setErr('');
     trpc.submission.layerForGrading
       .query({ submissionId: submission.id })
       .then(({ student, teacher }) => {
@@ -211,12 +200,10 @@ function GradePdfModal({
 
   async function doGrade() {
     if (typeof score !== 'number') {
-      setErr('Nhập điểm');
+      notifyError(new Error('Nhập điểm'), 'Chấm bài thất bại');
       return;
     }
     setBusy('grade');
-    setErr('');
-    setMsg('');
     try {
       await trpc.grade.grade.mutate({
         submissionId: submission.id,
@@ -225,10 +212,10 @@ function GradePdfModal({
         annotationLayer: teacherLayer ?? undefined,
       });
       setHasGrade(true);
-      setMsg('Đã chấm (kèm chú thích).');
+      notifySuccess('Đã chấm (kèm chú thích)');
       onChanged();
     } catch (e) {
-      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Chấm bài thất bại');
     } finally {
       setBusy(null);
     }
@@ -236,14 +223,12 @@ function GradePdfModal({
 
   async function doPublish() {
     setBusy('publish');
-    setErr('');
-    setMsg('');
     try {
       const r = await trpc.grade.publish.mutate({ submissionId: submission.id });
-      setMsg(`Đã công bố · +${r.starsEarned} sao`);
+      notifySuccess(`Đã công bố · +${r.starsEarned} sao`);
       onChanged();
     } catch (e) {
-      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Công bố điểm thất bại');
     } finally {
       setBusy(null);
     }
@@ -286,16 +271,6 @@ function GradePdfModal({
           value={feedback}
           onChange={(e) => setFeedback(e.currentTarget.value)}
         />
-        {msg && (
-          <Text size="sm" c="green">
-            {msg}
-          </Text>
-        )}
-        {err && (
-          <Text size="sm" c="red">
-            {err}
-          </Text>
-        )}
         <Text size="xs" c="dimmed">
           Nét xanh nhạt là bài làm của học sinh; chấm/ghi chú của bạn vẽ chồng lên trên.
         </Text>
@@ -328,17 +303,13 @@ function GradeRow({
   const [grade, setGrade] = useState<Grade | null>(submission.grade);
   const [grading, setGrading] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [msg, setMsg] = useState('');
-  const [err, setErr] = useState('');
 
   async function doGrade() {
     if (typeof score !== 'number') {
-      setErr('Nhập điểm');
+      notifyError(new Error('Nhập điểm'), 'Chấm bài thất bại');
       return;
     }
     setGrading(true);
-    setErr('');
-    setMsg('');
     try {
       const g = await trpc.grade.grade.mutate({
         submissionId: submission.id,
@@ -346,10 +317,10 @@ function GradeRow({
         feedback: feedback.trim() || undefined,
       });
       setGrade(g);
-      setMsg('Đã chấm.');
+      notifySuccess('Đã chấm điểm');
       onChanged();
     } catch (e) {
-      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Chấm bài thất bại');
     } finally {
       setGrading(false);
     }
@@ -357,15 +328,13 @@ function GradeRow({
 
   async function doPublish() {
     setPublishing(true);
-    setErr('');
-    setMsg('');
     try {
       const r = await trpc.grade.publish.mutate({ submissionId: submission.id });
       setGrade(r.grade);
-      setMsg(`Đã công bố · +${r.starsEarned} sao`);
+      notifySuccess(`Đã công bố · +${r.starsEarned} sao`);
       onChanged();
     } catch (e) {
-      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Công bố điểm thất bại');
     } finally {
       setPublishing(false);
     }
@@ -461,16 +430,6 @@ function GradeRow({
               </Badge>
             )}
           </Group>
-          {msg && (
-            <Text size="xs" c="green">
-              {msg}
-            </Text>
-          )}
-          {err && (
-            <Text size="xs" c="red">
-              {err}
-            </Text>
-          )}
         </Stack>
       </Table.Td>
     </Table.Tr>
@@ -480,15 +439,13 @@ function GradeRow({
 function SubmissionsPanel({ exercise }: { exercise: Exercise }) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
-    setErr('');
     trpc.submission.listByExercise
       .query({ exerciseId: exercise.id })
       .then((rows) => setSubmissions(rows))
-      .catch((e) => setErr('Lỗi tải bài nộp: ' + (e instanceof Error ? e.message : '')))
+      .catch((e) => notifyError(e, 'Không tải được bài nộp'))
       .finally(() => setLoading(false));
   }, [exercise.id]);
   useEffect(load, [load]);
@@ -511,12 +468,6 @@ function SubmissionsPanel({ exercise }: { exercise: Exercise }) {
           Tải lại
         </Button>
       </Group>
-
-      {err && (
-        <Alert color="red" mb="sm">
-          {err}
-        </Alert>
-      )}
 
       {loading ? (
         <Center py="md">
@@ -556,20 +507,18 @@ function SubmissionsPanel({ exercise }: { exercise: Exercise }) {
 function ClassGrading({ facilityId, classBatchId }: { facilityId: number; classBatchId: string }) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
-    setErr('');
     trpc.exercise.listByClass
       .query({ classBatchId })
       .then((rows) => {
         setExercises(rows);
         setSelectedId((cur) => (cur && rows.some((r) => r.id === cur) ? cur : null));
       })
-      .catch((e) => setErr('Lỗi tải bài tập: ' + (e instanceof Error ? e.message : '')))
+      .catch((e) => notifyError(e, 'Không tải được danh sách bài tập'))
       .finally(() => setLoading(false));
   }, [classBatchId]);
   useEffect(load, [load]);
@@ -578,9 +527,10 @@ function ClassGrading({ facilityId, classBatchId }: { facilityId: number; classB
     setPublishingId(id);
     try {
       await trpc.exercise.publish.mutate({ id });
+      notifySuccess('Đã phát hành bài tập');
       load();
     } catch (e) {
-      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Phát hành bài tập thất bại');
     } finally {
       setPublishingId(null);
     }
@@ -595,12 +545,6 @@ function ClassGrading({ facilityId, classBatchId }: { facilityId: number; classB
           <Title order={5}>Bài tập ({exercises.length})</Title>
           <CreateExerciseModal facilityId={facilityId} classBatchId={classBatchId} onCreated={load} />
         </Group>
-
-        {err && (
-          <Alert color="red" mb="sm">
-            {err}
-          </Alert>
-        )}
 
         {loading ? (
           <Center py="md">
@@ -688,7 +632,6 @@ export function GradingPanel() {
   const [batchId, setBatchId] = useState<string | null>(null);
   const [loadingFacilities, setLoadingFacilities] = useState(true);
   const [loadingBatches, setLoadingBatches] = useState(true);
-  const [err, setErr] = useState('');
 
   useEffect(() => {
     setLoadingFacilities(true);
@@ -698,7 +641,7 @@ export function GradingPanel() {
         setFacilities(fs);
         setFacilityId((cur) => cur ?? fs[0]?.id ?? null);
       })
-      .catch((e) => setErr('Lỗi tải cơ sở: ' + (e instanceof Error ? e.message : '')))
+      .catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'))
       .finally(() => setLoadingFacilities(false));
   }, []);
 
@@ -707,7 +650,7 @@ export function GradingPanel() {
     trpc.classBatch.list
       .query()
       .then((bs) => setBatches(bs))
-      .catch((e) => setErr('Lỗi tải lớp: ' + (e instanceof Error ? e.message : '')))
+      .catch((e) => notifyError(e, 'Không tải được danh sách lớp'))
       .finally(() => setLoadingBatches(false));
   }, []);
 
@@ -761,8 +704,6 @@ export function GradingPanel() {
           onChange={setBatchId}
         />
       </Group>
-
-      {err && <Alert color="red">{err}</Alert>}
 
       {facilityId && batchId ? (
         <ClassGrading key={batchId} facilityId={facilityId} classBatchId={batchId} />

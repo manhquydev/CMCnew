@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, Chatter } from '@cmc/ui';
+import { trpc, Chatter, notifyError, notifySuccess } from '@cmc/ui';
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -50,7 +49,6 @@ export function CrmPanel() {
   const [studentName, setStudentName] = useState('');
   const [program, setProgram] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [lostTarget, setLostTarget] = useState<Opp | null>(null);
   const [lostReason, setLostReason] = useState('');
   const [tests, setTests] = useState<TestAppt[]>([]);
@@ -85,35 +83,34 @@ export function CrmPanel() {
         type: 'entrance',
         scheduledAt: testAt.toISOString(),
       });
-      setMsg({ kind: 'ok', text: 'Đã đặt lịch test (cơ hội tự lên O3).' });
+      notifySuccess('Đã đặt lịch test (cơ hội tự lên O3)');
       setTestTarget(null);
       setTestAt(null);
       load();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Đặt lịch test thất bại');
     }
   }
   async function doGrade() {
     if (!gradeTarget || typeof gradeScore !== 'number') return;
     try {
       await trpc.crm.testGrade.mutate({ id: gradeTarget.id, score: gradeScore, result: gradeResult.trim() || undefined });
-      setMsg({ kind: 'ok', text: 'Đã chấm test (cơ hội tự lên O4).' });
+      notifySuccess('Đã chấm test (cơ hội tự lên O4)');
       setGradeTarget(null);
       setGradeScore('');
       setGradeResult('');
       load();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Chấm test thất bại');
     }
   }
 
   async function createLead() {
     if (!facilityId || !fullName.trim() || !phone.trim()) {
-      setMsg({ kind: 'err', text: 'Nhập tên liên hệ và số điện thoại.' });
+      notifyError(new Error('Nhập tên liên hệ và số điện thoại'), 'Tạo cơ hội thất bại');
       return;
     }
     setBusy(true);
-    setMsg(null);
     try {
       const contact = await trpc.crm.contactCreate.mutate({
         facilityId,
@@ -125,14 +122,14 @@ export function CrmPanel() {
         studentName: studentName.trim() || undefined,
         program: (program as 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE') || undefined,
       });
-      setMsg({ kind: 'ok', text: `Đã tạo cơ hội cho ${contact.fullName}.` });
+      notifySuccess(`Đã tạo cơ hội cho ${contact.fullName}`);
       setFullName('');
       setPhone('');
       setStudentName('');
       setProgram(null);
       load();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Tạo cơ hội thất bại');
     } finally {
       setBusy(false);
     }
@@ -143,26 +140,28 @@ export function CrmPanel() {
       await trpc.crm.opportunityTransition.mutate({ id: o.id, stage: stage as Opp['stage'] });
       load();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Chuyển bước cơ hội thất bại');
     }
   }
   async function reopen(o: Opp) {
     try {
       await trpc.crm.opportunityReopen.mutate({ id: o.id });
+      notifySuccess('Đã mở lại cơ hội');
       load();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Mở lại cơ hội thất bại');
     }
   }
   async function doMarkLost() {
     if (!lostTarget || !lostReason.trim()) return;
     try {
       await trpc.crm.opportunityMarkLost.mutate({ id: lostTarget.id, reason: lostReason.trim() });
+      notifySuccess('Đã đánh dấu cơ hội mất');
       setLostTarget(null);
       setLostReason('');
       load();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Đánh dấu cơ hội mất thất bại');
     }
   }
 
@@ -199,12 +198,6 @@ export function CrmPanel() {
           </Button>
         </Group>
       </Card>
-
-      {msg && (
-        <Alert color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)}>
-          {msg.text}
-        </Alert>
-      )}
 
       <Card withBorder>
         <Title order={6} mb="sm">

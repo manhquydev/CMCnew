@@ -6,6 +6,8 @@ import {
   BadgeShelf,
   Leaderboard,
   NotificationCenter,
+  notifyError,
+  notifySuccess,
   type LmsPrincipal,
   type LiveNotification,
   type AnnotationData,
@@ -130,15 +132,26 @@ function ExerciseModal({
         annotationLayer: annotation ?? undefined,
       });
       setMsg('Đã lưu nháp.');
+      notifySuccess('Đã lưu nháp bài làm');
       await onChanged();
     } catch (e) {
-      setErr('Lỗi: ' + (e instanceof Error ? e.message : 'không lưu được nháp'));
+      const msg = e instanceof Error ? e.message : 'Không lưu được nháp';
+      setErr('Lỗi: ' + msg);
+      notifyError(e, 'Lưu nháp thất bại');
     } finally {
       setBusy(null);
     }
   }
 
   async function submitWork() {
+    // Require at least some answer content before submitting.
+    const hasText = answer.trim().length > 0;
+    const hasAnnotation = annotation != null && annotation.items.length > 0;
+    if (!hasText && !hasAnnotation) {
+      setErr('Vui lòng nhập bài làm trước khi nộp.');
+      return;
+    }
+
     setBusy('submit');
     setMsg('');
     setErr('');
@@ -150,10 +163,13 @@ function ExerciseModal({
         annotationLayer: annotation ?? undefined,
       });
       await trpc.submission.submit.mutate({ exerciseId: exercise.id });
+      notifySuccess('Đã nộp bài thành công');
       await onChanged();
       onClose();
     } catch (e) {
-      setErr('Lỗi: ' + (e instanceof Error ? e.message : 'không nộp được bài'));
+      const msg = e instanceof Error ? e.message : 'Không nộp được bài';
+      setErr('Lỗi: ' + msg);
+      notifyError(e, 'Nộp bài thất bại');
     } finally {
       setBusy(null);
     }
@@ -269,6 +285,7 @@ function ExercisesTab({ refreshKey }: { refreshKey: number }) {
       setSubmissions(subs);
     } catch (e) {
       setErr('Không tải được danh sách bài tập: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Tải bài tập thất bại');
     } finally {
       setLoading(false);
     }
@@ -406,6 +423,7 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
       setGifts(gs);
     } catch (e) {
       setErr('Không tải được phần thưởng: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Tải phần thưởng thất bại');
     } finally {
       setLoading(false);
     }
@@ -422,10 +440,14 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
     setRedeemErr('');
     try {
       await trpc.rewards.redeem.mutate({ giftId: gift.id });
-      setMsg(`Đã đổi quà "${gift.name}". Vui lòng chờ duyệt.`);
+      const successMsg = `Đã đổi quà "${gift.name}". Vui lòng chờ duyệt.`;
+      setMsg(successMsg);
+      notifySuccess(successMsg, 'Đổi quà thành công');
       await load();
     } catch (e) {
-      setRedeemErr(friendlyRedeemError(e instanceof Error ? e.message : ''));
+      const friendly = friendlyRedeemError(e instanceof Error ? e.message : '');
+      setRedeemErr(friendly);
+      notifyError(friendly, 'Đổi quà thất bại');
     } finally {
       setRedeemingId(null);
     }

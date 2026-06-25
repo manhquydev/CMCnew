@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, API_URL } from '@cmc/ui';
-import { Alert, Button, Card, Group, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { trpc, API_URL, notifyError, notifySuccess } from '@cmc/ui';
+import { Button, Card, Group, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
@@ -15,7 +15,6 @@ export function CertificatePanel() {
   const [level, setLevel] = useState('');
   const [title, setTitle] = useState('Hoàn thành cấp độ');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   useEffect(() => {
     trpc.facility.list.query().then((fs) => {
@@ -39,11 +38,10 @@ export function CertificatePanel() {
   async function issue() {
     const student = students.find((s) => s.id === studentId);
     if (!student || !title.trim()) {
-      setMsg({ kind: 'err', text: 'Chọn học sinh và nhập tiêu đề.' });
+      notifyError(new Error('Chọn học sinh và nhập tiêu đề'), 'Cấp chứng chỉ thất bại');
       return;
     }
     setBusy(true);
-    setMsg(null);
     try {
       await trpc.certificate.issue.mutate({
         studentId: student.id,
@@ -51,11 +49,11 @@ export function CertificatePanel() {
         level: level.trim() || undefined,
         title: title.trim(),
       });
-      setMsg({ kind: 'ok', text: `Đã cấp chứng chỉ cho ${student.fullName}.` });
+      notifySuccess(`Đã cấp chứng chỉ cho ${student.fullName}`);
       setLevel('');
       load();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Cấp chứng chỉ thất bại');
     } finally {
       setBusy(false);
     }
@@ -94,12 +92,6 @@ export function CertificatePanel() {
           </Button>
         </Group>
       </Card>
-
-      {msg && (
-        <Alert color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)}>
-          {msg.text}
-        </Alert>
-      )}
 
       <Card withBorder>
         <Title order={6} mb="sm">

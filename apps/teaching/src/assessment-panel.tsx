@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc } from '@cmc/ui';
+import { trpc, notifyError, notifySuccess } from '@cmc/ui';
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -37,13 +36,11 @@ function StudentAssessment({ student }: { student: StudentT }) {
   const [period, setPeriod] = useState<Period>('MONTHLY');
   const [periodKey, setPeriodKey] = useState('');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [result, setResult] = useState<FinalResult | null>(null);
 
   // Pillars are driven by the program's configured rubric template, not hardcoded.
   useEffect(() => {
     setResult(null);
-    setMsg(null);
     trpc.assessment.template
       .query({ program: student.program })
       .then((t) => {
@@ -64,11 +61,10 @@ function StudentAssessment({ student }: { student: StudentT }) {
 
   async function saveQualitative() {
     if (!periodKey.trim()) {
-      setMsg({ kind: 'err', text: 'Nhập kỳ đánh giá (ví dụ 2026-06 hoặc L1).' });
+      notifyError(new Error('Nhập kỳ đánh giá (ví dụ 2026-06 hoặc L1)'), 'Lưu đánh giá thất bại');
       return;
     }
     setBusy(true);
-    setMsg(null);
     try {
       await trpc.assessment.upsertQualitative.mutate({
         studentId: student.id,
@@ -78,9 +74,9 @@ function StudentAssessment({ student }: { student: StudentT }) {
         narrative: narrative.trim() || undefined,
         program: student.program,
       });
-      setMsg({ kind: 'ok', text: 'Đã lưu đánh giá định tính.' });
+      notifySuccess('Đã lưu đánh giá định tính');
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Lưu đánh giá thất bại');
     } finally {
       setBusy(false);
     }
@@ -88,11 +84,10 @@ function StudentAssessment({ student }: { student: StudentT }) {
 
   async function computeFinal() {
     if (!periodKey.trim()) {
-      setMsg({ kind: 'err', text: 'Nhập kỳ đánh giá trước khi tổng kết.' });
+      notifyError(new Error('Nhập kỳ đánh giá trước khi tổng kết'), 'Tổng kết thất bại');
       return;
     }
     setBusy(true);
-    setMsg(null);
     try {
       const r = await trpc.assessment.computeFinalGrade.mutate({
         studentId: student.id,
@@ -101,7 +96,7 @@ function StudentAssessment({ student }: { student: StudentT }) {
       });
       setResult(r);
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Tổng kết điểm thất bại');
     } finally {
       setBusy(false);
     }
@@ -180,12 +175,6 @@ function StudentAssessment({ student }: { student: StudentT }) {
         </Group>
       </Card>
 
-      {msg && (
-        <Alert color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)}>
-          {msg.text}
-        </Alert>
-      )}
-
       <LevelProposeCard studentId={student.id} program={student.program} />
 
       {result && (
@@ -217,22 +206,20 @@ function LevelProposeCard({ studentId, program }: { studentId: string; program: 
   const [toLevel, setToLevel] = useState('');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   async function propose() {
     if (!toLevel.trim()) {
-      setMsg({ kind: 'err', text: 'Nhập cấp độ đề xuất.' });
+      notifyError(new Error('Nhập cấp độ đề xuất'), 'Gửi đề xuất thất bại');
       return;
     }
     setBusy(true);
-    setMsg(null);
     try {
       await trpc.levelProgress.propose.mutate({ studentId, toLevel: toLevel.trim(), reason: reason.trim() || undefined });
-      setMsg({ kind: 'ok', text: 'Đã gửi đề xuất, chờ head_teacher duyệt.' });
+      notifySuccess('Đã gửi đề xuất, chờ head_teacher duyệt');
       setToLevel('');
       setReason('');
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Gửi đề xuất thất bại');
     } finally {
       setBusy(false);
     }
@@ -261,11 +248,6 @@ function LevelProposeCard({ studentId, program }: { studentId: string; program: 
           Gửi đề xuất
         </Button>
       </Group>
-      {msg && (
-        <Text size="sm" mt="xs" c={msg.kind === 'ok' ? 'green' : 'red'}>
-          {msg.text}
-        </Text>
-      )}
     </Card>
   );
 }
@@ -275,7 +257,10 @@ export function AssessmentPanel() {
   const [studentId, setStudentId] = useState<string | null>(null);
 
   useEffect(() => {
-    trpc.student.list.query().then(setStudents).catch(() => setStudents([]));
+    trpc.student.list.query().then(setStudents).catch((e) => {
+      notifyError(e, 'Không tải được danh sách học sinh');
+      setStudents([]);
+    });
   }, []);
 
   const selected = students.find((s) => s.id === studentId) ?? null;

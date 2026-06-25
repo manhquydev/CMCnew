@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc } from '@cmc/ui';
+import { trpc, notifyError, notifySuccess } from '@cmc/ui';
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -50,26 +49,31 @@ export function PayrollPanel() {
   const [kpiScore, setKpiScore] = useState<number | string>(90);
   const [variablePay, setVariablePay] = useState<number | string>(0);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   useEffect(() => {
-    trpc.facility.list.query().then((fs) => {
-      setFacilities(fs);
-      setFacilityId((cur) => cur ?? fs[0]?.id ?? null);
-    });
+    trpc.facility.list
+      .query()
+      .then((fs) => {
+        setFacilities(fs);
+        setFacilityId((cur) => cur ?? fs[0]?.id ?? null);
+      })
+      .catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
   }, []);
 
   const userName = useCallback((id: string) => roster.find((u) => u.id === id)?.displayName ?? id.slice(0, 8), [roster]);
 
   const loadSummary = useCallback(() => {
     if (!facilityId || !/^\d{4}-\d{2}$/.test(period)) return setSummary(null);
-    trpc.payroll.payslipPeriodSummary.query({ facilityId, periodKey: period }).then(setSummary).catch(() => setSummary(null));
+    trpc.payroll.payslipPeriodSummary
+      .query({ facilityId, periodKey: period })
+      .then(setSummary)
+      .catch((e) => { setSummary(null); notifyError(e, 'Không tải được tổng hợp kỳ lương'); });
   }, [facilityId, period]);
 
   const load = useCallback(() => {
     if (!facilityId) return;
-    trpc.payroll.roster.query({ facilityId }).then(setRoster).catch(() => setRoster([]));
-    trpc.payroll.payslipList.query({ facilityId }).then(setSlips).catch(() => setSlips([]));
+    trpc.payroll.roster.query({ facilityId }).then(setRoster).catch((e) => notifyError(e, 'Không tải được danh sách nhân sự'));
+    trpc.payroll.payslipList.query({ facilityId }).then(setSlips).catch((e) => notifyError(e, 'Không tải được phiếu lương'));
     loadSummary();
   }, [facilityId, loadSummary]);
   useEffect(load, [load]);
@@ -77,44 +81,66 @@ export function PayrollPanel() {
   const num = (v: number | string) => (typeof v === 'number' ? v : Number(v) || 0);
 
   async function saveRate() {
-    if (!facilityId || !userId) return setMsg({ kind: 'err', text: 'Chọn cơ sở và nhân sự.' });
-    setBusy(true); setMsg(null);
+    if (!facilityId || !userId) {
+      notifyError('Vui lòng chọn cơ sở và nhân sự.', 'Thiếu thông tin');
+      return;
+    }
+    setBusy(true);
     try {
       await trpc.payroll.rateCreate.mutate({
         userId, facilityId, baseSalary: num(base), mealAllowance: num(meal),
         otherAllowance: num(other), kpiMax: num(kpiMax), monthlyQuota: num(quota), effectiveFrom: effFrom,
       });
-      setMsg({ kind: 'ok', text: 'Đã lưu mức lương.' });
-    } catch (e) { setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') }); }
-    finally { setBusy(false); }
+      notifySuccess('Đã lưu mức lương.');
+    } catch (e) {
+      notifyError(e, 'Lưu mức lương thất bại');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function previewCommission() {
-    if (!facilityId || !userId) return setMsg({ kind: 'err', text: 'Chọn cơ sở và nhân sự.' });
-    setMsg(null); setCommission(null);
+    if (!facilityId || !userId) {
+      notifyError('Vui lòng chọn cơ sở và nhân sự.', 'Thiếu thông tin');
+      return;
+    }
+    setCommission(null);
     try {
       const c = await trpc.payroll.commissionForSale.query({ userId, facilityId, periodKey: period });
       setCommission(c);
-    } catch (e) { setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') }); }
+    } catch (e) {
+      notifyError(e, 'Tính hoa hồng thất bại');
+    }
   }
 
   async function compute() {
-    if (!facilityId || !userId) return setMsg({ kind: 'err', text: 'Chọn cơ sở và nhân sự.' });
-    setBusy(true); setMsg(null);
+    if (!facilityId || !userId) {
+      notifyError('Vui lòng chọn cơ sở và nhân sự.', 'Thiếu thông tin');
+      return;
+    }
+    setBusy(true);
     try {
       const r = await trpc.payroll.payslipCompute.mutate({
         userId, facilityId, periodKey: period, standardDays: num(stdDays),
         workdays: num(workdays), kpiScore: num(kpiScore), variablePay: num(variablePay),
       });
-      setMsg({ kind: 'ok', text: `Kỳ ${period}: gộp ${vnd(r.grossIncome)} · KPI ${r.kpiGrade} · thuế ${vnd(r.pitAmount)} · thực lĩnh ${vnd(r.netIncome)}.` });
+      notifySuccess(`Kỳ ${period}: gộp ${vnd(r.grossIncome)} · KPI ${r.kpiGrade} · thuế ${vnd(r.pitAmount)} · thực lĩnh ${vnd(r.netIncome)}.`, 'Tính lương thành công');
       load();
-    } catch (e) { setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') }); }
-    finally { setBusy(false); }
+    } catch (e) {
+      notifyError(e, 'Tính lương thất bại');
+    } finally {
+      setBusy(false);
+    }
   }
 
-  async function act(fn: () => Promise<unknown>) {
-    setMsg(null);
-    try { await fn(); load(); } catch (e) { setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') }); }
+  async function act(errorLabel: string, fn: () => Promise<unknown>, successMsg: string) {
+    try {
+      await fn();
+      if (successMsg) notifySuccess(successMsg);
+      load();
+    } catch (e) {
+      notifyError(e, errorLabel);
+    }
   }
 
   return (
@@ -125,8 +151,6 @@ export function PayrollPanel() {
         <Select label="Nhân sự" searchable placeholder={roster.length ? 'Chọn nhân sự' : 'Chưa có'}
           data={roster.map((u) => ({ value: u.id, label: `${u.displayName} (${u.primaryRole})` }))} value={userId} onChange={setUserId} />
       </Group>
-
-      {msg && <Alert color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)}>{msg.text}</Alert>}
 
       <Card withBorder>
         <Title order={6} mb="sm">Mức lương (hiệu lực từ)</Title>
@@ -186,13 +210,16 @@ export function PayrollPanel() {
           <Group justify="space-between" mb="sm">
             <Title order={6}>Bảng lương kỳ {summary.periodKey}</Title>
             <Button size="compact-sm" color="teal" disabled={summary.finalizedCount === 0} loading={busy}
-              onClick={() => act(async () => {
+              onClick={async () => {
                 setBusy(true);
                 try {
                   const r = await trpc.payroll.payslipBulkMarkPaid.mutate({ facilityId: facilityId!, periodKey: period });
-                  setMsg({ kind: 'ok', text: `Đã trả ${r.paidCount} phiếu kỳ ${period}.` });
+                  notifySuccess(`Đã trả ${r.paidCount} phiếu kỳ ${period}.`);
+                  load();
+                } catch (e) {
+                  notifyError(e, 'Trả lương hàng loạt thất bại');
                 } finally { setBusy(false); }
-              })}>
+              }}>
               Trả hàng loạt ({summary.finalizedCount})
             </Button>
           </Group>
@@ -229,9 +256,15 @@ export function PayrollPanel() {
                     <Table.Td><Badge color={st.color}>{st.label}</Badge></Table.Td>
                     <Table.Td>
                       <Group gap="xs" justify="flex-end">
-                        {s.status === 'draft' && <Button size="compact-xs" onClick={() => act(() => trpc.payroll.payslipFinalize.mutate({ id: s.id }))}>Chốt</Button>}
-                        {s.status === 'finalized' && <Button size="compact-xs" color="teal" onClick={() => act(() => trpc.payroll.payslipMarkPaid.mutate({ id: s.id }))}>Đã trả</Button>}
-                        {s.status === 'finalized' && <Button size="compact-xs" variant="light" onClick={() => act(() => trpc.payroll.payslipReopen.mutate({ id: s.id }))}>Mở lại</Button>}
+                        {s.status === 'draft' && (
+                          <Button size="compact-xs" onClick={() => act('Chốt phiếu lương thất bại', () => trpc.payroll.payslipFinalize.mutate({ id: s.id }), 'Đã chốt phiếu lương.')}>Chốt</Button>
+                        )}
+                        {s.status === 'finalized' && (
+                          <Button size="compact-xs" color="teal" onClick={() => act('Đánh dấu đã trả thất bại', () => trpc.payroll.payslipMarkPaid.mutate({ id: s.id }), 'Đã đánh dấu trả lương.')}>Đã trả</Button>
+                        )}
+                        {s.status === 'finalized' && (
+                          <Button size="compact-xs" variant="light" onClick={() => act('Mở lại phiếu lương thất bại', () => trpc.payroll.payslipReopen.mutate({ id: s.id }), 'Đã mở lại phiếu lương.')}>Mở lại</Button>
+                        )}
                       </Group>
                     </Table.Td>
                   </Table.Tr>

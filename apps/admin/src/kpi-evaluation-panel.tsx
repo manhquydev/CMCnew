@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, useSession } from '@cmc/ui';
+import { trpc, useSession, notifyError, notifySuccess } from '@cmc/ui';
 import {
-  Alert,
   Badge,
   Button,
   Card,
-  Grid,
   Group,
   NumberInput,
   Select,
@@ -87,7 +85,7 @@ function previewTotal(criteria: CriterionConfig[], scores: ScoreEntry[]): string
   return (weighted / totalWeight).toFixed(1);
 }
 
-// ─── Detail modal (inline card) ──────────────────────────────────────────────
+// ─── Detail card ─────────────────────────────────────────────────────────────
 
 function KpiDetailCard({
   row,
@@ -105,20 +103,21 @@ function KpiDetailCard({
   const [detail, setDetail] = useState<KpiEvalGetResult | null>(null);
   const [scores, setScores] = useState<ScoreEntry[]>([]);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   const load = useCallback(() => {
-    payrollApi.kpiEvalGet.query({ userId: row.userId, periodKey: row.periodKey }).then((d) => {
-      setDetail(d);
-      // Initialise editable scores from current criterionScores
-      const saved = (d.row.criterionScores as ScoreEntry[] | null) ?? [];
-      setScores(
-        d.criteriaConfig.map((c) => ({
-          key: c.key,
-          score: saved.find((s) => s.key === c.key)?.score ?? 0,
-        })),
-      );
-    }).catch(() => setMsg({ kind: 'err', text: 'Không thể tải chi tiết phiếu KPI.' }));
+    payrollApi.kpiEvalGet
+      .query({ userId: row.userId, periodKey: row.periodKey })
+      .then((d) => {
+        setDetail(d);
+        const saved = (d.row.criterionScores as ScoreEntry[] | null) ?? [];
+        setScores(
+          d.criteriaConfig.map((c) => ({
+            key: c.key,
+            score: saved.find((s) => s.key === c.key)?.score ?? 0,
+          })),
+        );
+      })
+      .catch((e) => notifyError(e, 'Không thể tải chi tiết phiếu KPI'));
   }, [row.userId, row.periodKey]);
 
   useEffect(() => { load(); }, [load]);
@@ -128,47 +127,47 @@ function KpiDetailCard({
   }
 
   async function doPrefill() {
-    setBusy(true); setMsg(null);
+    setBusy(true);
     try {
       await payrollApi.kpiAutoPrefill.mutate({ userId: row.userId, facilityId, periodKey: row.periodKey });
-      setMsg({ kind: 'ok', text: 'Tự điền thành công — đã cập nhật tiêu chí từ dữ liệu thực.' });
+      notifySuccess('Tự điền thành công — đã cập nhật tiêu chí từ dữ liệu thực.');
       load();
       onRefresh();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : String(e)) });
+      notifyError(e, 'Tự điền KPI thất bại');
     } finally { setBusy(false); }
   }
 
   async function doSubmit() {
-    setBusy(true); setMsg(null);
+    setBusy(true);
     try {
       await payrollApi.kpiEvalSubmit.mutate({ periodKey: row.periodKey, scores });
-      setMsg({ kind: 'ok', text: 'Đã nộp phiếu KPI.' });
+      notifySuccess('Đã nộp phiếu KPI.');
       onRefresh();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : String(e)) });
+      notifyError(e, 'Nộp phiếu KPI thất bại');
     } finally { setBusy(false); }
   }
 
   async function doConfirm() {
-    setBusy(true); setMsg(null);
+    setBusy(true);
     try {
       await payrollApi.kpiEvalConfirm.mutate({ userId: row.userId, periodKey: row.periodKey, scores });
-      setMsg({ kind: 'ok', text: 'Đã xác nhận phiếu KPI.' });
+      notifySuccess('Đã xác nhận phiếu KPI.');
       onRefresh();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : String(e)) });
+      notifyError(e, 'Xác nhận phiếu KPI thất bại');
     } finally { setBusy(false); }
   }
 
   async function doApprove() {
-    setBusy(true); setMsg(null);
+    setBusy(true);
     try {
       await payrollApi.kpiEvalApprove.mutate({ userId: row.userId, periodKey: row.periodKey });
-      setMsg({ kind: 'ok', text: 'Đã phê duyệt phiếu KPI. Điểm chính thức đã được ghi.' });
+      notifySuccess('Đã phê duyệt phiếu KPI. Điểm chính thức đã được ghi.');
       onRefresh();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : String(e)) });
+      notifyError(e, 'Phê duyệt phiếu KPI thất bại');
     } finally { setBusy(false); }
   }
 
@@ -185,12 +184,6 @@ function KpiDetailCard({
         </Group>
         <Button size="xs" variant="subtle" onClick={onClose}>Đóng</Button>
       </Group>
-
-      {msg && (
-        <Alert color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)} mb="sm">
-          {msg.text}
-        </Alert>
-      )}
 
       {criteria.length > 0 && (
         <>
@@ -321,18 +314,23 @@ export function KpiEvaluationPanel() {
   const [createUserId, setCreateUserId] = useState<string | null>(null);
   const [createBlock, setCreateBlock] = useState<string>('training');
   const [createBusy, setCreateBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   const fid = facilityId ? Number(facilityId) : null;
 
   const loadRoster = useCallback(() => {
     if (!fid) return;
-    payrollApi.roster.query({ facilityId: fid }).then(setRoster).catch(() => setRoster([]));
+    payrollApi.roster
+      .query({ facilityId: fid })
+      .then(setRoster)
+      .catch((e) => notifyError(e, 'Không tải được danh sách nhân sự'));
   }, [fid]);
 
   const loadKpiList = useCallback(() => {
     if (!fid || !periodKey) return;
-    payrollApi.kpiList.query({ facilityId: fid, periodKey }).then(setKpiRows).catch(() => setKpiRows([]));
+    payrollApi.kpiList
+      .query({ facilityId: fid, periodKey })
+      .then(setKpiRows)
+      .catch((e) => notifyError(e, 'Không tải được danh sách phiếu KPI'));
   }, [fid, periodKey]);
 
   useEffect(() => { loadRoster(); }, [loadRoster]);
@@ -349,7 +347,7 @@ export function KpiEvaluationPanel() {
 
   async function createEval() {
     if (!fid || !createUserId) return;
-    setCreateBusy(true); setMsg(null);
+    setCreateBusy(true);
     try {
       await payrollApi.kpiEvalStart.mutate({
         userId: createUserId,
@@ -357,20 +355,22 @@ export function KpiEvaluationPanel() {
         periodKey,
         block: createBlock as 'training' | 'sales',
       });
-      setMsg({ kind: 'ok', text: `Đã tạo phiếu KPI cho ${rosterMap.get(createUserId) ?? createUserId}.` });
+      notifySuccess(`Đã tạo phiếu KPI cho ${rosterMap.get(createUserId) ?? createUserId}.`);
       setCreateUserId(null);
       loadKpiList();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : String(e)) });
+      notifyError(e, 'Tạo phiếu KPI thất bại');
     } finally { setCreateBusy(false); }
   }
 
   return (
     <Stack>
-      <Alert color="blue" variant="light">
-        Vòng đời phiếu KPI: <b>Nháp</b> → Nhân sự tự nộp (<b>Đã nộp</b>) → Quản lý xác nhận (<b>Đã xác nhận</b>) → BGĐ phê duyệt (<b>Đã duyệt</b>).
-        Khi phê duyệt, điểm khóa lại và đổ vào phiếu lương kỳ đó.
-      </Alert>
+      <Card withBorder p="sm" style={{ background: 'var(--mantine-color-blue-0)' }}>
+        <Text size="sm">
+          Vòng đời phiếu KPI: <b>Nháp</b> → Nhân sự tự nộp (<b>Đã nộp</b>) → Quản lý xác nhận (<b>Đã xác nhận</b>) → BGĐ phê duyệt (<b>Đã duyệt</b>).
+          Khi phê duyệt, điểm khóa lại và đổ vào phiếu lương kỳ đó.
+        </Text>
+      </Card>
 
       <Card withBorder>
         <Title order={6} mb="sm">Bộ lọc</Title>
@@ -385,7 +385,7 @@ export function KpiEvaluationPanel() {
             placeholder="YYYY-MM"
             w={150}
           />
-          <Button variant="default" onClick={() => { loadRoster(); loadKpiList(); setMsg(null); }}>
+          <Button variant="default" onClick={() => { loadRoster(); loadKpiList(); }}>
             Tải lại
           </Button>
         </Group>
@@ -417,11 +417,6 @@ export function KpiEvaluationPanel() {
             Tạo phiếu
           </Button>
         </Group>
-        {msg && (
-          <Alert mt="sm" color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)}>
-            {msg.text}
-          </Alert>
-        )}
       </Card>
 
       <Title order={5}>Phiếu KPI kỳ {periodKey}</Title>

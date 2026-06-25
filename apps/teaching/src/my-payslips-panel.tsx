@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { trpc } from '@cmc/ui';
+import { trpc, notifyError } from '@cmc/ui';
 import { Badge, Card, Stack, Table, Text, Title } from '@mantine/core';
 
 type MyPayslip = Awaited<ReturnType<typeof trpc.payroll.myPayslips.query>>[number];
@@ -15,7 +15,10 @@ export function MyPayslipsPanel() {
   const [slips, setSlips] = useState<MyPayslip[]>([]);
 
   useEffect(() => {
-    trpc.payroll.myPayslips.query().then(setSlips).catch(() => setSlips([]));
+    trpc.payroll.myPayslips
+      .query()
+      .then(setSlips)
+      .catch((e) => notifyError(e, 'Không tải được phiếu lương của bạn'));
   }, []);
 
   return (

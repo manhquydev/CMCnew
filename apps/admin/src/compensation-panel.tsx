@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc } from '@cmc/ui';
-import { Alert, Badge, Button, Card, Group, JsonInput, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { trpc, notifyError, notifySuccess } from '@cmc/ui';
+import { Badge, Button, Card, Group, JsonInput, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 
 // Minimal shape the list view needs — avoids inferring the deep params JSON type (TS2589).
 type Policy = { id: string; effectiveFrom: string | Date; note: string | null; createdAt: string | Date; params: unknown };
@@ -21,10 +21,12 @@ export function CompensationConfigPanel() {
   const [effectiveFrom, setEffectiveFrom] = useState(todayISO());
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   const loadList = useCallback(() => {
-    compensationApi.list.query().then(setPolicies).catch(() => setPolicies([]));
+    compensationApi.list
+      .query()
+      .then(setPolicies)
+      .catch((e) => notifyError(e, 'Không tải được danh sách chính sách'));
   }, []);
   useEffect(loadList, [loadList]);
 
@@ -42,36 +44,36 @@ export function CompensationConfigPanel() {
   }, []);
 
   async function loadDefaults() {
-    setMsg(null);
     try {
       const d = await compensationApi.defaults.query();
       setParamsText(JSON.stringify(d, null, 2));
-      setMsg({ kind: 'ok', text: 'Đã nạp tham số mặc định (PA2 + Đào tạo). Sửa rồi tạo phiên bản mới.' });
+      notifySuccess('Đã nạp tham số mặc định (PA2 + Đào tạo). Sửa rồi tạo phiên bản mới.');
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Không tải được tham số mặc định');
     }
   }
 
   async function createVersion() {
-    setMsg(null);
     let params: unknown;
     try {
       params = JSON.parse(paramsText);
     } catch {
-      return setMsg({ kind: 'err', text: 'JSON không hợp lệ — kiểm tra lại.' });
+      notifyError('JSON không hợp lệ — kiểm tra lại.', 'Lỗi định dạng');
+      return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
-      return setMsg({ kind: 'err', text: 'Ngày hiệu lực phải dạng YYYY-MM-DD.' });
+      notifyError('Ngày hiệu lực phải dạng YYYY-MM-DD.', 'Lỗi ngày');
+      return;
     }
     setBusy(true);
     try {
       // Server re-validates params against the Zod schema; an invalid shape throws here.
       await compensationApi.create.mutate({ effectiveFrom, params: params as never, note: note || undefined });
-      setMsg({ kind: 'ok', text: `Đã tạo chính sách hiệu lực từ ${effectiveFrom} (áp dụng kỳ sau, không đổi lương đã chốt).` });
+      notifySuccess(`Đã tạo chính sách hiệu lực từ ${effectiveFrom} (áp dụng kỳ sau, không đổi lương đã chốt).`);
       setNote('');
       loadList();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi (tham số không hợp lệ?): ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Tạo chính sách thất bại (tham số không hợp lệ?)');
     } finally {
       setBusy(false);
     }
@@ -79,17 +81,13 @@ export function CompensationConfigPanel() {
 
   return (
     <Stack>
-      <Alert color="blue" variant="light">
-        Cơ cấu thu nhập (bậc %, hoa hồng, KPI, vượt giờ, thuế). Mỗi lần lưu tạo <b>một phiên bản có ngày
-        hiệu lực</b>; phiếu lương khi tính dùng bản hiệu lực tại kỳ đó. Sửa ở đây <b>chỉ áp dụng về sau</b> —
-        lương các kỳ đã chốt không đổi. Chỉ super_admin truy cập.
-      </Alert>
-
-      {msg && (
-        <Alert color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)}>
-          {msg.text}
-        </Alert>
-      )}
+      <Card withBorder p="sm" style={{ background: 'var(--mantine-color-blue-0)' }}>
+        <Text size="sm">
+          Cơ cấu thu nhập (bậc %, hoa hồng, KPI, vượt giờ, thuế). Mỗi lần lưu tạo <b>một phiên bản có ngày
+          hiệu lực</b>; phiếu lương khi tính dùng bản hiệu lực tại kỳ đó. Sửa ở đây <b>chỉ áp dụng về sau</b> —
+          lương các kỳ đã chốt không đổi. Chỉ super_admin truy cập.
+        </Text>
+      </Card>
 
       <Card withBorder>
         <Title order={6} mb="sm">Tạo phiên bản chính sách mới</Title>

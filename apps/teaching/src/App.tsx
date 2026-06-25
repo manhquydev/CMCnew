@@ -1,7 +1,8 @@
 import '@mantine/dates/styles.css';
 import { useCallback, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
-import { LoginGate, useSession, trpc, Chatter } from '@cmc/ui';
+import { LoginGate, useSession, trpc, Chatter, notifyError, notifySuccess, required } from '@cmc/ui';
+import { useForm } from '@mantine/form';
 import {
   Alert,
   Badge,
@@ -63,36 +64,37 @@ function CreateClassModal({
   onCreated: () => void;
 }) {
   const [opened, { open, close }] = useDisclosure(false);
-  const [courseId, setCourseId] = useState<string | null>(null);
-  const [name, setName] = useState('');
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
-  const [capacity, setCapacity] = useState<number | string>('');
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
 
-  async function create() {
-    if (!courseId || !name) {
-      setErr('Chọn khóa học và nhập tên lớp');
-      return;
-    }
+  const form = useForm({
+    initialValues: { courseId: '' as string, name: '', capacity: '' as number | string },
+    validate: {
+      courseId: required('Chọn khóa học'),
+      name: required('Nhập tên lớp'),
+    },
+  });
+
+  async function create(values: typeof form.values) {
     setBusy(true);
-    setErr('');
     try {
       await trpc.classBatch.create.mutate({
         facilityId,
-        courseId,
-        name,
+        courseId: values.courseId,
+        name: values.name,
         startDate: toApiDate(startDate),
         endDate: toApiDate(endDate),
-        capacity: typeof capacity === 'number' ? capacity : undefined,
+        capacity: typeof values.capacity === 'number' ? values.capacity : undefined,
       });
+      notifySuccess(`Đã tạo lớp "${values.name}"`);
       close();
-      setName('');
-      setCourseId(null);
+      form.reset();
+      setStartDate(null);
+      setEndDate(null);
       onCreated();
     } catch (e) {
-      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Tạo lớp học thất bại');
     } finally {
       setBusy(false);
     }
@@ -104,29 +106,26 @@ function CreateClassModal({
         + Tạo lớp
       </Button>
       <Modal opened={opened} onClose={close} title="Tạo lớp học">
-        <Stack>
-          <Select
-            label="Khóa học"
-            placeholder={courses.length ? 'Chọn khóa' : 'Chưa có khóa học (tạo ở Admin)'}
-            data={courses.map((c) => ({ value: c.id, label: `${c.code} — ${c.name} (${c.program})` }))}
-            value={courseId}
-            onChange={setCourseId}
-          />
-          <TextInput label="Tên lớp" value={name} onChange={(e) => setName(e.currentTarget.value)} />
-          <Group grow>
-            <DateInput label="Khai giảng" value={startDate} onChange={setStartDate} valueFormat="DD/MM/YYYY" clearable />
-            <DateInput label="Kết thúc" value={endDate} onChange={setEndDate} valueFormat="DD/MM/YYYY" clearable />
-          </Group>
-          <NumberInput label="Sĩ số tối đa (tùy chọn)" value={capacity} onChange={setCapacity} min={1} />
-          {err && (
-            <Text c="red" size="sm">
-              {err}
-            </Text>
-          )}
-          <Button onClick={create} loading={busy}>
-            Tạo
-          </Button>
-        </Stack>
+        <form onSubmit={form.onSubmit(create)}>
+          <Stack>
+            <Select
+              label="Khóa học"
+              withAsterisk
+              placeholder={courses.length ? 'Chọn khóa' : 'Chưa có khóa học (tạo ở Admin)'}
+              data={courses.map((c) => ({ value: c.id, label: `${c.code} — ${c.name} (${c.program})` }))}
+              {...form.getInputProps('courseId')}
+            />
+            <TextInput label="Tên lớp" withAsterisk {...form.getInputProps('name')} />
+            <Group grow>
+              <DateInput label="Khai giảng" value={startDate} onChange={setStartDate} valueFormat="DD/MM/YYYY" clearable />
+              <DateInput label="Kết thúc" value={endDate} onChange={setEndDate} valueFormat="DD/MM/YYYY" clearable />
+            </Group>
+            <NumberInput label="Sĩ số tối đa (tùy chọn)" min={1} {...form.getInputProps('capacity')} />
+            <Button type="submit" loading={busy}>
+              Tạo
+            </Button>
+          </Stack>
+        </form>
       </Modal>
     </>
   );
@@ -150,7 +149,7 @@ function ScheduleTab({
   const [roomId, setRoomId] = useState<string | null>(null);
   const [teacherId, setTeacherId] = useState<string | null>(null);
   const [range, setRange] = useState<{ from: Date | null; to: Date | null }>({ from: null, to: null });
-  const [msg, setMsg] = useState('');
+  const [generateMsg, setGenerateMsg] = useState('');
   const roomLabel = useCallback(
     (id: string | null) => (id ? (rooms.find((r) => r.id === id)?.code ?? '—') : '—'),
     [rooms],
@@ -160,33 +159,38 @@ function ScheduleTab({
     [teachers],
   );
   const load = useCallback(() => {
-    trpc.schedule.listSlots.query({ classBatchId: batch.id }).then(setSlots).catch(() => {});
+    trpc.schedule.listSlots.query({ classBatchId: batch.id }).then(setSlots).catch((e) => notifyError(e, 'Không tải được lịch học'));
   }, [batch.id]);
   useEffect(load, [load]);
 
   async function addSlot() {
-    await trpc.schedule.addSlot.mutate({
-      facilityId,
-      classBatchId: batch.id,
-      dayOfWeek: Number(day),
-      startTime: start,
-      endTime: end,
-      roomId: roomId ?? undefined,
-      teacherId: teacherId ?? undefined,
-    });
-    load();
+    try {
+      await trpc.schedule.addSlot.mutate({
+        facilityId,
+        classBatchId: batch.id,
+        dayOfWeek: Number(day),
+        startTime: start,
+        endTime: end,
+        roomId: roomId ?? undefined,
+        teacherId: teacherId ?? undefined,
+      });
+      notifySuccess('Đã thêm khung lịch');
+      load();
+    } catch (e) {
+      notifyError(e, 'Thêm khung lịch thất bại');
+    }
   }
   async function generate() {
-    setMsg('');
+    setGenerateMsg('');
     try {
       const r = await trpc.schedule.generateSessions.mutate({
         classBatchId: batch.id,
         startDate: toApiDate(range.from)!,
         endDate: toApiDate(range.to)!,
       });
-      setMsg(`Đã tạo ${r.created} buổi (bỏ qua ${r.skipped}).`);
+      setGenerateMsg(`Đã tạo ${r.created} buổi (bỏ qua ${r.skipped}).`);
     } catch (e) {
-      setMsg('Lỗi: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Sinh buổi học thất bại');
     }
   }
 
@@ -274,9 +278,9 @@ function ScheduleTab({
             Sinh lịch
           </Button>
         </Group>
-        {msg && (
-          <Text size="sm" mt="xs" c={msg.startsWith('Lỗi') ? 'red' : 'green'}>
-            {msg}
+        {generateMsg && (
+          <Text size="sm" mt="xs" c="green">
+            {generateMsg}
           </Text>
         )}
       </Card>
@@ -287,7 +291,7 @@ function ScheduleTab({
 function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Room[]; teachers: Teacher[] }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   useEffect(() => {
-    trpc.schedule.listSessions.query({ classBatchId: batchId }).then(setSessions).catch(() => {});
+    trpc.schedule.listSessions.query({ classBatchId: batchId }).then(setSessions).catch((e) => notifyError(e, 'Không tải được buổi học'));
   }, [batchId]);
   const roomLabel = (id: string | null) => (id ? (rooms.find((r) => r.id === id)?.code ?? '—') : '—');
   const teacherLabel = (id: string | null) =>
@@ -326,31 +330,35 @@ function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Roo
 
 function CreateStudentModal({ facilityId, onCreated }: { facilityId: number; onCreated: () => void }) {
   const [opened, { open, close }] = useDisclosure(false);
-  const [studentCode, setStudentCode] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [program, setProgram] = useState<string | null>('UCREA');
   const [dob, setDob] = useState<Date | null>(null);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
 
-  async function create() {
+  const form = useForm({
+    initialValues: { studentCode: '', fullName: '', program: 'UCREA' as string },
+    validate: {
+      studentCode: required('Nhập mã học sinh'),
+      fullName: required('Nhập họ tên'),
+      program: required('Chọn chương trình'),
+    },
+  });
+
+  async function create(values: typeof form.values) {
     setBusy(true);
-    setErr('');
     try {
       await trpc.student.create.mutate({
         facilityId,
-        studentCode,
-        fullName,
-        program: program as 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE',
+        studentCode: values.studentCode,
+        fullName: values.fullName,
+        program: values.program as 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE',
         dateOfBirth: toApiDate(dob),
       });
+      notifySuccess(`Đã tạo học sinh "${values.fullName}"`);
       close();
-      setStudentCode('');
-      setFullName('');
+      form.reset();
       setDob(null);
       onCreated();
     } catch (e) {
-      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Tạo học sinh thất bại');
     } finally {
       setBusy(false);
     }
@@ -362,24 +370,22 @@ function CreateStudentModal({ facilityId, onCreated }: { facilityId: number; onC
         + Tạo học sinh
       </Button>
       <Modal opened={opened} onClose={close} title="Tạo học sinh">
-        <Stack>
-          <TextInput
-            label="Mã học sinh"
-            value={studentCode}
-            onChange={(e) => setStudentCode(e.currentTarget.value)}
-          />
-          <TextInput label="Họ tên" value={fullName} onChange={(e) => setFullName(e.currentTarget.value)} />
-          <Select label="Chương trình" data={['UCREA', 'BRIGHT_IG', 'BLACK_HOLE']} value={program} onChange={setProgram} />
-          <DateInput label="Ngày sinh" value={dob} onChange={setDob} valueFormat="DD/MM/YYYY" clearable />
-          {err && (
-            <Text c="red" size="sm">
-              {err}
-            </Text>
-          )}
-          <Button onClick={create} loading={busy} disabled={!studentCode || !fullName}>
-            Tạo
-          </Button>
-        </Stack>
+        <form onSubmit={form.onSubmit(create)}>
+          <Stack>
+            <TextInput label="Mã học sinh" withAsterisk {...form.getInputProps('studentCode')} />
+            <TextInput label="Họ tên" withAsterisk {...form.getInputProps('fullName')} />
+            <Select
+              label="Chương trình"
+              withAsterisk
+              data={['UCREA', 'BRIGHT_IG', 'BLACK_HOLE']}
+              {...form.getInputProps('program')}
+            />
+            <DateInput label="Ngày sinh" value={dob} onChange={setDob} valueFormat="DD/MM/YYYY" clearable />
+            <Button type="submit" loading={busy}>
+              Tạo
+            </Button>
+          </Stack>
+        </form>
       </Modal>
     </>
   );
@@ -389,29 +395,38 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [students, setStudents] = useState<StudentT[]>([]);
   const [studentId, setStudentId] = useState<string | null>(null);
-  const [msg, setMsg] = useState('');
+  const [enrollMsg, setEnrollMsg] = useState('');
   const load = useCallback(() => {
-    trpc.enrollment.listByBatch.query({ classBatchId: batch.id }).then(setEnrollments).catch(() => {});
-    trpc.student.list.query().then(setStudents).catch(() => {});
+    trpc.enrollment.listByBatch.query({ classBatchId: batch.id }).then(setEnrollments).catch((e) => notifyError(e, 'Không tải được danh sách ghi danh'));
+    trpc.student.list.query().then(setStudents).catch((e) => notifyError(e, 'Không tải được danh sách học sinh'));
   }, [batch.id]);
   useEffect(load, [load]);
 
   async function enroll() {
     if (!studentId) return;
-    setMsg('');
+    setEnrollMsg('');
     try {
       const r = await trpc.enrollment.enroll.mutate({ facilityId, classBatchId: batch.id, studentId });
-      setMsg(r.overCapacity ? `⚠ Vượt sĩ số (${r.enrolledCount}/${r.capacity}) — vẫn ghi danh.` : 'Đã ghi danh.');
+      if (r.overCapacity) {
+        setEnrollMsg(`⚠ Vượt sĩ số (${r.enrolledCount}/${r.capacity}) — vẫn ghi danh.`);
+      } else {
+        notifySuccess('Đã ghi danh thành công');
+      }
       setStudentId(null);
       load();
     } catch (e) {
-      setMsg('Lỗi: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Ghi danh thất bại');
     }
   }
 
   async function complete(id: string) {
-    await trpc.enrollment.complete.mutate({ id });
-    load();
+    try {
+      await trpc.enrollment.complete.mutate({ id });
+      notifySuccess('Đã hoàn tất ghi danh');
+      load();
+    } catch (e) {
+      notifyError(e, 'Hoàn tất ghi danh thất bại');
+    }
   }
 
   // Enroll only students not already in this batch.
@@ -435,9 +450,9 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
         </Button>
         <CreateStudentModal facilityId={facilityId} onCreated={load} />
       </Group>
-      {msg && (
-        <Text size="sm" c={msg.startsWith('Lỗi') ? 'red' : msg.startsWith('⚠') ? 'orange' : 'green'}>
-          {msg}
+      {enrollMsg && (
+        <Text size="sm" c="orange">
+          {enrollMsg}
         </Text>
       )}
       <Table striped>
@@ -472,13 +487,18 @@ function MeetingsTab({ batch, facilityId }: { batch: Batch; facilityId: number }
   const [meetings, setMeetings] = useState<ParentMeeting[]>([]);
 
   const load = useCallback(() => {
-    trpc.parentMeeting.list.query({ facilityId, classBatchId: batch.id }).then(setMeetings).catch(() => {});
+    trpc.parentMeeting.list.query({ facilityId, classBatchId: batch.id }).then(setMeetings).catch((e) => notifyError(e, 'Không tải được lịch họp phụ huynh'));
   }, [facilityId, batch.id]);
   useEffect(load, [load]);
 
   async function setStatus(id: string, status: 'done' | 'cancelled') {
-    await trpc.parentMeeting.setStatus.mutate({ id, status });
-    load();
+    try {
+      await trpc.parentMeeting.setStatus.mutate({ id, status });
+      notifySuccess(status === 'done' ? 'Đã đánh dấu đã họp' : 'Đã hủy cuộc họp');
+      load();
+    } catch (e) {
+      notifyError(e, 'Cập nhật trạng thái họp thất bại');
+    }
   }
 
   const ST: Record<string, { label: string; color: string }> = {
@@ -528,8 +548,8 @@ function AttendanceTab({ batch, facilityId }: { batch: Batch; facilityId: number
   const [marks, setMarks] = useState<Record<string, { status: string; excused: boolean }>>({});
 
   useEffect(() => {
-    trpc.schedule.listSessions.query({ classBatchId: batch.id }).then(setSessions).catch(() => {});
-    trpc.enrollment.listByBatch.query({ classBatchId: batch.id }).then(setEnrollments).catch(() => {});
+    trpc.schedule.listSessions.query({ classBatchId: batch.id }).then(setSessions).catch((e) => notifyError(e, 'Không tải được danh sách buổi học'));
+    trpc.enrollment.listByBatch.query({ classBatchId: batch.id }).then(setEnrollments).catch((e) => notifyError(e, 'Không tải được danh sách học sinh'));
   }, [batch.id]);
 
   useEffect(() => {
@@ -538,19 +558,23 @@ function AttendanceTab({ batch, facilityId }: { batch: Batch; facilityId: number
       const m: Record<string, { status: string; excused: boolean }> = {};
       for (const r of rows) m[r.enrollmentId] = { status: r.status, excused: r.excused };
       setMarks(m);
-    });
+    }).catch((e) => notifyError(e, 'Không tải được điểm danh'));
   }, [sessionId]);
 
   async function mark(enrollmentId: string, status: string, excused: boolean) {
     if (!sessionId || !status) return;
-    await trpc.attendance.mark.mutate({
-      facilityId,
-      classSessionId: sessionId,
-      enrollmentId,
-      status: status as 'present' | 'absent' | 'late',
-      excused,
-    });
-    setMarks((m) => ({ ...m, [enrollmentId]: { status, excused } }));
+    try {
+      await trpc.attendance.mark.mutate({
+        facilityId,
+        classSessionId: sessionId,
+        enrollmentId,
+        status: status as 'present' | 'absent' | 'late',
+        excused,
+      });
+      setMarks((m) => ({ ...m, [enrollmentId]: { status, excused } }));
+    } catch (e) {
+      notifyError(e, 'Điểm danh thất bại');
+    }
   }
 
   return (
@@ -623,18 +647,33 @@ function ClassDetail({
   const [reason, setReason] = useState('');
 
   async function doCancel() {
-    await trpc.classBatch.cancel.mutate({ id: batch.id, reason });
-    cancel.close();
-    setReason('');
-    onChanged();
+    try {
+      await trpc.classBatch.cancel.mutate({ id: batch.id, reason });
+      notifySuccess('Đã hủy lớp học');
+      cancel.close();
+      setReason('');
+      onChanged();
+    } catch (e) {
+      notifyError(e, 'Hủy lớp thất bại');
+    }
   }
   async function doReopen() {
-    await trpc.classBatch.reopen.mutate({ id: batch.id, toStatus: 'planned', reason: 'Mở lại từ giao diện' });
-    onChanged();
+    try {
+      await trpc.classBatch.reopen.mutate({ id: batch.id, toStatus: 'planned', reason: 'Mở lại từ giao diện' });
+      notifySuccess('Đã mở lại lớp học');
+      onChanged();
+    } catch (e) {
+      notifyError(e, 'Mở lại lớp thất bại');
+    }
   }
   async function setStatus(status: string) {
-    await trpc.classBatch.setStatus.mutate({ id: batch.id, status: status as 'open' | 'running' | 'closed' });
-    onChanged();
+    try {
+      await trpc.classBatch.setStatus.mutate({ id: batch.id, status: status as 'open' | 'running' | 'closed' });
+      notifySuccess(`Đã đổi trạng thái lớp sang "${status}"`);
+      onChanged();
+    } catch (e) {
+      notifyError(e, 'Đổi trạng thái lớp thất bại');
+    }
   }
 
   return (
@@ -726,28 +765,30 @@ function RoomsManager({
   reload: () => void;
 }) {
   const [opened, { open, close }] = useDisclosure(false);
-  const [code, setCode] = useState('');
-  const [name, setName] = useState('');
-  const [capacity, setCapacity] = useState<number | string>('');
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
 
-  async function create() {
+  const form = useForm({
+    initialValues: { code: '', name: '', capacity: '' as number | string },
+    validate: {
+      code: required('Nhập mã phòng'),
+      name: required('Nhập tên phòng'),
+    },
+  });
+
+  async function create(values: typeof form.values) {
     setBusy(true);
-    setErr('');
     try {
       await trpc.room.create.mutate({
         facilityId,
-        code,
-        name,
-        capacity: typeof capacity === 'number' ? capacity : undefined,
+        code: values.code,
+        name: values.name,
+        capacity: typeof values.capacity === 'number' ? values.capacity : undefined,
       });
-      setCode('');
-      setName('');
-      setCapacity('');
+      notifySuccess(`Đã thêm phòng "${values.name}"`);
+      form.reset();
       reload();
     } catch (e) {
-      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Thêm phòng thất bại');
     } finally {
       setBusy(false);
     }
@@ -760,24 +801,16 @@ function RoomsManager({
       </Button>
       <Modal opened={opened} onClose={close} title="Phòng học (theo cơ sở)">
         <Stack>
-          <Group align="flex-end">
-            <TextInput label="Mã" w={90} value={code} onChange={(e) => setCode(e.currentTarget.value)} />
-            <TextInput
-              label="Tên"
-              style={{ flex: 1 }}
-              value={name}
-              onChange={(e) => setName(e.currentTarget.value)}
-            />
-            <NumberInput label="Sức chứa" w={100} value={capacity} onChange={setCapacity} min={1} />
-            <Button onClick={create} loading={busy} disabled={!code || !name}>
-              Thêm
-            </Button>
-          </Group>
-          {err && (
-            <Text c="red" size="sm">
-              {err}
-            </Text>
-          )}
+          <form onSubmit={form.onSubmit(create)}>
+            <Group align="flex-end">
+              <TextInput label="Mã" w={90} withAsterisk {...form.getInputProps('code')} />
+              <TextInput label="Tên" style={{ flex: 1 }} withAsterisk {...form.getInputProps('name')} />
+              <NumberInput label="Sức chứa" w={100} min={1} {...form.getInputProps('capacity')} />
+              <Button type="submit" loading={busy} disabled={!form.values.code || !form.values.name}>
+                Thêm
+              </Button>
+            </Group>
+          </form>
           <Table striped>
             <Table.Tbody>
               {rooms.map((r) => (
@@ -815,20 +848,20 @@ function Workspace() {
     trpc.facility.list.query().then((fs) => {
       setFacilities(fs);
       setFacilityId((cur) => cur ?? fs[0]?.id ?? null);
-    });
-    trpc.course.list.query().then(setCourses).catch(() => {});
+    }).catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
+    trpc.course.list.query().then(setCourses).catch((e) => notifyError(e, 'Không tải được danh sách khóa học'));
   }, []);
 
   const loadBatches = useCallback(() => {
     trpc.classBatch.list.query().then((bs) => {
       setBatches(bs);
       setSelected((sel) => (sel ? (bs.find((b) => b.id === sel.id) ?? null) : null));
-    });
+    }).catch((e) => notifyError(e, 'Không tải được danh sách lớp học'));
   }, []);
   useEffect(loadBatches, [loadBatches]);
 
   const loadRooms = useCallback(() => {
-    trpc.room.list.query().then(setRooms).catch(() => {});
+    trpc.room.list.query().then(setRooms).catch((e) => notifyError(e, 'Không tải được danh sách phòng'));
   }, []);
   useEffect(loadRooms, [loadRooms]);
 
@@ -891,7 +924,7 @@ function Workspace() {
             </Table>
             {visible.length === 0 && (
               <Text c="dimmed" size="sm">
-                Chưa có lớp. Bấm “Tạo lớp”.
+                Chưa có lớp. Bấm "Tạo lớp".
               </Text>
             )}
           </Card>

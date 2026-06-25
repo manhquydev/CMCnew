@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { trpc } from '@cmc/ui';
+import { trpc, notifyError } from '@cmc/ui';
 import { Card, Group, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 
 type Summary = Awaited<ReturnType<typeof trpc.dashboard.summary.query>>;
@@ -28,13 +28,14 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 export function OverviewPanel() {
   const [s, setS] = useState<Summary | null>(null);
-  const [err, setErr] = useState(false);
 
   useEffect(() => {
-    trpc.dashboard.summary.query().then(setS).catch(() => setErr(true));
+    trpc.dashboard.summary
+      .query()
+      .then(setS)
+      .catch((e) => notifyError(e, 'Không tải được tổng quan'));
   }, []);
 
-  if (err) return <Text c="dimmed">Không tải được tổng quan.</Text>;
   if (!s) return <Text c="dimmed">Đang tải…</Text>;
 
   return (

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc } from '@cmc/ui';
+import { trpc, notifyError, notifySuccess } from '@cmc/ui';
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -38,13 +37,18 @@ export function GuardiansPanel() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   const loadParents = useCallback(() => {
-    trpc.guardian.parentList.query().then(setParents).catch(() => setParents([]));
+    trpc.guardian.parentList
+      .query()
+      .then(setParents)
+      .catch((e) => notifyError(e, 'Không tải được danh sách phụ huynh'));
   }, []);
   useEffect(() => {
-    trpc.student.list.query().then(setStudents).catch(() => setStudents([]));
+    trpc.student.list
+      .query()
+      .then(setStudents)
+      .catch((e) => notifyError(e, 'Không tải được danh sách học sinh'));
     loadParents();
   }, [loadParents]);
 
@@ -53,17 +57,19 @@ export function GuardiansPanel() {
       setGuardians([]);
       return;
     }
-    trpc.guardian.listForStudent.query({ studentId }).then(setGuardians).catch(() => setGuardians([]));
+    trpc.guardian.listForStudent
+      .query({ studentId })
+      .then(setGuardians)
+      .catch((e) => notifyError(e, 'Không tải được phụ huynh của học sinh'));
   }, [studentId]);
   useEffect(loadGuardians, [loadGuardians]);
 
   async function createParent() {
     if (!name.trim() || !password.trim() || (!email.trim() && !phone.trim())) {
-      setMsg({ kind: 'err', text: 'Nhập tên, mật khẩu và email hoặc SĐT.' });
+      notifyError(new Error('Nhập tên, mật khẩu và email hoặc SĐT.'), 'Thông tin chưa đủ');
       return;
     }
     setBusy(true);
-    setMsg(null);
     try {
       const p = await trpc.guardian.parentCreate.mutate({
         displayName: name.trim(),
@@ -71,7 +77,7 @@ export function GuardiansPanel() {
         phone: phone.trim() || undefined,
         password: password.trim(),
       });
-      setMsg({ kind: 'ok', text: `Đã tạo phụ huynh ${p.displayName}.` });
+      notifySuccess(`Đã tạo phụ huynh ${p.displayName}`);
       setName('');
       setEmail('');
       setPhone('');
@@ -79,7 +85,7 @@ export function GuardiansPanel() {
       loadParents();
       setParentId(p.id);
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Tạo phụ huynh thất bại');
     } finally {
       setBusy(false);
     }
@@ -87,7 +93,7 @@ export function GuardiansPanel() {
 
   async function link() {
     if (!studentId || !parentId) {
-      setMsg({ kind: 'err', text: 'Chọn học sinh và phụ huynh.' });
+      notifyError(new Error('Chọn học sinh và phụ huynh.'), 'Liên kết thất bại');
       return;
     }
     try {
@@ -96,19 +102,20 @@ export function GuardiansPanel() {
         studentId,
         relation: relation as 'father' | 'mother' | 'guardian',
       });
-      setMsg({ kind: 'ok', text: 'Đã liên kết.' });
+      notifySuccess('Đã liên kết phụ huynh với học sinh');
       loadGuardians();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Liên kết thất bại');
     }
   }
 
   async function unlink(id: string) {
     try {
       await trpc.guardian.unlink.mutate({ id });
+      notifySuccess('Đã gỡ liên kết');
       loadGuardians();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Gỡ liên kết thất bại');
     }
   }
 
@@ -123,12 +130,6 @@ export function GuardiansPanel() {
         value={studentId}
         onChange={setStudentId}
       />
-
-      {msg && (
-        <Alert color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)}>
-          {msg.text}
-        </Alert>
-      )}
 
       {studentId && (
         <Card withBorder>

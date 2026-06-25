@@ -1,5 +1,16 @@
 import { useEffect, useState } from 'react';
-import { LoginGate, trpc, useSession } from '@cmc/ui';
+import {
+  LoginGate,
+  trpc,
+  useSession,
+  notifyError,
+  notifySuccess,
+  required,
+  email,
+  minLength,
+  combine,
+} from '@cmc/ui';
+import { useForm } from '@mantine/form';
 import {
   Badge,
   Button,
@@ -45,28 +56,35 @@ const ROLES = [
 function Courses() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [opened, { open, close }] = useDisclosure(false);
-  const [code, setCode] = useState('');
-  const [name, setName] = useState('');
-  const [program, setProgram] = useState<string | null>('UCREA');
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
+  const form = useForm({
+    initialValues: { code: '', name: '', program: 'UCREA' as Program },
+    validate: {
+      code: combine(required('Nhập mã khóa'), minLength(2, 'Mã cần tối thiểu 2 ký tự')),
+      name: required('Nhập tên khóa'),
+      program: required('Chọn chương trình'),
+    },
+  });
 
-  const load = () => trpc.course.list.query().then(setCourses).catch(() => {});
+  const load = () =>
+    trpc.course.list
+      .query()
+      .then(setCourses)
+      .catch((e) => notifyError(e, 'Không tải được danh sách khóa học'));
   useEffect(() => {
     load();
   }, []);
 
-  async function create() {
+  async function create(values: typeof form.values) {
     setBusy(true);
-    setErr('');
     try {
-      await trpc.course.create.mutate({ code, name, program: program as Program });
+      await trpc.course.create.mutate(values);
+      notifySuccess(`Đã tạo khóa "${values.name}"`);
       close();
-      setCode('');
-      setName('');
+      form.reset();
       load();
     } catch (e) {
-      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Tạo khóa học thất bại');
     } finally {
       setBusy(false);
     }
@@ -104,24 +122,21 @@ function Courses() {
         </Text>
       )}
       <Modal opened={opened} onClose={close} title="Tạo khóa học">
-        <Stack>
-          <TextInput label="Mã" value={code} onChange={(e) => setCode(e.currentTarget.value)} />
-          <TextInput label="Tên" value={name} onChange={(e) => setName(e.currentTarget.value)} />
-          <Select
-            label="Chương trình"
-            data={['UCREA', 'BRIGHT_IG', 'BLACK_HOLE']}
-            value={program}
-            onChange={setProgram}
-          />
-          {err && (
-            <Text c="red" size="sm">
-              {err}
-            </Text>
-          )}
-          <Button onClick={create} loading={busy}>
-            Tạo
-          </Button>
-        </Stack>
+        <form onSubmit={form.onSubmit(create)}>
+          <Stack>
+            <TextInput label="Mã" withAsterisk {...form.getInputProps('code')} />
+            <TextInput label="Tên" withAsterisk {...form.getInputProps('name')} />
+            <Select
+              label="Chương trình"
+              withAsterisk
+              data={['UCREA', 'BRIGHT_IG', 'BLACK_HOLE']}
+              {...form.getInputProps('program')}
+            />
+            <Button type="submit" loading={busy}>
+              Tạo
+            </Button>
+          </Stack>
+        </form>
       </Modal>
     </Card>
   );
@@ -135,28 +150,29 @@ function Facilities({
   reload: () => void;
 }) {
   const [opened, { open, close }] = useDisclosure(false);
-  const [code, setCode] = useState('');
-  const [name, setName] = useState('');
-  const [address, setAddress] = useState('');
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
+  const form = useForm({
+    initialValues: { code: '', name: '', address: '' },
+    validate: {
+      code: combine(required('Nhập mã cơ sở'), minLength(2, 'Mã cần tối thiểu 2 ký tự')),
+      name: required('Nhập tên cơ sở'),
+    },
+  });
 
-  async function create() {
+  async function create(values: typeof form.values) {
     setBusy(true);
-    setErr('');
     try {
       await trpc.facility.create.mutate({
-        code,
-        name,
-        address: address || undefined,
+        code: values.code,
+        name: values.name,
+        address: values.address || undefined,
       });
+      notifySuccess(`Đã tạo cơ sở "${values.name}"`);
       close();
-      setCode('');
-      setName('');
-      setAddress('');
+      form.reset();
       reload();
     } catch (e) {
-      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Tạo cơ sở thất bại');
     } finally {
       setBusy(false);
     }
@@ -191,28 +207,21 @@ function Facilities({
         </Table.Tbody>
       </Table>
       <Modal opened={opened} onClose={close} title="Tạo cơ sở">
-        <Stack>
-          <TextInput
-            label="Mã"
-            placeholder="VD: CS3"
-            value={code}
-            onChange={(e) => setCode(e.currentTarget.value)}
-          />
-          <TextInput label="Tên" value={name} onChange={(e) => setName(e.currentTarget.value)} />
-          <TextInput
-            label="Địa chỉ"
-            value={address}
-            onChange={(e) => setAddress(e.currentTarget.value)}
-          />
-          {err && (
-            <Text c="red" size="sm">
-              {err}
-            </Text>
-          )}
-          <Button onClick={create} loading={busy}>
-            Tạo
-          </Button>
-        </Stack>
+        <form onSubmit={form.onSubmit(create)}>
+          <Stack>
+            <TextInput
+              label="Mã"
+              placeholder="VD: CS3"
+              withAsterisk
+              {...form.getInputProps('code')}
+            />
+            <TextInput label="Tên" withAsterisk {...form.getInputProps('name')} />
+            <TextInput label="Địa chỉ" {...form.getInputProps('address')} />
+            <Button type="submit" loading={busy}>
+              Tạo
+            </Button>
+          </Stack>
+        </form>
       </Modal>
     </Card>
   );
@@ -229,39 +238,45 @@ function UserCreateModal({
   facilities: Facility[];
   reload: () => void;
 }) {
-  const [email, setEmail] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [password, setPassword] = useState('');
   const [roles, setRoles] = useState<string[]>([]);
   const [primaryRole, setPrimaryRole] = useState<string | null>(null);
   const [facilityIds, setFacilityIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
+  const form = useForm({
+    initialValues: { email: '', displayName: '', password: '' },
+    validate: {
+      email: email('Email không hợp lệ'),
+      password: minLength(8, 'Mật khẩu tối thiểu 8 ký tự'),
+      displayName: required('Nhập tên hiển thị'),
+    },
+  });
 
   const facilityData = facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }));
 
-  async function create() {
+  async function create(values: typeof form.values) {
+    if (roles.length === 0) {
+      notifyError(new Error('Chọn ít nhất một vai trò'), 'Tạo người dùng thất bại');
+      return;
+    }
     setBusy(true);
-    setErr('');
     try {
       await trpc.user.create.mutate({
-        email,
-        displayName,
-        password,
+        email: values.email,
+        displayName: values.displayName,
+        password: values.password,
         roles: roles as User['roles'],
         primaryRole: (primaryRole ?? roles[0]) as User['primaryRole'],
         facilityIds: facilityIds.map(Number),
       });
+      notifySuccess(`Đã tạo người dùng "${values.displayName}"`);
       close();
-      setEmail('');
-      setDisplayName('');
-      setPassword('');
+      form.reset();
       setRoles([]);
       setPrimaryRole(null);
       setFacilityIds([]);
       reload();
     } catch (e) {
-      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Tạo người dùng thất bại');
     } finally {
       setBusy(false);
     }
@@ -269,51 +284,44 @@ function UserCreateModal({
 
   return (
     <Modal opened={opened} onClose={close} title="Tạo người dùng">
-      <Stack>
-        <TextInput label="Email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
-        <TextInput
-          label="Tên hiển thị"
-          value={displayName}
-          onChange={(e) => setDisplayName(e.currentTarget.value)}
-        />
-        <PasswordInput
-          label="Mật khẩu"
-          description="Tối thiểu 8 ký tự"
-          value={password}
-          onChange={(e) => setPassword(e.currentTarget.value)}
-        />
-        <MultiSelect
-          label="Vai trò"
-          data={ROLES as unknown as string[]}
-          value={roles}
-          onChange={(v) => {
-            setRoles(v);
-            if (primaryRole && !v.includes(primaryRole)) setPrimaryRole(null);
-          }}
-        />
-        <Select
-          label="Vai trò chính"
-          data={roles}
-          value={primaryRole}
-          onChange={setPrimaryRole}
-          disabled={roles.length === 0}
-          placeholder={roles.length ? 'Chọn' : 'Chọn vai trò trước'}
-        />
-        <MultiSelect
-          label="Cơ sở được truy cập"
-          data={facilityData}
-          value={facilityIds}
-          onChange={setFacilityIds}
-        />
-        {err && (
-          <Text c="red" size="sm">
-            {err}
-          </Text>
-        )}
-        <Button onClick={create} loading={busy} disabled={roles.length === 0}>
-          Tạo
-        </Button>
-      </Stack>
+      <form onSubmit={form.onSubmit(create)}>
+        <Stack>
+          <TextInput label="Email" withAsterisk {...form.getInputProps('email')} />
+          <TextInput label="Tên hiển thị" withAsterisk {...form.getInputProps('displayName')} />
+          <PasswordInput
+            label="Mật khẩu"
+            description="Tối thiểu 8 ký tự"
+            withAsterisk
+            {...form.getInputProps('password')}
+          />
+          <MultiSelect
+            label="Vai trò"
+            data={ROLES as unknown as string[]}
+            value={roles}
+            onChange={(v) => {
+              setRoles(v);
+              if (primaryRole && !v.includes(primaryRole)) setPrimaryRole(null);
+            }}
+          />
+          <Select
+            label="Vai trò chính"
+            data={roles}
+            value={primaryRole}
+            onChange={setPrimaryRole}
+            disabled={roles.length === 0}
+            placeholder={roles.length ? 'Chọn' : 'Chọn vai trò trước'}
+          />
+          <MultiSelect
+            label="Cơ sở được truy cập"
+            data={facilityData}
+            value={facilityIds}
+            onChange={setFacilityIds}
+          />
+          <Button type="submit" loading={busy}>
+            Tạo
+          </Button>
+        </Stack>
+      </form>
     </Modal>
   );
 }
@@ -333,26 +341,24 @@ function UserEditModal({
   const [primaryRole, setPrimaryRole] = useState<string | null>(null);
   const [facilityIds, setFacilityIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
 
   useEffect(() => {
     if (!user) return;
     setRoles(user.roles);
     setPrimaryRole(user.primaryRole);
     setFacilityIds(user.facilities.map((f) => String(f.facilityId)));
-    setErr('');
   }, [user]);
 
   const facilityData = facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }));
 
-  async function run(fn: () => Promise<unknown>) {
+  async function run(fn: () => Promise<unknown>, successMsg: string) {
     setBusy(true);
-    setErr('');
     try {
       await fn();
+      notifySuccess(successMsg);
       reload();
     } catch (e) {
-      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Cập nhật thất bại');
     } finally {
       setBusy(false);
     }
@@ -389,12 +395,14 @@ function UserEditModal({
           loading={busy}
           disabled={roles.length === 0 || !primaryRole}
           onClick={() =>
-            run(() =>
-              trpc.user.setRoles.mutate({
-                id: user.id,
-                roles: roles as User['roles'],
-                primaryRole: primaryRole as User['primaryRole'],
-              }),
+            run(
+              () =>
+                trpc.user.setRoles.mutate({
+                  id: user.id,
+                  roles: roles as User['roles'],
+                  primaryRole: primaryRole as User['primaryRole'],
+                }),
+              'Đã lưu vai trò',
             )
           }
         >
@@ -412,11 +420,13 @@ function UserEditModal({
           size="xs"
           loading={busy}
           onClick={() =>
-            run(() =>
-              trpc.user.setFacilities.mutate({
-                id: user.id,
-                facilityIds: facilityIds.map(Number),
-              }),
+            run(
+              () =>
+                trpc.user.setFacilities.mutate({
+                  id: user.id,
+                  facilityIds: facilityIds.map(Number),
+                }),
+              'Đã lưu cơ sở',
             )
           }
         >
@@ -427,20 +437,15 @@ function UserEditModal({
           label="Đang hoạt động"
           checked={user.isActive}
           onChange={(e) =>
-            run(() =>
-              trpc.user.setActive.mutate({ id: user.id, isActive: e.currentTarget.checked }),
+            run(
+              () => trpc.user.setActive.mutate({ id: user.id, isActive: e.currentTarget.checked }),
+              'Đã cập nhật trạng thái',
             )
           }
         />
         <Text size="xs" c="dimmed">
           Đổi vai trò / cơ sở / trạng thái sẽ vô hiệu hóa các phiên đăng nhập hiện tại của người dùng.
         </Text>
-
-        {err && (
-          <Text c="red" size="sm">
-            {err}
-          </Text>
-        )}
       </Stack>
     </Modal>
   );
@@ -514,8 +519,10 @@ function Org() {
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [users, setUsers] = useState<User[]>([]);
 
-  const loadFacilities = () => trpc.facility.list.query().then(setFacilities).catch(() => {});
-  const loadUsers = () => trpc.user.list.query().then(setUsers).catch(() => {});
+  const loadFacilities = () =>
+    trpc.facility.list.query().then(setFacilities).catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
+  const loadUsers = () =>
+    trpc.user.list.query().then(setUsers).catch((e) => notifyError(e, 'Không tải được danh sách người dùng'));
   useEffect(() => {
     loadFacilities();
     loadUsers();

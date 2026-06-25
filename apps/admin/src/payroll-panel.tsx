@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { trpc } from '@cmc/ui';
+import { trpc, notifyError, notifySuccess } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -43,19 +43,22 @@ function SalaryRateCard({ userId, facilityId }: { userId: string; facilityId: nu
   const [rates, setRates] = useState<Rate[]>([]);
   const [form, setForm] = useState({ baseSalary: 0, mealAllowance: 0, otherAllowance: 0, kpiMax: 0, monthlyQuota: 0, effectiveFrom: new Date().toISOString().slice(0, 10) });
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
-  const load = () => payrollApi.rateList.query({ userId }).then(setRates).catch(() => {});
+  const load = () =>
+    payrollApi.rateList
+      .query({ userId })
+      .then(setRates)
+      .catch((e) => notifyError(e, 'Không tải được lịch sử mức lương'));
   useEffect(() => { load(); }, [userId]);
 
   async function create() {
-    setBusy(true); setMsg(null);
+    setBusy(true);
     try {
       await payrollApi.rateCreate.mutate({ userId, facilityId, ...form });
-      setMsg({ kind: 'ok', text: `Đã thêm mức lương hiệu lực từ ${form.effectiveFrom}.` });
+      notifySuccess(`Đã thêm mức lương hiệu lực từ ${form.effectiveFrom}.`);
       load();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Thêm mức lương thất bại');
     } finally { setBusy(false); }
   }
 
@@ -76,7 +79,6 @@ function SalaryRateCard({ userId, facilityId }: { userId: string; facilityId: nu
           <NumberInput label="Quota tháng (đ)" value={form.monthlyQuota} onChange={num('monthlyQuota')} thousandSeparator="." description="Ngưỡng doanh thu tính hoa hồng sale" />
           <TextInput label="Hiệu lực từ" value={form.effectiveFrom} onChange={(e) => setForm((f) => ({ ...f, effectiveFrom: e.currentTarget.value }))} placeholder="YYYY-MM-DD" />
         </Group>
-        {msg && <Alert color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)}>{msg.text}</Alert>}
         <Group justify="flex-end"><Button size="xs" onClick={create} loading={busy}>Thêm mức lương</Button></Group>
       </Stack>
       {rates.length > 0 && (
@@ -109,15 +111,14 @@ function CommissionCard({ userId, facilityId, onUseAsVariable }: { userId: strin
   const [period, setPeriod] = useState(todayMonth());
   const [result, setResult] = useState<CommissionResult | null>(null);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
 
   async function compute() {
-    setBusy(true); setErr('');
+    setBusy(true);
     try {
       const r = await payrollApi.commissionForSale.query({ userId, facilityId, periodKey: period });
       setResult(r);
     } catch (e) {
-      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+      notifyError(e, 'Tính hoa hồng thất bại');
     } finally { setBusy(false); }
   }
 
@@ -128,7 +129,6 @@ function CommissionCard({ userId, facilityId, onUseAsVariable }: { userId: strin
         <TextInput label="Kỳ lương" value={period} onChange={(e) => setPeriod(e.currentTarget.value)} placeholder="YYYY-MM" style={{ width: 130 }} />
         <Button size="xs" onClick={compute} loading={busy}>Tính</Button>
       </Group>
-      {err && <Alert color="red" mb="sm">{err}</Alert>}
       {result && (
         <Stack gap="xs">
           <Group justify="space-between">
@@ -173,10 +173,12 @@ export function PayrollPanel({ facilityId }: { facilityId: number }) {
   const [grade, setGrade] = useState('');
   const [dependents, setDependents] = useState(0);
   const [variable, setVariable] = useState(0);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   useEffect(() => {
-    payrollApi.roster.query({ facilityId }).then(setRoster).catch(() => {});
+    payrollApi.roster
+      .query({ facilityId })
+      .then(setRoster)
+      .catch((e) => notifyError(e, 'Không tải được danh sách nhân sự'));
   }, [facilityId]);
 
   const rosterData = roster.map((r) => ({ value: r.id, label: `${r.displayName} (${r.primaryRole})` }));
@@ -185,9 +187,9 @@ export function PayrollPanel({ facilityId }: { facilityId: number }) {
     if (!userId) return;
     try {
       await payrollApi.profileUpsert.mutate({ userId, facilityId, position, grade: grade || undefined, dependents });
-      setMsg({ kind: 'ok', text: 'Đã lưu hồ sơ.' });
+      notifySuccess('Đã lưu hồ sơ nhân sự.');
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Lưu hồ sơ nhân sự thất bại');
     }
   }
 
@@ -207,7 +209,6 @@ export function PayrollPanel({ facilityId }: { facilityId: number }) {
               <TextInput label="Bậc" value={grade} onChange={(e) => setGrade(e.currentTarget.value)} placeholder="vd: B2, PT4" />
               <NumberInput label="Người phụ thuộc" value={dependents} onChange={(v) => setDependents(Number(v) || 0)} min={0} max={10} />
             </Group>
-            {msg && <Alert mt="xs" color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)}>{msg.text}</Alert>}
             <Group justify="flex-end" mt="xs"><Button size="xs" onClick={saveProfile}>Lưu hồ sơ</Button></Group>
           </Card>
 

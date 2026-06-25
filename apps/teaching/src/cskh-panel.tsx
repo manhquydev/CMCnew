@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc } from '@cmc/ui';
+import { trpc, notifyError, notifySuccess } from '@cmc/ui';
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -50,7 +49,6 @@ export function CskhPanel() {
   const [priority, setPriority] = useState('normal');
   const [category, setCategory] = useState('');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [lcTarget, setLcTarget] = useState<Case | null>(null);
   const [lcValue, setLcValue] = useState<string | null>(null);
 
@@ -75,11 +73,10 @@ export function CskhPanel() {
 
   async function createCase() {
     if (!facilityId || !subject.trim()) {
-      setMsg({ kind: 'err', text: 'Nhập tiêu đề ca.' });
+      notifyError(new Error('Nhập tiêu đề ca'), 'Tạo ca CSKH thất bại');
       return;
     }
     setBusy(true);
-    setMsg(null);
     try {
       await trpc.afterSale.create.mutate({
         facilityId,
@@ -88,14 +85,14 @@ export function CskhPanel() {
         category: category.trim() || undefined,
         priority: priority as 'low' | 'normal' | 'high',
       });
-      setMsg({ kind: 'ok', text: 'Đã tạo ca CSKH.' });
+      notifySuccess('Đã tạo ca CSKH');
       setSubject('');
       setStudentId(null);
       setCategory('');
       setPriority('normal');
       load();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Tạo ca CSKH thất bại');
     } finally {
       setBusy(false);
     }
@@ -106,7 +103,7 @@ export function CskhPanel() {
       await trpc.afterSale.transition.mutate({ id: c.id, status: status as Case['status'] });
       load();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Cập nhật trạng thái ca thất bại');
     }
   }
 
@@ -118,11 +115,11 @@ export function CskhPanel() {
         lifecycle: lcValue as 'admitted' | 'active' | 'on_hold' | 'transferred' | 'withdrawn' | 'completed',
         caseId: lcTarget.id,
       });
-      setMsg({ kind: 'ok', text: 'Đã đổi vòng đời học sinh.' });
+      notifySuccess('Đã đổi vòng đời học sinh');
       setLcTarget(null);
       setLcValue(null);
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Đổi vòng đời học sinh thất bại');
     }
   }
 
@@ -163,12 +160,6 @@ export function CskhPanel() {
           </Button>
         </Group>
       </Card>
-
-      {msg && (
-        <Alert color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)}>
-          {msg.text}
-        </Alert>
-      )}
 
       <Card withBorder>
         <Title order={6} mb="sm">

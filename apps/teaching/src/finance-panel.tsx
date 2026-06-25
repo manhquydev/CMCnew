@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, API_URL, Chatter } from '@cmc/ui';
+import { trpc, API_URL, Chatter, notifyError, notifySuccess } from '@cmc/ui';
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -44,7 +43,6 @@ export function FinancePanel() {
   const [voucherCode, setVoucherCode] = useState('');
   const [period, setPeriod] = useState('');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Receipt | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [detailTarget, setDetailTarget] = useState<Receipt | null>(null);
@@ -59,22 +57,30 @@ export function FinancePanel() {
   );
 
   const loadReceipts = useCallback(() => {
-    trpc.finance.receiptList.query().then(setReceipts).catch(() => setReceipts([]));
+    trpc.finance.receiptList
+      .query()
+      .then(setReceipts)
+      .catch((e) => notifyError(e, 'Không tải được danh sách phiếu thu'));
   }, []);
   useEffect(() => {
-    trpc.student.list.query().then(setStudents).catch(() => setStudents([]));
-    trpc.course.list.query().then(setCourses).catch(() => setCourses([]));
+    trpc.student.list
+      .query()
+      .then(setStudents)
+      .catch((e) => notifyError(e, 'Không tải được danh sách học sinh'));
+    trpc.course.list
+      .query()
+      .then(setCourses)
+      .catch((e) => notifyError(e, 'Không tải được danh sách khóa học'));
     loadReceipts();
   }, [loadReceipts]);
 
   async function createDraft() {
     const student = students.find((s) => s.id === studentId);
     if (!student || !courseId) {
-      setMsg({ kind: 'err', text: 'Chọn học sinh và khóa học.' });
+      notifyError('Vui lòng chọn học sinh và khóa học.', 'Thiếu thông tin');
       return;
     }
     setBusy(true);
-    setMsg(null);
     try {
       const r = await trpc.finance.receiptCreate.mutate({
         facilityId: student.facilityId,
@@ -84,51 +90,50 @@ export function FinancePanel() {
         period: period.trim() || undefined,
         voucherCode: voucherCode.trim() || undefined,
       });
-      setMsg({
-        kind: 'ok',
-        text: `Đã tạo phiếu nháp: gốc ${vnd(r.grossAmount)} → giảm ${r.effectiveDiscountPercent}% → còn ${vnd(r.netAmount)}.`,
-      });
+      notifySuccess(
+        `Đã tạo phiếu nháp: gốc ${vnd(r.grossAmount)} → giảm ${r.effectiveDiscountPercent}% → còn ${vnd(r.netAmount)}.`,
+        'Tạo phiếu thu thành công',
+      );
       setVoucherCode('');
       setPeriod('');
       loadReceipts();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Tạo phiếu thu thất bại');
     } finally {
       setBusy(false);
     }
   }
 
   async function approve(id: string) {
-    setMsg(null);
     try {
       const r = await trpc.finance.receiptApprove.mutate({ id });
-      setMsg({ kind: 'ok', text: `Đã duyệt phiếu ${r.code}.` });
+      notifySuccess(`Đã duyệt phiếu ${r.code}.`);
       loadReceipts();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Duyệt phiếu thu thất bại');
     }
   }
 
   async function markSent(id: string) {
-    setMsg(null);
     try {
       await trpc.finance.receiptMarkSent.mutate({ id });
-      setMsg({ kind: 'ok', text: 'Đã đánh dấu gửi phiếu.' });
+      notifySuccess('Đã đánh dấu gửi phiếu.');
       loadReceipts();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Đánh dấu gửi phiếu thất bại');
     }
   }
+
   async function reconcile(id: string) {
-    setMsg(null);
     try {
       await trpc.finance.receiptReconcile.mutate({ id });
-      setMsg({ kind: 'ok', text: 'Đã đối soát phiếu.' });
+      notifySuccess('Đã đối soát phiếu.');
       loadReceipts();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Đối soát phiếu thất bại');
     }
   }
+
   function printReceipt(id: string) {
     window.open(`${API_URL}/files/receipt/${id}`, '_blank', 'noopener');
   }
@@ -137,12 +142,12 @@ export function FinancePanel() {
     if (!cancelTarget || !cancelReason.trim()) return;
     try {
       await trpc.finance.receiptCancel.mutate({ id: cancelTarget.id, reason: cancelReason.trim() });
-      setMsg({ kind: 'ok', text: 'Đã hủy phiếu thu.' });
+      notifySuccess('Đã hủy phiếu thu.');
       setCancelTarget(null);
       setCancelReason('');
       loadReceipts();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Hủy phiếu thu thất bại');
     }
   }
 
@@ -200,12 +205,6 @@ export function FinancePanel() {
           </Button>
         </Group>
       </Card>
-
-      {msg && (
-        <Alert color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)}>
-          {msg.text}
-        </Alert>
-      )}
 
       <Card withBorder>
         <Title order={6} mb="sm">

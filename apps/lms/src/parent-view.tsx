@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, useNotificationStream, BadgeShelf, Leaderboard, NotificationCenter, type LmsPrincipal, type LiveNotification } from '@cmc/ui';
+import { trpc, useNotificationStream, BadgeShelf, Leaderboard, NotificationCenter, notifyError, type LmsPrincipal, type LiveNotification } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -77,7 +77,10 @@ function LevelHistoryCard({ childId, refreshKey }: { childId: string; refreshKey
     trpc.levelProgress.forStudent
       .query({ studentId: childId })
       .then(setRows)
-      .catch((e) => setError('Không tải được tiến trình cấp độ: ' + (e instanceof Error ? e.message : '')));
+      .catch((e) => {
+        setError('Không tải được tiến trình cấp độ: ' + (e instanceof Error ? e.message : ''));
+        notifyError(e, 'Tải tiến trình cấp độ thất bại');
+      });
   }, [childId, refreshKey]);
 
   if (error) {
@@ -135,6 +138,7 @@ function ChildDashboard({ childId, refreshKey }: { childId: string; refreshKey: 
       })
       .catch((e) => {
         setError('Không tải được dữ liệu: ' + (e instanceof Error ? e.message : ''));
+        notifyError(e, 'Tải dữ liệu học sinh thất bại');
       })
       .finally(() => setLoading(false));
   }, [childId]);
@@ -342,7 +346,10 @@ function UpcomingMeetingsCard({ refreshKey }: { refreshKey: number }) {
     trpc.parentMeeting.myMeetings
       .query()
       .then((rows) => setMeetings(rows.filter((m) => new Date(m.scheduledAt).getTime() >= Date.now())))
-      .catch((e) => setError('Không tải được lịch họp phụ huynh: ' + (e instanceof Error ? e.message : '')));
+      .catch((e) => {
+        setError('Không tải được lịch họp phụ huynh: ' + (e instanceof Error ? e.message : ''));
+        notifyError(e, 'Tải lịch họp thất bại');
+      });
   }, [refreshKey]);
 
   if (error) {

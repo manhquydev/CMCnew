@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc } from '@cmc/ui';
-import { Alert, Badge, Button, Card, Group, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { trpc, notifyError, notifySuccess } from '@cmc/ui';
+import { Badge, Button, Card, Group, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 
 type Pending = Awaited<ReturnType<typeof trpc.levelProgress.listPending.query>>[number];
 
@@ -9,25 +9,23 @@ export function LevelApprovalPanel() {
   const [rows, setRows] = useState<Pending[] | null>(null);
   const [reason, setReason] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   const load = useCallback(() => {
     trpc.levelProgress.listPending
       .query()
       .then(setRows)
-      .catch((e) => setMsg({ kind: 'err', text: 'Không tải được: ' + (e instanceof Error ? e.message : '') }));
+      .catch((e) => notifyError(e, 'Không tải được danh sách đề xuất'));
   }, []);
   useEffect(load, [load]);
 
   async function decide(id: string, decision: 'approve' | 'reject') {
     setBusy(id);
-    setMsg(null);
     try {
       await trpc.levelProgress.decide.mutate({ id, decision, reason: reason[id]?.trim() || undefined });
-      setMsg({ kind: 'ok', text: decision === 'approve' ? 'Đã duyệt lên cấp độ.' : 'Đã từ chối đề xuất.' });
+      notifySuccess(decision === 'approve' ? 'Đã duyệt lên cấp độ' : 'Đã từ chối đề xuất');
       load();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Xử lý đề xuất thất bại');
     } finally {
       setBusy(null);
     }
@@ -36,11 +34,6 @@ export function LevelApprovalPanel() {
   return (
     <Stack>
       <Title order={4}>Duyệt lên cấp độ</Title>
-      {msg && (
-        <Alert color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)}>
-          {msg.text}
-        </Alert>
-      )}
       <Card withBorder>
         {rows && rows.length > 0 ? (
           <Table>
