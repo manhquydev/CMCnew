@@ -180,7 +180,9 @@ export const classBatchRouter = router({
         const managerIds = managers
           .filter((uf) => uf.user.roles.includes('quan_ly'))
           .map((uf) => uf.userId);
-        await emitStaffNotif(tx, {
+        // emitStaffNotif persists rows inside the tx and returns a push fn.
+        // Push is called outside withRls so SSE fires only after the tx commits.
+        const pushNotifs = await emitStaffNotif(tx, {
           recipientIds: managerIds,
           event: 'class_cancelled',
           title: 'Lớp học đã bị hủy',
@@ -188,8 +190,8 @@ export const classBatchRouter = router({
           data: { classBatchId: batch.id, code: batch.code },
           facilityId: batch.facilityId,
         });
-        return { batch, cancelledSessions: cancelled.count, cancelledMeetings };
-      }),
+        return { batch, cancelledSessions: cancelled.count, cancelledMeetings, pushNotifs };
+      }).then(({ pushNotifs, ...result }) => { pushNotifs(); return result; }),
     ),
 
   // Mở lại lớp đã hủy.

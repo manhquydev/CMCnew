@@ -61,7 +61,7 @@ export const enrollmentRouter = router({
           .filter((uf) => uf.user.roles.includes('quan_ly') || uf.user.roles.includes('head_teacher'))
           .map((uf) => uf.userId);
         const student = await tx.student.findUnique({ where: { id: input.studentId }, select: { fullName: true, studentCode: true } });
-        await emitStaffNotif(tx, {
+        const pushNotifs = await emitStaffNotif(tx, {
           recipientIds: notifyIds,
           event: 'enrollment_new',
           title: 'Ghi danh mới',
@@ -71,8 +71,8 @@ export const enrollmentRouter = router({
         });
         // Capacity = cảnh báo mềm (không chặn).
         const overCapacity = batch.capacity != null && activeCount + 1 > batch.capacity;
-        return { enrollment, overCapacity, capacity: batch.capacity, enrolledCount: activeCount + 1 };
-      }),
+        return { enrollment, overCapacity, capacity: batch.capacity, enrolledCount: activeCount + 1, pushNotifs };
+      }).then(({ pushNotifs, ...result }) => { pushNotifs(); return result; }),
     ),
 
   // Hoàn tất thủ công (khi đóng lớp).

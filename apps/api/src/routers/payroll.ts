@@ -525,11 +525,9 @@ export const payrollRouter = router({
         if (due.length === 0) return { paidCount: 0 };
         const paidAt = new Date();
         await tx.payslip.updateMany({ where: { id: { in: due.map((s) => s.id) } }, data: { status: 'paid', paidAt } });
-        await Promise.all(
-          due.map((s) =>
-            logEvent(tx, { facilityId: input.facilityId, entityType: 'payslip', entityId: s.id, type: 'status_changed', body: `Trả lương hàng loạt kỳ ${input.periodKey}`, changes: [{ field: 'status', old: 'finalized', new: 'paid' }], actorId: ctx.session.userId }),
-          ),
-        );
+        for (const s of due) {
+          await logEvent(tx, { facilityId: input.facilityId, entityType: 'payslip', entityId: s.id, type: 'status_changed', body: `Trả lương hàng loạt kỳ ${input.periodKey}`, changes: [{ field: 'status', old: 'finalized', new: 'paid' }], actorId: ctx.session.userId });
+        }
         return { paidCount: due.length };
       }),
     ),
@@ -559,19 +557,17 @@ export const payrollRouter = router({
             where: { id: { in: eligible.map((s) => s.id) } },
             data: { status: 'paid', paidAt },
           });
-          await Promise.all(
-            eligible.map((s) =>
-              logEvent(tx, {
-                facilityId: s.facilityId,
-                entityType: 'payslip',
-                entityId: s.id,
-                type: 'status_changed',
-                body: `Trả lương theo ID kỳ ${s.periodKey}`,
-                changes: [{ field: 'status', old: 'finalized', new: 'paid' }],
-                actorId: ctx.session.userId,
-              }),
-            ),
-          );
+          for (const s of eligible) {
+            await logEvent(tx, {
+              facilityId: s.facilityId,
+              entityType: 'payslip',
+              entityId: s.id,
+              type: 'status_changed',
+              body: `Trả lương theo ID kỳ ${s.periodKey}`,
+              changes: [{ field: 'status', old: 'finalized', new: 'paid' }],
+              actorId: ctx.session.userId,
+            });
+          }
         }
 
         return { succeeded: eligible.map((s) => s.id), failed };
@@ -702,7 +698,7 @@ export const payrollRouter = router({
           .filter((uf) => uf.user.roles.includes('bgd') || uf.user.roles.includes('quan_ly'))
           .map((uf) => uf.userId);
         const submitter = await tx.appUser.findUnique({ where: { id: userId }, select: { displayName: true } });
-        await emitStaffNotif(tx, {
+        const pushNotifs = await emitStaffNotif(tx, {
           recipientIds: managerIds,
           event: 'kpi_pending_review',
           title: 'Phiếu KPI chờ xác nhận',
@@ -710,8 +706,8 @@ export const payrollRouter = router({
           data: { kpiScoreId: row.id, periodKey: input.periodKey, submittedBy: userId },
           facilityId: row.facilityId,
         });
-        return updated;
-      }),
+        return { updated, pushNotifs };
+      }).then(({ pushNotifs, updated }) => { pushNotifs(); return updated; }),
     ),
 
   // Quản lý xác nhận phiếu KPI (N+1). Có thể sửa điểm trước khi confirm. Chỉ khi status=submitted.

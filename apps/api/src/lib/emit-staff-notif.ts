@@ -13,43 +13,64 @@ export interface StaffNotifPayload {
 }
 
 /**
- * Persist StaffNotification rows inside an active transaction and fan-out to
- * SSE clients. Call this AFTER the primary mutation has been written so the
- * SSE push is coherent with DB state.
+ * Persist StaffNotification rows inside an active transaction and return a
+ * push function to fan-out to SSE clients.
  *
- * No-op when recipientIds is empty.
+ * IMPORTANT: Call the returned `push()` function OUTSIDE the withRls callback
+ * (i.e. after the transaction commits). Calling it inside the tx would push
+ * ghost notifications to clients if the tx later rolls back.
+ *
+ * No-op when recipientIds is empty — returns a no-op push function.
+ *
+ * Usage:
+ *   const push = await emitStaffNotif(tx, payload);
+ *   return primaryResult;           // withRls commits here
+ *   // then after withRls resolves:
+ *   push();
  */
-export async function emitStaffNotif(tx: PrismaTx, payload: StaffNotifPayload): Promise<void> {
-  if (payload.recipientIds.length === 0) return;
+export async function emitStaffNotif(tx: PrismaTx, payload: StaffNotifPayload): Promise<() => void> {
+  if (payload.recipientIds.length === 0) return () => {};
 
-  const rows = await Promise.all(
-    payload.recipientIds.map((recipientId) =>
-      tx.staffNotification.create({
-        data: {
-          recipientId,
-          event: payload.event,
-          title: payload.title,
-          body: payload.body,
-          data: (payload.data ?? {}) as object,
-          facilityId: payload.facilityId,
-        },
-        select: { id: true, recipientId: true, event: true, title: true, body: true, data: true, createdAt: true },
-      }),
-    ),
-  );
+  // Persist rows sequentially to avoid concurrent writes on the same Prisma tx connection.
+  const rows: Array<{
+    id: string;
+    recipientId: string;
+    event: StaffNotifEvent;
+    title: string;
+    body: string;
+    data: Prisma.JsonValue;
+    createdAt: Date;
+  }> = [];
 
-  // Fan-out to connected SSE clients after all rows are committed.
-  for (const row of rows) {
-    emitStaffNotification({
-      recipientId: row.recipientId,
-      notification: {
-        id: row.id,
-        event: row.event,
-        title: row.title,
-        body: row.body,
-        data: row.data,
-        createdAt: row.createdAt.toISOString(),
+  for (const recipientId of payload.recipientIds) {
+    const row = await tx.staffNotification.create({
+      data: {
+        recipientId,
+        event: payload.event,
+        title: payload.title,
+        body: payload.body,
+        data: (payload.data ?? {}) as object,
+        facilityId: payload.facilityId,
       },
+      select: { id: true, recipientId: true, event: true, title: true, body: true, data: true, createdAt: true },
     });
+    rows.push(row);
   }
+
+  // Return a push function to be called after the transaction commits.
+  return () => {
+    for (const row of rows) {
+      emitStaffNotification({
+        recipientId: row.recipientId,
+        notification: {
+          id: row.id,
+          event: row.event,
+          title: row.title,
+          body: row.body,
+          data: row.data,
+          createdAt: row.createdAt.toISOString(),
+        },
+      });
+    }
+  };
 }

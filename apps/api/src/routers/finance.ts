@@ -212,7 +212,7 @@ export const financeRouter = router({
         const keToanIds = facilityUsers
           .filter((uf) => uf.user.roles.includes('ke_toan'))
           .map((uf) => uf.userId);
-        await emitStaffNotif(tx, {
+        const pushNotifs = await emitStaffNotif(tx, {
           recipientIds: keToanIds,
           event: 'receipt_pending_approval',
           title: 'Phiếu thu chờ duyệt',
@@ -220,8 +220,8 @@ export const financeRouter = router({
           data: { receiptId: receipt.id, netAmount: receipt.netAmount },
           facilityId: input.facilityId,
         });
-        return receipt;
-      }),
+        return { receipt, pushNotifs };
+      }).then(({ pushNotifs, receipt }) => { pushNotifs(); return receipt; }),
     ),
 
   // Approve: consume the voucher ATOMICALLY (0-row = CONFLICT, fixes legacy M2), allocate the
