@@ -15,7 +15,6 @@ import {
   Checkbox,
   Divider,
   Group,
-  Loader,
   Menu,
   Modal,
   NavLink,
@@ -39,16 +38,13 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import {
-  IconAlertCircle,
   IconBell,
   IconCheck,
-  IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
   IconCurrencyDong,
   IconDots,
   IconDownload,
-  IconFilter,
   IconInfoCircle,
   IconPencil,
   IconPlus,
