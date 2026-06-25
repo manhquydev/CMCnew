@@ -1,9 +1,7 @@
 import { createContext, useContext, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import {
-  AppShell,
   Button,
   Center,
-  Group,
   Loader,
   Paper,
   PasswordInput,
@@ -126,27 +124,9 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
     );
   }
 
-  const roleLabel = principal.kind === 'parent' ? 'Phụ huynh' : 'Học sinh';
   return (
     <LmsCtx.Provider value={{ principal, logout }}>
-      <AppShell header={{ height: 56 }} padding="md">
-        <AppShell.Header>
-          <Group h="100%" px="md" justify="space-between">
-            <Text fw={700} c="cmc.7">
-              CMC · Học tập
-            </Text>
-            <Group gap="sm">
-              <Text size="sm" c="dimmed">
-                {principal.displayName} · {roleLabel}
-              </Text>
-              <Button variant="default" size="xs" onClick={logout}>
-                Đăng xuất
-              </Button>
-            </Group>
-          </Group>
-        </AppShell.Header>
-        <AppShell.Main>{children}</AppShell.Main>
-      </AppShell>
+      {children}
     </LmsCtx.Provider>
   );
 }

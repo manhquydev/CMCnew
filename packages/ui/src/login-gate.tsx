@@ -1,9 +1,7 @@
 import { createContext, useContext, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import {
-  AppShell,
   Button,
   Center,
-  Group,
   Loader,
   Paper,
   PasswordInput,
@@ -102,24 +100,7 @@ export function LoginGate({ appTitle, children }: { appTitle: string; children: 
 
   return (
     <SessionCtx.Provider value={{ me, logout }}>
-      <AppShell header={{ height: 56 }} padding="md">
-        <AppShell.Header>
-          <Group h="100%" px="md" justify="space-between">
-            <Text fw={700} c="cmc.7">
-              CMC · {appTitle}
-            </Text>
-            <Group gap="sm">
-              <Text size="sm" c="dimmed">
-                {me.displayName} · {me.primaryRole}
-              </Text>
-              <Button variant="default" size="xs" onClick={logout}>
-                Đăng xuất
-              </Button>
-            </Group>
-          </Group>
-        </AppShell.Header>
-        <AppShell.Main>{children}</AppShell.Main>
-      </AppShell>
+      {children}
     </SessionCtx.Provider>
   );
 }

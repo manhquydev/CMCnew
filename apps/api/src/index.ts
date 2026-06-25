@@ -14,6 +14,7 @@ import { withRls } from '@cmc/db';
 import { appRouter } from './routers/index.js';
 import { createContext, COOKIE_NAME, LMS_COOKIE_NAME } from './context.js';
 import { onNotification } from './events.js';
+import { onStaffNotification } from './staff-notification.js';
 import { putPdf, readPdf, pdfExists, PdfStoreError, MAX_PDF_BYTES } from './services/pdf-store.js';
 import { renderReceiptHtml } from './services/receipt-html.js';
 import { runParentMeetingReminders } from './services/parent-meeting-reminder.js';
@@ -171,6 +172,38 @@ app.get('/sse/notifications', async (c) => {
     const unsubscribe = onNotification((evt) => {
       if (!ownedIds.has(evt.studentId)) return;
       void stream.writeSSE({ event: 'notification', data: JSON.stringify(evt.notification) });
+    });
+    stream.onAbort(unsubscribe);
+
+    await stream.writeSSE({ event: 'ready', data: '1' });
+    while (!stream.aborted) {
+      await stream.sleep(25_000);
+      if (stream.aborted) break;
+      await stream.writeSSE({ event: 'ping', data: '1' });
+    }
+    unsubscribe();
+  });
+});
+
+// Staff real-time notification stream. Authenticated via:
+//   1. Bearer JWT in Authorization header (primary, for EventSource polyfills / fetch-based clients)
+//   2. Staff session cookie (fallback, for native EventSource)
+// Only events for the connected user's recipientId are forwarded.
+app.get('/sse/staff', async (c) => {
+  // Bearer takes precedence; fall back to cookie.
+  const authHeader = c.req.header('Authorization');
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const cookieToken = getCookie(c, COOKIE_NAME);
+  const token = bearerToken ?? cookieToken;
+  const staff = token ? await resolveSession(token) : null;
+  if (!staff) return c.text('unauthorized', 401);
+
+  const userId = staff.userId;
+
+  return streamSSE(c, async (stream) => {
+    const unsubscribe = onStaffNotification((evt) => {
+      if (evt.recipientId !== userId) return;
+      void stream.writeSSE({ event: 'staff_notification', data: JSON.stringify(evt.notification) });
     });
     stream.onAbort(unsubscribe);
 

@@ -12,7 +12,6 @@ import {
   Table,
   Text,
   TextInput,
-  Title,
 } from '@mantine/core';
 
 // ─── Loose re-type to avoid TS2589 on deep tRPC inference ───────────────────
@@ -175,24 +174,24 @@ function KpiDetailCard({
   const criteria = detail?.criteriaConfig ?? [];
 
   return (
-    <Card withBorder mt="sm">
+    <Card radius="lg" mt="sm" style={{ border: '1px solid var(--cmc-border)' }}>
       <Group justify="space-between" mb="sm">
         <Group gap="xs">
-          <Title order={6}>{staffName}</Title>
-          <Badge size="sm" color={row.block === 'sales' ? 'violet' : 'cyan'}>{row.block}</Badge>
-          <Badge size="sm" color={statusColor(row.status)}>{statusLabel(row.status)}</Badge>
+          <Text fw={600} size="sm" style={{ color: 'var(--cmc-text)' }}>{staffName}</Text>
+          <Badge size="sm" color={row.block === 'sales' ? 'violet' : 'cyan'} variant="light" radius="xl">{row.block}</Badge>
+          <Badge size="sm" color={statusColor(row.status)} variant="light" radius="xl">{statusLabel(row.status)}</Badge>
         </Group>
         <Button size="xs" variant="subtle" onClick={onClose}>Đóng</Button>
       </Group>
 
       {criteria.length > 0 && (
         <>
-          <Table fz="sm" mb="sm">
+          <Table fz="sm" mb="sm" striped highlightOnHover withTableBorder={false}>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Tiêu chí</Table.Th>
-                <Table.Th>Trọng số</Table.Th>
-                <Table.Th>Điểm (0–100)</Table.Th>
+                <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)', fontWeight: 600 }}>Tiêu chí</Table.Th>
+                <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)', fontWeight: 600 }}>Trọng số</Table.Th>
+                <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)', fontWeight: 600 }}>Điểm (0–100)</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -267,7 +266,7 @@ function KanbanColumn({
       </Group>
       {rows.length === 0 && <Text size="xs" c="dimmed">Không có phiếu</Text>}
       {rows.map((r) => (
-        <Card key={r.id} withBorder padding="xs" style={{ cursor: 'pointer' }}>
+        <Card key={r.id} radius="lg" padding="xs" style={{ cursor: 'pointer', border: '1px solid var(--cmc-border)', transition: 'box-shadow 200ms' }}>
           <Stack gap={4} onClick={() => onSelect(selectedId === r.id ? null : r.id)}>
             <Text size="sm" fw={500}>{rosterMap.get(r.userId) ?? r.userId}</Text>
             <Group gap="xs">
@@ -365,15 +364,15 @@ export function KpiEvaluationPanel() {
 
   return (
     <Stack>
-      <Card withBorder p="sm" style={{ background: 'var(--mantine-color-blue-0)' }}>
-        <Text size="sm">
+      <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)', backgroundColor: 'var(--cmc-info-bg)' }}>
+        <Text size="sm" style={{ color: 'var(--cmc-info-text)' }}>
           Vòng đời phiếu KPI: <b>Nháp</b> → Nhân sự tự nộp (<b>Đã nộp</b>) → Quản lý xác nhận (<b>Đã xác nhận</b>) → BGĐ phê duyệt (<b>Đã duyệt</b>).
           Khi phê duyệt, điểm khóa lại và đổ vào phiếu lương kỳ đó.
         </Text>
       </Card>
 
-      <Card withBorder>
-        <Title order={6} mb="sm">Bộ lọc</Title>
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} size="sm" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }} mb="sm">Bộ lọc</Text>
         <Group align="flex-end">
           {me.facilityIds.length > 1 && (
             <Select label="Cơ sở" data={facilityOptions} value={facilityId} onChange={setFacilityId} w={160} />
@@ -385,14 +384,14 @@ export function KpiEvaluationPanel() {
             placeholder="YYYY-MM"
             w={150}
           />
-          <Button variant="default" onClick={() => { loadRoster(); loadKpiList(); }}>
+          <Button variant="subtle" onClick={() => { loadRoster(); loadKpiList(); }}>
             Tải lại
           </Button>
         </Group>
       </Card>
 
-      <Card withBorder>
-        <Title order={6} mb="sm">Tạo phiếu kỳ này cho nhân sự</Title>
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} style={{ color: 'var(--cmc-text)' }} mb="sm">Tạo phiếu kỳ này cho nhân sự</Text>
         <Group align="flex-end">
           <Select
             label="Nhân sự"
@@ -413,13 +412,13 @@ export function KpiEvaluationPanel() {
             onChange={(v) => setCreateBlock(v ?? 'training')}
             w={200}
           />
-          <Button onClick={createEval} loading={createBusy} disabled={!createUserId || !fid}>
+          <Button variant="filled" radius={9999} onClick={createEval} loading={createBusy} disabled={!createUserId || !fid}>
             Tạo phiếu
           </Button>
         </Group>
       </Card>
 
-      <Title order={5}>Phiếu KPI kỳ {periodKey}</Title>
+      <Text fw={600} size="lg" style={{ color: 'var(--cmc-text)' }}>Phiếu KPI kỳ {periodKey}</Text>
 
       {fid && (
         <SimpleGrid cols={4} spacing="sm">

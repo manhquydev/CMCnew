@@ -23,17 +23,21 @@ import {
   Stack,
   Switch,
   Table,
-  Tabs,
   Text,
   TextInput,
-  Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import {
+  IconCircleX,
+  IconCircleCheck,
+  IconPlus,
+} from '@tabler/icons-react';
 import { GuardiansPanel } from './guardians-panel';
 import { OverviewPanel } from './overview-panel';
 import { CompensationConfigPanel } from './compensation-panel';
 import { PayrollPanel } from './payroll-panel';
 import { KpiEvaluationPanel } from './kpi-evaluation-panel';
+import { Shell, buildNavGroups, SECTION_TITLES, type SectionKey } from './shell';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type User = Awaited<ReturnType<typeof trpc.user.list.query>>[number];
@@ -53,6 +57,18 @@ const ROLES = [
   'bgd',
 ] as const;
 
+// ─── Table header style ────────────────────────────────────────────────────────
+
+const TH_STYLE: React.CSSProperties = {
+  fontSize: 11,
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em',
+  color: 'var(--cmc-text-muted)',
+  fontWeight: 600,
+};
+
+// ─── Courses ──────────────────────────────────────────────────────────────────
+
 function Courses() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [opened, { open, close }] = useDisclosure(false);
@@ -71,6 +87,7 @@ function Courses() {
       .query()
       .then(setCourses)
       .catch((e) => notifyError(e, 'Không tải được danh sách khóa học'));
+
   useEffect(() => {
     load();
   }, []);
@@ -91,37 +108,48 @@ function Courses() {
   }
 
   return (
-    <Card withBorder>
-      <Group justify="space-between" mb="md">
-        <Title order={5}>Khóa học (dùng chung toàn hệ)</Title>
-        <Button size="xs" onClick={open}>
-          + Tạo khóa
+    <Stack>
+      <Group justify="space-between" mb="xs">
+        <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }}>
+          Khóa học
+        </Text>
+        <Button
+          variant="filled"
+          radius={9999}
+          leftSection={<IconPlus size={16} />}
+          onClick={open}
+        >
+          Tạo khóa
         </Button>
       </Group>
-      <Table striped highlightOnHover>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Mã</Table.Th>
-            <Table.Th>Tên</Table.Th>
-            <Table.Th>Chương trình</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {courses.map((c) => (
-            <Table.Tr key={c.id}>
-              <Table.Td>{c.code}</Table.Td>
-              <Table.Td>{c.name}</Table.Td>
-              <Table.Td>{c.program}</Table.Td>
+
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Table striped highlightOnHover withTableBorder={false}>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th style={TH_STYLE}>Mã</Table.Th>
+              <Table.Th style={TH_STYLE}>Tên</Table.Th>
+              <Table.Th style={TH_STYLE}>Chương trình</Table.Th>
             </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-      {courses.length === 0 && (
-        <Text c="dimmed" size="sm" mt="sm">
-          Chưa có khóa học.
-        </Text>
-      )}
-      <Modal opened={opened} onClose={close} title="Tạo khóa học">
+          </Table.Thead>
+          <Table.Tbody>
+            {courses.map((c) => (
+              <Table.Tr key={c.id}>
+                <Table.Td>{c.code}</Table.Td>
+                <Table.Td>{c.name}</Table.Td>
+                <Table.Td>{c.program}</Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+        {courses.length === 0 && (
+          <Text c="dimmed" size="sm" mt="sm">
+            Chưa có khóa học.
+          </Text>
+        )}
+      </Card>
+
+      <Modal opened={opened} onClose={close} title="Tạo khóa học" radius="xl" centered>
         <form onSubmit={form.onSubmit(create)}>
           <Stack>
             <TextInput label="Mã" withAsterisk {...form.getInputProps('code')} />
@@ -132,15 +160,20 @@ function Courses() {
               data={['UCREA', 'BRIGHT_IG', 'BLACK_HOLE']}
               {...form.getInputProps('program')}
             />
-            <Button type="submit" loading={busy}>
-              Tạo
-            </Button>
+            <Group justify="flex-end" mt="xs">
+              <Button variant="subtle" onClick={close}>Hủy</Button>
+              <Button type="submit" variant="filled" radius={9999} loading={busy}>
+                Tạo
+              </Button>
+            </Group>
           </Stack>
         </form>
       </Modal>
-    </Card>
+    </Stack>
   );
 }
+
+// ─── Facilities ───────────────────────────────────────────────────────────────
 
 function Facilities({
   facilities,
@@ -179,34 +212,65 @@ function Facilities({
   }
 
   return (
-    <Card withBorder>
-      <Group justify="space-between" mb="sm">
-        <Title order={5}>Cơ sở ({facilities.length})</Title>
-        <Button size="xs" onClick={open}>
-          + Tạo cơ sở
+    <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+      <Group justify="space-between" mb="md">
+        <Text fw={600} style={{ color: 'var(--cmc-text)' }}>
+          Cơ sở ({facilities.length})
+        </Text>
+        <Button
+          variant="filled"
+          radius={9999}
+          size="xs"
+          leftSection={<IconPlus size={14} />}
+          onClick={open}
+        >
+          Tạo cơ sở
         </Button>
       </Group>
-      <Table striped>
+      <Table striped highlightOnHover withTableBorder={false}>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th style={TH_STYLE}>#</Table.Th>
+            <Table.Th style={TH_STYLE}>Mã</Table.Th>
+            <Table.Th style={TH_STYLE}>Tên</Table.Th>
+            <Table.Th style={TH_STYLE}>Trạng thái</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
         <Table.Tbody>
           {facilities.map((f) => (
             <Table.Tr key={f.id}>
-              <Table.Td w={60}>#{f.id}</Table.Td>
-              <Table.Td w={80}>
-                <b>{f.code}</b>
+              <Table.Td style={{ color: 'var(--cmc-text-muted)', fontSize: 13 }}>
+                #{f.id}
+              </Table.Td>
+              <Table.Td>
+                <Text fw={500} size="sm">
+                  {f.code}
+                </Text>
               </Table.Td>
               <Table.Td>{f.name}</Table.Td>
-              <Table.Td w={90}>
-                {f.isActive ? null : (
-                  <Badge color="gray" size="sm">
-                    ngừng
-                  </Badge>
+              <Table.Td>
+                {f.isActive ? (
+                  <Group gap={4}>
+                    <IconCircleCheck size={12} color="var(--cmc-status-active)" />
+                    <Badge color="green" variant="light" radius="xl" size="sm">
+                      Hoạt động
+                    </Badge>
+                  </Group>
+                ) : (
+                  <Group gap={4}>
+                    <IconCircleX size={12} color="var(--cmc-status-inactive)" />
+                    <Badge color="gray" variant="light" radius="xl" size="sm">
+                      Ngừng
+                    </Badge>
+                  </Group>
                 )}
               </Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>
       </Table>
-      <Modal opened={opened} onClose={close} title="Tạo cơ sở">
+
+      <Modal opened={opened} onClose={close} title="Tạo cơ sở" radius="xl" centered>
         <form onSubmit={form.onSubmit(create)}>
           <Stack>
             <TextInput
@@ -217,15 +281,20 @@ function Facilities({
             />
             <TextInput label="Tên" withAsterisk {...form.getInputProps('name')} />
             <TextInput label="Địa chỉ" {...form.getInputProps('address')} />
-            <Button type="submit" loading={busy}>
-              Tạo
-            </Button>
+            <Group justify="flex-end" mt="xs">
+              <Button variant="subtle" onClick={close}>Hủy</Button>
+              <Button type="submit" variant="filled" radius={9999} loading={busy}>
+                Tạo
+              </Button>
+            </Group>
           </Stack>
         </form>
       </Modal>
     </Card>
   );
 }
+
+// ─── User modals ──────────────────────────────────────────────────────────────
 
 function UserCreateModal({
   opened,
@@ -251,7 +320,10 @@ function UserCreateModal({
     },
   });
 
-  const facilityData = facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }));
+  const facilityData = facilities.map((f) => ({
+    value: String(f.id),
+    label: `${f.code} — ${f.name}`,
+  }));
 
   async function create(values: typeof form.values) {
     if (roles.length === 0) {
@@ -283,7 +355,7 @@ function UserCreateModal({
   }
 
   return (
-    <Modal opened={opened} onClose={close} title="Tạo người dùng">
+    <Modal opened={opened} onClose={close} title="Tạo người dùng" radius="xl" centered>
       <form onSubmit={form.onSubmit(create)}>
         <Stack>
           <TextInput label="Email" withAsterisk {...form.getInputProps('email')} />
@@ -317,9 +389,12 @@ function UserCreateModal({
             value={facilityIds}
             onChange={setFacilityIds}
           />
-          <Button type="submit" loading={busy}>
-            Tạo
-          </Button>
+          <Group justify="flex-end" mt="xs">
+            <Button variant="subtle" onClick={close}>Hủy</Button>
+            <Button type="submit" variant="filled" radius={9999} loading={busy}>
+              Tạo
+            </Button>
+          </Group>
         </Stack>
       </form>
     </Modal>
@@ -349,7 +424,10 @@ function UserEditModal({
     setFacilityIds(user.facilities.map((f) => String(f.facilityId)));
   }, [user]);
 
-  const facilityData = facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }));
+  const facilityData = facilities.map((f) => ({
+    value: String(f.id),
+    label: `${f.code} — ${f.name}`,
+  }));
 
   async function run(fn: () => Promise<unknown>, successMsg: string) {
     setBusy(true);
@@ -367,7 +445,14 @@ function UserEditModal({
   if (!user) return null;
 
   return (
-    <Modal opened={!!user} onClose={close} title={`Sửa: ${user.displayName}`} size="lg">
+    <Modal
+      opened={!!user}
+      onClose={close}
+      title={`Sửa: ${user.displayName}`}
+      size="lg"
+      radius="xl"
+      centered
+    >
       <Stack>
         <Text size="sm" c="dimmed">
           {user.email}
@@ -438,7 +523,11 @@ function UserEditModal({
           checked={user.isActive}
           onChange={(e) =>
             run(
-              () => trpc.user.setActive.mutate({ id: user.id, isActive: e.currentTarget.checked }),
+              () =>
+                trpc.user.setActive.mutate({
+                  id: user.id,
+                  isActive: e.currentTarget.checked,
+                }),
               'Đã cập nhật trạng thái',
             )
           }
@@ -450,6 +539,8 @@ function UserEditModal({
     </Modal>
   );
 }
+
+// ─── Users ────────────────────────────────────────────────────────────────────
 
 function Users({
   users,
@@ -464,38 +555,56 @@ function Users({
   const [editing, setEditing] = useState<User | null>(null);
 
   return (
-    <Card withBorder>
-      <Group justify="space-between" mb="sm">
-        <Title order={5}>Người dùng ({users.length})</Title>
-        <Button size="xs" onClick={open}>
-          + Tạo người dùng
+    <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+      <Group justify="space-between" mb="md">
+        <Text fw={600} style={{ color: 'var(--cmc-text)' }}>
+          Người dùng ({users.length})
+        </Text>
+        <Button
+          variant="filled"
+          radius={9999}
+          size="xs"
+          leftSection={<IconPlus size={14} />}
+          onClick={open}
+        >
+          Tạo người dùng
         </Button>
       </Group>
-      <Table striped highlightOnHover>
+      <Table striped highlightOnHover withTableBorder={false}>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>Tên</Table.Th>
-            <Table.Th>Email</Table.Th>
-            <Table.Th>Vai trò</Table.Th>
-            <Table.Th>Cơ sở</Table.Th>
-            <Table.Th />
+            <Table.Th style={TH_STYLE}>Tên</Table.Th>
+            <Table.Th style={TH_STYLE}>Email</Table.Th>
+            <Table.Th style={TH_STYLE}>Vai trò</Table.Th>
+            <Table.Th style={TH_STYLE}>Cơ sở</Table.Th>
+            <Table.Th style={{ ...TH_STYLE, width: 80 }} />
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
           {users.map((u) => (
             <Table.Tr key={u.id}>
               <Table.Td>
-                {u.displayName}
-                {!u.isActive && (
-                  <Badge color="gray" size="xs" ml="xs">
-                    ngừng
-                  </Badge>
-                )}
+                <Group gap="xs">
+                  <Text size="sm">{u.displayName}</Text>
+                  {!u.isActive && (
+                    <Badge color="gray" variant="light" radius="xl" size="xs">
+                      Ngừng
+                    </Badge>
+                  )}
+                </Group>
               </Table.Td>
-              <Table.Td>{u.email}</Table.Td>
-              <Table.Td>{u.roles.join(', ')}</Table.Td>
-              <Table.Td>{u.facilities.length}</Table.Td>
-              <Table.Td w={70}>
+              <Table.Td>
+                <Text size="sm" style={{ color: 'var(--cmc-text-muted)' }}>
+                  {u.email}
+                </Text>
+              </Table.Td>
+              <Table.Td>
+                <Text size="sm">{u.roles.join(', ')}</Text>
+              </Table.Td>
+              <Table.Td>
+                <Text size="sm">{u.facilities.length}</Text>
+              </Table.Td>
+              <Table.Td>
                 <Button variant="subtle" size="compact-xs" onClick={() => setEditing(u)}>
                   Sửa
                 </Button>
@@ -515,14 +624,23 @@ function Users({
   );
 }
 
-function Org() {
+// ─── Org (Cơ sở & Users) ─────────────────────────────────────────────────────
+
+function OrgPanel() {
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [users, setUsers] = useState<User[]>([]);
 
   const loadFacilities = () =>
-    trpc.facility.list.query().then(setFacilities).catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
+    trpc.facility.list
+      .query()
+      .then(setFacilities)
+      .catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
   const loadUsers = () =>
-    trpc.user.list.query().then(setUsers).catch((e) => notifyError(e, 'Không tải được danh sách người dùng'));
+    trpc.user.list
+      .query()
+      .then(setUsers)
+      .catch((e) => notifyError(e, 'Không tải được danh sách người dùng'));
+
   useEffect(() => {
     loadFacilities();
     loadUsers();
@@ -530,18 +648,26 @@ function Org() {
 
   return (
     <Stack>
+      <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
+        Cơ sở &amp; Người dùng
+      </Text>
       <Facilities facilities={facilities} reload={loadFacilities} />
       <Users users={users} facilities={facilities} reload={loadUsers} />
     </Stack>
   );
 }
 
-function HrPayrollTab() {
+// ─── HR / Payroll tab ─────────────────────────────────────────────────────────
+
+function HrPayrollSection() {
   const { me } = useSession();
   const [facilityId, setFacilityId] = useState<string | null>(
     me.facilityIds.length > 0 ? String(me.facilityIds[0]) : null,
   );
-  const facilityOptions = me.facilityIds.map((id) => ({ value: String(id), label: `Cơ sở #${id}` }));
+  const facilityOptions = me.facilityIds.map((id) => ({
+    value: String(id),
+    label: `Cơ sở #${id}`,
+  }));
 
   if (me.facilityIds.length === 0) {
     return <Text c="dimmed">Tài khoản chưa được gán cơ sở.</Text>;
@@ -549,13 +675,24 @@ function HrPayrollTab() {
 
   return (
     <Stack>
+      <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
+        Nhân sự &amp; Lương
+      </Text>
       {me.facilityIds.length > 1 && (
-        <Select label="Cơ sở" data={facilityOptions} value={facilityId} onChange={setFacilityId} w={200} />
+        <Select
+          label="Cơ sở"
+          data={facilityOptions}
+          value={facilityId}
+          onChange={setFacilityId}
+          w={200}
+        />
       )}
       {facilityId && <PayrollPanel facilityId={Number(facilityId)} />}
     </Stack>
   );
 }
+
+// ─── Dashboard (AppShell wrapper) ─────────────────────────────────────────────
 
 function Dashboard() {
   const { me } = useSession();
@@ -563,47 +700,78 @@ function Dashboard() {
   const canKpi =
     me.isSuperAdmin ||
     me.roles.some((r) => ['hr', 'ke_toan', 'quan_ly', 'bgd', 'head_teacher'].includes(r));
+
+  const [activeSection, setActiveSection] = useState<SectionKey>('overview');
+
+  const navGroups = buildNavGroups({
+    canHr,
+    canKpi,
+    isSuperAdmin: me.isSuperAdmin,
+  });
+
+  // Guard: if user navigates to a section they lost access to, fall back to overview
+  const handleSectionChange = (key: SectionKey) => {
+    if (key === 'hr' && !canHr) return;
+    if (key === 'kpi' && !canKpi) return;
+    if (key === 'compensation' && !me.isSuperAdmin) return;
+    setActiveSection(key);
+  };
+
+  const renderContent = () => {
+    switch (activeSection) {
+      case 'overview':
+        return <OverviewPanel />;
+      case 'courses':
+        return <Courses />;
+      case 'org':
+        return <OrgPanel />;
+      case 'guardians':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
+              Phụ huynh
+            </Text>
+            <GuardiansPanel />
+          </Stack>
+        );
+      case 'hr':
+        return canHr ? <HrPayrollSection /> : null;
+      case 'kpi':
+        return canKpi ? (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
+              Đánh giá KPI
+            </Text>
+            <KpiEvaluationPanel />
+          </Stack>
+        ) : null;
+      case 'compensation':
+        return me.isSuperAdmin ? (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
+              Cơ cấu lương
+            </Text>
+            <CompensationConfigPanel />
+          </Stack>
+        ) : null;
+      default:
+        return null;
+    }
+  };
+
   return (
-    <Tabs defaultValue="overview">
-      <Tabs.List>
-        <Tabs.Tab value="overview">Tổng quan</Tabs.Tab>
-        <Tabs.Tab value="courses">Khóa học</Tabs.Tab>
-        <Tabs.Tab value="org">Cơ sở &amp; người dùng</Tabs.Tab>
-        <Tabs.Tab value="guardians">Phụ huynh</Tabs.Tab>
-        {canHr && <Tabs.Tab value="hr">Nhân sự &amp; Lương</Tabs.Tab>}
-        {canKpi && <Tabs.Tab value="kpi">Đánh giá KPI</Tabs.Tab>}
-        {me.isSuperAdmin && <Tabs.Tab value="compensation">Cơ cấu lương</Tabs.Tab>}
-      </Tabs.List>
-      <Tabs.Panel value="overview" pt="md">
-        <OverviewPanel />
-      </Tabs.Panel>
-      <Tabs.Panel value="courses" pt="md">
-        <Courses />
-      </Tabs.Panel>
-      <Tabs.Panel value="org" pt="md">
-        <Org />
-      </Tabs.Panel>
-      <Tabs.Panel value="guardians" pt="md">
-        <GuardiansPanel />
-      </Tabs.Panel>
-      {canHr && (
-        <Tabs.Panel value="hr" pt="md">
-          <HrPayrollTab />
-        </Tabs.Panel>
-      )}
-      {canKpi && (
-        <Tabs.Panel value="kpi" pt="md">
-          <KpiEvaluationPanel />
-        </Tabs.Panel>
-      )}
-      {me.isSuperAdmin && (
-        <Tabs.Panel value="compensation" pt="md">
-          <CompensationConfigPanel />
-        </Tabs.Panel>
-      )}
-    </Tabs>
+    <Shell
+      activeSection={activeSection}
+      onSectionChange={handleSectionChange}
+      navGroups={navGroups}
+      sectionTitle={SECTION_TITLES[activeSection]}
+    >
+      {renderContent()}
+    </Shell>
   );
 }
+
+// ─── App root ─────────────────────────────────────────────────────────────────
 
 export function App() {
   return (

@@ -14,6 +14,7 @@ import {
 } from '@cmc/domain-finance';
 import { nextReceiptCode } from '../services/receipt-code.js';
 import { router, requireRole, Role } from '../trpc.js';
+import { emitStaffNotif } from '../lib/emit-staff-notif.js';
 
 /** Discount tiers configured for a facility, or the charter defaults when none are set. */
 async function tiersFor(
@@ -202,6 +203,22 @@ export const financeRouter = router({
           type: 'created',
           body: `Phiếu thu nháp: ${receipt.netAmount.toLocaleString('vi-VN')}đ (giảm ${effective}%)`,
           actorId: ctx.session.userId,
+        });
+        // Notify ke_toan of this facility that a receipt is pending approval.
+        const facilityUsers = await tx.userFacility.findMany({
+          where: { facilityId: input.facilityId },
+          select: { userId: true, user: { select: { roles: true } } },
+        });
+        const keToanIds = facilityUsers
+          .filter((uf) => uf.user.roles.includes('ke_toan'))
+          .map((uf) => uf.userId);
+        await emitStaffNotif(tx, {
+          recipientIds: keToanIds,
+          event: 'receipt_pending_approval',
+          title: 'Phiếu thu chờ duyệt',
+          body: `Phiếu thu ${receipt.netAmount.toLocaleString('vi-VN')}đ vừa được tạo, chờ kế toán duyệt`,
+          data: { receiptId: receipt.id, netAmount: receipt.netAmount },
+          facilityId: input.facilityId,
         });
         return receipt;
       }),

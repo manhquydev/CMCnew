@@ -8,6 +8,7 @@ import { effectiveParamsAt } from './compensation.js';
 import { callioConfigFromEnv, fetchPeriodCdrs, aggregateValidCalls } from '../lib/callio-client.js';
 import { canOverrideKpi } from '../lib/kpi-authz.js';
 import { router, requireRole, protectedProcedure, Role } from '../trpc.js';
+import { emitStaffNotif } from '../lib/emit-staff-notif.js';
 
 // Payroll is HR-confidential: every procedure is role-gated to hr/ke_toan (super passes).
 // Non-HR staff have no code path to salary data. RLS adds facility isolation on top.
@@ -364,6 +365,39 @@ export const payrollRouter = router({
         const kpiRow = await tx.kpiScore.findUnique({ where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } } });
         const effectiveKpiScore = kpiRow ? (kpiRow.overrideScore ?? kpiRow.autoScore) : (input.kpiScore ?? 0);
 
+        // S3 — Commission auto-feed: for sale staff, derive variablePay from the period's
+        // approved receipts attributed to them (same logic as commissionForSale query).
+        // Only applies to draft payslips (existing guard already rejects non-draft above).
+        let effectiveVariablePay = input.variablePay;
+        let effectiveVariableNote = input.variableNote;
+        if (block === 'sales') {
+          const quota = rate.monthlyQuota ?? 0;
+          const [y, mo] = input.periodKey.split('-').map(Number);
+          const periodStart = new Date(Date.UTC(y!, mo! - 1, 1));
+          const periodEndDate = new Date(Date.UTC(y!, mo!, 1));
+          const grouped = await tx.receipt.groupBy({
+            by: ['kind'],
+            where: {
+              soldById: input.userId,
+              facilityId: input.facilityId,
+              status: { in: ['approved', 'sent', 'reconciled'] },
+              approvedAt: { gte: periodStart, lt: periodEndDate },
+            },
+            _sum: { netAmount: true },
+          });
+          const newRevenue = grouped.find((g) => g.kind === 'new')?._sum.netAmount ?? 0;
+          const renewalRevenue = grouped.find((g) => g.kind === 'renewal')?._sum.netAmount ?? 0;
+          const attainment = quota > 0 ? newRevenue / quota : 0;
+          const rateNew = cvtvNewCustomerRate(attainment, params);
+          const rateRenew = renewalRate('cvtv', 1, params); // centreRetentionRatio default 1
+          const commissionNew = commissionAmount(newRevenue, rateNew);
+          const commissionRenewal = commissionAmount(renewalRevenue, rateRenew);
+          const total = commissionNew + commissionRenewal;
+          effectiveVariablePay = total;
+          effectiveVariableNote =
+            `Hoa hồng tự động kỳ ${input.periodKey}: mới ${commissionNew.toLocaleString('vi-VN')}đ + tái tục ${commissionRenewal.toLocaleString('vi-VN')}đ`;
+        }
+
         const r = assemblePayslip(
           {
             baseSalary: rate.baseSalary,
@@ -374,7 +408,7 @@ export const payrollRouter = router({
             block,
             workdays: input.workdays,
             standardDays: input.standardDays,
-            variablePay: input.variablePay,
+            variablePay: effectiveVariablePay,
             insuranceDeduction: input.insuranceDeduction,
             dependents,
           },
@@ -392,7 +426,7 @@ export const payrollRouter = router({
           allowanceEarned: r.allowanceEarned,
           kpiBonus: r.kpiBonus,
           variablePay: r.variablePay,
-          variableNote: input.variableNote,
+          variableNote: effectiveVariableNote,
           insuranceDeduction: r.insuranceDeduction,
           dependents,
           grossIncome: r.grossIncome,
@@ -497,6 +531,50 @@ export const payrollRouter = router({
           ),
         );
         return { paidCount: due.length };
+      }),
+    ),
+
+  // Bulk-pay specific finalized payslips by ID (max 100 at a time). Only finalized slips
+  // belonging to ctx.facilityId are updated; slips already paid or from another facility
+  // are silently placed in `failed`. Returns { succeeded, failed }.
+  payslipBulkPay: requireRole(Role.hr, Role.ke_toan)
+    .input(z.object({ ids: z.array(z.string().uuid()).min(1).max(100) }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        // Resolve which of the provided IDs are finalized slips in the caller's facility set.
+        const slips = await tx.payslip.findMany({
+          where: { id: { in: input.ids }, status: 'finalized' },
+          select: { id: true, facilityId: true, periodKey: true },
+        });
+        // Only accept slips from facilities this user has access to (RLS already enforces this,
+        // but we also want to surface failures explicitly rather than silently ignoring).
+        const accessibleFacilityIds = new Set(ctx.session.facilityIds);
+        const eligible = slips.filter((s) => accessibleFacilityIds.has(s.facilityId));
+        const eligibleIds = new Set(eligible.map((s) => s.id));
+        const failed = input.ids.filter((id) => !eligibleIds.has(id));
+
+        if (eligible.length > 0) {
+          const paidAt = new Date();
+          await tx.payslip.updateMany({
+            where: { id: { in: eligible.map((s) => s.id) } },
+            data: { status: 'paid', paidAt },
+          });
+          await Promise.all(
+            eligible.map((s) =>
+              logEvent(tx, {
+                facilityId: s.facilityId,
+                entityType: 'payslip',
+                entityId: s.id,
+                type: 'status_changed',
+                body: `Trả lương theo ID kỳ ${s.periodKey}`,
+                changes: [{ field: 'status', old: 'finalized', new: 'paid' }],
+                actorId: ctx.session.userId,
+              }),
+            ),
+          );
+        }
+
+        return { succeeded: eligible.map((s) => s.id), failed };
       }),
     ),
 
@@ -615,6 +693,23 @@ export const payrollRouter = router({
           },
         });
         await logEvent(tx, { facilityId: row.facilityId, entityType: 'kpi_score', entityId: row.id, type: 'status_changed', body: `Nộp phiếu KPI ${input.periodKey} (tự đánh giá)`, actorId: userId });
+        // Notify managers (bgd + quan_ly) of this facility that a KPI evaluation is pending review.
+        const facilityUsers = await tx.userFacility.findMany({
+          where: { facilityId: row.facilityId },
+          select: { userId: true, user: { select: { roles: true, displayName: true } } },
+        });
+        const managerIds = facilityUsers
+          .filter((uf) => uf.user.roles.includes('bgd') || uf.user.roles.includes('quan_ly'))
+          .map((uf) => uf.userId);
+        const submitter = await tx.appUser.findUnique({ where: { id: userId }, select: { displayName: true } });
+        await emitStaffNotif(tx, {
+          recipientIds: managerIds,
+          event: 'kpi_pending_review',
+          title: 'Phiếu KPI chờ xác nhận',
+          body: `${submitter?.displayName ?? userId} vừa nộp phiếu KPI kỳ ${input.periodKey}`,
+          data: { kpiScoreId: row.id, periodKey: input.periodKey, submittedBy: userId },
+          facilityId: row.facilityId,
+        });
         return updated;
       }),
     ),

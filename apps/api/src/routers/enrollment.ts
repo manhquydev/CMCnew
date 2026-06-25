@@ -3,6 +3,7 @@ import { withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent, logStatusChange } from '@cmc/audit';
 import { router, protectedProcedure, requireRole, Role } from '../trpc.js';
+import { emitStaffNotif } from '../lib/emit-staff-notif.js';
 
 export const enrollmentRouter = router({
   listByBatch: protectedProcedure
@@ -50,6 +51,23 @@ export const enrollmentRouter = router({
           entityId: enrollment.id,
           type: 'created',
           actorId: ctx.session.userId,
+        });
+        // Notify quan_ly + head_teacher of this facility about the new enrollment.
+        const facilityUsers = await tx.userFacility.findMany({
+          where: { facilityId: input.facilityId },
+          select: { userId: true, user: { select: { roles: true } } },
+        });
+        const notifyIds = facilityUsers
+          .filter((uf) => uf.user.roles.includes('quan_ly') || uf.user.roles.includes('head_teacher'))
+          .map((uf) => uf.userId);
+        const student = await tx.student.findUnique({ where: { id: input.studentId }, select: { fullName: true, studentCode: true } });
+        await emitStaffNotif(tx, {
+          recipientIds: notifyIds,
+          event: 'enrollment_new',
+          title: 'Ghi danh mới',
+          body: `HS ${student?.fullName ?? input.studentId} (${student?.studentCode ?? ''}) vừa được ghi danh vào lớp ${batch.code}`,
+          data: { enrollmentId: enrollment.id, classBatchId: input.classBatchId, studentId: input.studentId },
+          facilityId: input.facilityId,
         });
         // Capacity = cảnh báo mềm (không chặn).
         const overCapacity = batch.capacity != null && activeCount + 1 > batch.capacity;

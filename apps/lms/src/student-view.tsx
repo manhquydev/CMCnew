@@ -24,12 +24,14 @@ import {
   SimpleGrid,
   Stack,
   Table,
-  Tabs,
   Text,
   Textarea,
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { IconCircleCheck, IconClock, IconPencil, IconAlertCircle } from '@tabler/icons-react';
+
+export type StudentTab = 'overview' | 'exercises' | 'results' | 'gradebook' | 'badges' | 'ranking' | 'rewards';
 
 type Exercise = Awaited<ReturnType<typeof trpc.exercise.listForPrincipal.query>>[number];
 type Submission = Awaited<ReturnType<typeof trpc.submission.mine.query>>[number];
@@ -45,11 +47,19 @@ const STATUS_LABEL: Record<WorkStatus, string> = {
   submitted: 'Đã nộp',
   graded: 'Đã chấm',
 };
+
 const STATUS_COLOR: Record<WorkStatus, string> = {
   none: 'gray',
   draft: 'yellow',
   submitted: 'blue',
   graded: 'green',
+};
+
+const STATUS_ICON: Record<WorkStatus, React.ReactNode> = {
+  none: <IconAlertCircle size={12} color="var(--cmc-text-faint)" />,
+  draft: <IconPencil size={12} color="var(--cmc-status-pending)" />,
+  submitted: <IconClock size={12} color="var(--cmc-brand)" />,
+  graded: <IconCircleCheck size={12} color="var(--cmc-status-active)" />,
 };
 
 function workStatus(sub: Submission | undefined): WorkStatus {
@@ -101,8 +111,6 @@ function ExerciseModal({
   const status = workStatus(submission);
   const isGraded = status === 'graded';
 
-  // Reset the editor from the latest submission each time the modal opens; pull the saved
-  // annotation layer (and the teacher's, once published) for the base PDF.
   useEffect(() => {
     if (!opened) return;
     setAnswer(submission?.answerText ?? '');
@@ -144,7 +152,6 @@ function ExerciseModal({
   }
 
   async function submitWork() {
-    // Require at least some answer content before submitting.
     const hasText = answer.trim().length > 0;
     const hasAnnotation = annotation != null && annotation.items.length > 0;
     if (!hasText && !hasAnnotation) {
@@ -156,7 +163,6 @@ function ExerciseModal({
     setMsg('');
     setErr('');
     try {
-      // Persist the current text + annotation layer before turning the work in.
       await trpc.submission.save.mutate({
         exerciseId: exercise.id,
         answerText: answer,
@@ -178,7 +184,7 @@ function ExerciseModal({
   const grade = submission?.grade;
 
   return (
-    <Modal opened={opened} onClose={onClose} title={exercise.title} size="lg">
+    <Modal opened={opened} onClose={onClose} title={exercise.title} size="lg" radius="xl" centered>
       <Stack>
         {exercise.description && (
           <Text size="sm" c="dimmed" style={{ whiteSpace: 'pre-wrap' }}>
@@ -186,7 +192,12 @@ function ExerciseModal({
           </Text>
         )}
         <Group gap="xs">
-          <Badge color={STATUS_COLOR[status]}>{STATUS_LABEL[status]}</Badge>
+          <Group gap={4}>
+            {STATUS_ICON[status]}
+            <Badge color={STATUS_COLOR[status]} variant="light" radius="xl">
+              {STATUS_LABEL[status]}
+            </Badge>
+          </Group>
           <Text size="sm" c="dimmed">
             Hạn nộp: {fmtDate(exercise.dueAt)} · Điểm tối đa: {exercise.maxScore}
           </Text>
@@ -232,6 +243,7 @@ function ExerciseModal({
           value={answer}
           onChange={(e) => setAnswer(e.currentTarget.value)}
           disabled={isGraded}
+          radius="md"
         />
 
         {isGraded && (
@@ -252,10 +264,10 @@ function ExerciseModal({
 
         {!isGraded && (
           <Group justify="flex-end">
-            <Button variant="default" onClick={saveDraft} loading={busy === 'save'} disabled={busy !== null}>
+            <Button variant="subtle" color="cmc" onClick={saveDraft} loading={busy === 'save'} disabled={busy !== null}>
               Lưu nháp
             </Button>
-            <Button onClick={submitWork} loading={busy === 'submit'} disabled={busy !== null}>
+            <Button variant="filled" radius={9999} onClick={submitWork} loading={busy === 'submit'} disabled={busy !== null}>
               Nộp bài
             </Button>
           </Group>
@@ -291,12 +303,10 @@ function ExercisesTab({ refreshKey }: { refreshKey: number }) {
     }
   }, []);
 
-  // refreshKey bumps when a realtime notification arrives → re-fetch so a freshly published grade appears live.
   useEffect(() => {
     load();
   }, [load, refreshKey]);
 
-  // Index submissions by exercise for an O(1) join.
   const subByExercise = useMemo(() => {
     const m = new Map<string, Submission>();
     for (const s of submissions) m.set(s.exerciseId, s);
@@ -327,18 +337,18 @@ function ExercisesTab({ refreshKey }: { refreshKey: number }) {
   }
 
   return (
-    <Card withBorder mt="md">
+    <Card radius="lg" style={{ border: '1px solid var(--cmc-border)' }} p={0}>
       {exercises.length === 0 ? (
-        <Text c="dimmed">Chưa có bài tập nào.</Text>
+        <Text c="dimmed" p="xl">Chưa có bài tập nào.</Text>
       ) : (
-        <Table highlightOnHover>
+        <Table striped highlightOnHover withTableBorder={false}>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Bài tập</Table.Th>
-              <Table.Th>Hạn nộp</Table.Th>
-              <Table.Th>Trạng thái</Table.Th>
-              <Table.Th>Điểm</Table.Th>
-              <Table.Th />
+              <Table.Th style={thStyle}>Bài tập</Table.Th>
+              <Table.Th style={thStyle}>Hạn nộp</Table.Th>
+              <Table.Th style={thStyle}>Trạng thái</Table.Th>
+              <Table.Th style={thStyle}>Điểm</Table.Th>
+              <Table.Th style={{ ...thStyle, width: 120 }} />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -350,18 +360,23 @@ function ExercisesTab({ refreshKey }: { refreshKey: number }) {
               return (
                 <Table.Tr key={ex.id}>
                   <Table.Td>
-                    <Text fw={600}>{ex.title}</Text>
+                    <Text fw={600} size="sm">{ex.title}</Text>
                   </Table.Td>
-                  <Table.Td>{fmtDate(ex.dueAt)}</Table.Td>
                   <Table.Td>
-                    <Badge size="sm" color={STATUS_COLOR[status]}>
-                      {STATUS_LABEL[status]}
-                    </Badge>
+                    <Text size="sm">{fmtDate(ex.dueAt)}</Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap={4}>
+                      {STATUS_ICON[status]}
+                      <Badge size="sm" color={STATUS_COLOR[status]} variant="light" radius="xl">
+                        {STATUS_LABEL[status]}
+                      </Badge>
+                    </Group>
                   </Table.Td>
                   <Table.Td>
                     {showGrade && grade ? (
                       <Stack gap={2}>
-                        <Text size="sm" fw={600}>
+                        <Text size="sm" fw={600} style={{ fontVariantNumeric: 'tabular-nums' }}>
                           {grade.score}/{grade.maxScore}
                           {ex.starReward > 0 ? ` · +${ex.starReward} sao` : ''}
                         </Text>
@@ -372,13 +387,11 @@ function ExercisesTab({ refreshKey }: { refreshKey: number }) {
                         )}
                       </Stack>
                     ) : (
-                      <Text size="sm" c="dimmed">
-                        —
-                      </Text>
+                      <Text size="sm" c="dimmed">—</Text>
                     )}
                   </Table.Td>
-                  <Table.Td w={120}>
-                    <Button size="xs" variant="light" onClick={() => openExercise(ex)}>
+                  <Table.Td>
+                    <Button size="xs" variant="subtle" color="cmc" radius={9999} onClick={() => openExercise(ex)}>
                       {status === 'graded' ? 'Xem' : 'Làm bài'}
                     </Button>
                   </Table.Td>
@@ -429,7 +442,6 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
     }
   }, []);
 
-  // refreshKey bumps on a realtime star earn → the balance updates without a manual reload.
   useEffect(() => {
     load();
   }, [load, refreshKey]);
@@ -472,14 +484,12 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
   const stars = balance ?? 0;
 
   return (
-    <Stack mt="md">
-      <Card withBorder>
-        <Text size="sm" c="dimmed">
-          Số sao hiện có
+    <Stack>
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text size="sm" c="dimmed" mb={4}>Số sao hiện có</Text>
+        <Text size="xl" fw={700} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-warn-text)' }}>
+          {stars} sao
         </Text>
-        <Title order={2} c="yellow.7">
-          ⭐ {stars} sao
-        </Title>
       </Card>
 
       {msg && (
@@ -494,7 +504,7 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
       )}
 
       {gifts.length === 0 ? (
-        <Card withBorder>
+        <Card radius="lg" style={{ border: '1px solid var(--cmc-border)' }} p="xl">
           <Text c="dimmed">Chưa có quà nào.</Text>
         </Card>
       ) : (
@@ -504,7 +514,7 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
             const notEnough = stars < g.starsRequired;
             const disabled = outOfStock || notEnough || redeemingId !== null;
             return (
-              <Card key={g.id} withBorder>
+              <Card key={g.id} radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
                 <Stack gap="xs" h="100%">
                   <Text fw={600}>{g.name}</Text>
                   {g.description && (
@@ -513,14 +523,16 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
                     </Text>
                   )}
                   <Group gap="xs">
-                    <Badge color="yellow">⭐ {g.starsRequired} sao</Badge>
-                    <Badge color={outOfStock ? 'red' : 'gray'} variant="light">
+                    <Badge color="yellow" variant="light" radius="xl">{g.starsRequired} sao</Badge>
+                    <Badge color={outOfStock ? 'red' : 'gray'} variant="light" radius="xl">
                       {giftStockLabel(g.stock)}
                     </Badge>
                   </Group>
                   <Button
                     mt="auto"
                     size="xs"
+                    variant="filled"
+                    radius={9999}
                     onClick={() => redeem(g)}
                     loading={redeemingId === g.id}
                     disabled={disabled}
@@ -537,66 +549,167 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
   );
 }
 
+function OverviewTab({ principal, refreshKey }: { principal: LmsPrincipal; refreshKey: number }) {
+  const [balance, setBalance] = useState<number | null>(null);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      trpc.rewards.balance.query(),
+      trpc.exercise.listForPrincipal.query(),
+      trpc.submission.mine.query(),
+    ])
+      .then(([bal, ex, subs]) => {
+        setBalance(bal);
+        setExercises(ex);
+        setSubmissions(subs);
+      })
+      .catch((e) => notifyError(e, 'Tải tổng quan thất bại'))
+      .finally(() => setLoading(false));
+  }, [refreshKey]);
+
+  if (loading) {
+    return (
+      <Center py="xl">
+        <Loader />
+      </Center>
+    );
+  }
+
+  const submitted = submissions.filter((s) => s.status === 'submitted' || s.status === 'graded').length;
+  const graded = submissions.filter((s) => s.status === 'graded' && s.grade?.isPublished).length;
+
+  return (
+    <Stack>
+      <Title order={2} style={{ color: 'var(--cmc-text)', fontSize: 22, fontWeight: 600 }}>
+        Xin chào, {principal.displayName}
+      </Title>
+      <SimpleGrid cols={{ base: 1, sm: 3 }}>
+        <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+          <Text size="sm" c="dimmed" mb={4}>Số sao tích lũy</Text>
+          <Text size="xl" fw={700} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-warn-text)' }}>
+            {balance ?? 0}
+          </Text>
+        </Card>
+        <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+          <Text size="sm" c="dimmed" mb={4}>Tổng bài tập</Text>
+          <Text size="xl" fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {exercises.length}
+          </Text>
+        </Card>
+        <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+          <Text size="sm" c="dimmed" mb={4}>Đã nộp / Đã chấm</Text>
+          <Text size="xl" fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>
+            {submitted} / {graded}
+          </Text>
+        </Card>
+      </SimpleGrid>
+    </Stack>
+  );
+}
+
 function liveMessage(n: LiveNotification): string {
   if (n.type === 'grade_published') {
     const score = n.payload.score != null ? ` ${n.payload.score} điểm` : '';
-    const stars = n.payload.starsEarned ? ` · +${n.payload.starsEarned} sao ⭐` : '';
-    return `🔔 Bài "${n.payload.exercise ?? ''}" đã có điểm:${score}${stars}`;
+    const stars = n.payload.starsEarned ? ` · +${n.payload.starsEarned} sao` : '';
+    return `Bài "${n.payload.exercise ?? ''}" đã có điểm:${score}${stars}`;
   }
   if (n.type === 'badge_awarded') {
-    return `🏅 Bạn vừa đạt huy hiệu "${n.payload.badge ?? ''}"!`;
+    return `Bạn vừa đạt huy hiệu "${n.payload.badge ?? ''}"!`;
   }
-  return '🔔 Bạn có thông báo mới';
+  return 'Bạn có thông báo mới';
 }
 
-export function StudentView({ principal }: { principal: LmsPrincipal }) {
+interface StudentViewProps {
+  principal: LmsPrincipal;
+  /** Controlled active tab — driven by the sidebar in StudentShell. */
+  activeTab?: StudentTab;
+  onTabChange?: (tab: StudentTab) => void;
+  /** Called when a real-time notification arrives so parent shell can update badge count. */
+  onNotification?: () => void;
+}
+
+export function StudentView({ principal, activeTab, onTabChange: _onTabChange, onNotification }: StudentViewProps) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [banner, setBanner] = useState<string | null>(null);
+
+  const currentTab = activeTab ?? 'exercises';
 
   useNotificationStream((n) => {
     setBanner(liveMessage(n));
     setRefreshKey((k) => k + 1);
+    onNotification?.();
   });
+
+  // In standalone mode the view renders its own minimal header with NotificationCenter.
+  const standaloneHeader = activeTab === undefined && (
+    <Group justify="space-between" align="center">
+      <Title order={3}>Xin chào, {principal.displayName}</Title>
+      <NotificationCenter pulse={refreshKey} />
+    </Group>
+  );
+
+  function renderPanel() {
+    switch (currentTab) {
+      case 'overview':
+        return <OverviewTab principal={principal} refreshKey={refreshKey} />;
+      case 'exercises':
+        return <ExercisesTab refreshKey={refreshKey} />;
+      case 'results':
+        // Exercises table filtered to graded submissions serves as the results view.
+        return <ExercisesTab refreshKey={refreshKey} />;
+      case 'gradebook':
+        return principal.studentIds[0] ? (
+          <BadgeShelf studentId={principal.studentIds[0]} refreshKey={refreshKey} />
+        ) : (
+          <Text c="dimmed">Không có học sinh liên kết.</Text>
+        );
+      case 'badges':
+        return principal.studentIds[0] ? (
+          <BadgeShelf studentId={principal.studentIds[0]} refreshKey={refreshKey} />
+        ) : (
+          <Text c="dimmed">Không có học sinh liên kết.</Text>
+        );
+      case 'ranking':
+        return principal.studentIds[0] ? (
+          <Leaderboard studentId={principal.studentIds[0]} refreshKey={refreshKey} />
+        ) : (
+          <Text c="dimmed">Không có học sinh liên kết.</Text>
+        );
+      case 'rewards':
+        return <RewardsTab refreshKey={refreshKey} />;
+      default:
+        return <ExercisesTab refreshKey={refreshKey} />;
+    }
+  }
 
   return (
     <Stack>
-      <Group justify="space-between" align="center">
-        <Title order={3}>Xin chào, {principal.displayName}</Title>
-        <NotificationCenter pulse={refreshKey} />
-      </Group>
+      {standaloneHeader}
       {banner && (
-        <Alert color="green" withCloseButton onClose={() => setBanner(null)}>
+        <Alert
+          color="green"
+          withCloseButton
+          onClose={() => setBanner(null)}
+          icon={<IconCircleCheck size={16} />}
+        >
           {banner}
         </Alert>
       )}
-      <Tabs defaultValue="exercises">
-        <Tabs.List>
-          <Tabs.Tab value="exercises">Bài tập</Tabs.Tab>
-          <Tabs.Tab value="rewards">Phần thưởng</Tabs.Tab>
-          <Tabs.Tab value="badges">Huy hiệu</Tabs.Tab>
-          <Tabs.Tab value="ranking">Bảng xếp hạng</Tabs.Tab>
-        </Tabs.List>
-        <Tabs.Panel value="exercises">
-          <ExercisesTab refreshKey={refreshKey} />
-        </Tabs.Panel>
-        <Tabs.Panel value="rewards">
-          <RewardsTab refreshKey={refreshKey} />
-        </Tabs.Panel>
-        <Tabs.Panel value="badges" pt="md">
-          {principal.studentIds[0] ? (
-            <BadgeShelf studentId={principal.studentIds[0]} refreshKey={refreshKey} />
-          ) : (
-            <Text c="dimmed">Không có học sinh liên kết.</Text>
-          )}
-        </Tabs.Panel>
-        <Tabs.Panel value="ranking" pt="md">
-          {principal.studentIds[0] ? (
-            <Leaderboard studentId={principal.studentIds[0]} refreshKey={refreshKey} />
-          ) : (
-            <Text c="dimmed">Không có học sinh liên kết.</Text>
-          )}
-        </Tabs.Panel>
-      </Tabs>
+      {renderPanel()}
     </Stack>
   );
 }
+
+// ── Shared style helpers ──────────────────────────────────────────────────────
+
+const thStyle: React.CSSProperties = {
+  fontSize: 11,
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em',
+  color: 'var(--cmc-text-muted)',
+};

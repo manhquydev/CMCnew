@@ -6,6 +6,7 @@ import { rlsContextOf } from '@cmc/auth';
 import { logEvent, logStatusChange, addFollower } from '@cmc/audit';
 import { router, protectedProcedure, requireRole, Role } from '../trpc.js';
 import { nextBatchCode } from '../services/batch-code.js';
+import { emitStaffNotif } from '../lib/emit-staff-notif.js';
 
 const ENTITY = 'class_batch';
 const TERMINAL_STATUSES: ClassStatus[] = ['closed', 'cancelled'];
@@ -170,6 +171,22 @@ export const classBatchRouter = router({
           type: 'note',
           body: `Lý do hủy: ${input.reason} (huỷ ${cancelled.count} buổi chưa diễn ra${meetingNote})`,
           actorId: ctx.session.userId,
+        });
+        // Notify quan_ly of this facility that the class was cancelled.
+        const managers = await tx.userFacility.findMany({
+          where: { facilityId: batch.facilityId },
+          select: { userId: true, user: { select: { roles: true } } },
+        });
+        const managerIds = managers
+          .filter((uf) => uf.user.roles.includes('quan_ly'))
+          .map((uf) => uf.userId);
+        await emitStaffNotif(tx, {
+          recipientIds: managerIds,
+          event: 'class_cancelled',
+          title: 'Lớp học đã bị hủy',
+          body: `Lớp ${batch.code} — ${batch.name} đã bị hủy. Lý do: ${input.reason}`,
+          data: { classBatchId: batch.id, code: batch.code },
+          facilityId: batch.facilityId,
         });
         return { batch, cancelledSessions: cancelled.count, cancelledMeetings };
       }),

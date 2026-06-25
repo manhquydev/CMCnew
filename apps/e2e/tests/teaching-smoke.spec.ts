@@ -19,11 +19,11 @@ test.describe('teaching smoke', () => {
     await page.getByLabel('Mật khẩu').fill(PASSWORD);
     await page.getByRole('button', { name: 'Đăng nhập' }).click();
 
-    // AppShell header shows the app title after login.
-    await expect(page.getByText('CMC · Teaching / ERP')).toBeVisible({ timeout: 10_000 });
+    // After login, the sidebar nav appears. "Lịch dạy" is the first nav item.
+    await expect(page.locator('nav').getByText('Lịch dạy')).toBeVisible({ timeout: 10_000 });
 
-    // First tab in Workbench is "Lớp học".
-    await expect(page.getByRole('tab', { name: 'Lớp học' })).toBeVisible({ timeout: 8_000 });
+    // "Lớp học" should be visible in the QUẢN LÝ LỚP group.
+    await expect(page.locator('nav').getByText('Lớp học')).toBeVisible({ timeout: 8_000 });
   });
 
   test('wrong password shows error', async ({ page }) => {

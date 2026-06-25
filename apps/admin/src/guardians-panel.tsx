@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { trpc, notifyError, notifySuccess } from '@cmc/ui';
 import {
   Badge,
@@ -11,7 +11,6 @@ import {
   Table,
   Text,
   TextInput,
-  Title,
 } from '@mantine/core';
 
 type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
@@ -119,6 +118,14 @@ export function GuardiansPanel() {
     }
   }
 
+  const TH_STYLE: React.CSSProperties = {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    color: 'var(--cmc-text-muted)',
+    fontWeight: 600,
+  };
+
   return (
     <Stack>
       <Select
@@ -132,34 +139,34 @@ export function GuardiansPanel() {
       />
 
       {studentId && (
-        <Card withBorder>
-          <Title order={6} mb="sm">
+        <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+          <Text fw={600} style={{ color: 'var(--cmc-text)' }} mb="md">
             Phụ huynh của học sinh
-          </Title>
+          </Text>
           {guardians.length === 0 ? (
             <Text c="dimmed" size="sm">
               Chưa liên kết phụ huynh nào.
             </Text>
           ) : (
-            <Table>
+            <Table striped highlightOnHover withTableBorder={false}>
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Phụ huynh</Table.Th>
-                  <Table.Th>Liên hệ</Table.Th>
-                  <Table.Th>Quan hệ</Table.Th>
-                  <Table.Th />
+                  <Table.Th style={TH_STYLE}>Phụ huynh</Table.Th>
+                  <Table.Th style={TH_STYLE}>Liên hệ</Table.Th>
+                  <Table.Th style={TH_STYLE}>Quan hệ</Table.Th>
+                  <Table.Th style={{ ...TH_STYLE, width: 80 }} />
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
                 {guardians.map((g) => (
                   <Table.Tr key={g.id}>
-                    <Table.Td>{g.parent.displayName}</Table.Td>
-                    <Table.Td>{g.parent.email ?? g.parent.phone ?? '—'}</Table.Td>
+                    <Table.Td><Text size="sm">{g.parent.displayName}</Text></Table.Td>
+                    <Table.Td><Text size="sm" style={{ color: 'var(--cmc-text-muted)' }}>{g.parent.email ?? g.parent.phone ?? '—'}</Text></Table.Td>
                     <Table.Td>
-                      <Badge variant="light">{RELATION_LABEL[g.relation] ?? g.relation}</Badge>
+                      <Badge variant="light" radius="xl" size="sm">{RELATION_LABEL[g.relation] ?? g.relation}</Badge>
                     </Table.Td>
                     <Table.Td>
-                      <Button size="compact-xs" variant="light" color="red" onClick={() => unlink(g.id)}>
+                      <Button size="compact-xs" variant="subtle" color="red" onClick={() => unlink(g.id)}>
                         Gỡ
                       </Button>
                     </Table.Td>
@@ -179,15 +186,15 @@ export function GuardiansPanel() {
               onChange={setParentId}
             />
             <Select label="Quan hệ" w={150} data={RELATIONS} value={relation} onChange={(v) => v && setRelation(v)} allowDeselect={false} />
-            <Button onClick={link}>Liên kết</Button>
+            <Button variant="filled" radius={9999} onClick={link}>Liên kết</Button>
           </Group>
         </Card>
       )}
 
-      <Card withBorder>
-        <Title order={6} mb="sm">
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} style={{ color: 'var(--cmc-text)' }} mb="md">
           Tạo tài khoản phụ huynh mới
-        </Title>
+        </Text>
         <Group grow align="flex-end">
           <TextInput label="Họ tên" value={name} onChange={(e) => setName(e.currentTarget.value)} />
           <TextInput label="Email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
@@ -197,7 +204,7 @@ export function GuardiansPanel() {
           <PasswordInput label="Mật khẩu" value={password} onChange={(e) => setPassword(e.currentTarget.value)} />
         </Group>
         <Group mt="md">
-          <Button onClick={createParent} loading={busy}>
+          <Button variant="filled" radius={9999} onClick={createParent} loading={busy}>
             Tạo phụ huynh
           </Button>
         </Group>

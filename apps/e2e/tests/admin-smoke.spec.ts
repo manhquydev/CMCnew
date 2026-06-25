@@ -20,11 +20,9 @@ test.describe('admin smoke', () => {
     await page.getByLabel('Mật khẩu').fill(PASSWORD);
     await page.getByRole('button', { name: 'Đăng nhập' }).click();
 
-    // After successful login the AppShell header appears with the app title.
-    await expect(page.getByText('CMC · Admin')).toBeVisible({ timeout: 10_000 });
-
-    // At least one Tabs.Tab should be visible (Tổng quan is the first tab).
-    await expect(page.getByRole('tab', { name: 'Tổng quan' })).toBeVisible({ timeout: 8_000 });
+    // After successful login the sidebar nav appears (AppShell layout).
+    // "Tổng quan" is the first nav item in the sidebar.
+    await expect(page.locator('nav').getByText('Tổng quan')).toBeVisible({ timeout: 10_000 });
   });
 
   test('wrong password shows error', async ({ page }) => {
@@ -43,10 +41,12 @@ test.describe('admin smoke', () => {
     await page.getByLabel('Email').fill(EMAIL);
     await page.getByLabel('Mật khẩu').fill(PASSWORD);
     await page.getByRole('button', { name: 'Đăng nhập' }).click();
-    await expect(page.getByText('CMC · Admin')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('nav').getByText('Tổng quan')).toBeVisible({ timeout: 10_000 });
 
-    await page.getByRole('tab', { name: 'Khóa học' }).click();
-    await page.getByRole('button', { name: '+ Tạo khóa' }).click();
+    // Navigate to Khóa học via sidebar nav (NavLink renders as a button in the nav).
+    await page.locator('nav').getByText('Khóa học').click();
+    // Button uses an SVG icon (not text "+") so exact name is "Tạo khóa".
+    await page.getByRole('button', { name: 'Tạo khóa' }).click();
 
     // Scope to the modal so the submit "Tạo" isn't confused with "+ Tạo khóa".
     const dialog = page.getByRole('dialog');

@@ -86,9 +86,10 @@ model Facility {
   name      String
   timezone  String         @default("Asia/Ho_Chi_Minh")
   address   String?
-  isActive  Boolean        @default(true) @map("is_active")
-  createdAt DateTime       @default(now()) @map("created_at")
-  users     UserFacility[]
+  isActive           Boolean             @default(true) @map("is_active")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  users              UserFacility[]
+  staffNotifications StaffNotification[]
 
   @@map("facility")
 }
@@ -104,9 +105,10 @@ model AppUser {
   primaryRole  Role           @map("primary_role")
   isActive     Boolean        @default(true) @map("is_active")
   /// Bumped on deactivate / role / facility change → invalidates outstanding JWTs.
-  tokenVersion Int            @default(0) @map("token_version")
-  createdAt    DateTime       @default(now()) @map("created_at")
-  facilities   UserFacility[]
+  tokenVersion        Int                  @default(0) @map("token_version")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  facilities          UserFacility[]
+  staffNotifications  StaffNotification[]
 
   @@map("app_user")
 }
@@ -1002,6 +1004,35 @@ model AfterSaleCase {
   @@index([facilityId])
   @@index([studentId])
   @@map("after_sale_case")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase B — Staff in-app notification. SSE fan-out per facility. 4 event types.
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum StaffNotifEvent {
+  class_cancelled
+  enrollment_new
+  receipt_pending_approval
+  kpi_pending_review
+}
+
+model StaffNotification {
+  id          String          @id @default(cuid())
+  recipientId String          @map("recipient_id") @db.Uuid
+  recipient   AppUser         @relation(fields: [recipientId], references: [id])
+  event       StaffNotifEvent
+  title       String
+  body        String
+  data        Json            @default("{}")
+  readAt      DateTime?       @map("read_at")
+  facilityId  Int             @map("facility_id")
+  facility    Facility        @relation(fields: [facilityId], references: [id])
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  @@index([recipientId, readAt])
+  @@index([facilityId])
+  @@map("staff_notification")
 }
 
 /// Chứng chỉ — cấp TAY bởi head_teacher/quan_ly (LMS là nền làm bài tập, không tự cấp bằng;

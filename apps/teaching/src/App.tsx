@@ -33,6 +33,7 @@ import { CskhPanel } from './cskh-panel';
 import { CertificatePanel } from './certificate-panel';
 import { PayrollPanel } from './payroll-panel';
 import { MyPayslipsPanel } from './my-payslips-panel';
+import { Shell, type SectionKey } from './shell';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
@@ -53,6 +54,16 @@ const STATUS_COLOR: Record<string, string> = {
 const DOW = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 const fmtDate = (d: string | Date) => dayjs(d).format('DD/MM/YYYY');
 const toApiDate = (d: Date | null) => (d ? dayjs(d).format('YYYY-MM-DD') : undefined);
+
+// Map sidebar section keys that belong inside Workspace to their ClassDetail tab value
+const SECTION_TO_CLASS_TAB: Partial<Record<SectionKey, string>> = {
+  schedule: 'schedule',
+  sessions: 'sessions',
+  attendance: 'attendance',
+  meetings: 'meetings',
+  classlog: 'log',
+  enrollment: 'enroll',
+};
 
 function CreateClassModal({
   facilityId,
@@ -102,10 +113,10 @@ function CreateClassModal({
 
   return (
     <>
-      <Button size="xs" onClick={open}>
+      <Button variant="filled" radius={9999} size="sm" onClick={open}>
         + Tạo lớp
       </Button>
-      <Modal opened={opened} onClose={close} title="Tạo lớp học">
+      <Modal opened={opened} onClose={close} title="Tạo lớp học" radius="xl" centered>
         <form onSubmit={form.onSubmit(create)}>
           <Stack>
             <Select
@@ -121,7 +132,7 @@ function CreateClassModal({
               <DateInput label="Kết thúc" value={endDate} onChange={setEndDate} valueFormat="DD/MM/YYYY" clearable />
             </Group>
             <NumberInput label="Sĩ số tối đa (tùy chọn)" min={1} {...form.getInputProps('capacity')} />
-            <Button type="submit" loading={busy}>
+            <Button type="submit" loading={busy} variant="filled" radius={9999}>
               Tạo
             </Button>
           </Stack>
@@ -196,8 +207,8 @@ function ScheduleTab({
 
   return (
     <Stack>
-      <Card withBorder>
-        <Text fw={600} mb="xs">
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} mb="xs" style={{ color: 'var(--cmc-text)' }}>
           Khung lịch tuần
         </Text>
         <Group align="flex-end">
@@ -229,18 +240,18 @@ function ScheduleTab({
             value={teacherId}
             onChange={setTeacherId}
           />
-          <Button onClick={addSlot}>Thêm khung</Button>
+          <Button onClick={addSlot} variant="filled" radius={9999}>Thêm khung</Button>
         </Group>
         <Text size="xs" c="dimmed" mt={6}>
           Gán phòng/giáo viên để hệ thống chặn cứng trùng phòng và trùng giáo viên khi sinh lịch.
         </Text>
-        <Table mt="sm">
+        <Table mt="sm" striped highlightOnHover withTableBorder={false}>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Thứ</Table.Th>
-              <Table.Th>Giờ</Table.Th>
-              <Table.Th>Phòng</Table.Th>
-              <Table.Th>Giáo viên</Table.Th>
+              <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Thứ</Table.Th>
+              <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Giờ</Table.Th>
+              <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Phòng</Table.Th>
+              <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Giáo viên</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -257,8 +268,8 @@ function ScheduleTab({
           </Table.Tbody>
         </Table>
       </Card>
-      <Card withBorder>
-        <Text fw={600} mb="xs">
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} mb="xs" style={{ color: 'var(--cmc-text)' }}>
           Sinh buổi học
         </Text>
         <Group align="flex-end">
@@ -274,7 +285,7 @@ function ScheduleTab({
             onChange={(d) => setRange((r) => ({ ...r, to: d }))}
             valueFormat="DD/MM/YYYY"
           />
-          <Button onClick={generate} disabled={!range.from || !range.to}>
+          <Button onClick={generate} disabled={!range.from || !range.to} variant="filled" radius={9999}>
             Sinh lịch
           </Button>
         </Group>
@@ -297,14 +308,14 @@ function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Roo
   const teacherLabel = (id: string | null) =>
     id ? (teachers.find((t) => t.id === id)?.displayName ?? '—') : '—';
   return (
-    <Table striped>
+    <Table striped highlightOnHover withTableBorder={false}>
       <Table.Thead>
         <Table.Tr>
-          <Table.Th>Ngày</Table.Th>
-          <Table.Th>Giờ</Table.Th>
-          <Table.Th>Phòng</Table.Th>
-          <Table.Th>Giáo viên</Table.Th>
-          <Table.Th>Trạng thái</Table.Th>
+          <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Ngày</Table.Th>
+          <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Giờ</Table.Th>
+          <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Phòng</Table.Th>
+          <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Giáo viên</Table.Th>
+          <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Trạng thái</Table.Th>
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>
@@ -317,7 +328,7 @@ function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Roo
             <Table.Td>{roomLabel(s.roomId)}</Table.Td>
             <Table.Td>{teacherLabel(s.teacherId)}</Table.Td>
             <Table.Td>
-              <Badge size="sm" color={STATUS_COLOR[s.status]}>
+              <Badge size="sm" color={STATUS_COLOR[s.status]} variant="light" radius="xl">
                 {s.status}
               </Badge>
             </Table.Td>
@@ -366,10 +377,10 @@ function CreateStudentModal({ facilityId, onCreated }: { facilityId: number; onC
 
   return (
     <>
-      <Button variant="default" onClick={open}>
+      <Button variant="subtle" onClick={open}>
         + Tạo học sinh
       </Button>
-      <Modal opened={opened} onClose={close} title="Tạo học sinh">
+      <Modal opened={opened} onClose={close} title="Tạo học sinh" radius="xl" centered>
         <form onSubmit={form.onSubmit(create)}>
           <Stack>
             <TextInput label="Mã học sinh" withAsterisk {...form.getInputProps('studentCode')} />
@@ -381,7 +392,7 @@ function CreateStudentModal({ facilityId, onCreated }: { facilityId: number; onC
               {...form.getInputProps('program')}
             />
             <DateInput label="Ngày sinh" value={dob} onChange={setDob} valueFormat="DD/MM/YYYY" clearable />
-            <Button type="submit" loading={busy}>
+            <Button type="submit" loading={busy} variant="filled" radius={9999}>
               Tạo
             </Button>
           </Stack>
@@ -408,7 +419,7 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
     try {
       const r = await trpc.enrollment.enroll.mutate({ facilityId, classBatchId: batch.id, studentId });
       if (r.overCapacity) {
-        setEnrollMsg(`⚠ Vượt sĩ số (${r.enrolledCount}/${r.capacity}) — vẫn ghi danh.`);
+        setEnrollMsg(`Vượt sĩ số (${r.enrolledCount}/${r.capacity}) — vẫn ghi danh.`);
       } else {
         notifySuccess('Đã ghi danh thành công');
       }
@@ -429,7 +440,6 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
     }
   }
 
-  // Enroll only students not already in this batch.
   const enrolledIds = new Set(enrollments.map((e) => e.studentId));
   const enrollable = students.filter((s) => !enrolledIds.has(s.id));
 
@@ -445,7 +455,7 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
           value={studentId}
           onChange={setStudentId}
         />
-        <Button onClick={enroll} disabled={!studentId}>
+        <Button onClick={enroll} disabled={!studentId} variant="filled" radius={9999}>
           Ghi danh
         </Button>
         <CreateStudentModal facilityId={facilityId} onCreated={load} />
@@ -455,14 +465,14 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
           {enrollMsg}
         </Text>
       )}
-      <Table striped>
+      <Table striped highlightOnHover withTableBorder={false}>
         <Table.Tbody>
           {enrollments.map((e) => (
             <Table.Tr key={e.id}>
               <Table.Td>{e.student.studentCode}</Table.Td>
               <Table.Td>{e.student.fullName}</Table.Td>
               <Table.Td>
-                <Badge size="sm" color={e.status === 'completed' ? 'teal' : undefined}>
+                <Badge size="sm" color={e.status === 'completed' ? 'teal' : undefined} variant="light" radius="xl">
                   {e.status}
                 </Badge>
               </Table.Td>
@@ -510,29 +520,29 @@ function MeetingsTab({ batch, facilityId }: { batch: Batch; facilityId: number }
   return (
     <Stack>
       <Alert color="blue" variant="light">
-        Lịch họp phụ huynh được hệ thống tự sinh theo định kỳ của chương trình (UCREA 5 tháng; Bright I.G & Black Hole 3 tháng), tính từ ngày khai giảng lớp. Không tạo họp đột xuất — nhân viên chỉ đánh dấu đã họp / hủy.
+        Lịch họp phụ huynh được hệ thống tự sinh theo định kỳ của chương trình (UCREA 5 tháng; Bright I.G &amp; Black Hole 3 tháng), tính từ ngày khai giảng lớp. Không tạo họp đột xuất — nhân viên chỉ đánh dấu đã họp / hủy.
       </Alert>
-      <Table striped>
+      <Table striped highlightOnHover withTableBorder={false}>
         <Table.Tbody>
           {meetings.map((m) => {
             const st = ST[m.status] ?? { label: m.status, color: 'gray' };
             return (
-            <Table.Tr key={m.id}>
-              <Table.Td>{dayjs(m.scheduledAt).format('DD/MM/YYYY HH:mm')}</Table.Td>
-              <Table.Td>{m.title}</Table.Td>
-              <Table.Td>{m.location ?? ''}</Table.Td>
-              <Table.Td>
-                <Badge size="sm" color={st.color}>{st.label}</Badge>
-              </Table.Td>
-              <Table.Td w={170}>
-                {m.status === 'scheduled' && (
-                  <Group gap="xs">
-                    <Button size="compact-xs" color="teal" variant="subtle" onClick={() => setStatus(m.id, 'done')}>Đã họp</Button>
-                    <Button size="compact-xs" color="gray" variant="subtle" onClick={() => setStatus(m.id, 'cancelled')}>Hủy</Button>
-                  </Group>
-                )}
-              </Table.Td>
-            </Table.Tr>
+              <Table.Tr key={m.id}>
+                <Table.Td>{dayjs(m.scheduledAt).format('DD/MM/YYYY HH:mm')}</Table.Td>
+                <Table.Td>{m.title}</Table.Td>
+                <Table.Td>{m.location ?? ''}</Table.Td>
+                <Table.Td>
+                  <Badge size="sm" color={st.color} variant="light" radius="xl">{st.label}</Badge>
+                </Table.Td>
+                <Table.Td w={170}>
+                  {m.status === 'scheduled' && (
+                    <Group gap="xs">
+                      <Button size="compact-xs" color="teal" variant="subtle" onClick={() => setStatus(m.id, 'done')}>Đã họp</Button>
+                      <Button size="compact-xs" color="gray" variant="subtle" onClick={() => setStatus(m.id, 'cancelled')}>Hủy</Button>
+                    </Group>
+                  )}
+                </Table.Td>
+              </Table.Tr>
             );
           })}
         </Table.Tbody>
@@ -587,12 +597,12 @@ function AttendanceTab({ batch, facilityId }: { batch: Batch; facilityId: number
         onChange={setSessionId}
       />
       {sessionId && (
-        <Table>
+        <Table striped highlightOnHover withTableBorder={false}>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>Học sinh</Table.Th>
-              <Table.Th>Điểm danh</Table.Th>
-              <Table.Th>Có phép</Table.Th>
+              <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Học sinh</Table.Th>
+              <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Điểm danh</Table.Th>
+              <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Có phép</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -636,12 +646,14 @@ function ClassDetail({
   rooms,
   teachers,
   onChanged,
+  initialTab,
 }: {
   batch: Batch;
   facilityId: number;
   rooms: Room[];
   teachers: Teacher[];
   onChanged: () => void;
+  initialTab?: string;
 }) {
   const [cancelOpen, cancel] = useDisclosure(false);
   const [reason, setReason] = useState('');
@@ -677,12 +689,12 @@ function ClassDetail({
   }
 
   return (
-    <Card withBorder>
+    <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
       <Group justify="space-between" mb="md">
         <div>
           <Group gap="xs">
-            <Title order={5}>{batch.code}</Title>
-            <Badge color={STATUS_COLOR[batch.status]}>{batch.status}</Badge>
+            <Title order={5} style={{ color: 'var(--cmc-text)' }}>{batch.code}</Title>
+            <Badge color={STATUS_COLOR[batch.status]} variant="light" radius="xl">{batch.status}</Badge>
           </Group>
           <Text c="dimmed" size="sm">
             {batch.name} · {batch.course.code}
@@ -703,14 +715,14 @@ function ClassDetail({
               </Button>
             </>
           ) : (
-            <Button size="xs" onClick={doReopen}>
+            <Button size="xs" variant="filled" radius={9999} onClick={doReopen}>
               Mở lại
             </Button>
           )}
         </Group>
       </Group>
 
-      <Tabs defaultValue="schedule">
+      <Tabs defaultValue={initialTab ?? 'schedule'}>
         <Tabs.List>
           <Tabs.Tab value="schedule">Lịch</Tabs.Tab>
           <Tabs.Tab value="sessions">Buổi học</Tabs.Tab>
@@ -739,16 +751,19 @@ function ClassDetail({
         </Tabs.Panel>
       </Tabs>
 
-      <Modal opened={cancelOpen} onClose={cancel.close} title="Hủy lớp">
+      <Modal opened={cancelOpen} onClose={cancel.close} title="Hủy lớp" radius="xl" centered>
         <Stack>
           <TextInput
             label="Lý do hủy (bắt buộc)"
             value={reason}
             onChange={(e) => setReason(e.currentTarget.value)}
           />
-          <Button color="red" onClick={doCancel} disabled={!reason}>
-            Xác nhận hủy
-          </Button>
+          <Group justify="flex-end">
+            <Button variant="subtle" onClick={cancel.close}>Hủy bỏ</Button>
+            <Button color="red" variant="filled" onClick={doCancel} disabled={!reason}>
+              Xác nhận hủy
+            </Button>
+          </Group>
         </Stack>
       </Modal>
     </Card>
@@ -796,22 +811,22 @@ function RoomsManager({
 
   return (
     <>
-      <Button size="xs" variant="default" onClick={open}>
+      <Button size="xs" variant="subtle" onClick={open}>
         Quản lý phòng ({rooms.length})
       </Button>
-      <Modal opened={opened} onClose={close} title="Phòng học (theo cơ sở)">
+      <Modal opened={opened} onClose={close} title="Phòng học (theo cơ sở)" radius="xl" centered>
         <Stack>
           <form onSubmit={form.onSubmit(create)}>
             <Group align="flex-end">
               <TextInput label="Mã" w={90} withAsterisk {...form.getInputProps('code')} />
               <TextInput label="Tên" style={{ flex: 1 }} withAsterisk {...form.getInputProps('name')} />
               <NumberInput label="Sức chứa" w={100} min={1} {...form.getInputProps('capacity')} />
-              <Button type="submit" loading={busy} disabled={!form.values.code || !form.values.name}>
+              <Button type="submit" loading={busy} disabled={!form.values.code || !form.values.name} variant="filled" radius={9999}>
                 Thêm
               </Button>
             </Group>
           </form>
-          <Table striped>
+          <Table striped highlightOnHover withTableBorder={false}>
             <Table.Tbody>
               {rooms.map((r) => (
                 <Table.Tr key={r.id}>
@@ -835,7 +850,7 @@ function RoomsManager({
   );
 }
 
-function Workspace() {
+function Workspace({ initialTab }: { initialTab?: string }) {
   const { me } = useSession();
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facilityId, setFacilityId] = useState<number | null>(null);
@@ -865,7 +880,6 @@ function Workspace() {
   }, []);
   useEffect(loadRooms, [loadRooms]);
 
-  // Teachers are RLS-scoped to the caller's facilities; reload per selected facility.
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   useEffect(() => {
     if (!facilityId) return;
@@ -877,44 +891,47 @@ function Workspace() {
 
   return (
     <Stack>
-      <Group justify="space-between">
-        <Select
-          label="Cơ sở"
-          data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-          value={facilityId ? String(facilityId) : null}
-          onChange={(v) => setFacilityId(v ? Number(v) : null)}
-          w={240}
-        />
-        {facilityId && (
-          <Group gap="xs" align="flex-end">
-            <RoomsManager facilityId={facilityId} rooms={facilityRooms} reload={loadRooms} />
-            <CreateClassModal facilityId={facilityId} courses={courses} onCreated={loadBatches} />
-          </Group>
-        )}
+      <Group justify="space-between" mb="xl">
+        <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }}>Lớp học</Text>
+        <Group gap="xs" align="flex-end">
+          <Select
+            label="Cơ sở"
+            data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
+            value={facilityId ? String(facilityId) : null}
+            onChange={(v) => setFacilityId(v ? Number(v) : null)}
+            w={240}
+          />
+          {facilityId && (
+            <>
+              <RoomsManager facilityId={facilityId} rooms={facilityRooms} reload={loadRooms} />
+              <CreateClassModal facilityId={facilityId} courses={courses} onCreated={loadBatches} />
+            </>
+          )}
+        </Group>
       </Group>
       <Grid>
         <Grid.Col span={{ base: 12, md: 4 }}>
-          <Card withBorder>
-            <Title order={5} mb="sm">
+          <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+            <Text size="lg" fw={600} mb="sm" style={{ color: 'var(--cmc-text)' }}>
               Lớp học ({visible.length})
-            </Title>
-            <Table highlightOnHover>
+            </Text>
+            <Table highlightOnHover withTableBorder={false}>
               <Table.Tbody>
                 {visible.map((b) => (
                   <Table.Tr
                     key={b.id}
                     style={{ cursor: 'pointer' }}
-                    bg={selected?.id === b.id ? 'var(--mantine-color-cmc-0)' : undefined}
+                    bg={selected?.id === b.id ? 'var(--cmc-brand-muted)' : undefined}
                     onClick={() => setSelected(b)}
                   >
                     <Table.Td>
-                      <Text fw={600}>{b.code}</Text>
+                      <Text fw={600} style={{ color: 'var(--cmc-text)' }}>{b.code}</Text>
                       <Text size="xs" c="dimmed">
                         {b.name}
                       </Text>
                     </Table.Td>
                     <Table.Td>
-                      <Badge size="sm" color={STATUS_COLOR[b.status]}>
+                      <Badge size="sm" color={STATUS_COLOR[b.status]} variant="light" radius="xl">
                         {b.status}
                       </Badge>
                     </Table.Td>
@@ -937,9 +954,10 @@ function Workspace() {
               rooms={facilityRooms}
               teachers={teachers}
               onChanged={loadBatches}
+              initialTab={initialTab}
             />
           ) : (
-            <Card withBorder>
+            <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
               <Text c="dimmed">
                 Chọn một lớp để xem chi tiết, hoặc tạo lớp mới. Xin chào {me.displayName}.
               </Text>
@@ -951,57 +969,49 @@ function Workspace() {
   );
 }
 
+// Sections that map to the Workspace/classes view with a specific sub-tab
+const CLASS_CONTEXT_SECTIONS = new Set<SectionKey>([
+  'schedule', 'sessions', 'attendance', 'enrollment', 'meetings', 'classlog', 'classes',
+]);
+
 function Workbench() {
   const { me } = useSession();
-  // Payroll is HR-confidential — only show its tab to hr/ke_toan/super_admin.
   const canPayroll = me.isSuperAdmin || me.roles.includes('hr') || me.roles.includes('ke_toan');
+  const [activeSection, setActiveSection] = useState<SectionKey>('classes');
+
+  function renderContent() {
+    if (CLASS_CONTEXT_SECTIONS.has(activeSection)) {
+      const classTab = SECTION_TO_CLASS_TAB[activeSection];
+      return <Workspace key={activeSection} initialTab={classTab} />;
+    }
+    switch (activeSection) {
+      case 'grading':
+        return <GradingPanel />;
+      case 'assessment':
+        return <AssessmentPanel />;
+      case 'levelup':
+        return <LevelApprovalPanel />;
+      case 'crm':
+        return <CrmPanel />;
+      case 'finance':
+        return <FinancePanel />;
+      case 'cskh':
+        return <CskhPanel />;
+      case 'certificate':
+        return <CertificatePanel />;
+      case 'my-payslips':
+        return <MyPayslipsPanel />;
+      case 'payroll':
+        return canPayroll ? <PayrollPanel /> : null;
+      default:
+        return null;
+    }
+  }
+
   return (
-      <Tabs defaultValue="classes" keepMounted={false}>
-        <Tabs.List mb="md">
-          <Tabs.Tab value="classes">Lớp học</Tabs.Tab>
-          <Tabs.Tab value="grading">Chấm bài</Tabs.Tab>
-          <Tabs.Tab value="assessment">Học bạ</Tabs.Tab>
-          <Tabs.Tab value="levelup">Duyệt cấp độ</Tabs.Tab>
-          <Tabs.Tab value="crm">CRM</Tabs.Tab>
-          <Tabs.Tab value="finance">Phiếu thu</Tabs.Tab>
-          <Tabs.Tab value="cskh">CSKH</Tabs.Tab>
-          <Tabs.Tab value="certificate">Chứng chỉ</Tabs.Tab>
-          <Tabs.Tab value="my-payslips">Phiếu lương của tôi</Tabs.Tab>
-          {canPayroll && <Tabs.Tab value="payroll">Lương</Tabs.Tab>}
-        </Tabs.List>
-        <Tabs.Panel value="classes">
-          <Workspace />
-        </Tabs.Panel>
-        <Tabs.Panel value="grading">
-          <GradingPanel />
-        </Tabs.Panel>
-        <Tabs.Panel value="assessment">
-          <AssessmentPanel />
-        </Tabs.Panel>
-        <Tabs.Panel value="levelup">
-          <LevelApprovalPanel />
-        </Tabs.Panel>
-        <Tabs.Panel value="crm">
-          <CrmPanel />
-        </Tabs.Panel>
-        <Tabs.Panel value="finance">
-          <FinancePanel />
-        </Tabs.Panel>
-        <Tabs.Panel value="cskh">
-          <CskhPanel />
-        </Tabs.Panel>
-        <Tabs.Panel value="certificate">
-          <CertificatePanel />
-        </Tabs.Panel>
-        <Tabs.Panel value="my-payslips">
-          <MyPayslipsPanel />
-        </Tabs.Panel>
-        {canPayroll && (
-          <Tabs.Panel value="payroll">
-            <PayrollPanel />
-          </Tabs.Panel>
-        )}
-      </Tabs>
+    <Shell activeSection={activeSection} onSectionChange={setActiveSection}>
+      {renderContent()}
+    </Shell>
   );
 }
 

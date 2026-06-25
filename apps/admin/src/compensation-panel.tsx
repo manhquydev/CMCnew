@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { trpc, notifyError, notifySuccess } from '@cmc/ui';
-import { Badge, Button, Card, Group, JsonInput, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { Badge, Button, Card, Group, JsonInput, Stack, Table, Text, TextInput } from '@mantine/core';
 
 // Minimal shape the list view needs — avoids inferring the deep params JSON type (TS2589).
 type Policy = { id: string; effectiveFrom: string | Date; note: string | null; createdAt: string | Date; params: unknown };
@@ -79,22 +79,30 @@ export function CompensationConfigPanel() {
     }
   }
 
+  const TH_STYLE: React.CSSProperties = {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    color: 'var(--cmc-text-muted)',
+    fontWeight: 600,
+  };
+
   return (
     <Stack>
-      <Card withBorder p="sm" style={{ background: 'var(--mantine-color-blue-0)' }}>
-        <Text size="sm">
+      <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)', backgroundColor: 'var(--cmc-info-bg)' }}>
+        <Text size="sm" style={{ color: 'var(--cmc-info-text)' }}>
           Cơ cấu thu nhập (bậc %, hoa hồng, KPI, vượt giờ, thuế). Mỗi lần lưu tạo <b>một phiên bản có ngày
           hiệu lực</b>; phiếu lương khi tính dùng bản hiệu lực tại kỳ đó. Sửa ở đây <b>chỉ áp dụng về sau</b> —
           lương các kỳ đã chốt không đổi. Chỉ super_admin truy cập.
         </Text>
       </Card>
 
-      <Card withBorder>
-        <Title order={6} mb="sm">Tạo phiên bản chính sách mới</Title>
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} style={{ color: 'var(--cmc-text)' }} mb="md">Tạo phiên bản chính sách mới</Text>
         <Group grow mb="sm" align="flex-end">
           <TextInput label="Hiệu lực từ" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.currentTarget.value)} placeholder="YYYY-MM-DD" />
           <TextInput label="Ghi chú" value={note} onChange={(e) => setNote(e.currentTarget.value)} placeholder="vd: điều chỉnh hoa hồng Q3" />
-          <Button variant="default" onClick={loadDefaults}>Nạp mặc định</Button>
+          <Button variant="subtle" onClick={loadDefaults}>Nạp mặc định</Button>
         </Group>
         <JsonInput
           label="Tham số (JSON)"
@@ -107,20 +115,22 @@ export function CompensationConfigPanel() {
           validationError="JSON không hợp lệ"
           styles={{ input: { fontFamily: 'monospace', fontSize: 12 } }}
         />
-        <Group justify="flex-end" mt="sm">
-          <Button onClick={createVersion} loading={busy}>Tạo phiên bản</Button>
+        <Group justify="flex-end" mt="md">
+          <Button variant="filled" radius={9999} onClick={createVersion} loading={busy}>Tạo phiên bản</Button>
         </Group>
       </Card>
 
-      <Card withBorder>
-        <Title order={6} mb="sm">Các phiên bản đã ban hành</Title>
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} style={{ color: 'var(--cmc-text)' }} mb="md">Các phiên bản đã ban hành</Text>
         {policies.length === 0 ? (
           <Text c="dimmed" size="sm">Chưa có phiên bản nào — hệ thống đang dùng tham số mặc định (PA2 + Đào tạo).</Text>
         ) : (
-          <Table>
+          <Table striped highlightOnHover withTableBorder={false}>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Hiệu lực từ</Table.Th><Table.Th>Ghi chú</Table.Th><Table.Th>Tạo lúc</Table.Th>
+                <Table.Th style={TH_STYLE}>Hiệu lực từ</Table.Th>
+                <Table.Th style={TH_STYLE}>Ghi chú</Table.Th>
+                <Table.Th style={TH_STYLE}>Tạo lúc</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -128,12 +138,12 @@ export function CompensationConfigPanel() {
                 <Table.Tr key={p.id}>
                   <Table.Td>
                     <Group gap="xs">
-                      {new Date(p.effectiveFrom).toLocaleDateString('vi-VN')}
-                      {i === 0 && <Badge size="xs" color="teal">mới nhất</Badge>}
+                      <Text size="sm">{new Date(p.effectiveFrom).toLocaleDateString('vi-VN')}</Text>
+                      {i === 0 && <Badge size="xs" color="teal" variant="light" radius="xl">mới nhất</Badge>}
                     </Group>
                   </Table.Td>
-                  <Table.Td>{p.note ?? ''}</Table.Td>
-                  <Table.Td>{new Date(p.createdAt).toLocaleString('vi-VN')}</Table.Td>
+                  <Table.Td><Text size="sm">{p.note ?? ''}</Text></Table.Td>
+                  <Table.Td><Text size="sm" style={{ color: 'var(--cmc-text-muted)' }}>{new Date(p.createdAt).toLocaleString('vi-VN')}</Text></Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
