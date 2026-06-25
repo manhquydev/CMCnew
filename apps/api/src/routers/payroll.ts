@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { assemblePayslip, cvtvNewCustomerRate, renewalRate, commissionAmount, weightedKpi } from '@cmc/domain-payroll';
+import { assemblePayslip, cvtvNewCustomerRate, renewalRate, commissionAmount, weightedKpi, ratioToScore } from '@cmc/domain-payroll';
 import { effectiveParamsAt } from './compensation.js';
 import { callioConfigFromEnv, fetchPeriodCdrs, aggregateValidCalls } from '../lib/callio-client.js';
 import { canOverrideKpi } from '../lib/kpi-authz.js';
@@ -709,6 +709,153 @@ export const payrollRouter = router({
         });
         await logEvent(tx, { facilityId: row.facilityId, entityType: 'kpi_score', entityId: row.id, type: 'status_changed', body: `Phê duyệt phiếu KPI ${input.periodKey}: điểm ${autoScore}`, changes: [{ field: 'status', old: 'confirmed', new: 'approved' }], actorId: ctx.session.userId });
         return updated;
+      }),
+    ),
+
+  // Auto-prefill quantitative KPI criteria from real data (P06, decision 0011).
+  // HR/ke_toan triggers after kpiEvalStart; fills only the auto-computable keys and merges
+  // them into criterionScores — preserving any manually-set keys unchanged.
+  // Requires an existing KpiScore with status=draft (NOT_FOUND if missing, CONFLICT if non-draft).
+  kpiAutoPrefill: requireRole(Role.hr, Role.ke_toan)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        facilityId: z.number().int().positive(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        // Guard: phiếu phải tồn tại và đang ở draft
+        const row = await tx.kpiScore.findUnique({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+        });
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Chưa có phiếu KPI cho kỳ này — HR cần khởi tạo trước (kpiEvalStart)' });
+        if (row.status !== 'draft') throw new TRPCError({ code: 'CONFLICT', message: 'Chỉ tự điền được phiếu đang ở trạng thái draft' });
+
+        // Determine block from user roles
+        const user = await tx.appUser.findUnique({ where: { id: input.userId }, select: { roles: true } });
+        if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy nhân sự' });
+        const block: 'sales' | 'training' = user.roles.includes(Role.sale) ? 'sales' : 'training';
+
+        const { fromMs, toMs } = periodRangeMs(input.periodKey);
+        const periodStart = new Date(fromMs);
+        const periodEndDate = new Date(toMs); // exclusive
+
+        // Collect validCalls from CallMetric snapshot (display only, not scored)
+        const callMetric = await tx.callMetric.findUnique({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+          select: { validCalls: true },
+        });
+        const validCalls = callMetric?.validCalls ?? 0;
+
+        // Computed result accumulator
+        const computed: { key: string; score: number; dataAvailable: boolean }[] = [];
+        let approvedRevenue = 0;
+        let quota = 0;
+
+        if (block === 'sales') {
+          // SALES: doanh_so = ratioToScore(approvedRevenue / quota)
+          const rate = await tx.salaryRate.findFirst({
+            where: { userId: input.userId, archivedAt: null, effectiveFrom: { lte: periodEnd(input.periodKey) } },
+            orderBy: { effectiveFrom: 'desc' },
+            select: { monthlyQuota: true },
+          });
+          quota = rate?.monthlyQuota ?? 0;
+
+          // Sum all approved/sent/reconciled receipts credited to this sale in this period
+          const revenueAgg = await tx.receipt.aggregate({
+            where: {
+              soldById: input.userId,
+              facilityId: input.facilityId,
+              status: { in: ['approved', 'sent', 'reconciled'] },
+              approvedAt: { gte: periodStart, lt: periodEndDate },
+            },
+            _sum: { netAmount: true },
+          });
+          approvedRevenue = revenueAgg._sum.netAmount ?? 0;
+
+          const attainment = quota > 0 ? approvedRevenue / quota : 0;
+          const doanhSoScore = ratioToScore(attainment);
+          computed.push({ key: 'doanh_so', score: doanhSoScore, dataAvailable: quota > 0 });
+        } else {
+          // TRAINING: chuyen_mon + tuan_thu
+
+          // chuyen_mon = avg(Grade.score / Grade.maxScore) × 100
+          // where gradedById=user, facilityId, isPublished=true, gradedAt in period
+          const grades = await tx.grade.findMany({
+            where: {
+              facilityId: input.facilityId,
+              gradedById: input.userId,
+              isPublished: true,
+              gradedAt: { gte: periodStart, lt: periodEndDate },
+            },
+            select: { score: true, maxScore: true },
+          });
+          let chuyenMonScore = 0;
+          const chuyenMonAvailable = grades.length > 0;
+          if (chuyenMonAvailable) {
+            const ratioSum = grades.reduce((acc, g) => acc + (g.maxScore > 0 ? g.score / g.maxScore : 0), 0);
+            chuyenMonScore = Math.round((ratioSum / grades.length) * 100 * 100) / 100;
+          }
+          computed.push({ key: 'chuyen_mon', score: chuyenMonScore, dataAvailable: chuyenMonAvailable });
+
+          // tuan_thu = (confirmed sessions with ≥1 Attendance.markedAt) / (all confirmed sessions) × 100
+          // where teacherId=user, facilityId, sessionDate in period
+          const allSessions = await tx.classSession.findMany({
+            where: {
+              facilityId: input.facilityId,
+              teacherId: input.userId,
+              status: 'confirmed',
+              sessionDate: { gte: periodStart, lt: periodEndDate },
+            },
+            select: { id: true },
+          });
+          const totalSessions = allSessions.length;
+          let tuanThuScore = 0;
+          const tuanThuAvailable = totalSessions > 0;
+          if (tuanThuAvailable) {
+            // Count sessions that have at least one attendance with markedAt not null
+            const sessionIds = allSessions.map((s) => s.id);
+            const markedSessions = await tx.attendance.groupBy({
+              by: ['classSessionId'],
+              where: {
+                classSessionId: { in: sessionIds },
+                markedAt: { not: null },
+              },
+            });
+            const markedCount = markedSessions.length;
+            tuanThuScore = Math.round((markedCount / totalSessions) * 100 * 100) / 100;
+          }
+          computed.push({ key: 'tuan_thu', score: tuanThuScore, dataAvailable: tuanThuAvailable });
+        }
+
+        // Merge auto-computed keys into existing criterionScores (preserve manual keys)
+        const existing = (row.criterionScores as { key: string; score: number }[] | null) ?? [];
+        const autoKeySet = new Set(computed.map((c) => c.key));
+        const merged = [
+          ...existing.filter((e) => !autoKeySet.has(e.key)),
+          ...computed.map((c) => ({ key: c.key, score: c.score })),
+        ];
+
+        await tx.kpiScore.update({
+          where: { id: row.id },
+          data: { criterionScores: merged },
+        });
+
+        await logEvent(tx, {
+          facilityId: row.facilityId,
+          entityType: 'kpi_score',
+          entityId: row.id,
+          type: 'updated',
+          body: `Tự điền KPI định lượng ${input.periodKey}`,
+          actorId: ctx.session.userId,
+        });
+
+        return {
+          computed,
+          context: { validCalls, approvedRevenue, quota },
+        };
       }),
     ),
 
