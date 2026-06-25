@@ -10,11 +10,9 @@ export default defineConfig({
     headless: true,
     trace: 'on-first-retry',
   },
-  projects: [
-    { name: 'admin',    use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5173' } },
-    { name: 'teaching', use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5174' } },
-    { name: 'lms',      use: { ...devices['Desktop Chrome'], baseURL: 'http://localhost:5175' } },
-  ],
+  // Each spec pins its own app via test.use({ baseURL }), so one browser project
+  // suffices — every test runs exactly once against its target app.
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: [
     {
       command: 'pnpm --filter @cmc/api dev',

@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 // Teaching app uses the same LoginGate as admin; credentials are staff accounts.
 const EMAIL = process.env.TEST_TEACHING_EMAIL ?? 'admin@cmc.local';
-const PASSWORD = process.env.TEST_TEACHING_PASSWORD ?? 'changeme-dev';
+const PASSWORD = process.env.TEST_TEACHING_PASSWORD ?? 'ChangeMe!123';
 
 test.use({ baseURL: 'http://localhost:5174' });
 

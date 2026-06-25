@@ -3,8 +3,8 @@ import { test, expect } from '@playwright/test';
 // LMS has two login modes: parent (email/phone) and student (login code).
 // Default test account is a parent; set TEST_LMS_MODE=student to switch.
 const MODE = (process.env.TEST_LMS_MODE ?? 'parent') as 'parent' | 'student';
-const ID_FIELD = process.env.TEST_LMS_ID ?? 'parent@cmc.local';
-const PASSWORD = process.env.TEST_LMS_PASSWORD ?? 'changeme-dev';
+const ID_FIELD = process.env.TEST_LMS_ID ?? 'ph@cmc.local';
+const PASSWORD = process.env.TEST_LMS_PASSWORD ?? 'Parent!123';
 
 // Label of the id field changes per mode:
 //   parent  → "Email hoặc số điện thoại"
@@ -20,14 +20,15 @@ test.describe('lms smoke', () => {
     await page.goto('/');
     // LmsLoginGate renders the SegmentedControl before the form fields.
     await expect(page.getByText('CMC · Học tập')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole('radio', { name: 'Phụ huynh' })).toBeVisible();
-    await expect(page.getByRole('radio', { name: 'Học sinh' })).toBeVisible();
+    // Mantine SegmentedControl hides the radio <input>; assert the option labels instead.
+    await expect(page.getByText('Phụ huynh', { exact: true })).toBeVisible();
+    await expect(page.getByText('Học sinh', { exact: true })).toBeVisible();
   });
 
   test('login → app shell renders', async ({ page }) => {
     await page.goto('/');
     // Ensure the correct mode segment is selected.
-    await page.getByRole('radio', { name: MODE_LABEL }).click();
+    await page.getByText(MODE_LABEL, { exact: true }).click();
     await page.getByLabel(ID_LABEL).fill(ID_FIELD);
     await page.getByLabel('Mật khẩu').fill(PASSWORD);
     await page.getByRole('button', { name: 'Đăng nhập' }).click();
@@ -42,7 +43,7 @@ test.describe('lms smoke', () => {
 
   test('wrong password shows error', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('radio', { name: MODE_LABEL }).click();
+    await page.getByText(MODE_LABEL, { exact: true }).click();
     await page.getByLabel(ID_LABEL).fill(ID_FIELD);
     await page.getByLabel('Mật khẩu').fill('wrong-password-xyz');
     await page.getByRole('button', { name: 'Đăng nhập' }).click();
