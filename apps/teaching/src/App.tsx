@@ -33,7 +33,7 @@ import { CskhPanel } from './cskh-panel';
 import { CertificatePanel } from './certificate-panel';
 import { PayrollPanel } from './payroll-panel';
 import { MyPayslipsPanel } from './my-payslips-panel';
-import { Shell, type SectionKey } from './shell';
+import { Shell, ALL_TEACHING_KEYS, type SectionKey } from './shell';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
@@ -977,7 +977,15 @@ const CLASS_CONTEXT_SECTIONS = new Set<SectionKey>([
 function Workbench() {
   const { me } = useSession();
   const canPayroll = me.isSuperAdmin || me.roles.includes('hr') || me.roles.includes('ke_toan');
-  const [activeSection, setActiveSection] = useState<SectionKey>('classes');
+
+  const hashKey = window.location.hash.slice(1);
+  const initialSection: SectionKey = ALL_TEACHING_KEYS.has(hashKey) ? (hashKey as SectionKey) : 'classes';
+  const [activeSection, setActiveSection] = useState<SectionKey>(initialSection);
+
+  function handleSectionChange(key: SectionKey) {
+    window.location.hash = key;
+    setActiveSection(key);
+  }
 
   function renderContent() {
     if (CLASS_CONTEXT_SECTIONS.has(activeSection)) {
@@ -1009,7 +1017,7 @@ function Workbench() {
   }
 
   return (
-    <Shell activeSection={activeSection} onSectionChange={setActiveSection}>
+    <Shell activeSection={activeSection} onSectionChange={handleSectionChange}>
       {renderContent()}
     </Shell>
   );

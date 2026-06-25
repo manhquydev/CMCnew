@@ -211,6 +211,12 @@ app.get('/sse/staff', async (c) => {
     while (!stream.aborted) {
       await stream.sleep(25_000);
       if (stream.aborted) break;
+      // Re-validate session on every heartbeat: detects forced logout, deactivation, token expiry.
+      const refreshed = token ? await resolveSession(token) : null;
+      if (!refreshed || refreshed.userId !== userId) {
+        unsubscribe();
+        break;
+      }
       await stream.writeSSE({ event: 'ping', data: '1' });
     }
     unsubscribe();

@@ -694,6 +694,15 @@ function HrPayrollSection() {
 
 // ─── Dashboard (AppShell wrapper) ─────────────────────────────────────────────
 
+const ALL_ADMIN_KEYS = new Set<string>([
+  'overview', 'courses', 'org', 'guardians', 'hr', 'kpi', 'compensation',
+]);
+
+function hashToAdminSection(): SectionKey | undefined {
+  const raw = window.location.hash.slice(1);
+  return ALL_ADMIN_KEYS.has(raw) ? (raw as SectionKey) : undefined;
+}
+
 function Dashboard() {
   const { me } = useSession();
   const canHr = me.isSuperAdmin || me.roles.includes('hr') || me.roles.includes('ke_toan');
@@ -701,7 +710,9 @@ function Dashboard() {
     me.isSuperAdmin ||
     me.roles.some((r) => ['hr', 'ke_toan', 'quan_ly', 'bgd', 'head_teacher'].includes(r));
 
-  const [activeSection, setActiveSection] = useState<SectionKey>('overview');
+  const [activeSection, setActiveSection] = useState<SectionKey>(
+    hashToAdminSection() ?? 'overview',
+  );
 
   const navGroups = buildNavGroups({
     canHr,
@@ -714,6 +725,7 @@ function Dashboard() {
     if (key === 'hr' && !canHr) return;
     if (key === 'kpi' && !canKpi) return;
     if (key === 'compensation' && !me.isSuperAdmin) return;
+    window.location.hash = key;
     setActiveSection(key);
   };
 

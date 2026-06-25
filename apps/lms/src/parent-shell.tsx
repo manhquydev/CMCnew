@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   AppShell,
+  ActionIcon,
   Button,
   Group,
   NavLink,
@@ -27,10 +28,21 @@ interface ParentShellProps {
   principal: LmsPrincipal;
 }
 
+const ALL_PARENT_TABS = new Set<string>(['overview', 'gradebook', 'notifications', 'rewards']);
+
 export function ParentShell({ principal }: ParentShellProps) {
   const { logout } = useLmsSession();
-  const [activeTab, setActiveTab] = useState<ParentTab>('overview');
+  const hashKey = window.location.hash.slice(1);
+  const [activeTab, setActiveTab] = useState<ParentTab>(
+    ALL_PARENT_TABS.has(hashKey) ? (hashKey as ParentTab) : 'overview',
+  );
+  const [mobileOpened, setMobileOpened] = useState(false);
   const [notificationPulse, setNotificationPulse] = useState(0);
+
+  function handleTabChange(tab: ParentTab) {
+    window.location.hash = tab;
+    setActiveTab(tab);
+  }
 
   function onNotification() {
     setNotificationPulse((k) => k + 1);
@@ -39,7 +51,7 @@ export function ParentShell({ principal }: ParentShellProps) {
   return (
     <AppShell
       header={{ height: 56 }}
-      navbar={{ width: 240, breakpoint: 'sm' }}
+      navbar={{ width: 240, breakpoint: 'sm', collapsed: { mobile: !mobileOpened } }}
       bg="var(--cmc-bg)"
     >
       {/* ── Topbar ── */}
@@ -51,6 +63,19 @@ export function ParentShell({ principal }: ParentShellProps) {
       >
         <Group h="100%" px="lg" justify="space-between">
           <Group gap={0}>
+            <ActionIcon
+              variant="subtle"
+              hiddenFrom="sm"
+              onClick={() => setMobileOpened((o) => !o)}
+              aria-label="Mở menu"
+              mr={8}
+            >
+              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            </ActionIcon>
             <Text
               fw={700}
               size="md"
@@ -104,7 +129,7 @@ export function ParentShell({ principal }: ParentShellProps) {
               label={label}
               leftSection={icon}
               active={activeTab === tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => { handleTabChange(tab); setMobileOpened(false); }}
               styles={navlinkStyles(activeTab === tab)}
             />
           ))}
@@ -116,7 +141,7 @@ export function ParentShell({ principal }: ParentShellProps) {
         <ParentView
           principal={principal}
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={handleTabChange}
           onNotification={onNotification}
         />
       </AppShell.Main>

@@ -39,6 +39,12 @@ export type SectionKey =
   | 'my-payslips'
   | 'payroll';
 
+export const ALL_TEACHING_KEYS = new Set<string>([
+  'schedule', 'sessions', 'attendance', 'grading', 'assessment',
+  'classes', 'enrollment', 'levelup', 'certificate', 'meetings',
+  'classlog', 'cskh', 'crm', 'finance', 'my-payslips', 'payroll',
+]);
+
 interface NavItem {
   key: SectionKey;
   label: string;
@@ -133,6 +139,7 @@ interface ShellProps {
 export function Shell({ activeSection, onSectionChange, children }: ShellProps) {
   const { me, logout } = useSession();
   const [mobileOpened, setMobileOpened] = useState(false);
+
 
   const canPayroll = me.isSuperAdmin || me.roles.includes('hr') || me.roles.includes('ke_toan');
   // All authenticated teachers/staff can see their own payslips
