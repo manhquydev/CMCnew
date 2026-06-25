@@ -41,6 +41,7 @@ execution layer. They run **inside** the Harness Task Loop, never around it:
    ck to do the work, record the Harness to prove it.** Never skip
    `harness-cli trace` because a ck skill already wrote a journal.
 
-`ship` / `review-pr` / `vibe --ship` / `team` stay deferred until Jenkins CI and
-merge→`main` resume (`docs/CK_WORKFLOW.md` §5). The ELI5 output style
+`ship` / `review-pr` / `vibe --ship` / `team` stay deferred until a green CI
+exists (GitHub Actions billing is blocked → runs fail at ~3s; Jenkins not yet
+built) — see `docs/CK_WORKFLOW.md` §5. The ELI5 output style
 (`.claude/.ck.json` `codingLevel: 0`) is an intentional operator setting; keep it.

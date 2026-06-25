@@ -176,10 +176,12 @@ Tuned to current reality: **solo build, CI/CD on Jenkins deferred, merge → `ma
 - **Tier 2 — use selectively:** `ck-security --red-team` / `--fix` (before auth/payment/data
   releases), `scenario --saturation` (pre-release coverage audit). Higher token cost.
 
-- **Tier 3 — defer until CI + merge resume:** `ship` (auto-build → PR), `review-pr --fix --reply`
+- **Tier 3 — defer until a green CI exists:** `ship` (auto-build → PR), `review-pr --fix --reply`
   (needs GitHub CI green to converge), `vibe --ship` (auto-merge), `team` (needs
-  `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, multi-session, Opus — overkill for solo). Until
-  Jenkins CI exists and merge→main is unpaused, these can't reach their "done" state cleanly.
+  `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`, multi-session, Opus — overkill for solo). These
+  need a green CI to converge; GitHub Actions runs currently fail at ~3s (billing blocked) and
+  Jenkins is not yet stood up, so no green CI exists to gate auto-merge yet. (PRs #1/#2 already
+  merged to `main`; the earlier merge pause was lifted.)
 
 **Git boundary (non-negotiable, from `AGENTS.md`):** never let a ck build skill auto-commit
 to `main`. Keep commits on `develop`/feature; `/ck:cook` and `/ck:fix` finalize steps may
@@ -195,7 +197,7 @@ commit via `git-manager` **only on the working branch**. PR → `main` stays hum
 | Durable record of work | **Harness** (`harness-cli` intake/story/trace/decision) | ck journals/reports are evidence, not the record of truth |
 | Execution quality gates | **ck** (scout-first, no-side-effects, verification iron law, spec-compliance) | These satisfy parts of the Harness Done Definition — run them, then record the proof in the durable layer |
 | Context budget | **Harness** (`CONTEXT_RULES.md`) | ck `/clear`-between-phases aligns with this |
-| Branch / release policy | **Harness/`AGENTS.md`** | ck `ship`/`vibe`/`review-pr` deferred until CI + merge resume |
+| Branch / release policy | **Harness/`AGENTS.md`** | ck `ship`/`vibe`/`review-pr` deferred until a green CI exists (GH Actions billing blocked; Jenkins not yet built) |
 
 Rule of thumb: **run ck for the doing, record the Harness for the proving.** Never skip
 `harness-cli trace` just because a ck skill wrote a journal entry.
