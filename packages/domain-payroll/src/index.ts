@@ -31,3 +31,9 @@ export {
   DEFAULT_PARAMS,
   type CompensationParams,
 } from './params.js';
+export {
+  weightedKpi,
+  ratioToScore,
+  type KpiCriterion,
+  type KpiComposite,
+} from './kpi.js';

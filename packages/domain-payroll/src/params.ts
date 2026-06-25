@@ -6,9 +6,10 @@ import { z } from 'zod';
  *  a NEW effective-dated version; payslip compute reads the version effective at the period, so
  *  edits apply forward only (finalized payslips keep their frozen numbers).
  *
- *  Design note: rate VALUES + bands are data (editable); tier BREAKPOINTS for commission
- *  (quota % thresholds 50/80/100/120/150) stay as code logic in commission.ts — they are stable
- *  policy structure, while the percentages are what gets tuned. KPI/PIT bands are fully data-driven. */
+ *  Source of truth: tài liệu "Cơ cấu thu nhập CMC 2026" (khối Đào tạo + Kinh doanh). CVTV
+ *  new-customer commission is by ABSOLUTE monthly new revenue (decision: build theo tài liệu,
+ *  2026-06-25); renewal is tiered by centre retention. All rate VALUES + tier thresholds are data
+ *  (editable per policy); KPI/PIT bands are fully data-driven. */
 
 const taxBracketSchema = z.object({
   upTo: z.number().int().positive().nullable(), // null = top (no upper bound)
@@ -19,6 +20,12 @@ const kpiBandSchema = z.object({
   minScore: z.number().min(0).max(100), // inclusive lower bound; bands evaluated high→low
   grade: z.string().min(1),
   ratio: z.number().min(0).max(1),
+});
+
+/** Renewal commission tier — rate applies when centre retention ratio ≥ minRetention (0..1+). */
+const retentionTierSchema = z.object({
+  minRetention: z.number().min(0),
+  rate: z.number().min(0).max(1),
 });
 
 export const compensationParamsSchema = z.object({
@@ -32,22 +39,29 @@ export const compensationParamsSchema = z.object({
     sales: z.array(kpiBandSchema).min(1),
   }),
   commission: z.object({
-    /** CVTV new-customer rates at the fixed quota breakpoints [<50,50-80,80-100,100-120,120-150,>150]. */
+    /** CVTV new-customer commission by QUOTA-ATTAINMENT % (Excel "Mẫu đánh giá KPI kinh doanh",
+     *  PHỤ LỤC 02: "Theo tỷ lệ hoàn thành chỉ tiêu của cá nhân"; Excel là nguồn chuẩn — chốt
+     *  2026-06-25). Rates at the 6 fixed quota breakpoints [<50%,50-80%,80-100%,100-120%,
+     *  120-150%,>150%]. (NB: docx GĐ/Phó-GĐTT mô tả theo doanh thu tuyệt đối — MÂU THUẪN; Excel
+     *  thắng theo quyết định chủ dự án. Xem report bottleneck.) Rate VALUES editable. */
     cvtvNewRates: z.array(z.number().min(0).max(1)).length(6),
-    /** TPKD new rates at breakpoints [<80,80-100,100-120,120-150,>150]. */
+    /** CVTV renewal commission by centre retention ratio (khớp cả docx + Excel): <50%=0 ·
+     *  50–70%=1.5% · 70–90%=2% · ≥90%=2.2%. Inclusive lower bound. */
+    cvtvRenewalTiers: z.array(retentionTierSchema).min(1),
+    /** Manager (TPKD/GĐTT) new-customer rates at quota breakpoints [<80,80-100,100-120,120-150,>150].
+     *  DEFERRED (team rollup) — kept for forward-compat; not wired in v1 (CVTV-only). */
     tpkdNewRates: z.array(z.number().min(0).max(1)).length(5),
-    /** GĐTT new rates at breakpoints [<80,80-100,100-120,120-150,>150]. */
     gdttNewRates: z.array(z.number().min(0).max(1)).length(5),
-    /** Flat renewal rate per role, applied when centre retention ≥ retentionFloor. */
+    /** Flat renewal rate for non-CVTV roles, applied when centre retention ≥ retentionFloor.
+     *  DEFERRED for tpkd/gdtt; gv/cskh kept for future use. */
     renewal: z.object({
-      cvtv: z.number().min(0).max(1),
       tpkd: z.number().min(0).max(1),
       gdtt: z.number().min(0).max(1),
       gv: z.number().min(0).max(1),
       cskh: z.number().min(0).max(1),
     }),
     retentionFloor: z.number().min(0).max(1),
-    /** Commission budget cap as a fraction of real revenue (PA2: ≤6%) — advisory warning. */
+    /** Commission budget cap as a fraction of real revenue (chốt: ≤6% theo file Excel KPI). */
     budgetPct: z.number().min(0).max(1),
   }),
   /** Teaching overtime unit price (VND/hour) by teacher grade. */
@@ -58,9 +72,8 @@ export const compensationParamsSchema = z.object({
 
 export type CompensationParams = z.infer<typeof compensationParamsSchema>;
 
-/** Seed defaults: PA2 (sales) + the signed teaching decision. Used when no policy version exists
- *  and as the fallback for the pure functions. NOTE: the SALES KPI band is PROVISIONAL — PA2's
- *  source KPI tables are internally inconsistent; admin should confirm/edit it in the policy UI. */
+/** Seed defaults từ tài liệu "Cơ cấu thu nhập CMC 2026". Dùng khi chưa có policy version nào và
+ *  làm fallback cho các hàm thuần. */
 export const DEFAULT_PARAMS: CompensationParams = {
   pit: {
     brackets: [
@@ -76,25 +89,36 @@ export const DEFAULT_PARAMS: CompensationParams = {
     dependentRelief: 4_400_000,
   },
   kpi: {
+    // Khối Đào tạo: A(85-100)=100% · B(70-85)=90% · C(50-70)=80% · D(<50)=0%.
     training: [
       { minScore: 85, grade: 'A', ratio: 1.0 },
       { minScore: 70, grade: 'B', ratio: 0.9 },
       { minScore: 50, grade: 'C', ratio: 0.8 },
       { minScore: 0, grade: 'D', ratio: 0 },
     ],
-    // PROVISIONAL (PA2 appendix: A 90-100→100%, B 70-<90→90%; C/D inferred). Admin to confirm.
+    // Khối Kinh doanh (4 bậc — file Excel "Mẫu đánh giá KPI -kinh doanh", cột "% thưởng KPI", chốt
+    // 2026-06-25): A(90-100)=100% · B(80-<90)=80% · C(60-<80)=50% · D(<60)=0%.
     sales: [
       { minScore: 90, grade: 'A', ratio: 1.0 },
-      { minScore: 70, grade: 'B', ratio: 0.9 },
-      { minScore: 50, grade: 'C', ratio: 0.7 },
+      { minScore: 80, grade: 'B', ratio: 0.8 },
+      { minScore: 60, grade: 'C', ratio: 0.5 },
       { minScore: 0, grade: 'D', ratio: 0 },
     ],
   },
   commission: {
-    cvtvNewRates: [0, 0.01, 0.02, 0.03, 0.04, 0.045],
+    // Rates at quota breakpoints [<50%, 50-80%, 80-100%, 100-120%, >120-150%, >150%].
+    cvtvNewRates: [0, 0.01, 0.02, 0.03, 0.04, 0.05],
+    cvtvRenewalTiers: [
+      { minRetention: 0, rate: 0 },
+      { minRetention: 0.5, rate: 0.015 },
+      { minRetention: 0.7, rate: 0.02 },
+      { minRetention: 0.9, rate: 0.022 },
+    ],
+    // DEFERRED + UNVERIFIED (v1 = CVTV only). docx GĐTT gợi ý TPKD 0/0.7/1.0/1.2, GĐTT 0/0.6/0.8/1.0
+    // nhưng Excel cells illegible + mapping 5-band không rõ → giữ placeholder, KHÔNG dùng khi chưa chốt.
     tpkdNewRates: [0, 0.006, 0.01, 0.012, 0.015],
     gdttNewRates: [0, 0.004, 0.006, 0.008, 0.01],
-    renewal: { cvtv: 0.022, tpkd: 0.005, gdtt: 0.005, gv: 0.01, cskh: 0.008 },
+    renewal: { tpkd: 0.005, gdtt: 0.005, gv: 0.01, cskh: 0.008 },
     retentionFloor: 0.5,
     budgetPct: 0.06,
   },

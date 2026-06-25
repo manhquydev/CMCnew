@@ -11,7 +11,7 @@ import {
 import { kpiGradeFromScore } from './payslip.js';
 import { compensationParamsSchema, DEFAULT_PARAMS, type CompensationParams } from './params.js';
 
-describe('cvtvNewCustomerRate — PA2 quota bands (from DEFAULT_PARAMS)', () => {
+describe('cvtvNewCustomerRate — by quota attainment % (Excel PHỤ LỤC 02, nguồn chuẩn)', () => {
   it.each([
     [0.49, 0],
     [0.5, 0.01],
@@ -22,9 +22,9 @@ describe('cvtvNewCustomerRate — PA2 quota bands (from DEFAULT_PARAMS)', () => 
     [1.2, 0.03], // 100–120% inclusive of 1.2
     [1.21, 0.04],
     [1.5, 0.04],
-    [1.51, 0.045],
-    [3.0, 0.045],
-  ])('quota %f → rate %f', (q, rate) => {
+    [1.51, 0.05],
+    [3.0, 0.05],
+  ])('attainment %f → rate %f', (q, rate) => {
     expect(cvtvNewCustomerRate(q)).toBe(rate);
   });
 });
@@ -47,14 +47,20 @@ describe('managerNewCustomerRate — PA2', () => {
   });
 });
 
-describe('renewalRate — flat per role, gated by centre retention ≥ 50%', () => {
-  it('below floor → 0', () => {
-    for (const role of ['cvtv', 'tpkd', 'gdtt', 'gv', 'cskh'] as const) {
+describe('renewalRate — CVTV tiered by retention (tài liệu); others flat gated by floor', () => {
+  it('CVTV retention tiers', () => {
+    expect(renewalRate('cvtv', 0.49)).toBe(0);
+    expect(renewalRate('cvtv', 0.5)).toBe(0.015);
+    expect(renewalRate('cvtv', 0.69)).toBe(0.015);
+    expect(renewalRate('cvtv', 0.7)).toBe(0.02);
+    expect(renewalRate('cvtv', 0.89)).toBe(0.02);
+    expect(renewalRate('cvtv', 0.9)).toBe(0.022);
+    expect(renewalRate('cvtv', 1.0)).toBe(0.022);
+  });
+  it('non-CVTV roles flat below/at floor', () => {
+    for (const role of ['tpkd', 'gdtt', 'gv', 'cskh'] as const) {
       expect(renewalRate(role, 0.49)).toBe(0);
     }
-  });
-  it('at/above floor → role flat rate', () => {
-    expect(renewalRate('cvtv', 0.5)).toBe(0.022);
     expect(renewalRate('tpkd', 0.9)).toBe(0.005);
     expect(renewalRate('gdtt', 0.9)).toBe(0.005);
     expect(renewalRate('gv', 0.9)).toBe(0.01);
@@ -80,7 +86,7 @@ describe('commissionAmount / overtime / parttime', () => {
 });
 
 describe('params are editable — a custom policy changes the rates', () => {
-  it('cvtv new rate follows the policy params, not a hardcoded table', () => {
+  it('cvtv new rate follows the policy quota-band rates, not a hardcoded table', () => {
     const custom: CompensationParams = {
       ...DEFAULT_PARAMS,
       commission: { ...DEFAULT_PARAMS.commission, cvtvNewRates: [0, 0.02, 0.04, 0.06, 0.08, 0.1] },
@@ -89,13 +95,19 @@ describe('params are editable — a custom policy changes the rates', () => {
     expect(cvtvNewCustomerRate(3.0, custom)).toBe(0.1);
     expect(cvtvNewCustomerRate(0.5)).toBe(0.01); // default unchanged
   });
-  it('renewal floor is editable', () => {
+  it('cvtv renewal tiers are editable', () => {
     const custom: CompensationParams = {
       ...DEFAULT_PARAMS,
-      commission: { ...DEFAULT_PARAMS.commission, retentionFloor: 0.7 },
+      commission: {
+        ...DEFAULT_PARAMS.commission,
+        cvtvRenewalTiers: [
+          { minRetention: 0, rate: 0 },
+          { minRetention: 0.7, rate: 0.03 }, // floor raised to 70%, rate 3%
+        ],
+      },
     };
     expect(renewalRate('cvtv', 0.6, custom)).toBe(0); // below the raised floor
-    expect(renewalRate('cvtv', 0.6)).toBe(0.022); // default floor 0.5
+    expect(renewalRate('cvtv', 0.6)).toBe(0.015); // default tier still applies
   });
 });
 
@@ -106,9 +118,13 @@ describe('kpiGradeFromScore — data-driven bands', () => {
     expect(kpiGradeFromScore(50)).toEqual({ grade: 'C', ratio: 0.8 });
     expect(kpiGradeFromScore(49)).toEqual({ grade: 'D', ratio: 0 });
   });
-  it('sales band differs (A from 90)', () => {
-    expect(kpiGradeFromScore(90, 'sales').grade).toBe('A');
-    expect(kpiGradeFromScore(88, 'sales').grade).not.toBe('A');
+  it('sales band = 4 tiers (Excel: 90/80/60/<60)', () => {
+    expect(kpiGradeFromScore(90, 'sales')).toEqual({ grade: 'A', ratio: 1.0 });
+    expect(kpiGradeFromScore(89, 'sales')).toEqual({ grade: 'B', ratio: 0.8 });
+    expect(kpiGradeFromScore(80, 'sales')).toEqual({ grade: 'B', ratio: 0.8 });
+    expect(kpiGradeFromScore(79, 'sales')).toEqual({ grade: 'C', ratio: 0.5 });
+    expect(kpiGradeFromScore(60, 'sales')).toEqual({ grade: 'C', ratio: 0.5 });
+    expect(kpiGradeFromScore(59, 'sales')).toEqual({ grade: 'D', ratio: 0 });
   });
   it('bands come from params (custom band changes grading)', () => {
     const custom: CompensationParams = {

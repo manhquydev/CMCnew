@@ -1043,12 +1043,55 @@ model EmploymentProfile {
   position   String // teacher | sales | lead_teacher | center_director | training_director …
   grade      String? // B1..B4, PT3…
   dependents Int       @default(0)
+  /// Callio (Phonenet) extension number — maps this user to their call records for KPI calls
+  /// (decision 0010). Null = not on the dialer; call metrics resolve 0 for them.
+  callioExt  String?   @map("callio_ext")
   startedAt  DateTime? @map("started_at") @db.Date
   archivedAt DateTime? @map("archived_at")
   createdAt  DateTime  @default(now()) @map("created_at")
 
   @@index([facilityId])
   @@map("employment_profile")
+}
+
+/// Snapshot số liệu cuộc gọi Callio theo (nhân sự, kỳ) — đóng băng để payslip tái lập (decision
+/// 0010). validCalls = cuộc gọi ra có billDuration > 5s. Facility-scoped RLS; HR/super đọc-ghi.
+model CallMetric {
+  id           String   @id @default(uuid()) @db.Uuid
+  facilityId   Int      @map("facility_id")
+  userId       String   @map("user_id") @db.Uuid
+  periodKey    String   @map("period_key") // YYYY-MM
+  validCalls   Int      @default(0) @map("valid_calls")
+  totalCalls   Int      @default(0) @map("total_calls")
+  totalTalkSec Int      @default(0) @map("total_talk_sec")
+  syncedAt     DateTime @default(now()) @map("synced_at")
+
+  @@unique([userId, periodKey])
+  @@index([facilityId, periodKey])
+  @@map("call_metric")
+}
+
+/// Điểm KPI theo (nhân sự, kỳ) — auto tính từ dữ liệu + cho phép cấp trên override có lý do
+/// (decision 0011). finalScore = overrideScore ?? autoScore. Mọi override ghi record_event để
+/// minh bạch. Facility-scoped RLS. Payslip đọc finalScore khi tính (thay vì HR gõ tay).
+model KpiScore {
+  id             String    @id @default(uuid()) @db.Uuid
+  facilityId     Int       @map("facility_id")
+  userId         String    @map("user_id") @db.Uuid
+  periodKey      String    @map("period_key") // YYYY-MM
+  block          String // 'training' | 'sales' — quyết định KPI band áp dụng
+  autoScore      Float     @map("auto_score") // 0..100 tính từ dữ liệu
+  autoBreakdown  Json?     @map("auto_breakdown") // [{ criterion, weight, score }]
+  overrideScore  Float?    @map("override_score") // cấp trên chỉnh (0..100); null = dùng auto
+  overrideReason String?   @map("override_reason")
+  overriddenById String?   @map("overridden_by_id") @db.Uuid
+  overriddenAt   DateTime? @map("overridden_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@unique([userId, periodKey])
+  @@index([facilityId, periodKey])
+  @@map("kpi_score")
 }
 
 /// Mức lương hiệu lực theo thời điểm (per nhân sự). Áp dụng bản mới nhất effectiveFrom ≤ kỳ lương.

@@ -10,8 +10,8 @@ import { DEFAULT_PARAMS } from '@cmc/domain-payroll';
  * soldById (from opportunity owner) and kind (new/renewal), then commission
  * computation groups receipts by kind and computes per-attainment rate.
  *
- * Reference case: a CVTV with 10tr quota sells 8.5tr new revenue → expect
- * 340M commission (8.5tr × 0.04 rate at 85% attainment).
+ * Reference case (tài liệu CMC 2026 — commission by ABSOLUTE new revenue): a CVTV sells 85tr net
+ * new revenue → tier [80–100tr] → 2% → 1.7tr commission. Quota is display/context only now.
  *
  * Test covers:
  * - Full seed: seller staff + student + course + opportunity (with seller as owner) + receipt
@@ -24,7 +24,7 @@ describe('commission-for-sale: E2E attribution & computation', () => {
   // Use the current month so approvedAt (set to now()) falls in the period range
   const now = new Date();
   const PERIOD = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-  const MONTHLY_QUOTA = 10_000_000; // 10M (test uses 8.5M revenue → 85% attainment)
+  const MONTHLY_QUOTA = 10_000_000; // 10M — attainment is display-only now (commission is revenue-based)
 
   let seller: { id: string; displayName: string };
   let student: { id: string; studentCode: string };
@@ -84,7 +84,7 @@ describe('commission-for-sale: E2E attribution & computation', () => {
         data: {
           facilityId: FACILITY,
           courseId: c.id,
-          amount: 10_000_000, // 10M/year (used for pricing, not the actual revenue)
+          amount: 100_000_000, // 100M/year → 1yr 15% tier → net 85M → commission tier [80–100M]=2%
           effectiveFrom: new Date('2020-01-01'),
         },
       });
@@ -135,10 +135,8 @@ describe('commission-for-sale: E2E attribution & computation', () => {
     created.opportunityIds.push(oppData.id);
 
     // ─── Create + approve receipt ───
-    // Receipt draft: 10M base, 2 years → gross 20M, 30% tier for 2yr → net = 20M × (1 - 0.30) = 14M
-    // But we want ~8.5M net to hit 85% quota attainment. Adjust years to get the net amount.
-    // Let's use: 1 year → 10M gross, 15% tier → net = 8.5M
-    // (Close enough for the test; commission formula only cares about net).
+    // Receipt draft: 100M/year, 1 year → gross 100M, 15% tier → net 85M.
+    // 85M new revenue → commission tier [80–100M] → 2% → 1.7M.
     const draftReceipt = await caller.finance.receiptCreate({
       facilityId: FACILITY,
       studentId: student.id,
@@ -194,24 +192,19 @@ describe('commission-for-sale: E2E attribution & computation', () => {
       periodKey: PERIOD,
     });
 
-    // Expected attainment: receipt.netAmount / quota
-    const expectedAttainment = receipt.netAmount / MONTHLY_QUOTA;
-    expect(expectedAttainment).toBeGreaterThan(0);
-
-    // At ~85% attainment, CVTV band is "80–<100" (index 2), rate = cvtvNewRates[2] = 0.02.
-    // However, if netAmount is exactly 8.5M and quota is 10M, attainment = 0.85,
-    // which falls in the ">80–<100" band (cvtvNewRates[2]).
-    // Let's compute the expected rate and commission directly.
-    const expectedRate = cvtvNewCustomerRate(expectedAttainment, DEFAULT_PARAMS);
+    // Commission rate = by QUOTA ATTAINMENT % (Excel PHỤ LỤC 02, nguồn chuẩn).
+    const attainment = receipt.netAmount / MONTHLY_QUOTA;
+    const expectedRate = cvtvNewCustomerRate(attainment, DEFAULT_PARAMS);
     const expectedCommission = commissionAmount(receipt.netAmount, expectedRate);
 
     expect(result.newRevenue).toBe(receipt.netAmount);
     expect(result.renewalRevenue).toBe(0); // Only new receipt
-    expect(result.attainment).toBeCloseTo(expectedAttainment, 5);
     expect(result.rateNew).toBe(expectedRate);
     expect(result.commissionNew).toBe(expectedCommission);
     expect(result.commissionRenewal).toBe(0);
     expect(result.total).toBe(expectedCommission);
+    // Net 85M vs quota 10M → attainment 850% → top band >150% → 5%.
+    expect(result.rateNew).toBe(0.05);
   });
 
   it('commission amount is mutation-proof: tied to the specific receipt (soldById freeze)', async () => {

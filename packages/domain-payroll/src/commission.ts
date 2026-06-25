@@ -1,15 +1,16 @@
 import { DEFAULT_PARAMS, type CompensationParams } from './params.js';
 
-/** Sales-block commission + teaching overtime — quota-attainment model (PA2).
- *  Tier BREAKPOINTS (quota % thresholds) are fixed policy structure encoded here; the rate VALUES
- *  come from CompensationParams (editable per effective-dated policy). Boundary convention matches
- *  the PA2 tables: "100-120%" includes 1.2; ">120-≤150%" covers (1.2, 1.5]; ">150%" is the top band;
- *  lower thresholds (50/80/100%) are inclusive-lower of the next band. All amounts VND integer. */
+/** Sales-block commission + teaching overtime (tài liệu "Cơ cấu thu nhập CMC 2026").
+ *  CVTV new-customer commission = rate by ABSOLUTE monthly new revenue (tiered); renewal = rate by
+ *  centre retention (tiered). Manager (TPKD/GĐTT) rates stay quota-attainment but are DEFERRED
+ *  (team rollup, not wired in v1). Rate VALUES + thresholds come from CompensationParams (editable
+ *  per effective-dated policy). All amounts VND integer. */
 
 export type ManagerRole = 'tpkd' | 'gdtt';
 export type RenewalRole = 'cvtv' | 'tpkd' | 'gdtt' | 'gv' | 'cskh';
 
-/** CVTV new-customer band index (6 bands): <50 · 50–<80 · 80–<100 · 100–120 · >120–150 · >150. */
+/** CVTV new-customer band index (6 bands): <50 · 50–<80 · 80–<100 · 100–120 · >120–150 · >150
+ *  (quota attainment %). Boundary: 100–120% includes 1.2; >120–150% covers (1.2,1.5]. */
 function cvtvBandIndex(q: number): number {
   if (q < 0.5) return 0;
   if (q < 0.8) return 1;
@@ -19,7 +20,7 @@ function cvtvBandIndex(q: number): number {
   return 5;
 }
 
-/** Manager new-customer band index (5 bands): <80 · 80–<100 · 100–120 · >120–150 · >150. */
+/** Manager new-customer band index (5 bands): <80 · 80–<100 · 100–120 · >120–150 · >150 (quota %). */
 function managerBandIndex(q: number): number {
   if (q < 0.8) return 0;
   if (q < 1.0) return 1;
@@ -28,22 +29,31 @@ function managerBandIndex(q: number): number {
   return 4;
 }
 
-/** New-customer commission RATE for a CVTV by quota attainment (1 = 100% of target). */
+/** New-customer commission RATE for a CVTV by QUOTA-ATTAINMENT ratio (1 = 100% of target). Excel
+ *  PHỤ LỤC 02 "Theo tỷ lệ hoàn thành chỉ tiêu của cá nhân" (nguồn chuẩn, chốt 2026-06-25). */
 export function cvtvNewCustomerRate(quotaRatio: number, params: CompensationParams = DEFAULT_PARAMS): number {
   if (quotaRatio < 0) throw new Error('quotaRatio must be >= 0');
   return params.commission.cvtvNewRates[cvtvBandIndex(quotaRatio)] ?? 0;
 }
 
-/** New-customer commission RATE for a manager by quota attainment. */
+/** New-customer commission RATE for a manager by quota attainment. DEFERRED (v1 CVTV-only). */
 export function managerNewCustomerRate(role: ManagerRole, quotaRatio: number, params: CompensationParams = DEFAULT_PARAMS): number {
   if (quotaRatio < 0) throw new Error('quotaRatio must be >= 0');
   const rates = role === 'tpkd' ? params.commission.tpkdNewRates : params.commission.gdttNewRates;
   return rates[managerBandIndex(quotaRatio)] ?? 0;
 }
 
-/** Renewal commission RATE — flat per role, applied only when centre retention ≥ retentionFloor. */
+/** Renewal commission RATE by centre retention ratio. CVTV uses the tiered table (tài liệu);
+ *  other roles use a flat rate gated by retentionFloor (deferred refinement). */
 export function renewalRate(role: RenewalRole, centreRetentionRatio: number, params: CompensationParams = DEFAULT_PARAMS): number {
   if (centreRetentionRatio < 0) throw new Error('retention ratio must be >= 0');
+  if (role === 'cvtv') {
+    const tiers = [...params.commission.cvtvRenewalTiers].sort((a, b) => b.minRetention - a.minRetention);
+    for (const t of tiers) {
+      if (centreRetentionRatio >= t.minRetention) return t.rate;
+    }
+    return 0;
+  }
   if (centreRetentionRatio < params.commission.retentionFloor) return 0;
   return params.commission.renewal[role];
 }

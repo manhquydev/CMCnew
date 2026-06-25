@@ -5,6 +5,8 @@ import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { assemblePayslip, cvtvNewCustomerRate, renewalRate, commissionAmount } from '@cmc/domain-payroll';
 import { effectiveParamsAt } from './compensation.js';
+import { callioConfigFromEnv, fetchPeriodCdrs, aggregateValidCalls } from '../lib/callio-client.js';
+import { canOverrideKpi } from '../lib/kpi-authz.js';
 import { router, requireRole, protectedProcedure, Role } from '../trpc.js';
 
 // Payroll is HR-confidential: every procedure is role-gated to hr/ke_toan (super passes).
@@ -17,6 +19,15 @@ function periodEnd(periodKey: string): Date {
   const y = Number(parts[0]);
   const m = Number(parts[1]);
   return new Date(Date.UTC(y, m, 0)); // day 0 of next month = last day of month m
+}
+
+/** [start, end) of a YYYY-MM period as epoch ms (UTC) — the from/to window for Callio CDR queries. */
+function periodRangeMs(periodKey: string): { fromMs: number; toMs: number } {
+  const [y, m] = periodKey.split('-').map(Number);
+  return {
+    fromMs: Date.UTC(y!, m! - 1, 1),
+    toMs: Date.UTC(y!, m!, 1), // exclusive next-month start
+  };
 }
 
 export const payrollRouter = router({
@@ -41,24 +52,41 @@ export const payrollRouter = router({
         position: z.string().min(1),
         grade: z.string().optional(),
         dependents: z.number().int().min(0).default(0),
+        callioExt: z.string().optional(), // Callio extension for KPI call metrics (decision 0010)
         startedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        // Lý do — BẮT BUỘC khi đổi bậc (grade) của hồ sơ đã tồn tại (decision 0011: minh bạch).
+        reason: z.string().min(1).optional(),
       }),
     )
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
+        const existing = await tx.employmentProfile.findUnique({ where: { userId: input.userId }, select: { grade: true } });
+        // Only an explicitly-provided, different grade counts as a change (omitting grade leaves it
+        // untouched — Prisma ignores undefined — so callers that don't manage grade aren't forced
+        // to supply a reason).
+        const gradeChanged = existing != null && input.grade !== undefined && existing.grade !== input.grade;
+        // Đổi bậc phải kèm lý do — bậc lương là thông tin nhạy cảm, cần vết minh bạch.
+        if (gradeChanged && !input.reason) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Đổi bậc lương phải kèm lý do (reason).' });
+        }
         const profile = await tx.employmentProfile.upsert({
           where: { userId: input.userId },
-          update: { position: input.position, grade: input.grade, dependents: input.dependents, startedAt: input.startedAt ? new Date(input.startedAt) : undefined },
+          update: { position: input.position, grade: input.grade, dependents: input.dependents, callioExt: input.callioExt, startedAt: input.startedAt ? new Date(input.startedAt) : undefined },
           create: {
             facilityId: input.facilityId,
             userId: input.userId,
             position: input.position,
             grade: input.grade,
             dependents: input.dependents,
+            callioExt: input.callioExt,
             startedAt: input.startedAt ? new Date(input.startedAt) : undefined,
           },
         });
-        await logEvent(tx, { facilityId: profile.facilityId, entityType: 'employment_profile', entityId: profile.id, type: 'updated', body: `Hồ sơ NS: ${input.position}${input.grade ? ' ' + input.grade : ''}`, actorId: ctx.session.userId });
+        // Đổi bậc → log cũ→mới + lý do; còn lại → log cập nhật hồ sơ thường.
+        const body = gradeChanged
+          ? `Đổi bậc ${existing!.grade ?? '—'}→${input.grade ?? '—'}: ${input.reason}`
+          : `Hồ sơ NS: ${input.position}${input.grade ? ' ' + input.grade : ''}`;
+        await logEvent(tx, { facilityId: profile.facilityId, entityType: 'employment_profile', entityId: profile.id, type: 'updated', body, actorId: ctx.session.userId });
         return profile;
       }),
     ),
@@ -89,7 +117,8 @@ export const payrollRouter = router({
         const rate = await tx.salaryRate.create({
           data: { ...input, effectiveFrom: new Date(input.effectiveFrom), createdById: ctx.session.userId },
         });
-        await logEvent(tx, { facilityId: rate.facilityId, entityType: 'salary_rate', entityId: rate.id, type: 'created', body: `Mức lương từ ${input.effectiveFrom}: LCB ${input.baseSalary.toLocaleString('vi-VN')}đ`, actorId: ctx.session.userId });
+        const quotaNote = input.monthlyQuota > 0 ? `, quota ${input.monthlyQuota.toLocaleString('vi-VN')}đ` : '';
+        await logEvent(tx, { facilityId: rate.facilityId, entityType: 'salary_rate', entityId: rate.id, type: 'created', body: `Mức lương từ ${input.effectiveFrom}: LCB ${input.baseSalary.toLocaleString('vi-VN')}đ${quotaNote}`, actorId: ctx.session.userId });
         return rate;
       }),
     ),
@@ -99,6 +128,129 @@ export const payrollRouter = router({
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
         tx.salaryRate.findMany({ where: { userId: input.userId, archivedAt: null }, orderBy: { effectiveFrom: 'desc' } }),
+      ),
+    ),
+
+  // Sync Callio (Phonenet) call metrics for a facility/period into frozen CallMetric snapshots
+  // (decision 0010). Pulls the period's CDRs once, tallies valid outbound calls (>5s talk) per
+  // extension, maps each extension to a staff member via EmploymentProfile.callioExt, and upserts
+  // one row per (user, period). Token unset → no-op (returns synced: 0). Snapshot lets payslip
+  // re-compute without re-hitting Callio (and survives later CDR edits).
+  syncCallMetrics: requireRole(...HR_ROLES)
+    .input(z.object({ facilityId: z.number().int().positive(), periodKey: z.string().regex(/^\d{4}-\d{2}$/) }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const cfg = callioConfigFromEnv();
+        if (!cfg) return { synced: 0, skipped: 'callio-not-configured' as const };
+
+        // Map extension → staff in this facility (only those with a Callio extension set).
+        const profiles = await tx.employmentProfile.findMany({
+          where: { facilityId: input.facilityId, callioExt: { not: null }, archivedAt: null },
+          select: { userId: true, callioExt: true },
+        });
+        if (profiles.length === 0) return { synced: 0, skipped: 'no-mapped-extensions' as const };
+
+        const { fromMs, toMs } = periodRangeMs(input.periodKey);
+        const records = await fetchPeriodCdrs(cfg, fromMs, toMs);
+        const byExt = aggregateValidCalls(records);
+
+        let synced = 0;
+        for (const p of profiles) {
+          const tally = byExt.get(p.callioExt!) ?? { validCalls: 0, totalCalls: 0, totalTalkSec: 0 };
+          await tx.callMetric.upsert({
+            where: { userId_periodKey: { userId: p.userId, periodKey: input.periodKey } },
+            update: { validCalls: tally.validCalls, totalCalls: tally.totalCalls, totalTalkSec: tally.totalTalkSec, syncedAt: new Date(), facilityId: input.facilityId },
+            create: { facilityId: input.facilityId, userId: p.userId, periodKey: input.periodKey, validCalls: tally.validCalls, totalCalls: tally.totalCalls, totalTalkSec: tally.totalTalkSec },
+          });
+          synced += 1;
+        }
+        return { synced, skipped: null };
+      }),
+    ),
+
+  // Read snapshotted call metrics for a facility/period (HR view).
+  callMetricList: requireRole(...HR_ROLES)
+    .input(z.object({ facilityId: z.number().int().positive(), periodKey: z.string().regex(/^\d{4}-\d{2}$/) }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.callMetric.findMany({ where: { facilityId: input.facilityId, periodKey: input.periodKey }, orderBy: { validCalls: 'desc' } }),
+      ),
+    ),
+
+  // ─── KPI score: auto-compute snapshot + tree-based override + audit (decision 0011) ───
+  // HR computes/auto-sets; managers (tree) override; HR + managers read.
+
+  // Persist an auto-computed KPI score + breakdown for (user, period). HR/super (compute pipeline
+  // P05/P06 calls this). Does NOT touch override fields — re-running auto keeps any manager override.
+  kpiSetAuto: requireRole(Role.hr, Role.ke_toan)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        facilityId: z.number().int().positive(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+        block: z.enum(['training', 'sales']),
+        autoScore: z.number().min(0).max(100),
+        autoBreakdown: z.array(z.object({ criterion: z.string(), weight: z.number(), score: z.number() })).optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.kpiScore.upsert({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+          update: { block: input.block, autoScore: input.autoScore, autoBreakdown: input.autoBreakdown ?? undefined, facilityId: input.facilityId },
+          create: { facilityId: input.facilityId, userId: input.userId, periodKey: input.periodKey, block: input.block, autoScore: input.autoScore, autoBreakdown: input.autoBreakdown ?? undefined },
+        }),
+      ),
+    ),
+
+  // Manager override of a KPI score (tree authority — decision 0011). Sets overrideScore + reason
+  // and logs the old→new change to the record_event timeline. The actor must rank above the target
+  // (canOverrideKpi); nobody overrides their own KPI. Reason is mandatory.
+  kpiOverride: requireRole(Role.quan_ly, Role.bgd, Role.head_teacher)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+        overrideScore: z.number().min(0).max(100),
+        reason: z.string().min(1),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const target = await tx.appUser.findUnique({ where: { id: input.userId }, select: { roles: true } });
+        if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy nhân sự' });
+        const actor = { userId: ctx.session.userId, roles: ctx.session.roles, isSuperAdmin: ctx.session.isSuperAdmin };
+        if (!canOverrideKpi(actor, input.userId, target.roles)) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Bạn không có quyền sửa KPI của nhân sự này' });
+        }
+        const row = await tx.kpiScore.findUnique({ where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } } });
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Chưa có KPI auto cho kỳ này' });
+
+        const prev = row.overrideScore ?? row.autoScore;
+        const updated = await tx.kpiScore.update({
+          where: { id: row.id },
+          data: { overrideScore: input.overrideScore, overrideReason: input.reason, overriddenById: ctx.session.userId, overriddenAt: new Date() },
+        });
+        // Minh bạch: ghi cũ→mới + lý do vào timeline (record_event.changes + body).
+        await logEvent(tx, {
+          facilityId: row.facilityId,
+          entityType: 'kpi_score',
+          entityId: row.id,
+          type: 'updated',
+          changes: [{ field: 'kpiScore', old: prev, new: input.overrideScore }],
+          body: `Sửa KPI ${input.periodKey}: ${prev}→${input.overrideScore} — ${input.reason}`,
+          actorId: ctx.session.userId,
+        });
+        return updated;
+      }),
+    ),
+
+  // Read KPI scores for a facility/period (HR + managers). finalScore = override ?? auto.
+  kpiList: requireRole(Role.hr, Role.ke_toan, Role.quan_ly, Role.bgd, Role.head_teacher)
+    .input(z.object({ facilityId: z.number().int().positive(), periodKey: z.string().regex(/^\d{4}-\d{2}$/) }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.kpiScore.findMany({ where: { facilityId: input.facilityId, periodKey: input.periodKey }, orderBy: { createdAt: 'desc' } }),
       ),
     ),
 
@@ -142,6 +294,7 @@ export const payrollRouter = router({
         const newRevenue = grouped.find((g) => g.kind === 'new')?._sum.netAmount ?? 0;
         const renewalRevenue = grouped.find((g) => g.kind === 'renewal')?._sum.netAmount ?? 0;
 
+        // CVTV new-customer commission rate = by QUOTA ATTAINMENT % (Excel PHỤ LỤC 02, nguồn chuẩn).
         const attainment = quota > 0 ? newRevenue / quota : 0;
         const rateNew = cvtvNewCustomerRate(attainment, params);
         const rateRenew = renewalRate('cvtv', input.centreRetentionRatio, params);
@@ -175,7 +328,10 @@ export const payrollRouter = router({
         periodKey: z.string().regex(/^\d{4}-\d{2}$/),
         standardDays: z.number().int().positive(),
         workdays: z.number().int().min(0),
-        kpiScore: z.number().min(0).max(100),
+        // KPI score: optional. If a KpiScore row exists for the period, the auto/override score
+        // there wins (decision 0011 — KPI is computed + tree-overridable). Manual input is a
+        // fallback for employees without an auto KPI yet.
+        kpiScore: z.number().min(0).max(100).optional(),
         variablePay: z.number().int().nonnegative().default(0),
         variableNote: z.string().optional(),
         insuranceDeduction: z.number().int().nonnegative().default(0),
@@ -203,13 +359,18 @@ export const payrollRouter = router({
         const emp = await tx.appUser.findUnique({ where: { id: input.userId }, select: { roles: true } });
         const block: 'training' | 'sales' = emp?.roles.includes(Role.sale) ? 'sales' : 'training';
 
+        // KPI score precedence: KpiScore row (override ?? auto) → manual input → 0. So the auto/
+        // overridden KPI drives the payslip; HR no longer has to retype it.
+        const kpiRow = await tx.kpiScore.findUnique({ where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } } });
+        const effectiveKpiScore = kpiRow ? (kpiRow.overrideScore ?? kpiRow.autoScore) : (input.kpiScore ?? 0);
+
         const r = assemblePayslip(
           {
             baseSalary: rate.baseSalary,
             mealAllowance: rate.mealAllowance,
             otherAllowance: rate.otherAllowance,
             kpiMax: rate.kpiMax,
-            kpiScore: input.kpiScore,
+            kpiScore: effectiveKpiScore,
             block,
             workdays: input.workdays,
             standardDays: input.standardDays,
@@ -225,7 +386,7 @@ export const payrollRouter = router({
           periodKey: input.periodKey,
           standardDays: input.standardDays,
           workdays: input.workdays,
-          kpiScore: input.kpiScore,
+          kpiScore: effectiveKpiScore,
           kpiGrade: r.kpiGrade,
           baseEarned: r.baseEarned,
           allowanceEarned: r.allowanceEarned,
