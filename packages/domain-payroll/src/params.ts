@@ -6,10 +6,20 @@ import { z } from 'zod';
  *  a NEW effective-dated version; payslip compute reads the version effective at the period, so
  *  edits apply forward only (finalized payslips keep their frozen numbers).
  *
- *  Source of truth: tài liệu "Cơ cấu thu nhập CMC 2026" (khối Đào tạo + Kinh doanh). CVTV
- *  new-customer commission is by ABSOLUTE monthly new revenue (decision: build theo tài liệu,
- *  2026-06-25); renewal is tiered by centre retention. All rate VALUES + tier thresholds are data
- *  (editable per policy); KPI/PIT bands are fully data-driven. */
+ *  Source of truth: Excel "Mẫu đánh giá KPI" (nguồn chuẩn, chốt 2026-06-25). CVTV new-customer
+ *  commission is by QUOTA-ATTAINMENT % (not absolute revenue — docx mâu thuẫn, Excel thắng; xem
+ *  decision 0012 + bottleneck report); renewal tiered by centre retention. All rate VALUES + bands
+ *  are data (editable per CompensationPolicy); KPI/PIT bands fully data-driven. */
+
+/** Tiêu chí KPI có trọng số — một phần tử trong danh sách kpiCriteria[block].
+ *  HR chỉnh qua JSON policy UI; weights trong mỗi block PHẢI sum = 1 (±1e-6). */
+export const kpiCriterionConfigSchema = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  weight: z.number().min(0).max(1),
+});
+
+export type KpiCriterionConfig = z.infer<typeof kpiCriterionConfigSchema>;
 
 const taxBracketSchema = z.object({
   upTo: z.number().int().positive().nullable(), // null = top (no upper bound)
@@ -68,6 +78,20 @@ export const compensationParamsSchema = z.object({
   overtimeRates: z.record(z.string(), z.number().int().nonnegative()),
   /** Part-time package flat monthly gross (VND) by package code. */
   parttimePackages: z.record(z.string(), z.number().int().nonnegative()),
+  /** Tiêu chí KPI có trọng số per block — HR chỉnh qua JSON policy UI (P05, decision 0012).
+   *  weights mỗi block PHẢI sum = 1 (±1e-6); validate ở cả Zod (refine) + service (weightedKpi). */
+  kpiCriteria: z.object({
+    sales: z.array(kpiCriterionConfigSchema).min(1),
+    training: z.array(kpiCriterionConfigSchema).min(1),
+  }).refine(
+    (c) => {
+      const EPSILON = 1e-6;
+      const salesSum = c.sales.reduce((s, x) => s + x.weight, 0);
+      const trainingSum = c.training.reduce((s, x) => s + x.weight, 0);
+      return Math.abs(salesSum - 1) <= EPSILON && Math.abs(trainingSum - 1) <= EPSILON;
+    },
+    { message: 'kpiCriteria weights cho mỗi block phải sum = 1 (±1e-6)' },
+  ),
 });
 
 export type CompensationParams = z.infer<typeof compensationParamsSchema>;
@@ -124,4 +148,17 @@ export const DEFAULT_PARAMS: CompensationParams = {
   },
   overtimeRates: { B1: 100_000, B2: 120_000, B3: 130_000, B4: 150_000 },
   parttimePackages: { PT3: 3_000_000, PT4: 4_000_000, PT5: 5_000_000 },
+  // Seed từ decision 0012 (provisional — HR chỉnh qua JSON policy UI).
+  kpiCriteria: {
+    sales: [
+      { key: 'doanh_so', label: 'Doanh số', weight: 0.7 },
+      { key: 'tuan_thu', label: 'Tuân thủ', weight: 0.2 },
+      { key: 'khac', label: 'Khác', weight: 0.1 },
+    ],
+    training: [
+      { key: 'chuyen_mon', label: 'Chuyên môn', weight: 0.6 },
+      { key: 'tuan_thu', label: 'Tuân thủ', weight: 0.2 },
+      { key: 'khac', label: 'Khác', weight: 0.2 },
+    ],
+  },
 };

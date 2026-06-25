@@ -1071,9 +1071,18 @@ model CallMetric {
   @@map("call_metric")
 }
 
+/// Trạng thái phiếu đánh giá KPI (P05, decision 0011): draft→submitted→confirmed→approved.
+enum KpiStatus {
+  draft
+  submitted
+  confirmed
+  approved
+}
+
 /// Điểm KPI theo (nhân sự, kỳ) — auto tính từ dữ liệu + cho phép cấp trên override có lý do
 /// (decision 0011). finalScore = overrideScore ?? autoScore. Mọi override ghi record_event để
 /// minh bạch. Facility-scoped RLS. Payslip đọc finalScore khi tính (thay vì HR gõ tay).
+/// P05: mở rộng thành phiếu đánh giá (Odoo-style) với workflow draft→submitted→confirmed→approved.
 model KpiScore {
   id             String    @id @default(uuid()) @db.Uuid
   facilityId     Int       @map("facility_id")
@@ -1088,6 +1097,15 @@ model KpiScore {
   overriddenAt   DateTime? @map("overridden_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
   createdAt      DateTime  @default(now()) @map("created_at")
+  // P05 workflow fields — phiếu đánh giá KPI kiểu Odoo
+  status          KpiStatus @default(draft)
+  criterionScores Json?     @map("criterion_scores") // [{key, score}] — điểm từng tiêu chí
+  submittedById   String?   @map("submitted_by_id") @db.Uuid
+  submittedAt     DateTime? @map("submitted_at")
+  confirmedById   String?   @map("confirmed_by_id") @db.Uuid
+  confirmedAt     DateTime? @map("confirmed_at")
+  approvedById    String?   @map("approved_by_id") @db.Uuid
+  approvedAt      DateTime? @map("approved_at")
 
   @@unique([userId, periodKey])
   @@index([facilityId, periodKey])

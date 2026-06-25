@@ -29,7 +29,9 @@ export {
 export {
   compensationParamsSchema,
   DEFAULT_PARAMS,
+  kpiCriterionConfigSchema,
   type CompensationParams,
+  type KpiCriterionConfig,
 } from './params.js';
 export {
   weightedKpi,

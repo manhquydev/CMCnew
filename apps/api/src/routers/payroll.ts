@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { assemblePayslip, cvtvNewCustomerRate, renewalRate, commissionAmount } from '@cmc/domain-payroll';
+import { assemblePayslip, cvtvNewCustomerRate, renewalRate, commissionAmount, weightedKpi } from '@cmc/domain-payroll';
 import { effectiveParamsAt } from './compensation.js';
 import { callioConfigFromEnv, fetchPeriodCdrs, aggregateValidCalls } from '../lib/callio-client.js';
 import { canOverrideKpi } from '../lib/kpi-authz.js';
@@ -543,4 +543,192 @@ export const payrollRouter = router({
       }),
     ),
   ),
+
+  // ─── Phiếu đánh giá KPI (P05, decision 0011) — workflow draft→submitted→confirmed→approved ───
+
+  // Tạo/khởi tạo phiếu KPI cho (nhân sự, kỳ). HR/ke_toan hoặc super được phép.
+  // Upsert với status=draft và điểm từng tiêu chí = 0. Không ghi đè nếu đã submitted+.
+  kpiEvalStart: requireRole(Role.hr, Role.ke_toan)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        facilityId: z.number().int().positive(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+        block: z.enum(['training', 'sales']),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        // Kiểm tra nếu đã có phiếu và status > draft → không đụng vào
+        const existing = await tx.kpiScore.findUnique({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+        });
+        if (existing && existing.status !== 'draft') {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu đã qua bước tự đánh giá — không thể khởi tạo lại' });
+        }
+        // Lấy tiêu chí từ policy hiệu lực (kpiCriteria[block])
+        const params = await effectiveParamsAt(tx, input.periodKey);
+        const criteria = params.kpiCriteria[input.block];
+        const criterionScores = criteria.map((c) => ({ key: c.key, score: 0 }));
+        const row = await tx.kpiScore.upsert({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+          update: { block: input.block, criterionScores, autoScore: 0, facilityId: input.facilityId, status: 'draft' },
+          create: {
+            facilityId: input.facilityId,
+            userId: input.userId,
+            periodKey: input.periodKey,
+            block: input.block,
+            autoScore: 0,
+            criterionScores,
+            status: 'draft',
+          },
+        });
+        await logEvent(tx, { facilityId: row.facilityId, entityType: 'kpi_score', entityId: row.id, type: 'created', body: `Khởi tạo phiếu KPI ${input.periodKey} (${input.block})`, actorId: ctx.session.userId });
+        return row;
+      }),
+    ),
+
+  // Nhân sự tự nộp phiếu KPI (tự đánh giá). Actor phải là chính chủ. Chỉ khi status=draft.
+  kpiEvalSubmit: protectedProcedure
+    .input(
+      z.object({
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+        scores: z.array(z.object({ key: z.string().min(1), score: z.number().min(0).max(100) })).min(1),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        // Actor = chính chủ (userId từ session)
+        const userId = ctx.session.userId;
+        const row = await tx.kpiScore.findUnique({
+          where: { userId_periodKey: { userId, periodKey: input.periodKey } },
+        });
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Chưa có phiếu KPI cho kỳ này — HR cần khởi tạo trước' });
+        if (row.status !== 'draft') throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu đã nộp hoặc đã được xác nhận' });
+        const updated = await tx.kpiScore.update({
+          where: { id: row.id },
+          data: {
+            criterionScores: input.scores,
+            status: 'submitted',
+            submittedById: userId,
+            submittedAt: new Date(),
+          },
+        });
+        await logEvent(tx, { facilityId: row.facilityId, entityType: 'kpi_score', entityId: row.id, type: 'status_changed', body: `Nộp phiếu KPI ${input.periodKey} (tự đánh giá)`, actorId: userId });
+        return updated;
+      }),
+    ),
+
+  // Quản lý xác nhận phiếu KPI (N+1). Có thể sửa điểm trước khi confirm. Chỉ khi status=submitted.
+  // Authz: canOverrideKpi(actor, target, targetRoles) — tức là manager phải rank trên nhân sự.
+  kpiEvalConfirm: requireRole(Role.quan_ly, Role.head_teacher, Role.bgd)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+        scores: z.array(z.object({ key: z.string().min(1), score: z.number().min(0).max(100) })).optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const target = await tx.appUser.findUnique({ where: { id: input.userId }, select: { roles: true } });
+        if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy nhân sự' });
+        const actor = { userId: ctx.session.userId, roles: ctx.session.roles, isSuperAdmin: ctx.session.isSuperAdmin };
+        if (!canOverrideKpi(actor, input.userId, target.roles)) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Bạn không có quyền xác nhận KPI của nhân sự này' });
+        }
+        const row = await tx.kpiScore.findUnique({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+        });
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
+        if (row.status !== 'submitted') throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu chưa được nộp hoặc đã được phê duyệt' });
+
+        const newScores = input.scores ?? (row.criterionScores as { key: string; score: number }[] | null) ?? [];
+        const scoresChanged = input.scores !== undefined;
+        const updated = await tx.kpiScore.update({
+          where: { id: row.id },
+          data: {
+            criterionScores: newScores,
+            status: 'confirmed',
+            confirmedById: ctx.session.userId,
+            confirmedAt: new Date(),
+          },
+        });
+        const body = scoresChanged
+          ? `Xác nhận phiếu KPI ${input.periodKey} (có điều chỉnh điểm)`
+          : `Xác nhận phiếu KPI ${input.periodKey}`;
+        if (scoresChanged) {
+          await logEvent(tx, { facilityId: row.facilityId, entityType: 'kpi_score', entityId: row.id, type: 'updated', changes: [{ field: 'criterionScores', old: row.criterionScores, new: newScores }], body, actorId: ctx.session.userId });
+        } else {
+          await logEvent(tx, { facilityId: row.facilityId, entityType: 'kpi_score', entityId: row.id, type: 'status_changed', body, actorId: ctx.session.userId });
+        }
+        return updated;
+      }),
+    ),
+
+  // BGD phê duyệt phiếu KPI (N+2). Chỉ khi status=confirmed. Actor ≠ confirmedById (tách trách nhiệm).
+  // Khi approve: tính autoScore = weightedKpi(criterionScores × policy weights).
+  kpiEvalApprove: requireRole(Role.bgd)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const row = await tx.kpiScore.findUnique({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+        });
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
+        if (row.status !== 'confirmed') throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu chưa được xác nhận (cần confirmed trước)' });
+        // Tách trách nhiệm: người approve ≠ người confirm (N+1 ≠ N+2)
+        if (row.confirmedById === ctx.session.userId) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Người phê duyệt không thể đồng thời là người xác nhận' });
+        }
+        // Tính autoScore từ criterionScores + policy weights
+        const params = await effectiveParamsAt(tx, input.periodKey);
+        const block = row.block as 'training' | 'sales';
+        const policyCriteria = params.kpiCriteria[block];
+        const criterionScores = (row.criterionScores as { key: string; score: number }[] | null) ?? [];
+        // Map từng key sang {criterion, weight, score} theo thứ tự policy
+        const kpiInput = policyCriteria.map((pc) => {
+          const cs = criterionScores.find((s) => s.key === pc.key);
+          return { criterion: pc.key, weight: pc.weight, score: cs?.score ?? 0 };
+        });
+        const { score: autoScore, breakdown } = weightedKpi(kpiInput);
+        const updated = await tx.kpiScore.update({
+          where: { id: row.id },
+          data: {
+            autoScore,
+            autoBreakdown: breakdown as unknown as object[],
+            status: 'approved',
+            approvedById: ctx.session.userId,
+            approvedAt: new Date(),
+          },
+        });
+        await logEvent(tx, { facilityId: row.facilityId, entityType: 'kpi_score', entityId: row.id, type: 'status_changed', body: `Phê duyệt phiếu KPI ${input.periodKey}: điểm ${autoScore}`, changes: [{ field: 'status', old: 'confirmed', new: 'approved' }], actorId: ctx.session.userId });
+        return updated;
+      }),
+    ),
+
+  // Đọc phiếu KPI + config tiêu chí (HR/quản lý/bgd/head_teacher đọc được).
+  kpiEvalGet: requireRole(Role.hr, Role.ke_toan, Role.quan_ly, Role.bgd, Role.head_teacher)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+      }),
+    )
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const row = await tx.kpiScore.findUnique({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+        });
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
+        const params = await effectiveParamsAt(tx, input.periodKey);
+        const block = row.block as 'training' | 'sales';
+        return { row, criteriaConfig: params.kpiCriteria[block] };
+      }),
+    ),
 });
