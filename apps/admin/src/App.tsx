@@ -22,6 +22,7 @@ import { GuardiansPanel } from './guardians-panel';
 import { OverviewPanel } from './overview-panel';
 import { CompensationConfigPanel } from './compensation-panel';
 import { PayrollPanel } from './payroll-panel';
+import { KpiEvaluationPanel } from './kpi-evaluation-panel';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type User = Awaited<ReturnType<typeof trpc.user.list.query>>[number];
@@ -552,6 +553,9 @@ function HrPayrollTab() {
 function Dashboard() {
   const { me } = useSession();
   const canHr = me.isSuperAdmin || me.roles.includes('hr') || me.roles.includes('ke_toan');
+  const canKpi =
+    me.isSuperAdmin ||
+    me.roles.some((r) => ['hr', 'ke_toan', 'quan_ly', 'bgd', 'head_teacher'].includes(r));
   return (
     <Tabs defaultValue="overview">
       <Tabs.List>
@@ -560,6 +564,7 @@ function Dashboard() {
         <Tabs.Tab value="org">Cơ sở &amp; người dùng</Tabs.Tab>
         <Tabs.Tab value="guardians">Phụ huynh</Tabs.Tab>
         {canHr && <Tabs.Tab value="hr">Nhân sự &amp; Lương</Tabs.Tab>}
+        {canKpi && <Tabs.Tab value="kpi">Đánh giá KPI</Tabs.Tab>}
         {me.isSuperAdmin && <Tabs.Tab value="compensation">Cơ cấu lương</Tabs.Tab>}
       </Tabs.List>
       <Tabs.Panel value="overview" pt="md">
@@ -577,6 +582,11 @@ function Dashboard() {
       {canHr && (
         <Tabs.Panel value="hr" pt="md">
           <HrPayrollTab />
+        </Tabs.Panel>
+      )}
+      {canKpi && (
+        <Tabs.Panel value="kpi" pt="md">
+          <KpiEvaluationPanel />
         </Tabs.Panel>
       )}
       {me.isSuperAdmin && (

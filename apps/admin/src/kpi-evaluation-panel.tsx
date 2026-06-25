@@ -1,0 +1,447 @@
+import { useCallback, useEffect, useState } from 'react';
+import { trpc, useSession } from '@cmc/ui';
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Grid,
+  Group,
+  NumberInput,
+  Select,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core';
+
+// ─── Loose re-type to avoid TS2589 on deep tRPC inference ───────────────────
+
+type RosterEntry = { id: string; displayName: string; primaryRole: string };
+
+type KpiRow = {
+  id: string;
+  userId: string;
+  facilityId: number;
+  periodKey: string;
+  block: string;
+  status: string;
+  autoScore: number;
+  overrideScore: number | null;
+  criterionScores: unknown;
+};
+
+type CriterionConfig = { key: string; label: string; weight: number };
+
+type KpiEvalGetResult = {
+  row: KpiRow;
+  criteriaConfig: CriterionConfig[];
+};
+
+type ScoreEntry = { key: string; score: number };
+
+const payrollApi = trpc.payroll as unknown as {
+  roster: { query: (i: { facilityId: number }) => Promise<RosterEntry[]> };
+  kpiList: { query: (i: { facilityId: number; periodKey: string }) => Promise<KpiRow[]> };
+  kpiEvalStart: { mutate: (i: { userId: string; facilityId: number; periodKey: string; block: 'training' | 'sales' }) => Promise<unknown> };
+  kpiAutoPrefill: { mutate: (i: { userId: string; facilityId: number; periodKey: string }) => Promise<unknown> };
+  kpiEvalSubmit: { mutate: (i: { periodKey: string; scores: ScoreEntry[] }) => Promise<unknown> };
+  kpiEvalConfirm: { mutate: (i: { userId: string; periodKey: string; scores?: ScoreEntry[] }) => Promise<unknown> };
+  kpiEvalApprove: { mutate: (i: { userId: string; periodKey: string }) => Promise<unknown> };
+  kpiEvalGet: { query: (i: { userId: string; periodKey: string }) => Promise<KpiEvalGetResult> };
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const todayMonth = () => new Date().toISOString().slice(0, 7);
+
+function statusColor(status: string): string {
+  switch (status) {
+    case 'draft': return 'gray';
+    case 'submitted': return 'blue';
+    case 'confirmed': return 'orange';
+    case 'approved': return 'green';
+    default: return 'gray';
+  }
+}
+
+function statusLabel(status: string): string {
+  switch (status) {
+    case 'draft': return 'Nháp';
+    case 'submitted': return 'Đã nộp';
+    case 'confirmed': return 'Đã xác nhận';
+    case 'approved': return 'Đã duyệt';
+    default: return status;
+  }
+}
+
+function previewTotal(criteria: CriterionConfig[], scores: ScoreEntry[]): string {
+  const totalWeight = criteria.reduce((s, c) => s + c.weight, 0);
+  if (totalWeight === 0) return '—';
+  const weighted = criteria.reduce((s, c) => {
+    const se = scores.find((e) => e.key === c.key);
+    return s + c.weight * (se?.score ?? 0);
+  }, 0);
+  return (weighted / totalWeight).toFixed(1);
+}
+
+// ─── Detail modal (inline card) ──────────────────────────────────────────────
+
+function KpiDetailCard({
+  row,
+  rosterMap,
+  facilityId,
+  onClose,
+  onRefresh,
+}: {
+  row: KpiRow;
+  rosterMap: Map<string, string>;
+  facilityId: number;
+  onClose: () => void;
+  onRefresh: () => void;
+}) {
+  const [detail, setDetail] = useState<KpiEvalGetResult | null>(null);
+  const [scores, setScores] = useState<ScoreEntry[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  const load = useCallback(() => {
+    payrollApi.kpiEvalGet.query({ userId: row.userId, periodKey: row.periodKey }).then((d) => {
+      setDetail(d);
+      // Initialise editable scores from current criterionScores
+      const saved = (d.row.criterionScores as ScoreEntry[] | null) ?? [];
+      setScores(
+        d.criteriaConfig.map((c) => ({
+          key: c.key,
+          score: saved.find((s) => s.key === c.key)?.score ?? 0,
+        })),
+      );
+    }).catch(() => setMsg({ kind: 'err', text: 'Không thể tải chi tiết phiếu KPI.' }));
+  }, [row.userId, row.periodKey]);
+
+  useEffect(() => { load(); }, [load]);
+
+  function setScore(key: string, val: number) {
+    setScores((prev) => prev.map((s) => (s.key === key ? { ...s, score: val } : s)));
+  }
+
+  async function doPrefill() {
+    setBusy(true); setMsg(null);
+    try {
+      await payrollApi.kpiAutoPrefill.mutate({ userId: row.userId, facilityId, periodKey: row.periodKey });
+      setMsg({ kind: 'ok', text: 'Tự điền thành công — đã cập nhật tiêu chí từ dữ liệu thực.' });
+      load();
+      onRefresh();
+    } catch (e) {
+      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : String(e)) });
+    } finally { setBusy(false); }
+  }
+
+  async function doSubmit() {
+    setBusy(true); setMsg(null);
+    try {
+      await payrollApi.kpiEvalSubmit.mutate({ periodKey: row.periodKey, scores });
+      setMsg({ kind: 'ok', text: 'Đã nộp phiếu KPI.' });
+      onRefresh();
+    } catch (e) {
+      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : String(e)) });
+    } finally { setBusy(false); }
+  }
+
+  async function doConfirm() {
+    setBusy(true); setMsg(null);
+    try {
+      await payrollApi.kpiEvalConfirm.mutate({ userId: row.userId, periodKey: row.periodKey, scores });
+      setMsg({ kind: 'ok', text: 'Đã xác nhận phiếu KPI.' });
+      onRefresh();
+    } catch (e) {
+      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : String(e)) });
+    } finally { setBusy(false); }
+  }
+
+  async function doApprove() {
+    setBusy(true); setMsg(null);
+    try {
+      await payrollApi.kpiEvalApprove.mutate({ userId: row.userId, periodKey: row.periodKey });
+      setMsg({ kind: 'ok', text: 'Đã phê duyệt phiếu KPI. Điểm chính thức đã được ghi.' });
+      onRefresh();
+    } catch (e) {
+      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : String(e)) });
+    } finally { setBusy(false); }
+  }
+
+  const staffName = rosterMap.get(row.userId) ?? row.userId;
+  const criteria = detail?.criteriaConfig ?? [];
+
+  return (
+    <Card withBorder mt="sm">
+      <Group justify="space-between" mb="sm">
+        <Group gap="xs">
+          <Title order={6}>{staffName}</Title>
+          <Badge size="sm" color={row.block === 'sales' ? 'violet' : 'cyan'}>{row.block}</Badge>
+          <Badge size="sm" color={statusColor(row.status)}>{statusLabel(row.status)}</Badge>
+        </Group>
+        <Button size="xs" variant="subtle" onClick={onClose}>Đóng</Button>
+      </Group>
+
+      {msg && (
+        <Alert color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)} mb="sm">
+          {msg.text}
+        </Alert>
+      )}
+
+      {criteria.length > 0 && (
+        <>
+          <Table fz="sm" mb="sm">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Tiêu chí</Table.Th>
+                <Table.Th>Trọng số</Table.Th>
+                <Table.Th>Điểm (0–100)</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {criteria.map((c) => (
+                <Table.Tr key={c.key}>
+                  <Table.Td>{c.label}</Table.Td>
+                  <Table.Td>{(c.weight * 100).toFixed(0)}%</Table.Td>
+                  <Table.Td>
+                    <NumberInput
+                      size="xs"
+                      min={0}
+                      max={100}
+                      value={scores.find((s) => s.key === c.key)?.score ?? 0}
+                      onChange={(v) => setScore(c.key, Number(v) || 0)}
+                      disabled={row.status === 'approved'}
+                      w={90}
+                    />
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+          <Text size="sm" c="dimmed" mb="sm">
+            Điểm tổng dự kiến: <b>{previewTotal(criteria, scores)}</b> / 100
+            {row.status === 'approved' && row.autoScore !== null && (
+              <> &nbsp;·&nbsp; Điểm chính thức (server): <b>{row.autoScore.toFixed(1)}</b></>
+            )}
+          </Text>
+        </>
+      )}
+
+      {row.status === 'draft' && (
+        <Group>
+          <Button size="xs" variant="light" onClick={doPrefill} loading={busy}>Tự điền</Button>
+          <Button size="xs" onClick={doSubmit} loading={busy}>Nộp</Button>
+        </Group>
+      )}
+      {row.status === 'submitted' && (
+        <Button size="xs" onClick={doConfirm} loading={busy}>Xác nhận</Button>
+      )}
+      {row.status === 'confirmed' && (
+        <Button size="xs" color="orange" onClick={doApprove} loading={busy}>Duyệt</Button>
+      )}
+    </Card>
+  );
+}
+
+// ─── Kanban column ────────────────────────────────────────────────────────────
+
+function KanbanColumn({
+  status,
+  rows,
+  rosterMap,
+  facilityId,
+  selectedId,
+  onSelect,
+  onRefresh,
+}: {
+  status: string;
+  rows: KpiRow[];
+  rosterMap: Map<string, string>;
+  facilityId: number;
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <Stack gap="xs">
+      <Group gap="xs">
+        <Badge color={statusColor(status)}>{statusLabel(status)}</Badge>
+        <Text size="xs" c="dimmed">({rows.length})</Text>
+      </Group>
+      {rows.length === 0 && <Text size="xs" c="dimmed">Không có phiếu</Text>}
+      {rows.map((r) => (
+        <Card key={r.id} withBorder padding="xs" style={{ cursor: 'pointer' }}>
+          <Stack gap={4} onClick={() => onSelect(selectedId === r.id ? null : r.id)}>
+            <Text size="sm" fw={500}>{rosterMap.get(r.userId) ?? r.userId}</Text>
+            <Group gap="xs">
+              <Badge size="xs" color={r.block === 'sales' ? 'violet' : 'cyan'}>{r.block}</Badge>
+              {r.autoScore != null && r.status === 'approved' && (
+                <Text size="xs" c="teal">Điểm: {r.autoScore.toFixed(1)}</Text>
+              )}
+              {r.overrideScore != null && (
+                <Text size="xs" c="orange">Override: {r.overrideScore.toFixed(1)}</Text>
+              )}
+            </Group>
+          </Stack>
+          {selectedId === r.id && (
+            <KpiDetailCard
+              row={r}
+              rosterMap={rosterMap}
+              facilityId={facilityId}
+              onClose={() => onSelect(null)}
+              onRefresh={() => { onSelect(null); onRefresh(); }}
+            />
+          )}
+        </Card>
+      ))}
+    </Stack>
+  );
+}
+
+// ─── Main panel ──────────────────────────────────────────────────────────────
+
+export function KpiEvaluationPanel() {
+  const { me } = useSession();
+
+  const [facilityId, setFacilityId] = useState<string | null>(
+    me.facilityIds.length > 0 ? String(me.facilityIds[0]) : null,
+  );
+  const facilityOptions = me.facilityIds.map((id) => ({ value: String(id), label: `Cơ sở #${id}` }));
+
+  const [periodKey, setPeriodKey] = useState(todayMonth());
+  const [roster, setRoster] = useState<RosterEntry[]>([]);
+  const [kpiRows, setKpiRows] = useState<KpiRow[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Create-eval form state
+  const [createUserId, setCreateUserId] = useState<string | null>(null);
+  const [createBlock, setCreateBlock] = useState<string>('training');
+  const [createBusy, setCreateBusy] = useState(false);
+  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+
+  const fid = facilityId ? Number(facilityId) : null;
+
+  const loadRoster = useCallback(() => {
+    if (!fid) return;
+    payrollApi.roster.query({ facilityId: fid }).then(setRoster).catch(() => setRoster([]));
+  }, [fid]);
+
+  const loadKpiList = useCallback(() => {
+    if (!fid || !periodKey) return;
+    payrollApi.kpiList.query({ facilityId: fid, periodKey }).then(setKpiRows).catch(() => setKpiRows([]));
+  }, [fid, periodKey]);
+
+  useEffect(() => { loadRoster(); }, [loadRoster]);
+  useEffect(() => { loadKpiList(); }, [loadKpiList]);
+
+  const rosterMap = new Map(roster.map((r) => [r.id, r.displayName]));
+  const rosterData = roster.map((r) => ({ value: r.id, label: `${r.displayName} (${r.primaryRole})` }));
+
+  const byStatus = (s: string) => kpiRows.filter((r) => r.status === s);
+
+  if (me.facilityIds.length === 0) {
+    return <Text c="dimmed">Tài khoản chưa được gán cơ sở.</Text>;
+  }
+
+  async function createEval() {
+    if (!fid || !createUserId) return;
+    setCreateBusy(true); setMsg(null);
+    try {
+      await payrollApi.kpiEvalStart.mutate({
+        userId: createUserId,
+        facilityId: fid,
+        periodKey,
+        block: createBlock as 'training' | 'sales',
+      });
+      setMsg({ kind: 'ok', text: `Đã tạo phiếu KPI cho ${rosterMap.get(createUserId) ?? createUserId}.` });
+      setCreateUserId(null);
+      loadKpiList();
+    } catch (e) {
+      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : String(e)) });
+    } finally { setCreateBusy(false); }
+  }
+
+  return (
+    <Stack>
+      <Alert color="blue" variant="light">
+        Vòng đời phiếu KPI: <b>Nháp</b> → Nhân sự tự nộp (<b>Đã nộp</b>) → Quản lý xác nhận (<b>Đã xác nhận</b>) → BGĐ phê duyệt (<b>Đã duyệt</b>).
+        Khi phê duyệt, điểm khóa lại và đổ vào phiếu lương kỳ đó.
+      </Alert>
+
+      <Card withBorder>
+        <Title order={6} mb="sm">Bộ lọc</Title>
+        <Group align="flex-end">
+          {me.facilityIds.length > 1 && (
+            <Select label="Cơ sở" data={facilityOptions} value={facilityId} onChange={setFacilityId} w={160} />
+          )}
+          <TextInput
+            label="Kỳ lương (YYYY-MM)"
+            value={periodKey}
+            onChange={(e) => setPeriodKey(e.currentTarget.value)}
+            placeholder="YYYY-MM"
+            w={150}
+          />
+          <Button variant="default" onClick={() => { loadRoster(); loadKpiList(); setMsg(null); }}>
+            Tải lại
+          </Button>
+        </Group>
+      </Card>
+
+      <Card withBorder>
+        <Title order={6} mb="sm">Tạo phiếu kỳ này cho nhân sự</Title>
+        <Group align="flex-end">
+          <Select
+            label="Nhân sự"
+            placeholder="Chọn người"
+            data={rosterData}
+            value={createUserId}
+            onChange={setCreateUserId}
+            searchable
+            w={280}
+          />
+          <Select
+            label="Bộ phận"
+            data={[
+              { value: 'training', label: 'Đào tạo (training)' },
+              { value: 'sales', label: 'Kinh doanh (sales)' },
+            ]}
+            value={createBlock}
+            onChange={(v) => setCreateBlock(v ?? 'training')}
+            w={200}
+          />
+          <Button onClick={createEval} loading={createBusy} disabled={!createUserId || !fid}>
+            Tạo phiếu
+          </Button>
+        </Group>
+        {msg && (
+          <Alert mt="sm" color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)}>
+            {msg.text}
+          </Alert>
+        )}
+      </Card>
+
+      <Title order={5}>Phiếu KPI kỳ {periodKey}</Title>
+
+      {fid && (
+        <SimpleGrid cols={4} spacing="sm">
+          {(['draft', 'submitted', 'confirmed', 'approved'] as const).map((s) => (
+            <KanbanColumn
+              key={s}
+              status={s}
+              rows={byStatus(s)}
+              rosterMap={rosterMap}
+              facilityId={fid}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onRefresh={loadKpiList}
+            />
+          ))}
+        </SimpleGrid>
+      )}
+    </Stack>
+  );
+}
