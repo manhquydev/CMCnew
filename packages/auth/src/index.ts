@@ -6,6 +6,7 @@ export type { SessionClaims } from './jwt.js';
 export {
   loginParent,
   loginStudent,
+  mintParentSession,
   resolveLmsSession,
   lmsRlsContextOf,
   type LmsSession,

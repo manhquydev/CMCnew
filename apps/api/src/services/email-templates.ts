@@ -8,7 +8,8 @@ export type EmailTemplateKind =
   | 'payslip_ready'
   | 'password_reset'
   | 'account_security_alert'
-  | 'parent_meeting';
+  | 'parent_meeting'
+  | 'otp_login';
 
 const BRAND = 'CMC';
 
@@ -67,6 +68,7 @@ export interface TemplatePayloads {
   password_reset: { name?: string; resetUrl: string; expiresMinutes: number };
   account_security_alert: { name?: string; action: string; at: string };
   parent_meeting: { title: string; scheduledAt: string; location?: string | null };
+  otp_login: { code: string; expiresMinutes: number };
 }
 
 type Renderer<K extends EmailTemplateKind> = (data: TemplatePayloads[K]) => RenderedEmail;
@@ -140,6 +142,18 @@ const renderers: { [K in EmailTemplateKind]: Renderer<K> } = {
         p('Kính gửi Quý phụ huynh,') +
         p(`Buổi họp <strong>${esc(d.title)}</strong> sẽ diễn ra lúc <strong>${esc(d.scheduledAt)}</strong>${d.location ? ` tại ${esc(d.location)}` : ''}.`) +
         p('Kính mong Quý phụ huynh sắp xếp tham dự.'),
+    }),
+  }),
+  otp_login: (d) => ({
+    subject: `Mã đăng nhập LMS: ${esc(d.code)}`,
+    html: layout({
+      title: 'Mã đăng nhập một lần (OTP)',
+      preheader: `Mã đăng nhập của bạn: ${d.code}`,
+      bodyHtml:
+        p('Kính gửi Quý phụ huynh,') +
+        p('Mã đăng nhập một lần của bạn là:') +
+        `<p style="margin:0 0 16px;font-size:32px;font-weight:700;letter-spacing:6px;color:#0b5cad">${esc(d.code)}</p>` +
+        p(`Mã có hiệu lực trong ${d.expiresMinutes} phút và chỉ dùng một lần. Nếu bạn không yêu cầu đăng nhập, hãy bỏ qua thư này.`),
     }),
   }),
 };

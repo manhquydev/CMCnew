@@ -105,6 +105,19 @@ export async function loginStudent(
   return { token, session: strip(resolved) };
 }
 
+/**
+ * Mint a parent session by accountId WITHOUT a password — used by passwordless flows (Email OTP).
+ * The caller is responsible for having authenticated the parent (e.g. a verified OTP).
+ */
+export async function mintParentSession(
+  accountId: string,
+): Promise<{ token: string; session: LmsSession } | null> {
+  const resolved = await parentSession(accountId);
+  if (!resolved) return null;
+  const token = await signLmsSession({ sub: accountId, kind: 'parent', tokenVersion: resolved._tokenVersion });
+  return { token, session: strip(resolved) };
+}
+
 /** Verify an LMS JWT and re-check it against live DB state (active + tokenVersion). */
 export async function resolveLmsSession(token: string): Promise<LmsSession | null> {
   const claims = await verifyLmsToken(token);

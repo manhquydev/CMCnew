@@ -151,3 +151,15 @@ export async function sendViaGraph(
     throw new Error(`Graph sendMail HTTP ${res.status}${detail ? `: ${detail.slice(0, 300)}` : ''}`);
   }
 }
+
+/**
+ * Send one email immediately (synchronous), bypassing the outbox queue — for time-critical mail like
+ * login OTP. Returns false when Graph is unconfigured (caller decides a dev fallback); throws on a
+ * real send failure so the caller can surface "couldn't send code, try again".
+ */
+export async function sendEmailNow(msg: OutgoingEmail, deps: SendDeps = {}): Promise<boolean> {
+  const cfg = graphMailerFromEnv();
+  if (!cfg) return false;
+  await sendViaGraph(cfg, msg, deps);
+  return true;
+}
