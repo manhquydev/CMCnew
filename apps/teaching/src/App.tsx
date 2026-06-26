@@ -1,10 +1,8 @@
 import '@mantine/dates/styles.css';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
-import { LoginGate, useSession, trpc, Chatter, notifyError, notifySuccess, required } from '@cmc/ui';
-import { useForm } from '@mantine/form';
+import { LoginGate, useSession, trpc, Chatter } from '@cmc/ui';
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -13,6 +11,7 @@ import {
   Group,
   Modal,
   NumberInput,
+  Pagination,
   Select,
   SegmentedControl,
   Stack,
@@ -33,7 +32,6 @@ import { CskhPanel } from './cskh-panel';
 import { CertificatePanel } from './certificate-panel';
 import { PayrollPanel } from './payroll-panel';
 import { MyPayslipsPanel } from './my-payslips-panel';
-import { Shell, ALL_TEACHING_KEYS, type SectionKey } from './shell';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
@@ -54,16 +52,7 @@ const STATUS_COLOR: Record<string, string> = {
 const DOW = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 const fmtDate = (d: string | Date) => dayjs(d).format('DD/MM/YYYY');
 const toApiDate = (d: Date | null) => (d ? dayjs(d).format('YYYY-MM-DD') : undefined);
-
-// Map sidebar section keys that belong inside Workspace to their ClassDetail tab value
-const SECTION_TO_CLASS_TAB: Partial<Record<SectionKey, string>> = {
-  schedule: 'schedule',
-  sessions: 'sessions',
-  attendance: 'attendance',
-  meetings: 'meetings',
-  classlog: 'log',
-  enrollment: 'enroll',
-};
+const PAGE_SIZE = 20;
 
 function CreateClassModal({
   facilityId,
@@ -75,37 +64,36 @@ function CreateClassModal({
   onCreated: () => void;
 }) {
   const [opened, { open, close }] = useDisclosure(false);
+  const [courseId, setCourseId] = useState<string | null>(null);
+  const [name, setName] = useState('');
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
+  const [capacity, setCapacity] = useState<number | string>('');
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
 
-  const form = useForm({
-    initialValues: { courseId: '' as string, name: '', capacity: '' as number | string },
-    validate: {
-      courseId: required('Chọn khóa học'),
-      name: required('Nhập tên lớp'),
-    },
-  });
-
-  async function create(values: typeof form.values) {
+  async function create() {
+    if (!courseId || !name) {
+      setErr('Chọn khóa học và nhập tên lớp');
+      return;
+    }
     setBusy(true);
+    setErr('');
     try {
       await trpc.classBatch.create.mutate({
         facilityId,
-        courseId: values.courseId,
-        name: values.name,
+        courseId,
+        name,
         startDate: toApiDate(startDate),
         endDate: toApiDate(endDate),
-        capacity: typeof values.capacity === 'number' ? values.capacity : undefined,
+        capacity: typeof capacity === 'number' ? capacity : undefined,
       });
-      notifySuccess(`Đã tạo lớp "${values.name}"`);
       close();
-      form.reset();
-      setStartDate(null);
-      setEndDate(null);
+      setName('');
+      setCourseId(null);
       onCreated();
     } catch (e) {
-      notifyError(e, 'Tạo lớp học thất bại');
+      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
     } finally {
       setBusy(false);
     }
@@ -113,30 +101,33 @@ function CreateClassModal({
 
   return (
     <>
-      <Button variant="filled" radius={9999} size="sm" onClick={open}>
+      <Button size="xs" onClick={open}>
         + Tạo lớp
       </Button>
-      <Modal opened={opened} onClose={close} title="Tạo lớp học" radius="xl" centered>
-        <form onSubmit={form.onSubmit(create)}>
-          <Stack>
-            <Select
-              label="Khóa học"
-              withAsterisk
-              placeholder={courses.length ? 'Chọn khóa' : 'Chưa có khóa học (tạo ở Admin)'}
-              data={courses.map((c) => ({ value: c.id, label: `${c.code} — ${c.name} (${c.program})` }))}
-              {...form.getInputProps('courseId')}
-            />
-            <TextInput label="Tên lớp" withAsterisk {...form.getInputProps('name')} />
-            <Group grow>
-              <DateInput label="Khai giảng" value={startDate} onChange={setStartDate} valueFormat="DD/MM/YYYY" clearable />
-              <DateInput label="Kết thúc" value={endDate} onChange={setEndDate} valueFormat="DD/MM/YYYY" clearable />
-            </Group>
-            <NumberInput label="Sĩ số tối đa (tùy chọn)" min={1} {...form.getInputProps('capacity')} />
-            <Button type="submit" loading={busy} variant="filled" radius={9999}>
-              Tạo
-            </Button>
-          </Stack>
-        </form>
+      <Modal opened={opened} onClose={close} title="Tạo lớp học">
+        <Stack>
+          <Select
+            label="Khóa học"
+            placeholder={courses.length ? 'Chọn khóa' : 'Chưa có khóa học (tạo ở Admin)'}
+            data={courses.map((c) => ({ value: c.id, label: `${c.code} — ${c.name} (${c.program})` }))}
+            value={courseId}
+            onChange={setCourseId}
+          />
+          <TextInput label="Tên lớp" value={name} onChange={(e) => setName(e.currentTarget.value)} />
+          <Group grow>
+            <DateInput label="Khai giảng" value={startDate} onChange={setStartDate} valueFormat="DD/MM/YYYY" clearable />
+            <DateInput label="Kết thúc" value={endDate} onChange={setEndDate} valueFormat="DD/MM/YYYY" clearable />
+          </Group>
+          <NumberInput label="Sĩ số tối đa (tùy chọn)" value={capacity} onChange={setCapacity} min={1} />
+          {err && (
+            <Text c="red" size="sm">
+              {err}
+            </Text>
+          )}
+          <Button onClick={create} loading={busy}>
+            Tạo
+          </Button>
+        </Stack>
       </Modal>
     </>
   );
@@ -160,7 +151,7 @@ function ScheduleTab({
   const [roomId, setRoomId] = useState<string | null>(null);
   const [teacherId, setTeacherId] = useState<string | null>(null);
   const [range, setRange] = useState<{ from: Date | null; to: Date | null }>({ from: null, to: null });
-  const [generateMsg, setGenerateMsg] = useState('');
+  const [msg, setMsg] = useState('');
   const roomLabel = useCallback(
     (id: string | null) => (id ? (rooms.find((r) => r.id === id)?.code ?? '—') : '—'),
     [rooms],
@@ -170,45 +161,40 @@ function ScheduleTab({
     [teachers],
   );
   const load = useCallback(() => {
-    trpc.schedule.listSlots.query({ classBatchId: batch.id }).then(setSlots).catch((e) => notifyError(e, 'Không tải được lịch học'));
+    trpc.schedule.listSlots.query({ classBatchId: batch.id }).then(setSlots).catch(() => {});
   }, [batch.id]);
   useEffect(load, [load]);
 
   async function addSlot() {
-    try {
-      await trpc.schedule.addSlot.mutate({
-        facilityId,
-        classBatchId: batch.id,
-        dayOfWeek: Number(day),
-        startTime: start,
-        endTime: end,
-        roomId: roomId ?? undefined,
-        teacherId: teacherId ?? undefined,
-      });
-      notifySuccess('Đã thêm khung lịch');
-      load();
-    } catch (e) {
-      notifyError(e, 'Thêm khung lịch thất bại');
-    }
+    await trpc.schedule.addSlot.mutate({
+      facilityId,
+      classBatchId: batch.id,
+      dayOfWeek: Number(day),
+      startTime: start,
+      endTime: end,
+      roomId: roomId ?? undefined,
+      teacherId: teacherId ?? undefined,
+    });
+    load();
   }
   async function generate() {
-    setGenerateMsg('');
+    setMsg('');
     try {
       const r = await trpc.schedule.generateSessions.mutate({
         classBatchId: batch.id,
         startDate: toApiDate(range.from)!,
         endDate: toApiDate(range.to)!,
       });
-      setGenerateMsg(`Đã tạo ${r.created} buổi (bỏ qua ${r.skipped}).`);
+      setMsg(`Đã tạo ${r.created} buổi (bỏ qua ${r.skipped}).`);
     } catch (e) {
-      notifyError(e, 'Sinh buổi học thất bại');
+      setMsg('Lỗi: ' + (e instanceof Error ? e.message : ''));
     }
   }
 
   return (
     <Stack>
-      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-        <Text fw={600} mb="xs" style={{ color: 'var(--cmc-text)' }}>
+      <Card withBorder>
+        <Text fw={600} mb="xs">
           Khung lịch tuần
         </Text>
         <Group align="flex-end">
@@ -240,18 +226,18 @@ function ScheduleTab({
             value={teacherId}
             onChange={setTeacherId}
           />
-          <Button onClick={addSlot} variant="filled" radius={9999}>Thêm khung</Button>
+          <Button onClick={addSlot}>Thêm khung</Button>
         </Group>
         <Text size="xs" c="dimmed" mt={6}>
           Gán phòng/giáo viên để hệ thống chặn cứng trùng phòng và trùng giáo viên khi sinh lịch.
         </Text>
-        <Table mt="sm" striped highlightOnHover withTableBorder={false}>
+        <Table mt="sm">
           <Table.Thead>
             <Table.Tr>
-              <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Thứ</Table.Th>
-              <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Giờ</Table.Th>
-              <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Phòng</Table.Th>
-              <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Giáo viên</Table.Th>
+              <Table.Th>Thứ</Table.Th>
+              <Table.Th>Giờ</Table.Th>
+              <Table.Th>Phòng</Table.Th>
+              <Table.Th>Giáo viên</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -268,8 +254,8 @@ function ScheduleTab({
           </Table.Tbody>
         </Table>
       </Card>
-      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-        <Text fw={600} mb="xs" style={{ color: 'var(--cmc-text)' }}>
+      <Card withBorder>
+        <Text fw={600} mb="xs">
           Sinh buổi học
         </Text>
         <Group align="flex-end">
@@ -285,13 +271,13 @@ function ScheduleTab({
             onChange={(d) => setRange((r) => ({ ...r, to: d }))}
             valueFormat="DD/MM/YYYY"
           />
-          <Button onClick={generate} disabled={!range.from || !range.to} variant="filled" radius={9999}>
+          <Button onClick={generate} disabled={!range.from || !range.to}>
             Sinh lịch
           </Button>
         </Group>
-        {generateMsg && (
-          <Text size="sm" mt="xs" c="green">
-            {generateMsg}
+        {msg && (
+          <Text size="sm" mt="xs" c={msg.startsWith('Lỗi') ? 'red' : 'green'}>
+            {msg}
           </Text>
         )}
       </Card>
@@ -302,20 +288,20 @@ function ScheduleTab({
 function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Room[]; teachers: Teacher[] }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   useEffect(() => {
-    trpc.schedule.listSessions.query({ classBatchId: batchId }).then(setSessions).catch((e) => notifyError(e, 'Không tải được buổi học'));
+    trpc.schedule.listSessions.query({ classBatchId: batchId }).then(setSessions).catch(() => {});
   }, [batchId]);
   const roomLabel = (id: string | null) => (id ? (rooms.find((r) => r.id === id)?.code ?? '—') : '—');
   const teacherLabel = (id: string | null) =>
     id ? (teachers.find((t) => t.id === id)?.displayName ?? '—') : '—';
   return (
-    <Table striped highlightOnHover withTableBorder={false}>
+    <Table striped>
       <Table.Thead>
         <Table.Tr>
-          <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Ngày</Table.Th>
-          <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Giờ</Table.Th>
-          <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Phòng</Table.Th>
-          <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Giáo viên</Table.Th>
-          <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Trạng thái</Table.Th>
+          <Table.Th>Ngày</Table.Th>
+          <Table.Th>Giờ</Table.Th>
+          <Table.Th>Phòng</Table.Th>
+          <Table.Th>Giáo viên</Table.Th>
+          <Table.Th>Trạng thái</Table.Th>
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>
@@ -328,7 +314,7 @@ function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Roo
             <Table.Td>{roomLabel(s.roomId)}</Table.Td>
             <Table.Td>{teacherLabel(s.teacherId)}</Table.Td>
             <Table.Td>
-              <Badge size="sm" color={STATUS_COLOR[s.status]} variant="light" radius="xl">
+              <Badge size="sm" color={STATUS_COLOR[s.status]}>
                 {s.status}
               </Badge>
             </Table.Td>
@@ -341,35 +327,31 @@ function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Roo
 
 function CreateStudentModal({ facilityId, onCreated }: { facilityId: number; onCreated: () => void }) {
   const [opened, { open, close }] = useDisclosure(false);
+  const [studentCode, setStudentCode] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [program, setProgram] = useState<string | null>('UCREA');
   const [dob, setDob] = useState<Date | null>(null);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
 
-  const form = useForm({
-    initialValues: { studentCode: '', fullName: '', program: 'UCREA' as string },
-    validate: {
-      studentCode: required('Nhập mã học sinh'),
-      fullName: required('Nhập họ tên'),
-      program: required('Chọn chương trình'),
-    },
-  });
-
-  async function create(values: typeof form.values) {
+  async function create() {
     setBusy(true);
+    setErr('');
     try {
       await trpc.student.create.mutate({
         facilityId,
-        studentCode: values.studentCode,
-        fullName: values.fullName,
-        program: values.program as 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE',
+        studentCode,
+        fullName,
+        program: program as 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE',
         dateOfBirth: toApiDate(dob),
       });
-      notifySuccess(`Đã tạo học sinh "${values.fullName}"`);
       close();
-      form.reset();
+      setStudentCode('');
+      setFullName('');
       setDob(null);
       onCreated();
     } catch (e) {
-      notifyError(e, 'Tạo học sinh thất bại');
+      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
     } finally {
       setBusy(false);
     }
@@ -377,26 +359,28 @@ function CreateStudentModal({ facilityId, onCreated }: { facilityId: number; onC
 
   return (
     <>
-      <Button variant="subtle" onClick={open}>
+      <Button variant="default" onClick={open}>
         + Tạo học sinh
       </Button>
-      <Modal opened={opened} onClose={close} title="Tạo học sinh" radius="xl" centered>
-        <form onSubmit={form.onSubmit(create)}>
-          <Stack>
-            <TextInput label="Mã học sinh" withAsterisk {...form.getInputProps('studentCode')} />
-            <TextInput label="Họ tên" withAsterisk {...form.getInputProps('fullName')} />
-            <Select
-              label="Chương trình"
-              withAsterisk
-              data={['UCREA', 'BRIGHT_IG', 'BLACK_HOLE']}
-              {...form.getInputProps('program')}
-            />
-            <DateInput label="Ngày sinh" value={dob} onChange={setDob} valueFormat="DD/MM/YYYY" clearable />
-            <Button type="submit" loading={busy} variant="filled" radius={9999}>
-              Tạo
-            </Button>
-          </Stack>
-        </form>
+      <Modal opened={opened} onClose={close} title="Tạo học sinh">
+        <Stack>
+          <TextInput
+            label="Mã học sinh"
+            value={studentCode}
+            onChange={(e) => setStudentCode(e.currentTarget.value)}
+          />
+          <TextInput label="Họ tên" value={fullName} onChange={(e) => setFullName(e.currentTarget.value)} />
+          <Select label="Chương trình" data={['UCREA', 'BRIGHT_IG', 'BLACK_HOLE']} value={program} onChange={setProgram} />
+          <DateInput label="Ngày sinh" value={dob} onChange={setDob} valueFormat="DD/MM/YYYY" clearable />
+          {err && (
+            <Text c="red" size="sm">
+              {err}
+            </Text>
+          )}
+          <Button onClick={create} loading={busy} disabled={!studentCode || !fullName}>
+            Tạo
+          </Button>
+        </Stack>
       </Modal>
     </>
   );
@@ -406,40 +390,32 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [students, setStudents] = useState<StudentT[]>([]);
   const [studentId, setStudentId] = useState<string | null>(null);
-  const [enrollMsg, setEnrollMsg] = useState('');
+  const [msg, setMsg] = useState('');
   const load = useCallback(() => {
-    trpc.enrollment.listByBatch.query({ classBatchId: batch.id }).then(setEnrollments).catch((e) => notifyError(e, 'Không tải được danh sách ghi danh'));
-    trpc.student.list.query().then(setStudents).catch((e) => notifyError(e, 'Không tải được danh sách học sinh'));
+    trpc.enrollment.listByBatch.query({ classBatchId: batch.id }).then(setEnrollments).catch(() => {});
+    trpc.student.list.query().then(setStudents).catch(() => {});
   }, [batch.id]);
   useEffect(load, [load]);
 
   async function enroll() {
     if (!studentId) return;
-    setEnrollMsg('');
+    setMsg('');
     try {
       const r = await trpc.enrollment.enroll.mutate({ facilityId, classBatchId: batch.id, studentId });
-      if (r.overCapacity) {
-        setEnrollMsg(`Vượt sĩ số (${r.enrolledCount}/${r.capacity}) — vẫn ghi danh.`);
-      } else {
-        notifySuccess('Đã ghi danh thành công');
-      }
+      setMsg(r.overCapacity ? `⚠ Vượt sĩ số (${r.enrolledCount}/${r.capacity}) — vẫn ghi danh.` : 'Đã ghi danh.');
       setStudentId(null);
       load();
     } catch (e) {
-      notifyError(e, 'Ghi danh thất bại');
+      setMsg('Lỗi: ' + (e instanceof Error ? e.message : ''));
     }
   }
 
   async function complete(id: string) {
-    try {
-      await trpc.enrollment.complete.mutate({ id });
-      notifySuccess('Đã hoàn tất ghi danh');
-      load();
-    } catch (e) {
-      notifyError(e, 'Hoàn tất ghi danh thất bại');
-    }
+    await trpc.enrollment.complete.mutate({ id });
+    load();
   }
 
+  // Enroll only students not already in this batch.
   const enrolledIds = new Set(enrollments.map((e) => e.studentId));
   const enrollable = students.filter((s) => !enrolledIds.has(s.id));
 
@@ -455,24 +431,24 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
           value={studentId}
           onChange={setStudentId}
         />
-        <Button onClick={enroll} disabled={!studentId} variant="filled" radius={9999}>
+        <Button onClick={enroll} disabled={!studentId}>
           Ghi danh
         </Button>
         <CreateStudentModal facilityId={facilityId} onCreated={load} />
       </Group>
-      {enrollMsg && (
-        <Text size="sm" c="orange">
-          {enrollMsg}
+      {msg && (
+        <Text size="sm" c={msg.startsWith('Lỗi') ? 'red' : msg.startsWith('⚠') ? 'orange' : 'green'}>
+          {msg}
         </Text>
       )}
-      <Table striped highlightOnHover withTableBorder={false}>
+      <Table striped>
         <Table.Tbody>
           {enrollments.map((e) => (
             <Table.Tr key={e.id}>
               <Table.Td>{e.student.studentCode}</Table.Td>
               <Table.Td>{e.student.fullName}</Table.Td>
               <Table.Td>
-                <Badge size="sm" color={e.status === 'completed' ? 'teal' : undefined} variant="light" radius="xl">
+                <Badge size="sm" color={e.status === 'completed' ? 'teal' : undefined}>
                   {e.status}
                 </Badge>
               </Table.Td>
@@ -497,18 +473,13 @@ function MeetingsTab({ batch, facilityId }: { batch: Batch; facilityId: number }
   const [meetings, setMeetings] = useState<ParentMeeting[]>([]);
 
   const load = useCallback(() => {
-    trpc.parentMeeting.list.query({ facilityId, classBatchId: batch.id }).then(setMeetings).catch((e) => notifyError(e, 'Không tải được lịch họp phụ huynh'));
+    trpc.parentMeeting.list.query({ facilityId, classBatchId: batch.id }).then(setMeetings).catch(() => {});
   }, [facilityId, batch.id]);
   useEffect(load, [load]);
 
   async function setStatus(id: string, status: 'done' | 'cancelled') {
-    try {
-      await trpc.parentMeeting.setStatus.mutate({ id, status });
-      notifySuccess(status === 'done' ? 'Đã đánh dấu đã họp' : 'Đã hủy cuộc họp');
-      load();
-    } catch (e) {
-      notifyError(e, 'Cập nhật trạng thái họp thất bại');
-    }
+    await trpc.parentMeeting.setStatus.mutate({ id, status });
+    load();
   }
 
   const ST: Record<string, { label: string; color: string }> = {
@@ -519,30 +490,27 @@ function MeetingsTab({ batch, facilityId }: { batch: Batch; facilityId: number }
 
   return (
     <Stack>
-      <Alert color="blue" variant="light">
-        Lịch họp phụ huynh được hệ thống tự sinh theo định kỳ của chương trình (UCREA 5 tháng; Bright I.G &amp; Black Hole 3 tháng), tính từ ngày khai giảng lớp. Không tạo họp đột xuất — nhân viên chỉ đánh dấu đã họp / hủy.
-      </Alert>
-      <Table striped highlightOnHover withTableBorder={false}>
+      <Table striped>
         <Table.Tbody>
           {meetings.map((m) => {
             const st = ST[m.status] ?? { label: m.status, color: 'gray' };
             return (
-              <Table.Tr key={m.id}>
-                <Table.Td>{dayjs(m.scheduledAt).format('DD/MM/YYYY HH:mm')}</Table.Td>
-                <Table.Td>{m.title}</Table.Td>
-                <Table.Td>{m.location ?? ''}</Table.Td>
-                <Table.Td>
-                  <Badge size="sm" color={st.color} variant="light" radius="xl">{st.label}</Badge>
-                </Table.Td>
-                <Table.Td w={170}>
-                  {m.status === 'scheduled' && (
-                    <Group gap="xs">
-                      <Button size="compact-xs" color="teal" variant="subtle" onClick={() => setStatus(m.id, 'done')}>Đã họp</Button>
-                      <Button size="compact-xs" color="gray" variant="subtle" onClick={() => setStatus(m.id, 'cancelled')}>Hủy</Button>
-                    </Group>
-                  )}
-                </Table.Td>
-              </Table.Tr>
+            <Table.Tr key={m.id}>
+              <Table.Td>{dayjs(m.scheduledAt).format('DD/MM/YYYY HH:mm')}</Table.Td>
+              <Table.Td>{m.title}</Table.Td>
+              <Table.Td>{m.location ?? ''}</Table.Td>
+              <Table.Td>
+                <Badge size="sm" color={st.color}>{st.label}</Badge>
+              </Table.Td>
+              <Table.Td w={170}>
+                {m.status === 'scheduled' && (
+                  <Group gap="xs">
+                    <Button size="compact-xs" color="teal" variant="subtle" onClick={() => setStatus(m.id, 'done')}>Đã họp</Button>
+                    <Button size="compact-xs" color="gray" variant="subtle" onClick={() => setStatus(m.id, 'cancelled')}>Hủy</Button>
+                  </Group>
+                )}
+              </Table.Td>
+            </Table.Tr>
             );
           })}
         </Table.Tbody>
@@ -558,8 +526,8 @@ function AttendanceTab({ batch, facilityId }: { batch: Batch; facilityId: number
   const [marks, setMarks] = useState<Record<string, { status: string; excused: boolean }>>({});
 
   useEffect(() => {
-    trpc.schedule.listSessions.query({ classBatchId: batch.id }).then(setSessions).catch((e) => notifyError(e, 'Không tải được danh sách buổi học'));
-    trpc.enrollment.listByBatch.query({ classBatchId: batch.id }).then(setEnrollments).catch((e) => notifyError(e, 'Không tải được danh sách học sinh'));
+    trpc.schedule.listSessions.query({ classBatchId: batch.id }).then(setSessions).catch(() => {});
+    trpc.enrollment.listByBatch.query({ classBatchId: batch.id }).then(setEnrollments).catch(() => {});
   }, [batch.id]);
 
   useEffect(() => {
@@ -568,23 +536,19 @@ function AttendanceTab({ batch, facilityId }: { batch: Batch; facilityId: number
       const m: Record<string, { status: string; excused: boolean }> = {};
       for (const r of rows) m[r.enrollmentId] = { status: r.status, excused: r.excused };
       setMarks(m);
-    }).catch((e) => notifyError(e, 'Không tải được điểm danh'));
+    });
   }, [sessionId]);
 
   async function mark(enrollmentId: string, status: string, excused: boolean) {
     if (!sessionId || !status) return;
-    try {
-      await trpc.attendance.mark.mutate({
-        facilityId,
-        classSessionId: sessionId,
-        enrollmentId,
-        status: status as 'present' | 'absent' | 'late',
-        excused,
-      });
-      setMarks((m) => ({ ...m, [enrollmentId]: { status, excused } }));
-    } catch (e) {
-      notifyError(e, 'Điểm danh thất bại');
-    }
+    await trpc.attendance.mark.mutate({
+      facilityId,
+      classSessionId: sessionId,
+      enrollmentId,
+      status: status as 'present' | 'absent' | 'late',
+      excused,
+    });
+    setMarks((m) => ({ ...m, [enrollmentId]: { status, excused } }));
   }
 
   return (
@@ -597,12 +561,12 @@ function AttendanceTab({ batch, facilityId }: { batch: Batch; facilityId: number
         onChange={setSessionId}
       />
       {sessionId && (
-        <Table striped highlightOnHover withTableBorder={false}>
+        <Table>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Học sinh</Table.Th>
-              <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Điểm danh</Table.Th>
-              <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)' }}>Có phép</Table.Th>
+              <Table.Th>Học sinh</Table.Th>
+              <Table.Th>Điểm danh</Table.Th>
+              <Table.Th>Có phép</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -646,55 +610,38 @@ function ClassDetail({
   rooms,
   teachers,
   onChanged,
-  initialTab,
 }: {
   batch: Batch;
   facilityId: number;
   rooms: Room[];
   teachers: Teacher[];
   onChanged: () => void;
-  initialTab?: string;
 }) {
   const [cancelOpen, cancel] = useDisclosure(false);
   const [reason, setReason] = useState('');
 
   async function doCancel() {
-    try {
-      await trpc.classBatch.cancel.mutate({ id: batch.id, reason });
-      notifySuccess('Đã hủy lớp học');
-      cancel.close();
-      setReason('');
-      onChanged();
-    } catch (e) {
-      notifyError(e, 'Hủy lớp thất bại');
-    }
+    await trpc.classBatch.cancel.mutate({ id: batch.id, reason });
+    cancel.close();
+    setReason('');
+    onChanged();
   }
   async function doReopen() {
-    try {
-      await trpc.classBatch.reopen.mutate({ id: batch.id, toStatus: 'planned', reason: 'Mở lại từ giao diện' });
-      notifySuccess('Đã mở lại lớp học');
-      onChanged();
-    } catch (e) {
-      notifyError(e, 'Mở lại lớp thất bại');
-    }
+    await trpc.classBatch.reopen.mutate({ id: batch.id, toStatus: 'planned', reason: 'Mở lại từ giao diện' });
+    onChanged();
   }
   async function setStatus(status: string) {
-    try {
-      await trpc.classBatch.setStatus.mutate({ id: batch.id, status: status as 'open' | 'running' | 'closed' });
-      notifySuccess(`Đã đổi trạng thái lớp sang "${status}"`);
-      onChanged();
-    } catch (e) {
-      notifyError(e, 'Đổi trạng thái lớp thất bại');
-    }
+    await trpc.classBatch.setStatus.mutate({ id: batch.id, status: status as 'open' | 'running' | 'closed' });
+    onChanged();
   }
 
   return (
-    <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+    <Card withBorder>
       <Group justify="space-between" mb="md">
         <div>
           <Group gap="xs">
-            <Title order={5} style={{ color: 'var(--cmc-text)' }}>{batch.code}</Title>
-            <Badge color={STATUS_COLOR[batch.status]} variant="light" radius="xl">{batch.status}</Badge>
+            <Title order={5}>{batch.code}</Title>
+            <Badge color={STATUS_COLOR[batch.status]}>{batch.status}</Badge>
           </Group>
           <Text c="dimmed" size="sm">
             {batch.name} · {batch.course.code}
@@ -715,14 +662,14 @@ function ClassDetail({
               </Button>
             </>
           ) : (
-            <Button size="xs" variant="filled" radius={9999} onClick={doReopen}>
+            <Button size="xs" onClick={doReopen}>
               Mở lại
             </Button>
           )}
         </Group>
       </Group>
 
-      <Tabs defaultValue={initialTab ?? 'schedule'}>
+      <Tabs defaultValue="schedule">
         <Tabs.List>
           <Tabs.Tab value="schedule">Lịch</Tabs.Tab>
           <Tabs.Tab value="sessions">Buổi học</Tabs.Tab>
@@ -751,19 +698,16 @@ function ClassDetail({
         </Tabs.Panel>
       </Tabs>
 
-      <Modal opened={cancelOpen} onClose={cancel.close} title="Hủy lớp" radius="xl" centered>
+      <Modal opened={cancelOpen} onClose={cancel.close} title="Hủy lớp">
         <Stack>
           <TextInput
             label="Lý do hủy (bắt buộc)"
             value={reason}
             onChange={(e) => setReason(e.currentTarget.value)}
           />
-          <Group justify="flex-end">
-            <Button variant="subtle" onClick={cancel.close}>Hủy bỏ</Button>
-            <Button color="red" variant="filled" onClick={doCancel} disabled={!reason}>
-              Xác nhận hủy
-            </Button>
-          </Group>
+          <Button color="red" onClick={doCancel} disabled={!reason}>
+            Xác nhận hủy
+          </Button>
         </Stack>
       </Modal>
     </Card>
@@ -780,30 +724,28 @@ function RoomsManager({
   reload: () => void;
 }) {
   const [opened, { open, close }] = useDisclosure(false);
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [capacity, setCapacity] = useState<number | string>('');
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
 
-  const form = useForm({
-    initialValues: { code: '', name: '', capacity: '' as number | string },
-    validate: {
-      code: required('Nhập mã phòng'),
-      name: required('Nhập tên phòng'),
-    },
-  });
-
-  async function create(values: typeof form.values) {
+  async function create() {
     setBusy(true);
+    setErr('');
     try {
       await trpc.room.create.mutate({
         facilityId,
-        code: values.code,
-        name: values.name,
-        capacity: typeof values.capacity === 'number' ? values.capacity : undefined,
+        code,
+        name,
+        capacity: typeof capacity === 'number' ? capacity : undefined,
       });
-      notifySuccess(`Đã thêm phòng "${values.name}"`);
-      form.reset();
+      setCode('');
+      setName('');
+      setCapacity('');
       reload();
     } catch (e) {
-      notifyError(e, 'Thêm phòng thất bại');
+      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
     } finally {
       setBusy(false);
     }
@@ -811,22 +753,30 @@ function RoomsManager({
 
   return (
     <>
-      <Button size="xs" variant="subtle" onClick={open}>
+      <Button size="xs" variant="default" onClick={open}>
         Quản lý phòng ({rooms.length})
       </Button>
-      <Modal opened={opened} onClose={close} title="Phòng học (theo cơ sở)" radius="xl" centered>
+      <Modal opened={opened} onClose={close} title="Phòng học (theo cơ sở)">
         <Stack>
-          <form onSubmit={form.onSubmit(create)}>
-            <Group align="flex-end">
-              <TextInput label="Mã" w={90} withAsterisk {...form.getInputProps('code')} />
-              <TextInput label="Tên" style={{ flex: 1 }} withAsterisk {...form.getInputProps('name')} />
-              <NumberInput label="Sức chứa" w={100} min={1} {...form.getInputProps('capacity')} />
-              <Button type="submit" loading={busy} disabled={!form.values.code || !form.values.name} variant="filled" radius={9999}>
-                Thêm
-              </Button>
-            </Group>
-          </form>
-          <Table striped highlightOnHover withTableBorder={false}>
+          <Group align="flex-end">
+            <TextInput label="Mã" w={90} value={code} onChange={(e) => setCode(e.currentTarget.value)} />
+            <TextInput
+              label="Tên"
+              style={{ flex: 1 }}
+              value={name}
+              onChange={(e) => setName(e.currentTarget.value)}
+            />
+            <NumberInput label="Sức chứa" w={100} value={capacity} onChange={setCapacity} min={1} />
+            <Button onClick={create} loading={busy} disabled={!code || !name}>
+              Thêm
+            </Button>
+          </Group>
+          {err && (
+            <Text c="red" size="sm">
+              {err}
+            </Text>
+          )}
+          <Table striped>
             <Table.Tbody>
               {rooms.map((r) => (
                 <Table.Tr key={r.id}>
@@ -850,7 +800,7 @@ function RoomsManager({
   );
 }
 
-function Workspace({ initialTab }: { initialTab?: string }) {
+function Workspace() {
   const { me } = useSession();
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facilityId, setFacilityId] = useState<number | null>(null);
@@ -863,23 +813,24 @@ function Workspace({ initialTab }: { initialTab?: string }) {
     trpc.facility.list.query().then((fs) => {
       setFacilities(fs);
       setFacilityId((cur) => cur ?? fs[0]?.id ?? null);
-    }).catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
-    trpc.course.list.query().then(setCourses).catch((e) => notifyError(e, 'Không tải được danh sách khóa học'));
+    });
+    trpc.course.list.query().then(setCourses).catch(() => {});
   }, []);
 
   const loadBatches = useCallback(() => {
     trpc.classBatch.list.query().then((bs) => {
       setBatches(bs);
       setSelected((sel) => (sel ? (bs.find((b) => b.id === sel.id) ?? null) : null));
-    }).catch((e) => notifyError(e, 'Không tải được danh sách lớp học'));
+    });
   }, []);
   useEffect(loadBatches, [loadBatches]);
 
   const loadRooms = useCallback(() => {
-    trpc.room.list.query().then(setRooms).catch((e) => notifyError(e, 'Không tải được danh sách phòng'));
+    trpc.room.list.query().then(setRooms).catch(() => {});
   }, []);
   useEffect(loadRooms, [loadRooms]);
 
+  // Teachers are RLS-scoped to the caller's facilities; reload per selected facility.
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   useEffect(() => {
     if (!facilityId) return;
@@ -891,6 +842,8 @@ function Workspace({ initialTab }: { initialTab?: string }) {
 
   const [classSearch, setClassSearch] = useState('');
   const [classStatusFilter, setClassStatusFilter] = useState('all');
+  const [classPage, setClassPage] = useState(1);
+
   const filteredBatches = useMemo(() => {
     const q = classSearch.toLowerCase();
     return visible.filter((b) => {
@@ -900,43 +853,53 @@ function Workspace({ initialTab }: { initialTab?: string }) {
     });
   }, [visible, classSearch, classStatusFilter]);
 
+  const totalPages = Math.ceil(filteredBatches.length / PAGE_SIZE);
+  const pageItems = filteredBatches.slice((classPage - 1) * PAGE_SIZE, classPage * PAGE_SIZE);
+
+  function handleClassSearch(v: string) {
+    setClassSearch(v);
+    setClassPage(1);
+  }
+
+  function handleClassStatusFilter(v: string) {
+    setClassStatusFilter(v);
+    setClassPage(1);
+  }
+
   return (
     <Stack>
-      <Group justify="space-between" mb="xl">
-        <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }}>Lớp học</Text>
-        <Group gap="xs" align="flex-end">
-          <Select
-            label="Cơ sở"
-            data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-            value={facilityId ? String(facilityId) : null}
-            onChange={(v) => setFacilityId(v ? Number(v) : null)}
-            w={240}
-          />
-          {facilityId && (
-            <>
-              <RoomsManager facilityId={facilityId} rooms={facilityRooms} reload={loadRooms} />
-              <CreateClassModal facilityId={facilityId} courses={courses} onCreated={loadBatches} />
-            </>
-          )}
-        </Group>
+      <Group justify="space-between">
+        <Select
+          label="Cơ sở"
+          data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
+          value={facilityId ? String(facilityId) : null}
+          onChange={(v) => setFacilityId(v ? Number(v) : null)}
+          w={240}
+        />
+        {facilityId && (
+          <Group gap="xs" align="flex-end">
+            <RoomsManager facilityId={facilityId} rooms={facilityRooms} reload={loadRooms} />
+            <CreateClassModal facilityId={facilityId} courses={courses} onCreated={loadBatches} />
+          </Group>
+        )}
       </Group>
       <Grid>
         <Grid.Col span={{ base: 12, md: 4 }}>
-          <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-            <Text size="lg" fw={600} mb="sm" style={{ color: 'var(--cmc-text)' }}>
+          <Card withBorder>
+            <Title order={5} mb="sm">
               Lớp học ({filteredBatches.length}{filteredBatches.length !== visible.length ? `/${visible.length}` : ''})
-            </Text>
+            </Title>
             <Stack gap="xs" mb="sm">
               <TextInput
                 placeholder="Tìm lớp..."
                 size="xs"
                 value={classSearch}
-                onChange={(e) => setClassSearch(e.currentTarget.value)}
+                onChange={(e) => handleClassSearch(e.currentTarget.value)}
               />
               <SegmentedControl
                 size="xs"
                 value={classStatusFilter}
-                onChange={setClassStatusFilter}
+                onChange={handleClassStatusFilter}
                 data={[
                   { value: 'all', label: 'Tất cả' },
                   { value: 'planned', label: 'Planned' },
@@ -947,23 +910,23 @@ function Workspace({ initialTab }: { initialTab?: string }) {
                 ]}
               />
             </Stack>
-            <Table highlightOnHover withTableBorder={false}>
+            <Table highlightOnHover>
               <Table.Tbody>
-                {filteredBatches.map((b) => (
+                {pageItems.map((b) => (
                   <Table.Tr
                     key={b.id}
                     style={{ cursor: 'pointer' }}
-                    bg={selected?.id === b.id ? 'var(--cmc-brand-muted)' : undefined}
+                    bg={selected?.id === b.id ? 'var(--mantine-color-cmc-0)' : undefined}
                     onClick={() => setSelected(b)}
                   >
                     <Table.Td>
-                      <Text fw={600} style={{ color: 'var(--cmc-text)' }}>{b.code}</Text>
+                      <Text fw={600}>{b.code}</Text>
                       <Text size="xs" c="dimmed">
                         {b.name}
                       </Text>
                     </Table.Td>
                     <Table.Td>
-                      <Badge size="sm" color={STATUS_COLOR[b.status]} variant="light" radius="xl">
+                      <Badge size="sm" color={STATUS_COLOR[b.status]}>
                         {b.status}
                       </Badge>
                     </Table.Td>
@@ -971,6 +934,15 @@ function Workspace({ initialTab }: { initialTab?: string }) {
                 ))}
               </Table.Tbody>
             </Table>
+            {totalPages > 1 && (
+              <Pagination
+                total={totalPages}
+                value={classPage}
+                onChange={setClassPage}
+                size="sm"
+                mt="md"
+              />
+            )}
             {visible.length === 0 && (
               <Text c="dimmed" size="sm">
                 Chưa có lớp. Bấm "Tạo lớp".
@@ -991,10 +963,9 @@ function Workspace({ initialTab }: { initialTab?: string }) {
               rooms={facilityRooms}
               teachers={teachers}
               onChanged={loadBatches}
-              initialTab={initialTab}
             />
           ) : (
-            <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+            <Card withBorder>
               <Text c="dimmed">
                 Chọn một lớp để xem chi tiết, hoặc tạo lớp mới. Xin chào {me.displayName}.
               </Text>
@@ -1006,57 +977,57 @@ function Workspace({ initialTab }: { initialTab?: string }) {
   );
 }
 
-// Sections that map to the Workspace/classes view with a specific sub-tab
-const CLASS_CONTEXT_SECTIONS = new Set<SectionKey>([
-  'schedule', 'sessions', 'attendance', 'enrollment', 'meetings', 'classlog', 'classes',
-]);
-
 function Workbench() {
   const { me } = useSession();
+  // Payroll is HR-confidential — only show its tab to hr/ke_toan/super_admin.
   const canPayroll = me.isSuperAdmin || me.roles.includes('hr') || me.roles.includes('ke_toan');
-
-  const hashKey = window.location.hash.slice(1);
-  const initialSection: SectionKey = ALL_TEACHING_KEYS.has(hashKey) ? (hashKey as SectionKey) : 'classes';
-  const [activeSection, setActiveSection] = useState<SectionKey>(initialSection);
-
-  function handleSectionChange(key: SectionKey) {
-    window.location.hash = key;
-    setActiveSection(key);
-  }
-
-  function renderContent() {
-    if (CLASS_CONTEXT_SECTIONS.has(activeSection)) {
-      const classTab = SECTION_TO_CLASS_TAB[activeSection];
-      return <Workspace key={activeSection} initialTab={classTab} />;
-    }
-    switch (activeSection) {
-      case 'grading':
-        return <GradingPanel />;
-      case 'assessment':
-        return <AssessmentPanel />;
-      case 'levelup':
-        return <LevelApprovalPanel />;
-      case 'crm':
-        return <CrmPanel />;
-      case 'finance':
-        return <FinancePanel />;
-      case 'cskh':
-        return <CskhPanel />;
-      case 'certificate':
-        return <CertificatePanel />;
-      case 'my-payslips':
-        return <MyPayslipsPanel />;
-      case 'payroll':
-        return canPayroll ? <PayrollPanel /> : null;
-      default:
-        return null;
-    }
-  }
-
   return (
-    <Shell activeSection={activeSection} onSectionChange={handleSectionChange}>
-      {renderContent()}
-    </Shell>
+      <Tabs defaultValue="classes" keepMounted={false}>
+        <Tabs.List mb="md">
+          <Tabs.Tab value="classes">Lớp học</Tabs.Tab>
+          <Tabs.Tab value="grading">Chấm bài</Tabs.Tab>
+          <Tabs.Tab value="assessment">Học bạ</Tabs.Tab>
+          <Tabs.Tab value="levelup">Duyệt cấp độ</Tabs.Tab>
+          <Tabs.Tab value="crm">CRM</Tabs.Tab>
+          <Tabs.Tab value="finance">Phiếu thu</Tabs.Tab>
+          <Tabs.Tab value="cskh">CSKH</Tabs.Tab>
+          <Tabs.Tab value="certificate">Chứng chỉ</Tabs.Tab>
+          <Tabs.Tab value="my-payslips">Phiếu lương của tôi</Tabs.Tab>
+          {canPayroll && <Tabs.Tab value="payroll">Lương</Tabs.Tab>}
+        </Tabs.List>
+        <Tabs.Panel value="classes">
+          <Workspace />
+        </Tabs.Panel>
+        <Tabs.Panel value="grading">
+          <GradingPanel />
+        </Tabs.Panel>
+        <Tabs.Panel value="assessment">
+          <AssessmentPanel />
+        </Tabs.Panel>
+        <Tabs.Panel value="levelup">
+          <LevelApprovalPanel />
+        </Tabs.Panel>
+        <Tabs.Panel value="crm">
+          <CrmPanel />
+        </Tabs.Panel>
+        <Tabs.Panel value="finance">
+          <FinancePanel />
+        </Tabs.Panel>
+        <Tabs.Panel value="cskh">
+          <CskhPanel />
+        </Tabs.Panel>
+        <Tabs.Panel value="certificate">
+          <CertificatePanel />
+        </Tabs.Panel>
+        <Tabs.Panel value="my-payslips">
+          <MyPayslipsPanel />
+        </Tabs.Panel>
+        {canPayroll && (
+          <Tabs.Panel value="payroll">
+            <PayrollPanel />
+          </Tabs.Panel>
+        )}
+      </Tabs>
   );
 }
 

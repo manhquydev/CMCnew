@@ -1,0 +1,168 @@
+# CMCnew — production docker-compose
+#
+# Run from the repo root:
+#   cp .env.production.example .env.production
+#   # Edit .env.production with real secrets
+#   docker compose -f docker/docker-compose.prod.yml --env-file .env.production up -d
+#
+# ── First-deploy checklist ─────────────────────────────────────────────────────
+# 1. Start postgres:
+#      docker compose -f docker/docker-compose.prod.yml --env-file .env.production \
+#        up -d postgres
+# 2. Run migrations (creates schema + cmc_app role via migration SQL):
+#      docker compose -f docker/docker-compose.prod.yml --env-file .env.production \
+#        run --rm api-migrate
+# 3. Seed the super-admin (idempotent):
+#      docker compose -f docker/docker-compose.prod.yml --env-file .env.production \
+#        run --rm api-seed
+# 4. Start all services:
+#      docker compose -f docker/docker-compose.prod.yml --env-file .env.production \
+#        up -d
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# Security note: the cmc_app role password is set in migration
+# 20260623045316_rls_tenancy ('cmc_app' by default). Change it post-migrate:
+#   docker exec -it <postgres-container> psql -U ${DB_USER} -d ${DB_NAME} \
+#     -c "ALTER ROLE cmc_app PASSWORD '<new-password>';"
+# Then update DATABASE_URL accordingly.
+
+name: cmcnew-prod
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER:     ${DB_USER:-cmc}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB:       ${DB_NAME:-cmc}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-cmc} -d ${DB_NAME:-cmc}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── Redis (session store / pub-sub for SSE notifications) ──────────────────
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ── API (Hono + tRPC, runs with tsx — no separate compile step) ─────────────
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV:         production
+      API_PORT:         4000
+      # Runtime: connects as non-owner cmc_app role so RLS policies apply.
+      # cmc_app is created by migration 20260623045316_rls_tenancy.
+      DATABASE_URL:     postgresql://cmc_app:${DB_APP_PASSWORD:-cmc_app}@postgres:5432/${DB_NAME:-cmc}?schema=public
+      # Owner role: used by prisma migrate / seed (bypasses RLS).
+      DIRECT_URL:       postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-cmc}?schema=public
+      REDIS_URL:        redis://redis:6379
+      JWT_SECRET:       ${JWT_SECRET:?JWT_SECRET is required}
+      AUTH_COOKIE_NAME: cmc.session
+      # Allowed CORS origins (comma-separated). Must include all frontend origins.
+      # In a single-nginx setup everything is same-origin, but set it anyway.
+      CORS_ORIGINS:     ${CORS_ORIGINS:-http://localhost}
+      CRM_LEAD_TOKEN:   ${CRM_LEAD_TOKEN:-}
+      DISABLE_CRON:     ${DISABLE_CRON:-0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── One-off: run Prisma migrations (use profiles to avoid starting with up) ─
+  api-migrate:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV:     production
+      DATABASE_URL: postgresql://cmc_app:${DB_APP_PASSWORD:-cmc_app}@postgres:5432/${DB_NAME:-cmc}?schema=public
+      DIRECT_URL:   postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-cmc}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ['pnpm', '--filter', '@cmc/db', 'migrate']
+    profiles: ['migrate']
+    restart: 'no'
+
+  # ── One-off: seed super-admin (idempotent) ──────────────────────────────────
+  api-seed:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV:                production
+      DATABASE_URL:            postgresql://cmc_app:${DB_APP_PASSWORD:-cmc_app}@postgres:5432/${DB_NAME:-cmc}?schema=public
+      DIRECT_URL:              postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-cmc}?schema=public
+      SEED_SUPERADMIN_EMAIL:    ${SEED_SUPERADMIN_EMAIL:?SEED_SUPERADMIN_EMAIL is required for seeding}
+      SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:?SEED_SUPERADMIN_PASSWORD is required for seeding}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ['pnpm', '--filter', '@cmc/db', 'seed']
+    profiles: ['seed']
+    restart: 'no'
+
+  # ── Admin SPA (catch-all at /) ───────────────────────────────────────────────
+  admin:
+    build:
+      context: ..
+      dockerfile: apps/admin/Dockerfile
+      args:
+        VITE_API_URL: /api
+    restart: unless-stopped
+
+  # ── Teaching SPA (at /teaching/) ─────────────────────────────────────────────
+  teaching:
+    build:
+      context: ..
+      dockerfile: apps/teaching/Dockerfile
+      args:
+        VITE_API_URL:  /api
+        VITE_BASE_URL: /teaching/
+    restart: unless-stopped
+
+  # ── LMS SPA (at /lms/) ───────────────────────────────────────────────────────
+  lms:
+    build:
+      context: ..
+      dockerfile: apps/lms/Dockerfile
+      args:
+        VITE_API_URL:  /api
+        VITE_BASE_URL: /lms/
+    restart: unless-stopped
+
+  # ── Nginx reverse proxy (only public port) ────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    ports:
+      - '${NGINX_PORT:-80}:80'
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api
+      - admin
+      - teaching
+      - lms
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
