@@ -36,11 +36,14 @@ export const guardianRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const passwordHash = input.password ? await hashPassword(input.password) : null;
+      // Normalize email so OTP login (which looks up by lower-cased email) always matches, and so the
+      // unique constraint is effectively case-insensitive.
+      const email = input.email?.trim().toLowerCase();
       return withRls(rlsContextOf(ctx.session), (tx) =>
         tx.parentAccount.create({
           data: {
             displayName: input.displayName,
-            email: input.email,
+            email,
             phone: input.phone,
             passwordHash,
           },

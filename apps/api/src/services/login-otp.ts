@@ -5,7 +5,7 @@
 
 import { randomInt, createHash } from 'node:crypto';
 import { withRls } from '@cmc/db';
-import { sendEmailNow, type SendDeps } from '../lib/graph-client.js';
+import { sendEmailNow, graphMailerFromEnv, type SendDeps } from '../lib/graph-client.js';
 import { renderTemplate } from './email-templates.js';
 
 const SYSTEM_CTX = { facilityIds: [] as number[], isSuperAdmin: true };
@@ -43,9 +43,15 @@ export async function requestLoginOtp(email: string, deps: SendDeps = {}): Promi
   );
 
   const { subject, html } = renderTemplate('otp_login', { code, expiresMinutes: OTP_TTL_MIN });
-  const sent = await sendEmailNow({ mailbox: 'notify', to: normEmail(email), subject, html }, deps);
-  if (!sent && process.env.NODE_ENV !== 'production') {
-    // Dev only: Graph not configured yet → surface the code so the flow is testable. NEVER in prod.
+  // Dev fallback (Graph unconfigured) is detectable synchronously — surface the code so the flow is
+  // testable before the tenant secret exists. NEVER in production.
+  const graphDisabled = graphMailerFromEnv() === null;
+  // Fire the Graph send WITHOUT blocking the response: removes the network round-trip from the
+  // request latency, shrinking the timing side-channel between known/unknown email (MED-3).
+  void sendEmailNow({ mailbox: 'notify', to: normEmail(email), subject, html }, deps).catch((e) =>
+    console.error('OTP email send failed', e),
+  );
+  if (graphDisabled && process.env.NODE_ENV !== 'production') {
     console.log(`[dev] LMS login OTP for ${normEmail(email)}: ${code}`);
     return { devCode: code };
   }
@@ -59,17 +65,29 @@ export async function requestLoginOtp(email: string, deps: SendDeps = {}): Promi
 export async function verifyLoginOtp(email: string, code: string): Promise<string | null> {
   const emailHash = sha256(normEmail(email));
   return withRls(SYSTEM_CTX, async (tx) => {
+    // Only consider a live OTP: unconsumed, unexpired, under the attempt cap. Putting attempts<MAX in
+    // the filter means an over-capped code is simply "not found".
     const otp = await tx.loginOtp.findFirst({
-      where: { emailHash, consumedAt: null },
+      where: { emailHash, consumedAt: null, expiresAt: { gt: new Date() }, attempts: { lt: MAX_ATTEMPTS } },
       orderBy: { createdAt: 'desc' },
     });
     if (!otp) return null;
-    if (otp.expiresAt.getTime() < Date.now() || otp.attempts >= MAX_ATTEMPTS) return null;
+
     if (otp.codeHash !== sha256(code)) {
-      await tx.loginOtp.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
+      // Atomic, race-safe increment: only bumps while still under the cap (TOCTOU-proof). Concurrent
+      // wrong guesses cannot push attempts past MAX nor be accepted.
+      await tx.loginOtp.updateMany({
+        where: { id: otp.id, attempts: { lt: MAX_ATTEMPTS } },
+        data: { attempts: { increment: 1 } },
+      });
       return null;
     }
-    await tx.loginOtp.update({ where: { id: otp.id }, data: { consumedAt: new Date() } });
+    // Atomic single-use consume: exactly one concurrent correct-code request wins.
+    const consumed = await tx.loginOtp.updateMany({
+      where: { id: otp.id, consumedAt: null },
+      data: { consumedAt: new Date() },
+    });
+    if (consumed.count !== 1) return null;
     const parent = await tx.parentAccount.findFirst({
       where: { email: normEmail(email), isActive: true },
       select: { id: true },

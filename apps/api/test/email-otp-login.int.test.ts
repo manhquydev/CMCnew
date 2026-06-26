@@ -52,6 +52,20 @@ describe('parent Email OTP login', () => {
     await expect(publicCaller().lmsAuth.otpVerify({ email, code: '000000' })).rejects.toBeInstanceOf(TRPCError);
   });
 
+  it('locks the code after 5 wrong attempts — a later correct code is rejected', async () => {
+    const req = await publicCaller(`otp-cap-${Date.now()}`).lmsAuth.otpRequest({ email });
+    const code = req.devCode!;
+    for (let i = 0; i < 5; i++) {
+      await expect(
+        publicCaller(`otp-cap-${i}`).lmsAuth.otpVerify({ email, code: '111111' }),
+      ).rejects.toBeInstanceOf(TRPCError);
+    }
+    // correct code now refused — attempt cap reached
+    await expect(
+      publicCaller(`otp-cap-final`).lmsAuth.otpVerify({ email, code }),
+    ).rejects.toBeInstanceOf(TRPCError);
+  });
+
   it('unknown email is silent (no enumeration): ok, no devCode, no otp row', async () => {
     const other = `${uniq('nobody')}@example.edu.vn`;
     const otherHash = createHash('sha256').update(other.toLowerCase()).digest('hex');

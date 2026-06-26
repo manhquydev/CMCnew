@@ -77,6 +77,7 @@ export const lmsAuthRouter = router({
     .input(z.object({ email: z.string().email(), code: z.string().length(6) }))
     .mutation(async ({ ctx, input }) => {
       throttle(`otpv:ip:${ctx.ip}`, OTP_REQUEST_LIMIT * 4);
+      throttle(`otpv:em:${input.email.toLowerCase()}`, OTP_REQUEST_LIMIT * 2);
       const accountId = await verifyLoginOtp(input.email, input.code);
       if (!accountId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Mã không đúng hoặc đã hết hạn' });
       const result = await mintParentSession(accountId);

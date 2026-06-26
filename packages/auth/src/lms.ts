@@ -81,8 +81,9 @@ export async function loginParent(
   emailOrPhone: string,
   password: string,
 ): Promise<{ token: string; session: LmsSession } | null> {
+  const id = emailOrPhone.trim();
   const acc = await withRls(SYSTEM_RLS, (tx) =>
-    tx.parentAccount.findFirst({ where: { OR: [{ email: emailOrPhone }, { phone: emailOrPhone }] } }),
+    tx.parentAccount.findFirst({ where: { OR: [{ email: id.toLowerCase() }, { phone: id }] } }),
   );
   if (!acc || !acc.isActive) return null;
   // Passwordless (OTP-only) parents have no passwordHash → password login is not available to them.
