@@ -35,7 +35,11 @@ export function BadgeShelf({ studentId, refreshKey = 0 }: { studentId: string; r
       {(badges ?? []).map((b) => (
         <Card key={b.id} withBorder padding="sm">
           <Stack gap={4} align="center" ta="center">
-            <Text fz={32}>{b.badge.iconUrl ? '' : '🏅'}</Text>
+            {b.badge.iconUrl ? (
+              <img src={b.badge.iconUrl} alt={b.badge.name} width={32} height={32} />
+            ) : (
+              <Text fz={32}>🏅</Text>
+            )}
             <Text fw={600} size="sm">
               {b.badge.name}
             </Text>

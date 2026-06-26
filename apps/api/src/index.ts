@@ -25,6 +25,11 @@ const app = new Hono();
 
 // Allowed origins from env (comma-separated); defaults to the dev Vite ports.
 // credentials:true so the session cookie flows. In production, set CORS_ORIGINS.
+// In production the allowlist MUST be set explicitly — falling back to localhost origins would
+// silently disable the cross-origin defense that SameSite:Lax cookies rely on.
+if (process.env.NODE_ENV === 'production' && !process.env.CORS_ORIGINS) {
+  throw new Error('CORS_ORIGINS must be set explicitly in production');
+}
 const corsOrigins = (
   process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:5174,http://localhost:5175'
 )
@@ -166,7 +171,7 @@ app.get('/sse/notifications', async (c) => {
   const token = getCookie(c, LMS_COOKIE_NAME);
   const lms = token ? await resolveLmsSession(token) : null;
   if (!lms) return c.text('unauthorized', 401);
-  const ownedIds = new Set(lms.studentIds);
+  let ownedIds = new Set(lms.studentIds);
 
   return streamSSE(c, async (stream) => {
     const unsubscribe = onNotification((evt) => {
@@ -179,6 +184,15 @@ app.get('/sse/notifications', async (c) => {
     while (!stream.aborted) {
       await stream.sleep(25_000);
       if (stream.aborted) break;
+      // Re-validate the LMS session every heartbeat (parity with /sse/staff): detects account
+      // deactivation, token expiry, or a changed guardian→student link. Refresh ownedIds so a
+      // revoked child stops receiving events without needing a reconnect.
+      const refreshed = token ? await resolveLmsSession(token) : null;
+      if (!refreshed || refreshed.accountId !== lms.accountId) {
+        unsubscribe();
+        break;
+      }
+      ownedIds = new Set(refreshed.studentIds);
       await stream.writeSSE({ event: 'ping', data: '1' });
     }
     unsubscribe();

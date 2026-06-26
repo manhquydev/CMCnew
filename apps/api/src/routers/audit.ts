@@ -22,7 +22,20 @@ export const auditRouter = router({
   timeline: protectedProcedure
     .input(z.object({ entityType: z.string().min(1), entityId: z.string().min(1) }))
     .query(({ ctx, input }) =>
-      withRls(rlsContextOf(ctx.session), (tx) => getTimeline(tx, input.entityType, input.entityId)),
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        // Same tenancy gate as followers/postNote: record_event allows facility_id IS NULL rows
+        // (user/course management events) to be read by any staff under RLS. Without an entity
+        // whitelist + visibility pre-check, any staff could read the role/facility/activation
+        // history of any user via timeline({ entityType: 'user', entityId }). Restrict to entities
+        // that have a Chatter surface and confirm the caller can see the entity first.
+        const resolve = NOTE_TARGETS[input.entityType];
+        if (!resolve)
+          throw new TRPCError({ code: 'BAD_REQUEST', message: `Không hỗ trợ dòng thời gian cho '${input.entityType}'` });
+        const entity = await resolve(tx, input.entityId);
+        if (!entity)
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy bản ghi (hoặc ngoài phạm vi cơ sở)' });
+        return getTimeline(tx, input.entityType, input.entityId);
+      }),
     ),
 
   followers: protectedProcedure

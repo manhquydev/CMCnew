@@ -330,6 +330,8 @@ export function buildNavGroups({
   canFinance,
   canCrm,
   canCskh,
+  canOrg,
+  canGuardians,
   isSuperAdmin,
 }: {
   canHr: boolean;
@@ -337,6 +339,8 @@ export function buildNavGroups({
   canFinance: boolean;
   canCrm: boolean;
   canCskh: boolean;
+  canOrg: boolean;
+  canGuardians: boolean;
   isSuperAdmin: boolean;
 }): NavGroup[] {
   return [
@@ -364,13 +368,13 @@ export function buildNavGroups({
           key: 'org',
           label: 'Cơ sở & Users',
           icon: <IconBuilding size={18} stroke={1.5} />,
-          visible: true,
+          visible: canOrg,
         },
         {
           key: 'guardians',
           label: 'Phụ huynh',
           icon: <IconUsers size={18} stroke={1.5} />,
-          visible: true,
+          visible: canGuardians,
         },
       ],
     },

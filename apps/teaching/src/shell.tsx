@@ -66,9 +66,33 @@ interface BuildGroupsOpts {
   canCrm: boolean;
   canFinance: boolean;
   canCskh: boolean;
+  canManageClass: boolean;
+  canLevelApproval: boolean;
 }
 
-function buildGroups({ canPayroll, canMyPayslips, canCrm, canFinance, canCskh }: BuildGroupsOpts): NavGroup[] {
+function buildGroups({
+  canPayroll,
+  canMyPayslips,
+  canCrm,
+  canFinance,
+  canCskh,
+  canManageClass,
+  canLevelApproval,
+}: BuildGroupsOpts): NavGroup[] {
+  // Class-management actions are backend-gated; hide the nav items too so non-authorized roles
+  // (e.g. plain giáo viên) don't hit a FORBIDDEN wall. enrollment = quan_ly/sale; levelup +
+  // certificate = head_teacher/quan_ly (mirrors requireRole on the procedures).
+  const classMgmtItems: NavItem[] = [
+    { key: 'classes', label: 'Lớp học', icon: <IconDoor size={ICON_SIZE} stroke={ICON_STROKE} /> },
+  ];
+  if (canManageClass) {
+    classMgmtItems.push({ key: 'enrollment', label: 'Ghi danh', icon: <IconUserPlus size={ICON_SIZE} stroke={ICON_STROKE} /> });
+  }
+  if (canLevelApproval) {
+    classMgmtItems.push({ key: 'levelup', label: 'Duyệt cấp độ', icon: <IconArrowUp size={ICON_SIZE} stroke={ICON_STROKE} /> });
+    classMgmtItems.push({ key: 'certificate', label: 'Chứng chỉ', icon: <IconCertificate size={ICON_SIZE} stroke={ICON_STROKE} /> });
+  }
+
   const groups: NavGroup[] = [
     {
       label: 'GIẢNG DẠY',
@@ -82,12 +106,7 @@ function buildGroups({ canPayroll, canMyPayslips, canCrm, canFinance, canCskh }:
     },
     {
       label: 'QUẢN LÝ LỚP',
-      items: [
-        { key: 'classes', label: 'Lớp học', icon: <IconDoor size={ICON_SIZE} stroke={ICON_STROKE} /> },
-        { key: 'enrollment', label: 'Ghi danh', icon: <IconUserPlus size={ICON_SIZE} stroke={ICON_STROKE} /> },
-        { key: 'levelup', label: 'Duyệt cấp độ', icon: <IconArrowUp size={ICON_SIZE} stroke={ICON_STROKE} /> },
-        { key: 'certificate', label: 'Chứng chỉ', icon: <IconCertificate size={ICON_SIZE} stroke={ICON_STROKE} /> },
-      ],
+      items: classMgmtItems,
     },
   ];
 
@@ -207,7 +226,17 @@ export function Shell({ activeSection, onSectionChange, children }: ShellProps) 
   const canFinance = me.isSuperAdmin || me.roles.some((r) => ['ke_toan', 'quan_ly'].includes(r));
   const canCskh = me.isSuperAdmin || me.roles.some((r) => ['cskh', 'quan_ly'].includes(r));
   const canMyPayslips = true; // all staff can view their own payslips
-  const groups = buildGroups({ canPayroll, canMyPayslips, canCrm, canFinance, canCskh });
+  const canManageClass = me.isSuperAdmin || me.roles.some((r) => ['quan_ly', 'sale'].includes(r));
+  const canLevelApproval = me.isSuperAdmin || me.roles.some((r) => ['head_teacher', 'quan_ly'].includes(r));
+  const groups = buildGroups({
+    canPayroll,
+    canMyPayslips,
+    canCrm,
+    canFinance,
+    canCskh,
+    canManageClass,
+    canLevelApproval,
+  });
 
   return (
     <AppShell

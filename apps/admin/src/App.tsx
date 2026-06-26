@@ -718,6 +718,11 @@ function Dashboard() {
     me.isSuperAdmin || me.roles.some((r) => ['sale', 'quan_ly', 'cskh'].includes(r));
   const canCskh =
     me.isSuperAdmin || me.roles.some((r) => ['cskh', 'quan_ly'].includes(r));
+  // org = cơ sở & user CRUD (roles/facilities) → chỉ quản trị; guardians = liên kết PH-HS.
+  const canOrg =
+    me.isSuperAdmin || me.roles.some((r) => ['quan_ly', 'bgd', 'hr'].includes(r));
+  const canGuardians =
+    me.isSuperAdmin || me.roles.some((r) => ['quan_ly', 'bgd', 'cskh'].includes(r));
 
   const [activeSection, setActiveSection] = useState<SectionKey>(
     hashToAdminSection() ?? 'overview',
@@ -738,6 +743,8 @@ function Dashboard() {
     canFinance,
     canCrm,
     canCskh,
+    canOrg,
+    canGuardians,
     isSuperAdmin: me.isSuperAdmin,
   });
 
@@ -749,6 +756,8 @@ function Dashboard() {
     if (key === 'finance' && !canFinance) return;
     if (key === 'crm' && !canCrm) return;
     if (key === 'cskh' && !canCskh) return;
+    if (key === 'org' && !canOrg) return;
+    if (key === 'guardians' && !canGuardians) return;
     window.location.hash = key;
     setActiveSection(key);
   };
@@ -760,16 +769,16 @@ function Dashboard() {
       case 'courses':
         return <Courses />;
       case 'org':
-        return <OrgPanel />;
+        return canOrg ? <OrgPanel /> : null;
       case 'guardians':
-        return (
+        return canGuardians ? (
           <Stack>
             <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
               Phụ huynh
             </Text>
             <GuardiansPanel />
           </Stack>
-        );
+        ) : null;
       case 'hr':
         return canHr ? <HrPayrollSection /> : null;
       case 'kpi':

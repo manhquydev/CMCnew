@@ -45,6 +45,11 @@ RUN pnpm --filter @cmc/db run generate
 COPY packages ./packages
 COPY apps/api  ./apps/api
 
+# Drop root: run as an unprivileged user (the image default is UID 0). Done after all
+# COPY/RUN steps so build-time writes succeed; chown the tree the runtime reads.
+RUN addgroup -S cmc && adduser -S cmc -G cmc && chown -R cmc:cmc /app
+USER cmc
+
 EXPOSE 4000
 
 # CWD becomes /app/apps/api so pnpm picks up the local package.json scripts.
