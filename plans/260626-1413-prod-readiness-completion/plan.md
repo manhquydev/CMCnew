@@ -32,7 +32,9 @@
 - ✅ **07A term-scoped grades**: AcademicTerm model + migration `20260626130000` (RLS) + term CRUD; `computeFinalGrade` lọc theo [startDate,endDate], fallback all-time. Commit done. Full suite 156/156 + domain 56/56 green.
 - ✅ **Retention config**: `commission.renewalRetentionDefault` (default 0.9, `.default()` backward-compat); payslip auto-feed dùng param thay hardcode 1.
 - ✅ **Commission cap**: giữ nguyên (user chốt) — no change.
-- ⏳ **Remaining 07** (focused next): commission tree-override `payslipOverrideVariablePay` (extract compute helper, recompute gross/PIT/net, canOverrideKpi tree-gate, audit, draft-only) + int-test; term-scoped grade int-test; admin terms panel + override button.
+- ✅ **07B commission tree-override**: `payslipOverrideVariablePay` (shared `assembleSlipData`, canOverrideKpi tree-gate, draft-only, recompute, audit) + admin terms panel + override button + 6 int-tests. Full suite 162/162 green. Commit done.
+
+**Phase 07 DONE.** Còn lại cho vận hành: RLS hardening, Docker prod rebuild+smoke, E2E, crm contactList UI (minor).
 
 ## Milestone (2026-06-26): full api suite GREEN 156/156 (đầu phiên 34 fail)
 
