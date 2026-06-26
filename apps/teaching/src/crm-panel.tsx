@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { trpc, Chatter, notifyError, notifySuccess } from '@cmc/ui';
 import {
   Badge,
@@ -16,6 +16,14 @@ import {
   Title,
 } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
+
+const TH_STYLE: React.CSSProperties = {
+  fontSize: 11,
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em',
+  color: 'var(--cmc-text-muted)',
+  fontWeight: 600,
+};
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Opp = Awaited<ReturnType<typeof trpc.crm.opportunityList.query>>[number];
@@ -211,10 +219,10 @@ export function CrmPanel() {
           <Table>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Học sinh / Liên hệ</Table.Th>
-                <Table.Th>SĐT</Table.Th>
-                <Table.Th w={210}>Bước</Table.Th>
-                <Table.Th>Trạng thái</Table.Th>
+                <Table.Th style={TH_STYLE}>Học sinh / Liên hệ</Table.Th>
+                <Table.Th style={TH_STYLE}>SĐT</Table.Th>
+                <Table.Th style={TH_STYLE} w={210}>Bước</Table.Th>
+                <Table.Th style={TH_STYLE}>Trạng thái</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>
@@ -285,11 +293,11 @@ export function CrmPanel() {
           <Table>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Học sinh</Table.Th>
-                <Table.Th>Loại</Table.Th>
-                <Table.Th>Lịch</Table.Th>
-                <Table.Th>Trạng thái</Table.Th>
-                <Table.Th>Điểm</Table.Th>
+                <Table.Th style={TH_STYLE}>Học sinh</Table.Th>
+                <Table.Th style={TH_STYLE}>Loại</Table.Th>
+                <Table.Th style={TH_STYLE}>Lịch</Table.Th>
+                <Table.Th style={TH_STYLE}>Trạng thái</Table.Th>
+                <Table.Th style={TH_STYLE}>Điểm</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>

@@ -364,7 +364,7 @@ export const payrollRouter = router({
   // Bulk-pay by explicit slip IDs: marks each finalized slip as paid. IDs that are not in
   // 'finalized' state are skipped (not errored) and returned in `failed`. Audited per slip.
   payslipBulkPay: requireRole(...HR_ROLES)
-    .input(z.array(z.string().uuid()).min(1))
+    .input(z.array(z.string().uuid()).min(1).max(200))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const due = await tx.payslip.findMany({

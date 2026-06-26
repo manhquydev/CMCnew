@@ -23,14 +23,14 @@ type PayslipRow = {
   kpiGrade: string | null;
 };
 
+type RosterEntry = { id: string; displayName: string; primaryRole: string | null };
 type BulkPayResult = { succeeded: string[]; failed: string[] };
 
 const payrollApi = trpc.payroll as unknown as {
+  roster: { query: (i: { facilityId: number }) => Promise<RosterEntry[]> };
   listByStaff: { query: (i: { staffId: string }) => Promise<PayslipRow[]> };
   payslipBulkPay: { mutate: (i: string[]) => Promise<BulkPayResult> };
 };
-
-type User = Awaited<ReturnType<typeof trpc.user.list.query>>[number];
 
 const TH_STYLE: React.CSSProperties = {
   fontSize: 11,
@@ -40,87 +40,61 @@ const TH_STYLE: React.CSSProperties = {
   fontWeight: 600,
 };
 
-const STAFF_ROLES = new Set([
-  'giao_vien',
-  'head_teacher',
-  'sale',
-  'ke_toan',
-  'hr',
-  'quan_ly',
-  'bgd',
-  'cskh',
-  'ctv_mkt',
-]);
 
-function StaffTable({ onSelect }: { onSelect: (userId: string, displayName: string) => void }) {
-  const [users, setUsers] = useState<User[]>([]);
+function StaffTable({
+  facilityId,
+  onSelect,
+}: {
+  facilityId: number;
+  onSelect: (userId: string, displayName: string) => void;
+}) {
+  const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     setLoading(true);
-    trpc.user.list
-      .query()
-      .then(setUsers)
+    setError('');
+    payrollApi.roster
+      .query({ facilityId })
+      .then(setRoster)
       .catch((e: unknown) =>
         setError(e instanceof Error ? e.message : 'Lỗi tải danh sách nhân sự'),
       )
       .finally(() => setLoading(false));
-  }, []);
+  }, [facilityId]);
 
-  const staff = users.filter((u) => u.roles.some((r) => STAFF_ROLES.has(r)));
-
-  if (loading) {
-    return <Text c="dimmed">Đang tải danh sách nhân sự...</Text>;
-  }
-  if (error) {
-    return <Alert color="red">{error}</Alert>;
-  }
+  if (loading) return <Text c="dimmed">Đang tải danh sách nhân sự...</Text>;
+  if (error) return <Alert color="red">{error}</Alert>;
 
   return (
     <Stack gap="md">
       <Text fw={600} size="lg">
-        Nhân sự ({staff.length})
+        Nhân sự ({roster.length})
       </Text>
       <Table striped highlightOnHover>
         <Table.Thead>
           <Table.Tr>
             <Table.Th style={TH_STYLE}>Tên</Table.Th>
-            <Table.Th style={TH_STYLE}>Vai trò</Table.Th>
-            <Table.Th style={TH_STYLE}>Cơ sở</Table.Th>
+            <Table.Th style={TH_STYLE}>Vai trò chính</Table.Th>
             <Table.Th style={TH_STYLE}>Thao tác</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {staff.map((u) => (
+          {roster.map((u) => (
             <Table.Tr
               key={u.id}
               style={{ cursor: 'pointer' }}
               onClick={() => onSelect(u.id, u.displayName)}
             >
+              <Table.Td>{u.displayName}</Table.Td>
               <Table.Td>
-                {u.displayName}
-                {!u.isActive && (
-                  <Badge color="gray" size="xs" ml="xs">
-                    ngừng
+                {u.primaryRole && (
+                  <Badge size="xs" variant="light" radius="xl">
+                    {u.primaryRole}
                   </Badge>
                 )}
               </Table.Td>
-              <Table.Td>
-                <Group gap={4}>
-                  {u.roles.slice(0, 2).map((r) => (
-                    <Badge key={r} size="xs" variant="light" radius="xl">
-                      {r}
-                    </Badge>
-                  ))}
-                  {u.roles.length > 2 && (
-                    <Badge size="xs" variant="outline" radius="xl" color="gray">
-                      +{u.roles.length - 2}
-                    </Badge>
-                  )}
-                </Group>
-              </Table.Td>
-              <Table.Td>{u.facilities.length}</Table.Td>
               <Table.Td>
                 <Button
                   size="xs"
@@ -137,9 +111,9 @@ function StaffTable({ onSelect }: { onSelect: (userId: string, displayName: stri
           ))}
         </Table.Tbody>
       </Table>
-      {staff.length === 0 && (
+      {roster.length === 0 && (
         <Text c="dimmed" size="sm">
-          Chưa có nhân sự.
+          Chưa có nhân sự tại cơ sở này.
         </Text>
       )}
     </Stack>
@@ -326,7 +300,7 @@ function StaffDetailDrawer({
   );
 }
 
-export function PayrollPanel(_props?: { facilityId?: number }) {
+export function PayrollPanel({ facilityId }: { facilityId?: number }) {
   const { me } = useSession();
   const [selectedStaff, setSelectedStaff] = useState<{ id: string; name: string } | null>(null);
 
@@ -334,9 +308,17 @@ export function PayrollPanel(_props?: { facilityId?: number }) {
     return <Text c="dimmed">Chỉ HR và Kế toán mới được truy cập mục này.</Text>;
   }
 
+  const activeFacilityId = facilityId ?? me.facilityIds[0];
+  if (!activeFacilityId) {
+    return <Text c="dimmed">Chọn cơ sở để xem nhân sự.</Text>;
+  }
+
   return (
     <Stack gap="xl">
-      <StaffTable onSelect={(id, name) => setSelectedStaff({ id, name })} />
+      <StaffTable
+        facilityId={activeFacilityId}
+        onSelect={(id, name) => setSelectedStaff({ id, name })}
+      />
       <StaffDetailDrawer
         staffId={selectedStaff?.id ?? null}
         staffName={selectedStaff?.name ?? ''}

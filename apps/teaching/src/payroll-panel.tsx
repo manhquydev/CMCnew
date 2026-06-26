@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { trpc, notifyError, notifySuccess } from '@cmc/ui';
 import {
   Badge,
@@ -13,6 +13,14 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+
+const TH_STYLE: React.CSSProperties = {
+  fontSize: 11,
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em',
+  color: 'var(--cmc-text-muted)',
+  fontWeight: 600,
+};
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type RosterUser = Awaited<ReturnType<typeof trpc.payroll.roster.query>>[number];
@@ -240,8 +248,8 @@ export function PayrollPanel() {
           <Table>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Nhân sự</Table.Th><Table.Th>Kỳ</Table.Th><Table.Th>Gộp</Table.Th>
-                <Table.Th>Thuế</Table.Th><Table.Th>Thực lĩnh</Table.Th><Table.Th>Trạng thái</Table.Th><Table.Th /></Table.Tr>
+                <Table.Th style={TH_STYLE}>Nhân sự</Table.Th><Table.Th style={TH_STYLE}>Kỳ</Table.Th><Table.Th style={TH_STYLE}>Gộp</Table.Th>
+                <Table.Th style={TH_STYLE}>Thuế</Table.Th><Table.Th style={TH_STYLE}>Thực lĩnh</Table.Th><Table.Th style={TH_STYLE}>Trạng thái</Table.Th><Table.Th /></Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {slips.map((s) => {

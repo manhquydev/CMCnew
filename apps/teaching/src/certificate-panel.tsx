@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { trpc, API_URL, notifyError, notifySuccess } from '@cmc/ui';
 import { Button, Card, Group, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+
+const TH_STYLE: React.CSSProperties = {
+  fontSize: 11,
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em',
+  color: 'var(--cmc-text-muted)',
+  fontWeight: 600,
+};
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
@@ -105,10 +113,10 @@ export function CertificatePanel() {
           <Table>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Học sinh</Table.Th>
-                <Table.Th>Tiêu đề</Table.Th>
-                <Table.Th>Cấp độ</Table.Th>
-                <Table.Th>Ngày cấp</Table.Th>
+                <Table.Th style={TH_STYLE}>Học sinh</Table.Th>
+                <Table.Th style={TH_STYLE}>Tiêu đề</Table.Th>
+                <Table.Th style={TH_STYLE}>Cấp độ</Table.Th>
+                <Table.Th style={TH_STYLE}>Ngày cấp</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>

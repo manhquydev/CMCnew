@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { trpc } from './client.js';
+import { notifyError } from './notify.js';
 
 /**
  * Minimal UI-facing shape of a staff notification.
@@ -25,6 +26,9 @@ export function useStaffNotif(facilityId: number | null) {
   const [notifications, setNotifications] = useState<StaffNotifItem[]>([]);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Track when markAllRead last completed so stale fetchList responses don't
+  // re-show notifications the user already dismissed (race condition guard).
+  const lastMarkedAtRef = useRef<number>(0);
 
   const fetchUnread = useCallback(() => {
     if (!facilityId) return;
@@ -38,10 +42,16 @@ export function useStaffNotif(facilityId: number | null) {
 
   const fetchList = useCallback(() => {
     if (!facilityId) return;
+    const fetchedAt = Date.now();
     // Cast via unknown: the Prisma `data: Json` field creates a recursive type that
     // overflows TS's instantiation depth when inferred through the tRPC client type.
     void (trpc.staffNotif.list.query({ facilityId }) as unknown as Promise<StaffNotifItem[]>)
-      .then(setNotifications)
+      .then((data) => {
+        // Discard if markAllRead completed after this fetch started — would re-show cleared items.
+        if (fetchedAt >= lastMarkedAtRef.current) {
+          setNotifications(data);
+        }
+      })
       .catch(() => {
         /* keep stale list on transient network error */
       });
@@ -64,13 +74,14 @@ export function useStaffNotif(facilityId: number | null) {
     void trpc.staffNotif.markAllRead
       .mutate({ facilityId })
       .then(() => {
+        lastMarkedAtRef.current = Date.now();
         setUnreadCount(0);
         setNotifications((prev) =>
           prev.map((n) => ({ ...n, readAt: n.readAt ?? new Date().toISOString() })),
         );
       })
-      .catch(() => {
-        /* keep badge; a later open will retry */
+      .catch((err: unknown) => {
+        notifyError(err instanceof Error ? err.message : 'Không thể đánh dấu đã đọc. Thử lại sau.');
       })
       .finally(() => setIsMarkingAll(false));
   }, [facilityId]);

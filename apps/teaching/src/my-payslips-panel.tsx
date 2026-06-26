@@ -1,6 +1,14 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { trpc, notifyError } from '@cmc/ui';
 import { Badge, Card, Stack, Table, Text, Title } from '@mantine/core';
+
+const TH_STYLE: React.CSSProperties = {
+  fontSize: 11,
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em',
+  color: 'var(--cmc-text-muted)',
+  fontWeight: 600,
+};
 
 type MyPayslip = Awaited<ReturnType<typeof trpc.payroll.myPayslips.query>>[number];
 
@@ -35,11 +43,11 @@ export function MyPayslipsPanel() {
           <Table>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Kỳ</Table.Th>
-                <Table.Th>Lương gộp</Table.Th>
-                <Table.Th>Thuế TNCN</Table.Th>
-                <Table.Th>Thực lĩnh</Table.Th>
-                <Table.Th>Trạng thái</Table.Th>
+                <Table.Th style={TH_STYLE}>Kỳ</Table.Th>
+                <Table.Th style={TH_STYLE}>Lương gộp</Table.Th>
+                <Table.Th style={TH_STYLE}>Thuế TNCN</Table.Th>
+                <Table.Th style={TH_STYLE}>Thực lĩnh</Table.Th>
+                <Table.Th style={TH_STYLE}>Trạng thái</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>

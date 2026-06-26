@@ -32,6 +32,7 @@ import { CskhPanel } from './cskh-panel';
 import { CertificatePanel } from './certificate-panel';
 import { PayrollPanel } from './payroll-panel';
 import { MyPayslipsPanel } from './my-payslips-panel';
+import { Shell, type SectionKey } from './shell';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
@@ -873,7 +874,7 @@ function Workspace() {
           label="Cơ sở"
           data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
           value={facilityId ? String(facilityId) : null}
-          onChange={(v) => setFacilityId(v ? Number(v) : null)}
+          onChange={(v) => { setFacilityId(v ? Number(v) : null); setClassPage(1); }}
           w={240}
         />
         {facilityId && (
@@ -978,56 +979,21 @@ function Workspace() {
 }
 
 function Workbench() {
-  const { me } = useSession();
-  // Payroll is HR-confidential — only show its tab to hr/ke_toan/super_admin.
-  const canPayroll = me.isSuperAdmin || me.roles.includes('hr') || me.roles.includes('ke_toan');
+  const [activeSection, setActiveSection] = useState<SectionKey>('classes');
+
   return (
-      <Tabs defaultValue="classes" keepMounted={false}>
-        <Tabs.List mb="md">
-          <Tabs.Tab value="classes">Lớp học</Tabs.Tab>
-          <Tabs.Tab value="grading">Chấm bài</Tabs.Tab>
-          <Tabs.Tab value="assessment">Học bạ</Tabs.Tab>
-          <Tabs.Tab value="levelup">Duyệt cấp độ</Tabs.Tab>
-          <Tabs.Tab value="crm">CRM</Tabs.Tab>
-          <Tabs.Tab value="finance">Phiếu thu</Tabs.Tab>
-          <Tabs.Tab value="cskh">CSKH</Tabs.Tab>
-          <Tabs.Tab value="certificate">Chứng chỉ</Tabs.Tab>
-          <Tabs.Tab value="my-payslips">Phiếu lương của tôi</Tabs.Tab>
-          {canPayroll && <Tabs.Tab value="payroll">Lương</Tabs.Tab>}
-        </Tabs.List>
-        <Tabs.Panel value="classes">
-          <Workspace />
-        </Tabs.Panel>
-        <Tabs.Panel value="grading">
-          <GradingPanel />
-        </Tabs.Panel>
-        <Tabs.Panel value="assessment">
-          <AssessmentPanel />
-        </Tabs.Panel>
-        <Tabs.Panel value="levelup">
-          <LevelApprovalPanel />
-        </Tabs.Panel>
-        <Tabs.Panel value="crm">
-          <CrmPanel />
-        </Tabs.Panel>
-        <Tabs.Panel value="finance">
-          <FinancePanel />
-        </Tabs.Panel>
-        <Tabs.Panel value="cskh">
-          <CskhPanel />
-        </Tabs.Panel>
-        <Tabs.Panel value="certificate">
-          <CertificatePanel />
-        </Tabs.Panel>
-        <Tabs.Panel value="my-payslips">
-          <MyPayslipsPanel />
-        </Tabs.Panel>
-        {canPayroll && (
-          <Tabs.Panel value="payroll">
-            <PayrollPanel />
-          </Tabs.Panel>
-        )}
-      </Tabs>
+    <Shell activeSection={activeSection} onSectionChange={setActiveSection}>
+      {activeSection === 'classes' && <Workspace />}
+      {activeSection === 'grading' && <GradingPanel />}
+      {activeSection === 'assessment' && <AssessmentPanel />}
+      {activeSection === 'levelup' && <LevelApprovalPanel />}
+      {activeSection === 'crm' && <CrmPanel />}
+      {activeSection === 'finance' && <FinancePanel />}
+      {activeSection === 'cskh' && <CskhPanel />}
+      {activeSection === 'certificate' && <CertificatePanel />}
+      {activeSection === 'my-payslips' && <MyPayslipsPanel />}
+      {activeSection === 'payroll' && <PayrollPanel />}
+    </Shell>
   );
 }
 

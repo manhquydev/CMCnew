@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { trpc, useSession, notifyError, notifySuccess } from '@cmc/ui';
 import {
   Badge,
@@ -13,6 +13,14 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
+
+const TH_STYLE: React.CSSProperties = {
+  fontSize: 11,
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em',
+  color: 'var(--cmc-text-muted)',
+  fontWeight: 600,
+};
 
 // ─── Loose re-type to avoid TS2589 on deep tRPC inference ───────────────────
 
@@ -189,9 +197,9 @@ function KpiDetailCard({
           <Table fz="sm" mb="sm" striped highlightOnHover withTableBorder={false}>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)', fontWeight: 600 }}>Tiêu chí</Table.Th>
-                <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)', fontWeight: 600 }}>Trọng số</Table.Th>
-                <Table.Th style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--cmc-text-muted)', fontWeight: 600 }}>Điểm (0–100)</Table.Th>
+                <Table.Th style={TH_STYLE}>Tiêu chí</Table.Th>
+                <Table.Th style={TH_STYLE}>Trọng số</Table.Th>
+                <Table.Th style={TH_STYLE}>Điểm (0–100)</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>

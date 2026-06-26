@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { trpc, notifyError, notifySuccess } from '@cmc/ui';
 import { Badge, Button, Card, Group, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+
+const TH_STYLE: React.CSSProperties = {
+  fontSize: 11,
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em',
+  color: 'var(--cmc-text-muted)',
+  fontWeight: 600,
+};
 
 type Pending = Awaited<ReturnType<typeof trpc.levelProgress.listPending.query>>[number];
 
@@ -39,10 +47,10 @@ export function LevelApprovalPanel() {
           <Table>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Học sinh</Table.Th>
-                <Table.Th>Cấp độ</Table.Th>
-                <Table.Th>Lý do đề xuất</Table.Th>
-                <Table.Th>Ghi chú duyệt</Table.Th>
+                <Table.Th style={TH_STYLE}>Học sinh</Table.Th>
+                <Table.Th style={TH_STYLE}>Cấp độ</Table.Th>
+                <Table.Th style={TH_STYLE}>Lý do đề xuất</Table.Th>
+                <Table.Th style={TH_STYLE}>Ghi chú duyệt</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>

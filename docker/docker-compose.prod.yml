@@ -68,7 +68,7 @@ services:
       API_PORT:         4000
       # Runtime: connects as non-owner cmc_app role so RLS policies apply.
       # cmc_app is created by migration 20260623045316_rls_tenancy.
-      DATABASE_URL:     postgresql://cmc_app:${DB_APP_PASSWORD:-cmc_app}@postgres:5432/${DB_NAME:-cmc}?schema=public
+      DATABASE_URL:     postgresql://cmc_app:${DB_APP_PASSWORD:?DB_APP_PASSWORD is required}@postgres:5432/${DB_NAME:-cmc}?schema=public
       # Owner role: used by prisma migrate / seed (bypasses RLS).
       DIRECT_URL:       postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-cmc}?schema=public
       REDIS_URL:        redis://redis:6379
@@ -93,7 +93,9 @@ services:
       dockerfile: apps/api/Dockerfile
     environment:
       NODE_ENV:     production
-      DATABASE_URL: postgresql://cmc_app:${DB_APP_PASSWORD:-cmc_app}@postgres:5432/${DB_NAME:-cmc}?schema=public
+      # Migrations run as owner (DB_USER) to create cmc_app role and apply DDL.
+      # cmc_app does not exist yet on first deploy, so DATABASE_URL must use owner.
+      DATABASE_URL: postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-cmc}?schema=public
       DIRECT_URL:   postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-cmc}?schema=public
     depends_on:
       postgres:
@@ -109,7 +111,7 @@ services:
       dockerfile: apps/api/Dockerfile
     environment:
       NODE_ENV:                production
-      DATABASE_URL:            postgresql://cmc_app:${DB_APP_PASSWORD:-cmc_app}@postgres:5432/${DB_NAME:-cmc}?schema=public
+      DATABASE_URL:            postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-cmc}?schema=public
       DIRECT_URL:              postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-cmc}?schema=public
       SEED_SUPERADMIN_EMAIL:    ${SEED_SUPERADMIN_EMAIL:?SEED_SUPERADMIN_EMAIL is required for seeding}
       SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:?SEED_SUPERADMIN_PASSWORD is required for seeding}
