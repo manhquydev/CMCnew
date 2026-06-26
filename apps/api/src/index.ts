@@ -20,6 +20,7 @@ import { renderReceiptHtml } from './services/receipt-html.js';
 import { runParentMeetingReminders } from './services/parent-meeting-reminder.js';
 import { generateParentMeetings } from './services/parent-meeting-cadence.js';
 import { renderCertificateHtml } from './services/certificate-html.js';
+import { runEmailOutbox } from './services/email-outbox.js';
 
 const app = new Hono();
 
@@ -270,5 +271,16 @@ if (process.env.DISABLE_CRON !== '1') {
         if (r.meetingsCreated) console.log(`↳ parent-meeting cadence: +${r.meetingsCreated} meetings across ${r.classesScanned} running classes`);
       })
       .catch((e) => console.error('parent-meeting cadence tick failed', e));
+  });
+
+  // Email outbox drain (decision: email-graph-integration): every minute, send up to 20 queued
+  // emails via Microsoft Graph (rate-limited under Exchange's 30/min cap). No-op when GRAPH_* env is
+  // unset — rows stay queued until the tenant is configured, so this is safe to run in production.
+  cron.schedule('* * * * *', () => {
+    runEmailOutbox()
+      .then((r) => {
+        if (!r.disabled && (r.sent || r.failed)) console.log(`↳ email outbox: ${r.sent} sent, ${r.failed} failed, ${r.rescheduled} rescheduled`);
+      })
+      .catch((e) => console.error('email outbox tick failed', e));
   });
 }

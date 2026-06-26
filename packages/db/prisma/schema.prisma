@@ -612,6 +612,42 @@ model Notification {
   @@map("notification")
 }
 
+/// Trạng thái một email trong outbox.
+enum EmailStatus {
+  queued
+  sending
+  sent
+  failed
+  skipped
+}
+
+/// Outbox cho email gửi qua Microsoft Graph (M365). Business code ghi 1 dòng cùng transaction
+/// với hành động nghiệp vụ (transactional outbox — atomic + idempotent qua dedupKey). Một worker
+/// cron rút hàng đợi với tốc độ giới hạn (≤20/phút < ngưỡng Exchange 30/phút), render & gửi.
+/// Khi GRAPH_* env chưa cấu hình, worker để nguyên trạng thái queued (no-op, không lỗi).
+/// System-scoped: worker chạy super-bypass; facilityId chỉ để truy vết & RLS cho staff khi enqueue.
+model EmailOutbox {
+  id           String      @id @default(uuid()) @db.Uuid
+  facilityId   Int?        @map("facility_id")
+  dedupKey     String      @unique @map("dedup_key")
+  toAddress    String      @map("to_address")
+  mailbox      String
+  templateKind String      @map("template_kind")
+  subject      String
+  bodyHtml     String      @map("body_html")
+  attachRef    String?     @map("attach_ref")
+  status       EmailStatus @default(queued)
+  attempts     Int         @default(0)
+  lastError    String?     @map("last_error")
+  scheduledFor DateTime    @default(now()) @map("scheduled_for")
+  sentAt       DateTime?   @map("sent_at")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  @@index([status, scheduledFor])
+  @@index([facilityId])
+  @@map("email_outbox")
+}
+
 /// Huy hiệu (S3) — danh mục facility-scoped. unlockCriteria (Json) do @cmc/domain-rewards diễn giải.
 model Badge {
   id             String         @id @default(uuid()) @db.Uuid
