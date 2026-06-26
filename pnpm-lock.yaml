@@ -50,6 +50,9 @@ importers:
       '@mantine/core':
         specifier: ^7.15.2
         version: 7.17.8(@mantine/hooks@7.17.8(react@19.2.7))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@mantine/dates':
+        specifier: ^7.15.2
+        version: 7.17.8(@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@19.2.7))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@mantine/hooks@7.17.8(react@19.2.7))(dayjs@1.11.21)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@mantine/form':
         specifier: ^7.15.2
         version: 7.17.8(react@19.2.7)

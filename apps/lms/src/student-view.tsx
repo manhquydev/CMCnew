@@ -277,7 +277,7 @@ function ExerciseModal({
   );
 }
 
-function ExercisesTab({ refreshKey }: { refreshKey: number }) {
+function ExercisesTab({ refreshKey, gradedOnly }: { refreshKey: number; gradedOnly?: boolean }) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -336,10 +336,14 @@ function ExercisesTab({ refreshKey }: { refreshKey: number }) {
     );
   }
 
+  const visibleExercises = gradedOnly
+    ? exercises.filter((ex) => subByExercise.get(ex.id)?.grade?.isPublished)
+    : exercises;
+
   return (
     <Card radius="lg" style={{ border: '1px solid var(--cmc-border)' }} p={0}>
-      {exercises.length === 0 ? (
-        <Text c="dimmed" p="xl">Chưa có bài tập nào.</Text>
+      {visibleExercises.length === 0 ? (
+        <Text c="dimmed" p="xl">{gradedOnly ? 'Chưa có bài tập nào được chấm điểm.' : 'Chưa có bài tập nào.'}</Text>
       ) : (
         <Table striped highlightOnHover withTableBorder={false}>
           <Table.Thead>
@@ -352,7 +356,7 @@ function ExercisesTab({ refreshKey }: { refreshKey: number }) {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {exercises.map((ex) => {
+            {visibleExercises.map((ex) => {
               const sub = subByExercise.get(ex.id);
               const status = workStatus(sub);
               const grade = sub?.grade;
@@ -411,6 +415,68 @@ function ExercisesTab({ refreshKey }: { refreshKey: number }) {
           onChanged={load}
         />
       )}
+    </Card>
+  );
+}
+
+type FinalGrade = Awaited<ReturnType<typeof trpc.assessment.gradebook.query>>['finalGrades'][number];
+
+function StudentGradebookTab({ studentId, refreshKey }: { studentId: string; refreshKey: number }) {
+  const [grades, setGrades] = useState<FinalGrade[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    setLoading(true);
+    setErr('');
+    trpc.assessment.gradebook
+      .query({ studentId })
+      .then((r) => setGrades(r.finalGrades))
+      .catch((e) => {
+        setErr('Không tải được học bạ.');
+        notifyError(e, 'Tải học bạ thất bại');
+      })
+      .finally(() => setLoading(false));
+  }, [studentId, refreshKey]);
+
+  if (loading) return <Center py="xl"><Loader /></Center>;
+  if (err) return <Alert color="red" mt="md">{err}</Alert>;
+  if (grades.length === 0) return <Text c="dimmed" p="xl">Chưa có kết quả học kỳ nào.</Text>;
+
+  return (
+    <Card radius="lg" style={{ border: '1px solid var(--cmc-border)' }} p={0}>
+      <Table striped withTableBorder={false}>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Kỳ</Table.Th>
+            <Table.Th>Chương trình</Table.Th>
+            <Table.Th>Bài tập TB</Table.Th>
+            <Table.Th>Thi</Table.Th>
+            <Table.Th>Điểm tổng</Table.Th>
+            <Table.Th>Kết quả</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {grades.map((g) => (
+            <Table.Tr key={g.id}>
+              <Table.Td>{g.periodKey}</Table.Td>
+              <Table.Td>{g.program}</Table.Td>
+              <Table.Td>{g.homeworkAvg != null ? g.homeworkAvg.toFixed(1) : '—'}</Table.Td>
+              <Table.Td>{g.testScore != null ? g.testScore.toFixed(1) : '—'}</Table.Td>
+              <Table.Td fw={600}>{g.finalScore != null ? g.finalScore.toFixed(1) : '—'}</Table.Td>
+              <Table.Td>
+                {g.complete ? (
+                  <Badge color={g.passed ? 'teal' : 'red'} variant="light" radius="xl">
+                    {g.passed ? 'Đạt' : 'Chưa đạt'}
+                  </Badge>
+                ) : (
+                  <Badge color="gray" variant="light" radius="xl">Đang học</Badge>
+                )}
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
     </Card>
   );
 }
@@ -659,11 +725,10 @@ export function StudentView({ principal, activeTab, onTabChange: _onTabChange, o
       case 'exercises':
         return <ExercisesTab refreshKey={refreshKey} />;
       case 'results':
-        // Exercises table filtered to graded submissions serves as the results view.
-        return <ExercisesTab refreshKey={refreshKey} />;
+        return <ExercisesTab refreshKey={refreshKey} gradedOnly />;
       case 'gradebook':
         return principal.studentIds[0] ? (
-          <BadgeShelf studentId={principal.studentIds[0]} refreshKey={refreshKey} />
+          <StudentGradebookTab studentId={principal.studentIds[0]} refreshKey={refreshKey} />
         ) : (
           <Text c="dimmed">Không có học sinh liên kết.</Text>
         );

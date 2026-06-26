@@ -250,7 +250,6 @@ function ChildDashboard({
 
     return (
       <Stack>
-        <UpcomingMeetingsCard refreshKey={refreshKey} />
         <Group grow>
           <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
             <Text size="sm" c="dimmed" mb={4}>Sao tích lũy</Text>
@@ -446,7 +445,6 @@ function ChildDashboard({
   if (tab === 'notifications') {
     return (
       <Stack>
-        <UpcomingMeetingsCard refreshKey={refreshKey} />
         <LevelHistoryCard childId={childId} refreshKey={refreshKey} />
       </Stack>
     );
@@ -570,6 +568,8 @@ export function ParentView({ principal, activeTab, onTabChange: _onTabChange, on
           {banner}
         </Alert>
       )}
+
+      <UpcomingMeetingsCard refreshKey={refreshKey} />
 
       {childId && (
         <ChildDashboard

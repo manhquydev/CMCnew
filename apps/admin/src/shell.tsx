@@ -8,7 +8,9 @@ import {
   IconCurrencyDong,
   IconId,
   IconLayoutDashboard,
+  IconReceipt,
   IconTargetArrow,
+  IconTrendingUp,
   IconUsers,
 } from '@tabler/icons-react';
 
@@ -21,7 +23,9 @@ type SectionKey =
   | 'guardians'
   | 'hr'
   | 'kpi'
-  | 'compensation';
+  | 'compensation'
+  | 'finance'
+  | 'crm';
 
 type NavItem = {
   key: SectionKey;
@@ -258,10 +262,14 @@ export function Shell({
 export function buildNavGroups({
   canHr,
   canKpi,
+  canFinance,
+  canCrm,
   isSuperAdmin,
 }: {
   canHr: boolean;
   canKpi: boolean;
+  canFinance: boolean;
+  canCrm: boolean;
   isSuperAdmin: boolean;
 }): NavGroup[] {
   return [
@@ -300,6 +308,23 @@ export function buildNavGroups({
       ],
     },
     {
+      groupLabel: 'Kinh doanh',
+      items: [
+        {
+          key: 'finance',
+          label: 'Tài chính',
+          icon: <IconReceipt size={18} stroke={1.5} />,
+          visible: canFinance,
+        },
+        {
+          key: 'crm',
+          label: 'CRM',
+          icon: <IconTrendingUp size={18} stroke={1.5} />,
+          visible: canCrm,
+        },
+      ],
+    },
+    {
       groupLabel: 'Nhân sự',
       items: [
         {
@@ -332,6 +357,8 @@ export const SECTION_TITLES: Record<SectionKey, string> = {
   courses: 'Khóa học',
   org: 'Cơ sở & Người dùng',
   guardians: 'Phụ huynh',
+  finance: 'Tài chính',
+  crm: 'CRM',
   hr: 'Nhân sự & Lương',
   kpi: 'Đánh giá KPI',
   compensation: 'Cơ cấu lương',

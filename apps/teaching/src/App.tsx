@@ -1,5 +1,5 @@
 import '@mantine/dates/styles.css';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
 import { LoginGate, useSession, trpc, Chatter, notifyError, notifySuccess, required } from '@cmc/ui';
 import { useForm } from '@mantine/form';
@@ -889,6 +889,17 @@ function Workspace({ initialTab }: { initialTab?: string }) {
   const visible = facilityId ? batches.filter((b) => b.facilityId === facilityId) : batches;
   const facilityRooms = facilityId ? rooms.filter((r) => r.facilityId === facilityId) : rooms;
 
+  const [classSearch, setClassSearch] = useState('');
+  const [classStatusFilter, setClassStatusFilter] = useState('all');
+  const filteredBatches = useMemo(() => {
+    const q = classSearch.toLowerCase();
+    return visible.filter((b) => {
+      const matchText = !q || b.code.toLowerCase().includes(q) || b.name.toLowerCase().includes(q);
+      const matchStatus = classStatusFilter === 'all' || b.status === classStatusFilter;
+      return matchText && matchStatus;
+    });
+  }, [visible, classSearch, classStatusFilter]);
+
   return (
     <Stack>
       <Group justify="space-between" mb="xl">
@@ -913,11 +924,32 @@ function Workspace({ initialTab }: { initialTab?: string }) {
         <Grid.Col span={{ base: 12, md: 4 }}>
           <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
             <Text size="lg" fw={600} mb="sm" style={{ color: 'var(--cmc-text)' }}>
-              Lớp học ({visible.length})
+              Lớp học ({filteredBatches.length}{filteredBatches.length !== visible.length ? `/${visible.length}` : ''})
             </Text>
+            <Stack gap="xs" mb="sm">
+              <TextInput
+                placeholder="Tìm lớp..."
+                size="xs"
+                value={classSearch}
+                onChange={(e) => setClassSearch(e.currentTarget.value)}
+              />
+              <SegmentedControl
+                size="xs"
+                value={classStatusFilter}
+                onChange={setClassStatusFilter}
+                data={[
+                  { value: 'all', label: 'Tất cả' },
+                  { value: 'planned', label: 'Planned' },
+                  { value: 'open', label: 'Open' },
+                  { value: 'running', label: 'Running' },
+                  { value: 'closed', label: 'Closed' },
+                  { value: 'cancelled', label: 'Cancelled' },
+                ]}
+              />
+            </Stack>
             <Table highlightOnHover withTableBorder={false}>
               <Table.Tbody>
-                {visible.map((b) => (
+                {filteredBatches.map((b) => (
                   <Table.Tr
                     key={b.id}
                     style={{ cursor: 'pointer' }}
@@ -942,6 +974,11 @@ function Workspace({ initialTab }: { initialTab?: string }) {
             {visible.length === 0 && (
               <Text c="dimmed" size="sm">
                 Chưa có lớp. Bấm "Tạo lớp".
+              </Text>
+            )}
+            {visible.length > 0 && filteredBatches.length === 0 && (
+              <Text c="dimmed" size="sm">
+                Không tìm thấy lớp phù hợp.
               </Text>
             )}
           </Card>

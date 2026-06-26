@@ -37,6 +37,8 @@ import { OverviewPanel } from './overview-panel';
 import { CompensationConfigPanel } from './compensation-panel';
 import { PayrollPanel } from './payroll-panel';
 import { KpiEvaluationPanel } from './kpi-evaluation-panel';
+import { FinancePanel } from './finance-panel';
+import { CrmPanel } from './crm-panel';
 import { Shell, buildNavGroups, SECTION_TITLES, type SectionKey } from './shell';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
@@ -695,7 +697,7 @@ function HrPayrollSection() {
 // ─── Dashboard (AppShell wrapper) ─────────────────────────────────────────────
 
 const ALL_ADMIN_KEYS = new Set<string>([
-  'overview', 'courses', 'org', 'guardians', 'hr', 'kpi', 'compensation',
+  'overview', 'courses', 'org', 'guardians', 'hr', 'kpi', 'compensation', 'finance', 'crm',
 ]);
 
 function hashToAdminSection(): SectionKey | undefined {
@@ -709,14 +711,29 @@ function Dashboard() {
   const canKpi =
     me.isSuperAdmin ||
     me.roles.some((r) => ['hr', 'ke_toan', 'quan_ly', 'bgd', 'head_teacher'].includes(r));
+  const canFinance =
+    me.isSuperAdmin || me.roles.some((r) => ['ke_toan', 'quan_ly'].includes(r));
+  const canCrm =
+    me.isSuperAdmin || me.roles.some((r) => ['sale', 'quan_ly', 'cskh'].includes(r));
 
   const [activeSection, setActiveSection] = useState<SectionKey>(
     hashToAdminSection() ?? 'overview',
   );
 
+  useEffect(() => {
+    const onHashChange = () => {
+      const next = hashToAdminSection();
+      if (next) setActiveSection(next);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
   const navGroups = buildNavGroups({
     canHr,
     canKpi,
+    canFinance,
+    canCrm,
     isSuperAdmin: me.isSuperAdmin,
   });
 
@@ -725,6 +742,8 @@ function Dashboard() {
     if (key === 'hr' && !canHr) return;
     if (key === 'kpi' && !canKpi) return;
     if (key === 'compensation' && !me.isSuperAdmin) return;
+    if (key === 'finance' && !canFinance) return;
+    if (key === 'crm' && !canCrm) return;
     window.location.hash = key;
     setActiveSection(key);
   };
@@ -764,6 +783,24 @@ function Dashboard() {
               Cơ cấu lương
             </Text>
             <CompensationConfigPanel />
+          </Stack>
+        ) : null;
+      case 'finance':
+        return canFinance ? (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
+              Tài chính
+            </Text>
+            <FinancePanel />
+          </Stack>
+        ) : null;
+      case 'crm':
+        return canCrm ? (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
+              CRM
+            </Text>
+            <CrmPanel />
           </Stack>
         ) : null;
       default:
