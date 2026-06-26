@@ -3,215 +3,217 @@
  * which tRPC procedure. No role inheritance; no wildcard rules; super_admin always bypasses
  * at the middleware layer before this registry is consulted.
  *
- * Shape: PERMISSIONS[routerMountKey][procedureName] = Role[]
+ * Shape: PERMISSIONS[routerMountKey][procedureName] = string[]
  *
  * Two intentional diffs from the pre-refactor baseline (captured in permission-snapshot.json):
  *   1. classBatch.create + schedule.addSlot + schedule.generateSessions: quan_ly-only → add head_teacher
  *   2. crm.opportunityList + crm.opportunityCreate: CRM roles → also add ctv_mkt (O1 read/create only)
  *
  * All other procedures must match the snapshot exactly; the parity test enforces this.
+ *
+ * NOTE: No Prisma / @cmc/db runtime import here. Role values are plain string literals so
+ * this module can be safely bundled for the browser via the @cmc/auth/permissions subpath.
+ * The parity test (apps/api/test/permission-parity.test.ts) catches any value-level drift.
  */
 
-import { Role } from '@cmc/db';
-
-export const PERMISSIONS: Record<string, Record<string, Role[]>> = {
+export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   assessment: {
-    template: [Role.giao_vien, Role.head_teacher, Role.quan_ly],
-    termList: [Role.giao_vien, Role.head_teacher, Role.quan_ly],
-    termCreate: [Role.head_teacher, Role.quan_ly],
-    termUpdate: [Role.head_teacher, Role.quan_ly],
-    upsertQualitative: [Role.giao_vien, Role.head_teacher, Role.quan_ly],
-    computeFinalGrade: [Role.giao_vien, Role.head_teacher, Role.quan_ly],
+    template: ['giao_vien', 'head_teacher', 'quan_ly'],
+    termList: ['giao_vien', 'head_teacher', 'quan_ly'],
+    termCreate: ['head_teacher', 'quan_ly'],
+    termUpdate: ['head_teacher', 'quan_ly'],
+    upsertQualitative: ['giao_vien', 'head_teacher', 'quan_ly'],
+    computeFinalGrade: ['giao_vien', 'head_teacher', 'quan_ly'],
   },
 
   afterSale: {
-    list: [Role.cskh, Role.quan_ly],
-    create: [Role.cskh, Role.quan_ly],
-    transition: [Role.cskh, Role.quan_ly],
-    assign: [Role.cskh, Role.quan_ly],
-    setStudentLifecycle: [Role.quan_ly],
+    list: ['cskh', 'quan_ly'],
+    create: ['cskh', 'quan_ly'],
+    transition: ['cskh', 'quan_ly'],
+    assign: ['cskh', 'quan_ly'],
+    setStudentLifecycle: ['quan_ly'],
   },
 
   attendance: {
-    mark: [Role.giao_vien, Role.quan_ly],
+    mark: ['giao_vien', 'quan_ly'],
   },
 
   course: {
-    create: [Role.quan_ly],
-    archive: [Role.quan_ly],
+    create: ['quan_ly'],
+    archive: ['quan_ly'],
   },
 
   badge: {
-    list: [Role.quan_ly, Role.head_teacher, Role.giao_vien],
-    create: [Role.quan_ly],
-    archive: [Role.quan_ly],
-    grant: [Role.giao_vien, Role.head_teacher, Role.quan_ly],
+    list: ['quan_ly', 'head_teacher', 'giao_vien'],
+    create: ['quan_ly'],
+    archive: ['quan_ly'],
+    grant: ['giao_vien', 'head_teacher', 'quan_ly'],
   },
 
   // Diff 1a: head_teacher added to classBatch.create so they can open a class
   // without escalating to quan_ly. setStatus/cancel/reopen remain quan_ly-only
   // (those affect financial commitments and student enrollment records).
   classBatch: {
-    create: [Role.quan_ly, Role.head_teacher],
-    setStatus: [Role.quan_ly],
-    cancel: [Role.quan_ly],
-    reopen: [Role.quan_ly],
+    create: ['quan_ly', 'head_teacher'],
+    setStatus: ['quan_ly'],
+    cancel: ['quan_ly'],
+    reopen: ['quan_ly'],
   },
 
   dashboard: {
-    summary: [Role.bgd, Role.quan_ly],
+    summary: ['bgd', 'quan_ly'],
   },
 
   exercise: {
-    create: [Role.giao_vien, Role.quan_ly],
-    publish: [Role.giao_vien, Role.quan_ly],
+    create: ['giao_vien', 'quan_ly'],
+    publish: ['giao_vien', 'quan_ly'],
   },
 
   // compensation.list / defaults / create are super_admin-only (enforced via superAdminProcedure,
   // not requirePermission). They appear here for a complete audit map; the parity test verifies them.
   compensation: {
-    list: [Role.super_admin],
-    effective: [Role.hr, Role.ke_toan],
-    defaults: [Role.super_admin],
-    create: [Role.super_admin],
+    list: ['super_admin'],
+    effective: ['hr', 'ke_toan'],
+    defaults: ['super_admin'],
+    create: ['super_admin'],
   },
 
   // Diff 2: ctv_mkt gets O1 read (opportunityList) and O1 create (opportunityCreate) only.
   // All other CRM procedures remain sale/cskh/quan_ly — ctv_mkt cannot transition, mark lost,
   // reopen, or manage tests. contactList/contactCreate stay at CRM_ROLES (no ctv_mkt there).
   crm: {
-    contactList: [Role.sale, Role.cskh, Role.quan_ly],
-    contactCreate: [Role.sale, Role.cskh, Role.quan_ly],
-    opportunityList: [Role.sale, Role.cskh, Role.quan_ly, Role.ctv_mkt],
-    opportunityCreate: [Role.sale, Role.cskh, Role.quan_ly, Role.ctv_mkt],
-    opportunityTransition: [Role.sale, Role.cskh, Role.quan_ly],
-    opportunityMarkLost: [Role.sale, Role.cskh, Role.quan_ly],
-    opportunityReopen: [Role.sale, Role.cskh, Role.quan_ly],
-    testList: [Role.sale, Role.cskh, Role.quan_ly],
-    testCreate: [Role.sale, Role.cskh, Role.quan_ly],
-    testGrade: [Role.giao_vien, Role.head_teacher, Role.quan_ly],
+    contactList: ['sale', 'cskh', 'quan_ly'],
+    contactCreate: ['sale', 'cskh', 'quan_ly'],
+    opportunityList: ['sale', 'cskh', 'quan_ly', 'ctv_mkt'],
+    opportunityCreate: ['sale', 'cskh', 'quan_ly', 'ctv_mkt'],
+    opportunityTransition: ['sale', 'cskh', 'quan_ly'],
+    opportunityMarkLost: ['sale', 'cskh', 'quan_ly'],
+    opportunityReopen: ['sale', 'cskh', 'quan_ly'],
+    testList: ['sale', 'cskh', 'quan_ly'],
+    testCreate: ['sale', 'cskh', 'quan_ly'],
+    testGrade: ['giao_vien', 'head_teacher', 'quan_ly'],
   },
 
   enrollment: {
-    enroll: [Role.quan_ly, Role.sale],
-    complete: [Role.quan_ly],
+    enroll: ['quan_ly', 'sale'],
+    complete: ['quan_ly'],
   },
 
   // facility.update / facility.create are super_admin-only (enforced via superAdminProcedure).
   facility: {
-    update: [Role.super_admin],
-    create: [Role.super_admin],
+    update: ['super_admin'],
+    create: ['super_admin'],
   },
 
   finance: {
-    priceCreate: [Role.quan_ly, Role.ke_toan],
-    priceList: [Role.quan_ly, Role.ke_toan],
-    voucherCreate: [Role.quan_ly, Role.ke_toan],
-    voucherList: [Role.quan_ly, Role.ke_toan],
-    receiptList: [Role.ke_toan, Role.quan_ly],
-    receiptCreate: [Role.ke_toan, Role.quan_ly],
-    receiptApprove: [Role.ke_toan, Role.quan_ly],
-    receiptMarkSent: [Role.ke_toan, Role.quan_ly],
-    receiptReconcile: [Role.ke_toan, Role.quan_ly],
-    receiptCancel: [Role.ke_toan, Role.quan_ly],
+    priceCreate: ['quan_ly', 'ke_toan'],
+    priceList: ['quan_ly', 'ke_toan'],
+    voucherCreate: ['quan_ly', 'ke_toan'],
+    voucherList: ['quan_ly', 'ke_toan'],
+    receiptList: ['ke_toan', 'quan_ly'],
+    receiptCreate: ['ke_toan', 'quan_ly'],
+    receiptApprove: ['ke_toan', 'quan_ly'],
+    receiptMarkSent: ['ke_toan', 'quan_ly'],
+    receiptReconcile: ['ke_toan', 'quan_ly'],
+    receiptCancel: ['ke_toan', 'quan_ly'],
   },
 
   certificate: {
-    list: [Role.head_teacher, Role.quan_ly, Role.giao_vien],
-    issue: [Role.head_teacher, Role.quan_ly],
+    list: ['head_teacher', 'quan_ly', 'giao_vien'],
+    issue: ['head_teacher', 'quan_ly'],
   },
 
   grade: {
-    grade: [Role.giao_vien, Role.quan_ly],
-    publish: [Role.giao_vien, Role.quan_ly],
+    grade: ['giao_vien', 'quan_ly'],
+    publish: ['giao_vien', 'quan_ly'],
   },
 
   levelProgress: {
-    propose: [Role.giao_vien, Role.head_teacher, Role.quan_ly],
-    listPending: [Role.head_teacher, Role.quan_ly],
-    decide: [Role.head_teacher],
+    propose: ['giao_vien', 'head_teacher', 'quan_ly'],
+    listPending: ['head_teacher', 'quan_ly'],
+    decide: ['head_teacher'],
   },
 
   guardian: {
-    parentList: [Role.bgd, Role.quan_ly],
-    parentCreate: [Role.bgd, Role.quan_ly],
-    listForStudent: [Role.bgd, Role.quan_ly],
-    link: [Role.bgd, Role.quan_ly],
-    unlink: [Role.bgd, Role.quan_ly],
+    parentList: ['bgd', 'quan_ly'],
+    parentCreate: ['bgd', 'quan_ly'],
+    listForStudent: ['bgd', 'quan_ly'],
+    link: ['bgd', 'quan_ly'],
+    unlink: ['bgd', 'quan_ly'],
   },
 
   // parentMeeting.runReminders / runCadence are super_admin-only (superAdminProcedure).
   parentMeeting: {
-    setStatus: [Role.giao_vien, Role.head_teacher, Role.quan_ly],
-    setSchedule: [Role.giao_vien, Role.head_teacher, Role.quan_ly],
-    runReminders: [Role.super_admin],
-    runCadence: [Role.super_admin],
+    setStatus: ['giao_vien', 'head_teacher', 'quan_ly'],
+    setSchedule: ['giao_vien', 'head_teacher', 'quan_ly'],
+    runReminders: ['super_admin'],
+    runCadence: ['super_admin'],
   },
 
   payroll: {
-    roster: [Role.hr, Role.ke_toan],
-    profileUpsert: [Role.hr, Role.ke_toan],
-    profileList: [Role.hr, Role.ke_toan],
-    rateCreate: [Role.hr, Role.ke_toan],
-    rateList: [Role.hr, Role.ke_toan],
-    commissionForSale: [Role.hr, Role.ke_toan],
-    payslipCompute: [Role.hr, Role.ke_toan],
-    payslipList: [Role.hr, Role.ke_toan],
-    payslipFinalize: [Role.hr, Role.ke_toan],
-    payslipMarkPaid: [Role.hr, Role.ke_toan],
-    payslipPeriodSummary: [Role.hr, Role.ke_toan],
-    payslipBulkMarkPaid: [Role.hr, Role.ke_toan],
-    listByStaff: [Role.hr, Role.ke_toan],
-    payslipBulkPay: [Role.hr, Role.ke_toan],
-    payslipReopen: [Role.hr, Role.ke_toan],
-    kpiEvalStart: [Role.hr, Role.ke_toan],
-    kpiEvalConfirm: [Role.quan_ly, Role.bgd],
-    kpiEvalApprove: [Role.bgd],
-    kpiEvalGet: [Role.hr, Role.ke_toan],
-    kpiList: [Role.hr, Role.ke_toan],
-    kpiAutoPrefill: [Role.hr, Role.ke_toan],
-    kpiSetAuto: [Role.hr, Role.ke_toan],
-    syncCallMetrics: [Role.hr, Role.ke_toan],
+    roster: ['hr', 'ke_toan'],
+    profileUpsert: ['hr', 'ke_toan'],
+    profileList: ['hr', 'ke_toan'],
+    rateCreate: ['hr', 'ke_toan'],
+    rateList: ['hr', 'ke_toan'],
+    commissionForSale: ['hr', 'ke_toan'],
+    payslipCompute: ['hr', 'ke_toan'],
+    payslipList: ['hr', 'ke_toan'],
+    payslipFinalize: ['hr', 'ke_toan'],
+    payslipMarkPaid: ['hr', 'ke_toan'],
+    payslipPeriodSummary: ['hr', 'ke_toan'],
+    payslipBulkMarkPaid: ['hr', 'ke_toan'],
+    listByStaff: ['hr', 'ke_toan'],
+    payslipBulkPay: ['hr', 'ke_toan'],
+    payslipReopen: ['hr', 'ke_toan'],
+    kpiEvalStart: ['hr', 'ke_toan'],
+    kpiEvalConfirm: ['quan_ly', 'bgd'],
+    kpiEvalApprove: ['bgd'],
+    kpiEvalGet: ['hr', 'ke_toan'],
+    kpiList: ['hr', 'ke_toan'],
+    kpiAutoPrefill: ['hr', 'ke_toan'],
+    kpiSetAuto: ['hr', 'ke_toan'],
+    syncCallMetrics: ['hr', 'ke_toan'],
   },
 
   rewards: {
-    giftCreate: [Role.quan_ly],
-    review: [Role.quan_ly],
+    giftCreate: ['quan_ly'],
+    review: ['quan_ly'],
   },
 
   room: {
-    create: [Role.quan_ly],
-    update: [Role.quan_ly],
-    archive: [Role.quan_ly],
+    create: ['quan_ly'],
+    update: ['quan_ly'],
+    archive: ['quan_ly'],
   },
 
   // Diff 1b: head_teacher added to schedule write actions (addSlot + generateSessions)
   // so they can build class timetables without needing quan_ly access. listSlots / listSessions /
   // mySessions remain protectedProcedure (any staff) — no change there.
   schedule: {
-    addSlot: [Role.quan_ly, Role.head_teacher],
-    generateSessions: [Role.quan_ly, Role.head_teacher],
+    addSlot: ['quan_ly', 'head_teacher'],
+    generateSessions: ['quan_ly', 'head_teacher'],
   },
 
   student: {
     // student.create is gated to superAdminProcedure (break-glass only); not in registry.
     // Normal students are created atomically at receipt.approve.
-    update: [Role.quan_ly, Role.sale],
+    update: ['quan_ly', 'sale'],
   },
 
   submission: {
-    listByExercise: [Role.giao_vien, Role.quan_ly],
-    layerForGrading: [Role.giao_vien, Role.quan_ly],
+    listByExercise: ['giao_vien', 'quan_ly'],
+    layerForGrading: ['giao_vien', 'quan_ly'],
   },
 
   // user.list / create / setRoles / setFacilities / setActive are super_admin-only (superAdminProcedure).
   user: {
-    list: [Role.super_admin],
-    listTeachers: [Role.quan_ly],
-    create: [Role.super_admin],
-    setRoles: [Role.super_admin],
-    setFacilities: [Role.super_admin],
-    setActive: [Role.super_admin],
+    list: ['super_admin'],
+    listTeachers: ['quan_ly'],
+    create: ['super_admin'],
+    setRoles: ['super_admin'],
+    setFacilities: ['super_admin'],
+    setActive: ['super_admin'],
   },
 };
 
@@ -219,9 +221,12 @@ export const PERMISSIONS: Record<string, Record<string, Role[]>> = {
  * Check whether a staff member with the given roles may perform module.action.
  * super_admin bypasses all role checks — call with isSuperAdmin=true when the session has that flag.
  * Returns false for unknown module/action combinations (fail-closed).
+ *
+ * Accepts string[] so this function can be called from both the backend (Role[] is assignable
+ * to string[] since Role is a string union) and the browser (no Prisma type needed).
  */
 export function can(
-  roles: Role[],
+  roles: string[],
   isSuperAdmin: boolean,
   module: string,
   action: string,

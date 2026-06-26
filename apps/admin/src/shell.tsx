@@ -1,38 +1,68 @@
 import { useState } from 'react';
-import { AppShell, ActionIcon, Avatar, Badge, Box, Button, Group, NavLink, Popover, ScrollArea, Stack, Text, UnstyledButton } from '@mantine/core';
+import {
+  AppShell, ActionIcon, Avatar, Badge, Box, Button, Group, NavLink,
+  Popover, ScrollArea, Stack, Text, UnstyledButton,
+} from '@mantine/core';
 import { useSession, useStaffNotif } from '@cmc/ui';
 import type { StaffNotifItem } from '@cmc/ui';
+import { can } from '@cmc/auth/permissions';
+import { NAV_GATES } from './nav-permissions.js';
 import {
+  IconArrowUp,
+  IconBell,
   IconBook,
   IconBuilding,
-  IconBell,
+  IconCalendar,
+  IconCertificate,
+  IconClipboardCheck,
   IconCurrencyDong,
+  IconDoor,
+  IconGift,
   IconHeadset,
   IconId,
   IconLayoutDashboard,
+  IconPencil,
   IconReceipt,
+  IconReport,
+  IconSchool,
   IconTargetArrow,
   IconTrendingUp,
   IconUsers,
-  IconSchool,
-  IconGift,
+  IconWallet,
 } from '@tabler/icons-react';
 
-// ─── Nav config ────────────────────────────────────────────────────────────────
+// ─── Section keys ─────────────────────────────────────────────────────────────
 
-type SectionKey =
+export type SectionKey =
+  // Admin/Settings
   | 'overview'
   | 'courses'
-  | 'students'
   | 'org'
+  // Students
+  | 'students'
   | 'guardians'
-  | 'hr'
-  | 'kpi'
-  | 'compensation'
+  // Academic / Teaching
+  | 'schedule'
+  | 'attendance'
+  | 'grading'
+  | 'assessment'
+  // Class management
+  | 'classes'
+  | 'meetings'
+  | 'levelup'
+  | 'certificate'
+  // Finance / CRM
   | 'finance'
   | 'crm'
   | 'cskh'
-  | 'rewards';
+  | 'rewards'
+  // HR / Payroll
+  | 'hr'
+  | 'kpi'
+  | 'compensation'
+  | 'my-payslips';
+
+// ─── Nav types ────────────────────────────────────────────────────────────────
 
 type NavItem = {
   key: SectionKey;
@@ -46,7 +76,7 @@ type NavGroup = {
   items: NavItem[];
 };
 
-// ─── Sidebar item ──────────────────────────────────────────────────────────────
+// ─── Sidebar item ─────────────────────────────────────────────────────────────
 
 function SidebarItem({
   item,
@@ -78,9 +108,7 @@ function SidebarItem({
             backgroundColor: active ? 'var(--cmc-brand-muted)' : 'var(--cmc-surface-2)',
           },
         },
-        label: {
-          fontSize: 14,
-        },
+        label: { fontSize: 14 },
       }}
     />
   );
@@ -159,8 +187,6 @@ function StaffNotifDropdown({
 
 // ─── Shell ─────────────────────────────────────────────────────────────────────
 
-export type { SectionKey };
-
 export function Shell({
   activeSection,
   onSectionChange,
@@ -178,6 +204,7 @@ export function Shell({
   const [mobileOpened, setMobileOpened] = useState(false);
   const facilityId = me.facilityIds[0] ?? null;
   const { unreadCount, notifications, fetchList, markAllRead, isMarkingAll } = useStaffNotif(facilityId);
+
   return (
     <AppShell
       header={{ height: 56 }}
@@ -209,16 +236,10 @@ export function Shell({
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </ActionIcon>
-            <Text
-              fw={700}
-              style={{ color: 'var(--cmc-brand)', fontSize: 18, letterSpacing: '-0.02em' }}
-            >
+            <Text fw={700} style={{ color: 'var(--cmc-brand)', fontSize: 18, letterSpacing: '-0.02em' }}>
               CMC
             </Text>
-            <Text
-              size="sm"
-              style={{ color: 'var(--cmc-text-muted)' }}
-            >
+            <Text size="sm" style={{ color: 'var(--cmc-text-muted)' }}>
               {sectionTitle}
             </Text>
           </Group>
@@ -306,19 +327,8 @@ export function Shell({
       </AppShell.Navbar>
 
       {/* ── Content ── */}
-      <AppShell.Main
-        style={{
-          backgroundColor: 'var(--cmc-bg)',
-          minHeight: '100vh',
-        }}
-      >
-        <div
-          style={{
-            maxWidth: 1280,
-            margin: '0 auto',
-            padding: 32,
-          }}
-        >
+      <AppShell.Main style={{ backgroundColor: 'var(--cmc-bg)', minHeight: '100vh' }}>
+        <div style={{ maxWidth: 1280, margin: '0 auto', padding: 32 }}>
           {children}
         </div>
       </AppShell.Main>
@@ -326,125 +336,89 @@ export function Shell({
   );
 }
 
-// ─── Nav items builder (used in App.tsx) ──────────────────────────────────────
+// ─── Nav builder ───────────────────────────────────────────────────────────────
+
+const I = (size = 18, stroke = 1.5) => ({ size, stroke });
 
 export function buildNavGroups({
-  canHr,
-  canKpi,
-  canFinance,
-  canCrm,
-  canCskh,
-  canOrg,
-  canGuardians,
-  canStudents,
-  canRewards,
+  roles,
   isSuperAdmin,
 }: {
-  canHr: boolean;
-  canKpi: boolean;
-  canFinance: boolean;
-  canCrm: boolean;
-  canCskh: boolean;
-  canOrg: boolean;
-  canGuardians: boolean;
-  canStudents: boolean;
-  canRewards: boolean;
+  roles: string[];
   isSuperAdmin: boolean;
 }): NavGroup[] {
-  return [
+  /**
+   * Derive visibility from the shared permission registry via NAV_GATES.
+   * No hardcoded role arrays here — adding/removing roles in packages/auth/permissions.ts
+   * propagates automatically. The nav-consistency test enforces that every visible item
+   * is backed by a passing can() check.
+   */
+  function visible(key: SectionKey): boolean {
+    const gate = NAV_GATES[key];
+    if (gate.kind === 'open') return true;
+    if (gate.kind === 'superAdmin') return isSuperAdmin;
+    return can(roles, isSuperAdmin, gate.module, gate.action);
+  }
+
+  const groups: NavGroup[] = [
     {
-      groupLabel: 'Quản trị',
+      groupLabel: 'Giảng dạy',
       items: [
-        {
-          key: 'overview',
-          label: 'Tổng quan',
-          icon: <IconLayoutDashboard size={18} stroke={1.5} />,
-          visible: true,
-        },
-        {
-          key: 'courses',
-          label: 'Khóa học',
-          icon: <IconBook size={18} stroke={1.5} />,
-          visible: true,
-        },
-        {
-          key: 'students',
-          label: 'Học sinh',
-          icon: <IconSchool size={18} stroke={1.5} />,
-          visible: canStudents,
-        },
+        { key: 'schedule' as const, label: 'Lịch dạy', icon: <IconCalendar {...I()} />, visible: visible('schedule') },
+        { key: 'attendance' as const, label: 'Điểm danh', icon: <IconClipboardCheck {...I()} />, visible: visible('attendance') },
+        { key: 'grading' as const, label: 'Chấm bài', icon: <IconPencil {...I()} />, visible: visible('grading') },
+        { key: 'assessment' as const, label: 'Học bạ', icon: <IconReport {...I()} />, visible: visible('assessment') },
       ],
     },
     {
-      groupLabel: 'Vận hành',
+      groupLabel: 'Lớp học',
       items: [
-        {
-          key: 'org',
-          label: 'Cơ sở & Users',
-          icon: <IconBuilding size={18} stroke={1.5} />,
-          visible: canOrg,
-        },
-        {
-          key: 'guardians',
-          label: 'Phụ huynh',
-          icon: <IconUsers size={18} stroke={1.5} />,
-          visible: canGuardians,
-        },
+        { key: 'classes' as const, label: 'Lớp học', icon: <IconDoor {...I()} />, visible: visible('classes') },
+        { key: 'meetings' as const, label: 'Họp PH', icon: <IconUsers {...I()} />, visible: visible('meetings') },
+        { key: 'levelup' as const, label: 'Duyệt cấp độ', icon: <IconArrowUp {...I()} />, visible: visible('levelup') },
+        { key: 'certificate' as const, label: 'Chứng chỉ', icon: <IconCertificate {...I()} />, visible: visible('certificate') },
       ],
     },
     {
-      groupLabel: 'Kinh doanh',
+      groupLabel: 'Học sinh',
       items: [
-        {
-          key: 'finance',
-          label: 'Tài chính',
-          icon: <IconReceipt size={18} stroke={1.5} />,
-          visible: canFinance,
-        },
-        {
-          key: 'crm',
-          label: 'CRM',
-          icon: <IconTrendingUp size={18} stroke={1.5} />,
-          visible: canCrm,
-        },
-        {
-          key: 'cskh',
-          label: 'Chăm sóc KH',
-          icon: <IconHeadset size={18} stroke={1.5} />,
-          visible: canCskh,
-        },
-        {
-          key: 'rewards',
-          label: 'Đổi quà',
-          icon: <IconGift size={18} stroke={1.5} />,
-          visible: canRewards,
-        },
+        { key: 'students' as const, label: 'Học sinh', icon: <IconSchool {...I()} />, visible: visible('students') },
+        { key: 'guardians' as const, label: 'Phụ huynh', icon: <IconUsers {...I()} />, visible: visible('guardians') },
+      ],
+    },
+    {
+      groupLabel: 'CRM & Kinh doanh',
+      items: [
+        { key: 'crm' as const, label: 'CRM', icon: <IconTrendingUp {...I()} />, visible: visible('crm') },
+        { key: 'cskh' as const, label: 'Chăm sóc KH', icon: <IconHeadset {...I()} />, visible: visible('cskh') },
+        { key: 'rewards' as const, label: 'Đổi quà', icon: <IconGift {...I()} />, visible: visible('rewards') },
+      ],
+    },
+    {
+      groupLabel: 'Tài chính',
+      items: [
+        { key: 'finance' as const, label: 'Tài chính', icon: <IconReceipt {...I()} />, visible: visible('finance') },
       ],
     },
     {
       groupLabel: 'Nhân sự',
       items: [
-        {
-          key: 'hr',
-          label: 'Nhân sự & Lương',
-          icon: <IconId size={18} stroke={1.5} />,
-          visible: canHr,
-        },
-        {
-          key: 'kpi',
-          label: 'Đánh giá KPI',
-          icon: <IconTargetArrow size={18} stroke={1.5} />,
-          visible: canKpi,
-        },
-        {
-          key: 'compensation',
-          label: 'Cơ cấu lương',
-          icon: <IconCurrencyDong size={18} stroke={1.5} />,
-          visible: isSuperAdmin,
-        },
+        { key: 'hr' as const, label: 'Nhân sự & Lương', icon: <IconId {...I()} />, visible: visible('hr') },
+        { key: 'kpi' as const, label: 'Đánh giá KPI', icon: <IconTargetArrow {...I()} />, visible: visible('kpi') },
+        { key: 'compensation' as const, label: 'Cơ cấu lương', icon: <IconCurrencyDong {...I()} />, visible: visible('compensation') },
+        { key: 'my-payslips' as const, label: 'Phiếu lương của tôi', icon: <IconWallet {...I()} />, visible: visible('my-payslips') },
+      ],
+    },
+    {
+      groupLabel: 'Quản trị',
+      items: [
+        { key: 'overview' as const, label: 'Tổng quan', icon: <IconLayoutDashboard {...I()} />, visible: visible('overview') },
+        { key: 'courses' as const, label: 'Khóa học', icon: <IconBook {...I()} />, visible: visible('courses') },
+        { key: 'org' as const, label: 'Cơ sở & Users', icon: <IconBuilding {...I()} />, visible: visible('org') },
       ],
     },
   ];
+  return groups;
 }
 
 // ─── Section title map ─────────────────────────────────────────────────────────
@@ -462,4 +436,14 @@ export const SECTION_TITLES: Record<SectionKey, string> = {
   kpi: 'Đánh giá KPI',
   compensation: 'Cơ cấu lương',
   rewards: 'Đổi quà',
+  // Teaching / Academic
+  schedule: 'Lịch dạy',
+  attendance: 'Điểm danh',
+  grading: 'Chấm bài',
+  assessment: 'Học bạ',
+  classes: 'Lớp học',
+  meetings: 'Họp phụ huynh',
+  levelup: 'Duyệt cấp độ',
+  certificate: 'Chứng chỉ',
+  'my-payslips': 'Phiếu lương của tôi',
 };

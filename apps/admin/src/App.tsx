@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import '@mantine/dates/styles.css';
+import { useCallback, useEffect, useState } from 'react';
 import {
   LoginGate,
   trpc,
@@ -27,11 +28,9 @@ import {
   TextInput,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import {
-  IconCircleX,
-  IconCircleCheck,
-  IconPlus,
-} from '@tabler/icons-react';
+import { IconCircleX, IconCircleCheck, IconPlus } from '@tabler/icons-react';
+
+// Panels — admin-native
 import { GuardiansPanel } from './guardians-panel';
 import { OverviewPanel } from './overview-panel';
 import { CompensationConfigPanel } from './compensation-panel';
@@ -43,24 +42,28 @@ import { CskhPanel } from './cskh-panel';
 import { StudentsPanel } from './students-panel';
 import { RewardsPanel } from './rewards-panel';
 import { TermsPanel } from './terms-panel';
+// Panels — ported from teaching
+import { GradingPanel } from './grading';
+import { AssessmentPanel } from './assessment-panel';
+import { AttendancePanel } from './attendance-panel';
+import { SchedulePanel } from './schedule-panel';
+import { MeetingsPanel } from './meetings-panel';
+import { LevelApprovalPanel } from './level-approval-panel';
+import { CertificatePanel } from './certificate-panel';
+import { MyPayslipsPanel } from './my-payslips-panel';
+import { Workspace, type NavAction } from './class-workspace';
+
 import { Shell, buildNavGroups, SECTION_TITLES, type SectionKey } from './shell';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type User = Awaited<ReturnType<typeof trpc.user.list.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
 type Program = 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE';
+type Session = ReturnType<typeof useSession>['me'];
 
 const ROLES = [
-  'super_admin',
-  'quan_ly',
-  'head_teacher',
-  'giao_vien',
-  'ke_toan',
-  'hr',
-  'sale',
-  'cskh',
-  'ctv_mkt',
-  'bgd',
+  'super_admin', 'quan_ly', 'head_teacher', 'giao_vien',
+  'ke_toan', 'hr', 'sale', 'cskh', 'ctv_mkt', 'bgd',
 ] as const;
 
 // ─── Table header style ────────────────────────────────────────────────────────
@@ -72,6 +75,18 @@ const TH_STYLE: React.CSSProperties = {
   color: 'var(--cmc-text-muted)',
   fontWeight: 600,
 };
+
+// ─── Persona → default landing ─────────────────────────────────────────────────
+
+function defaultSection(me: Session): SectionKey {
+  if (me.isSuperAdmin || me.roles.includes('quan_ly')) return 'overview';
+  if (me.roles.includes('giao_vien') || me.roles.includes('head_teacher')) return 'schedule';
+  if (me.roles.includes('sale') || me.roles.includes('ctv_mkt')) return 'crm';
+  if (me.roles.includes('ke_toan')) return 'finance';
+  if (me.roles.includes('hr')) return 'hr';
+  if (me.roles.includes('cskh')) return 'cskh';
+  return 'overview';
+}
 
 // ─── Courses ──────────────────────────────────────────────────────────────────
 
@@ -94,9 +109,7 @@ function Courses() {
       .then(setCourses)
       .catch((e) => notifyError(e, 'Không tải được danh sách khóa học'));
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   async function create(values: typeof form.values) {
     setBusy(true);
@@ -116,15 +129,8 @@ function Courses() {
   return (
     <Stack>
       <Group justify="space-between" mb="xs">
-        <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }}>
-          Khóa học
-        </Text>
-        <Button
-          variant="filled"
-          radius={9999}
-          leftSection={<IconPlus size={16} />}
-          onClick={open}
-        >
+        <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }}>Khóa học</Text>
+        <Button variant="filled" radius={9999} leftSection={<IconPlus size={16} />} onClick={open}>
           Tạo khóa
         </Button>
       </Group>
@@ -149,9 +155,7 @@ function Courses() {
           </Table.Tbody>
         </Table>
         {courses.length === 0 && (
-          <Text c="dimmed" size="sm" mt="sm">
-            Chưa có khóa học.
-          </Text>
+          <Text c="dimmed" size="sm" mt="sm">Chưa có khóa học.</Text>
         )}
       </Card>
 
@@ -161,16 +165,13 @@ function Courses() {
             <TextInput label="Mã" withAsterisk {...form.getInputProps('code')} />
             <TextInput label="Tên" withAsterisk {...form.getInputProps('name')} />
             <Select
-              label="Chương trình"
-              withAsterisk
+              label="Chương trình" withAsterisk
               data={['UCREA', 'BRIGHT_IG', 'BLACK_HOLE']}
               {...form.getInputProps('program')}
             />
             <Group justify="flex-end" mt="xs">
               <Button variant="subtle" onClick={close}>Hủy</Button>
-              <Button type="submit" variant="filled" radius={9999} loading={busy}>
-                Tạo
-              </Button>
+              <Button type="submit" variant="filled" radius={9999} loading={busy}>Tạo</Button>
             </Group>
           </Stack>
         </form>
@@ -181,13 +182,7 @@ function Courses() {
 
 // ─── Facilities ───────────────────────────────────────────────────────────────
 
-function Facilities({
-  facilities,
-  reload,
-}: {
-  facilities: Facility[];
-  reload: () => void;
-}) {
+function Facilities({ facilities, reload }: { facilities: Facility[]; reload: () => void }) {
   const [opened, { open, close }] = useDisclosure(false);
   const [busy, setBusy] = useState(false);
   const form = useForm({
@@ -220,16 +215,8 @@ function Facilities({
   return (
     <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
       <Group justify="space-between" mb="md">
-        <Text fw={600} style={{ color: 'var(--cmc-text)' }}>
-          Cơ sở ({facilities.length})
-        </Text>
-        <Button
-          variant="filled"
-          radius={9999}
-          size="xs"
-          leftSection={<IconPlus size={14} />}
-          onClick={open}
-        >
+        <Text fw={600} style={{ color: 'var(--cmc-text)' }}>Cơ sở ({facilities.length})</Text>
+        <Button variant="filled" radius={9999} size="xs" leftSection={<IconPlus size={14} />} onClick={open}>
           Tạo cơ sở
         </Button>
       </Group>
@@ -245,29 +232,19 @@ function Facilities({
         <Table.Tbody>
           {facilities.map((f) => (
             <Table.Tr key={f.id}>
-              <Table.Td style={{ color: 'var(--cmc-text-muted)', fontSize: 13 }}>
-                #{f.id}
-              </Table.Td>
-              <Table.Td>
-                <Text fw={500} size="sm">
-                  {f.code}
-                </Text>
-              </Table.Td>
+              <Table.Td style={{ color: 'var(--cmc-text-muted)', fontSize: 13 }}>#{f.id}</Table.Td>
+              <Table.Td><Text fw={500} size="sm">{f.code}</Text></Table.Td>
               <Table.Td>{f.name}</Table.Td>
               <Table.Td>
                 {f.isActive ? (
                   <Group gap={4}>
                     <IconCircleCheck size={12} color="var(--cmc-status-active)" />
-                    <Badge color="green" variant="light" radius="xl" size="sm">
-                      Hoạt động
-                    </Badge>
+                    <Badge color="green" variant="light" radius="xl" size="sm">Hoạt động</Badge>
                   </Group>
                 ) : (
                   <Group gap={4}>
                     <IconCircleX size={12} color="var(--cmc-status-inactive)" />
-                    <Badge color="gray" variant="light" radius="xl" size="sm">
-                      Ngừng
-                    </Badge>
+                    <Badge color="gray" variant="light" radius="xl" size="sm">Ngừng</Badge>
                   </Group>
                 )}
               </Table.Td>
@@ -279,19 +256,12 @@ function Facilities({
       <Modal opened={opened} onClose={close} title="Tạo cơ sở" radius="xl" centered>
         <form onSubmit={form.onSubmit(create)}>
           <Stack>
-            <TextInput
-              label="Mã"
-              placeholder="VD: CS3"
-              withAsterisk
-              {...form.getInputProps('code')}
-            />
+            <TextInput label="Mã" placeholder="VD: CS3" withAsterisk {...form.getInputProps('code')} />
             <TextInput label="Tên" withAsterisk {...form.getInputProps('name')} />
             <TextInput label="Địa chỉ" {...form.getInputProps('address')} />
             <Group justify="flex-end" mt="xs">
               <Button variant="subtle" onClick={close}>Hủy</Button>
-              <Button type="submit" variant="filled" radius={9999} loading={busy}>
-                Tạo
-              </Button>
+              <Button type="submit" variant="filled" radius={9999} loading={busy}>Tạo</Button>
             </Group>
           </Stack>
         </form>
@@ -326,10 +296,7 @@ function UserCreateModal({
     },
   });
 
-  const facilityData = facilities.map((f) => ({
-    value: String(f.id),
-    label: `${f.code} — ${f.name}`,
-  }));
+  const facilityData = facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }));
 
   async function create(values: typeof form.values) {
     if (roles.length === 0) {
@@ -367,39 +334,22 @@ function UserCreateModal({
           <TextInput label="Email" withAsterisk {...form.getInputProps('email')} />
           <TextInput label="Tên hiển thị" withAsterisk {...form.getInputProps('displayName')} />
           <PasswordInput
-            label="Mật khẩu"
-            description="Tối thiểu 8 ký tự"
-            withAsterisk
+            label="Mật khẩu" description="Tối thiểu 8 ký tự" withAsterisk
             {...form.getInputProps('password')}
           />
           <MultiSelect
-            label="Vai trò"
-            data={ROLES as unknown as string[]}
+            label="Vai trò" data={ROLES as unknown as string[]}
             value={roles}
-            onChange={(v) => {
-              setRoles(v);
-              if (primaryRole && !v.includes(primaryRole)) setPrimaryRole(null);
-            }}
+            onChange={(v) => { setRoles(v); if (primaryRole && !v.includes(primaryRole)) setPrimaryRole(null); }}
           />
           <Select
-            label="Vai trò chính"
-            data={roles}
-            value={primaryRole}
-            onChange={setPrimaryRole}
-            disabled={roles.length === 0}
-            placeholder={roles.length ? 'Chọn' : 'Chọn vai trò trước'}
+            label="Vai trò chính" data={roles} value={primaryRole} onChange={setPrimaryRole}
+            disabled={roles.length === 0} placeholder={roles.length ? 'Chọn' : 'Chọn vai trò trước'}
           />
-          <MultiSelect
-            label="Cơ sở được truy cập"
-            data={facilityData}
-            value={facilityIds}
-            onChange={setFacilityIds}
-          />
+          <MultiSelect label="Cơ sở được truy cập" data={facilityData} value={facilityIds} onChange={setFacilityIds} />
           <Group justify="flex-end" mt="xs">
             <Button variant="subtle" onClick={close}>Hủy</Button>
-            <Button type="submit" variant="filled" radius={9999} loading={busy}>
-              Tạo
-            </Button>
+            <Button type="submit" variant="filled" radius={9999} loading={busy}>Tạo</Button>
           </Group>
         </Stack>
       </form>
@@ -430,10 +380,7 @@ function UserEditModal({
     setFacilityIds(user.facilities.map((f) => String(f.facilityId)));
   }, [user]);
 
-  const facilityData = facilities.map((f) => ({
-    value: String(f.id),
-    label: `${f.code} — ${f.name}`,
-  }));
+  const facilityData = facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }));
 
   async function run(fn: () => Promise<unknown>, successMsg: string) {
     setBusy(true);
@@ -451,89 +398,45 @@ function UserEditModal({
   if (!user) return null;
 
   return (
-    <Modal
-      opened={!!user}
-      onClose={close}
-      title={`Sửa: ${user.displayName}`}
-      size="lg"
-      radius="xl"
-      centered
-    >
+    <Modal opened={!!user} onClose={close} title={`Sửa: ${user.displayName}`} size="lg" radius="xl" centered>
       <Stack>
-        <Text size="sm" c="dimmed">
-          {user.email}
-        </Text>
-
+        <Text size="sm" c="dimmed">{user.email}</Text>
         <MultiSelect
-          label="Vai trò"
-          data={ROLES as unknown as string[]}
+          label="Vai trò" data={ROLES as unknown as string[]}
           value={roles}
-          onChange={(v) => {
-            setRoles(v);
-            if (primaryRole && !v.includes(primaryRole)) setPrimaryRole(null);
-          }}
+          onChange={(v) => { setRoles(v); if (primaryRole && !v.includes(primaryRole)) setPrimaryRole(null); }}
         />
-        <Select
-          label="Vai trò chính"
-          data={roles}
-          value={primaryRole}
-          onChange={setPrimaryRole}
-          disabled={roles.length === 0}
-        />
+        <Select label="Vai trò chính" data={roles} value={primaryRole} onChange={setPrimaryRole} disabled={roles.length === 0} />
         <Button
-          variant="light"
-          size="xs"
-          loading={busy}
+          variant="light" size="xs" loading={busy}
           disabled={roles.length === 0 || !primaryRole}
           onClick={() =>
             run(
-              () =>
-                trpc.user.setRoles.mutate({
-                  id: user.id,
-                  roles: roles as User['roles'],
-                  primaryRole: primaryRole as User['primaryRole'],
-                }),
+              () => trpc.user.setRoles.mutate({ id: user.id, roles: roles as User['roles'], primaryRole: primaryRole as User['primaryRole'] }),
               'Đã lưu vai trò',
             )
           }
         >
           Lưu vai trò
         </Button>
-
-        <MultiSelect
-          label="Cơ sở được truy cập"
-          data={facilityData}
-          value={facilityIds}
-          onChange={setFacilityIds}
-        />
+        <MultiSelect label="Cơ sở được truy cập" data={facilityData} value={facilityIds} onChange={setFacilityIds} />
         <Button
-          variant="light"
-          size="xs"
-          loading={busy}
+          variant="light" size="xs" loading={busy}
           onClick={() =>
             run(
-              () =>
-                trpc.user.setFacilities.mutate({
-                  id: user.id,
-                  facilityIds: facilityIds.map(Number),
-                }),
+              () => trpc.user.setFacilities.mutate({ id: user.id, facilityIds: facilityIds.map(Number) }),
               'Đã lưu cơ sở',
             )
           }
         >
           Lưu cơ sở
         </Button>
-
         <Switch
           label="Đang hoạt động"
           checked={user.isActive}
           onChange={(e) =>
             run(
-              () =>
-                trpc.user.setActive.mutate({
-                  id: user.id,
-                  isActive: e.currentTarget.checked,
-                }),
+              () => trpc.user.setActive.mutate({ id: user.id, isActive: e.currentTarget.checked }),
               'Đã cập nhật trạng thái',
             )
           }
@@ -548,31 +451,15 @@ function UserEditModal({
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
-function Users({
-  users,
-  facilities,
-  reload,
-}: {
-  users: User[];
-  facilities: Facility[];
-  reload: () => void;
-}) {
+function Users({ users, facilities, reload }: { users: User[]; facilities: Facility[]; reload: () => void }) {
   const [createOpen, { open, close }] = useDisclosure(false);
   const [editing, setEditing] = useState<User | null>(null);
 
   return (
     <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
       <Group justify="space-between" mb="md">
-        <Text fw={600} style={{ color: 'var(--cmc-text)' }}>
-          Người dùng ({users.length})
-        </Text>
-        <Button
-          variant="filled"
-          radius={9999}
-          size="xs"
-          leftSection={<IconPlus size={14} />}
-          onClick={open}
-        >
+        <Text fw={600} style={{ color: 'var(--cmc-text)' }}>Người dùng ({users.length})</Text>
+        <Button variant="filled" radius={9999} size="xs" leftSection={<IconPlus size={14} />} onClick={open}>
           Tạo người dùng
         </Button>
       </Group>
@@ -592,40 +479,21 @@ function Users({
               <Table.Td>
                 <Group gap="xs">
                   <Text size="sm">{u.displayName}</Text>
-                  {!u.isActive && (
-                    <Badge color="gray" variant="light" radius="xl" size="xs">
-                      Ngừng
-                    </Badge>
-                  )}
+                  {!u.isActive && <Badge color="gray" variant="light" radius="xl" size="xs">Ngừng</Badge>}
                 </Group>
               </Table.Td>
+              <Table.Td><Text size="sm" style={{ color: 'var(--cmc-text-muted)' }}>{u.email}</Text></Table.Td>
+              <Table.Td><Text size="sm">{u.roles.join(', ')}</Text></Table.Td>
+              <Table.Td><Text size="sm">{u.facilities.length}</Text></Table.Td>
               <Table.Td>
-                <Text size="sm" style={{ color: 'var(--cmc-text-muted)' }}>
-                  {u.email}
-                </Text>
-              </Table.Td>
-              <Table.Td>
-                <Text size="sm">{u.roles.join(', ')}</Text>
-              </Table.Td>
-              <Table.Td>
-                <Text size="sm">{u.facilities.length}</Text>
-              </Table.Td>
-              <Table.Td>
-                <Button variant="subtle" size="compact-xs" onClick={() => setEditing(u)}>
-                  Sửa
-                </Button>
+                <Button variant="subtle" size="compact-xs" onClick={() => setEditing(u)}>Sửa</Button>
               </Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>
       </Table>
       <UserCreateModal opened={createOpen} close={close} facilities={facilities} reload={reload} />
-      <UserEditModal
-        user={editing}
-        close={() => setEditing(null)}
-        facilities={facilities}
-        reload={reload}
-      />
+      <UserEditModal user={editing} close={() => setEditing(null)} facilities={facilities} reload={reload} />
     </Card>
   );
 }
@@ -637,26 +505,15 @@ function OrgPanel() {
   const [users, setUsers] = useState<User[]>([]);
 
   const loadFacilities = () =>
-    trpc.facility.list
-      .query()
-      .then(setFacilities)
-      .catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
+    trpc.facility.list.query().then(setFacilities).catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
   const loadUsers = () =>
-    trpc.user.list
-      .query()
-      .then(setUsers)
-      .catch((e) => notifyError(e, 'Không tải được danh sách người dùng'));
+    trpc.user.list.query().then(setUsers).catch((e) => notifyError(e, 'Không tải được danh sách người dùng'));
 
-  useEffect(() => {
-    loadFacilities();
-    loadUsers();
-  }, []);
+  useEffect(() => { loadFacilities(); loadUsers(); }, []);
 
   return (
     <Stack>
-      <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
-        Cơ sở &amp; Người dùng
-      </Text>
+      <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Cơ sở &amp; Người dùng</Text>
       <Facilities facilities={facilities} reload={loadFacilities} />
       <Users users={users} facilities={facilities} reload={loadUsers} />
     </Stack>
@@ -670,10 +527,7 @@ function HrPayrollSection() {
   const [facilityId, setFacilityId] = useState<string | null>(
     me.facilityIds.length > 0 ? String(me.facilityIds[0]) : null,
   );
-  const facilityOptions = me.facilityIds.map((id) => ({
-    value: String(id),
-    label: `Cơ sở #${id}`,
-  }));
+  const facilityOptions = me.facilityIds.map((id) => ({ value: String(id), label: `Cơ sở #${id}` }));
 
   if (me.facilityIds.length === 0) {
     return <Text c="dimmed">Tài khoản chưa được gán cơ sở.</Text>;
@@ -681,190 +535,222 @@ function HrPayrollSection() {
 
   return (
     <Stack>
-      <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
-        Nhân sự &amp; Lương
-      </Text>
+      <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Nhân sự &amp; Lương</Text>
       {me.facilityIds.length > 1 && (
-        <Select
-          label="Cơ sở"
-          data={facilityOptions}
-          value={facilityId}
-          onChange={setFacilityId}
-          w={200}
-        />
+        <Select label="Cơ sở" data={facilityOptions} value={facilityId} onChange={setFacilityId} w={200} />
       )}
       {facilityId && <PayrollPanel facilityId={Number(facilityId)} />}
     </Stack>
   );
 }
 
-// ─── Dashboard (AppShell wrapper) ─────────────────────────────────────────────
+// ─── All valid section keys ────────────────────────────────────────────────────
 
-const ALL_ADMIN_KEYS = new Set<string>([
-  'overview', 'courses', 'students', 'org', 'guardians', 'hr', 'kpi', 'compensation', 'finance', 'crm', 'cskh', 'rewards',
+const ALL_SECTION_KEYS = new Set<string>([
+  'overview', 'courses', 'students', 'org', 'guardians',
+  'hr', 'kpi', 'compensation', 'finance', 'crm', 'cskh', 'rewards',
+  'schedule', 'attendance', 'grading', 'assessment',
+  'classes', 'meetings', 'levelup', 'certificate', 'my-payslips',
 ]);
 
-function hashToAdminSection(): SectionKey | undefined {
+function hashToSection(): SectionKey | undefined {
   const raw = window.location.hash.slice(1);
-  return ALL_ADMIN_KEYS.has(raw) ? (raw as SectionKey) : undefined;
+  return ALL_SECTION_KEYS.has(raw) ? (raw as SectionKey) : undefined;
 }
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
 
 function Dashboard() {
   const { me } = useSession();
-  const canHr = me.isSuperAdmin || me.roles.includes('hr') || me.roles.includes('ke_toan');
-  const canKpi =
-    me.isSuperAdmin ||
-    me.roles.some((r) => ['hr', 'ke_toan', 'quan_ly', 'bgd', 'head_teacher'].includes(r));
-  const canFinance =
-    me.isSuperAdmin || me.roles.some((r) => ['ke_toan', 'quan_ly'].includes(r));
-  const canCrm =
-    me.isSuperAdmin || me.roles.some((r) => ['sale', 'quan_ly', 'cskh'].includes(r));
-  const canCskh =
-    me.isSuperAdmin || me.roles.some((r) => ['cskh', 'quan_ly'].includes(r));
-  // org = cơ sở & user CRUD (roles/facilities) → chỉ quản trị; guardians = liên kết PH-HS.
-  const canOrg =
-    me.isSuperAdmin || me.roles.some((r) => ['quan_ly', 'bgd', 'hr'].includes(r));
-  const canGuardians =
-    me.isSuperAdmin || me.roles.some((r) => ['quan_ly', 'bgd', 'cskh'].includes(r));
-  // students = hồ sơ HS (create/update gated quan_ly/sale); rewards = duyệt đổi quà.
-  const canStudents =
-    me.isSuperAdmin || me.roles.some((r) => ['quan_ly', 'sale', 'bgd'].includes(r));
-  const canRewards =
-    me.isSuperAdmin || me.roles.some((r) => ['quan_ly', 'head_teacher', 'bgd'].includes(r));
+  const [navAction, setNavAction] = useState<NavAction | null>(null);
 
+  // Compute initial section: hash → persona default
   const [activeSection, setActiveSection] = useState<SectionKey>(
-    hashToAdminSection() ?? 'overview',
+    () => hashToSection() ?? defaultSection(me),
   );
 
   useEffect(() => {
     const onHashChange = () => {
-      const next = hashToAdminSection();
+      const next = hashToSection();
       if (next) setActiveSection(next);
     };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
-  const navGroups = buildNavGroups({
-    canHr,
-    canKpi,
-    canFinance,
-    canCrm,
-    canCskh,
-    canOrg,
-    canGuardians,
-    canStudents,
-    canRewards,
-    isSuperAdmin: me.isSuperAdmin,
-  });
+  // goToClass: navigate to the class workspace with a pre-selected batch + tab
+  const goToClass = useCallback((batchId: string | undefined, tab: string) => {
+    setActiveSection('classes');
+    setNavAction({ batchId, tab, ts: Date.now() });
+    window.location.hash = 'classes';
+  }, []);
 
-  // Guard: if user navigates to a section they lost access to, fall back to overview
-  const handleSectionChange = (key: SectionKey) => {
-    if (key === 'hr' && !canHr) return;
-    if (key === 'kpi' && !canKpi) return;
-    if (key === 'compensation' && !me.isSuperAdmin) return;
-    if (key === 'finance' && !canFinance) return;
-    if (key === 'crm' && !canCrm) return;
-    if (key === 'cskh' && !canCskh) return;
-    if (key === 'org' && !canOrg) return;
-    if (key === 'guardians' && !canGuardians) return;
-    if (key === 'students' && !canStudents) return;
-    if (key === 'rewards' && !canRewards) return;
+  function handleSectionChange(key: SectionKey) {
+    setNavAction(null);
     window.location.hash = key;
     setActiveSection(key);
-  };
+  }
+
+  const navGroups = buildNavGroups({ roles: me.roles as string[], isSuperAdmin: me.isSuperAdmin });
 
   const renderContent = () => {
     switch (activeSection) {
+      // ── Admin / Settings ──────────────────────────────────────────────────
       case 'overview':
         return <OverviewPanel />;
+
       case 'courses':
         return (
           <Stack>
             <Courses />
-            {/* Academic Terms: date-bounded grading periods scoped to a facility.
-                Shown when the user has a facility context; super_admin sees facility #1. */}
             {(me.facilityIds[0] ?? (me.isSuperAdmin ? 1 : null)) && (
               <TermsPanel facilityId={me.facilityIds[0] ?? 1} />
             )}
           </Stack>
         );
+
+      case 'org':
+        return <OrgPanel />;
+
+      // ── Students ──────────────────────────────────────────────────────────
       case 'students':
-        return canStudents ? (
+        return (
           <Stack>
-            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
-              Học sinh
-            </Text>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Học sinh</Text>
             <StudentsPanel />
           </Stack>
-        ) : null;
-      case 'org':
-        return canOrg ? <OrgPanel /> : null;
+        );
+
       case 'guardians':
-        return canGuardians ? (
+        return (
           <Stack>
-            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
-              Phụ huynh
-            </Text>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Phụ huynh</Text>
             <GuardiansPanel />
           </Stack>
-        ) : null;
-      case 'hr':
-        return canHr ? <HrPayrollSection /> : null;
-      case 'kpi':
-        return canKpi ? (
+        );
+
+      // ── Academic / Teaching ───────────────────────────────────────────────
+      case 'schedule':
+        return (
           <Stack>
-            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
-              Đánh giá KPI
-            </Text>
-            <KpiEvaluationPanel />
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Lịch dạy</Text>
+            <SchedulePanel goToClass={goToClass} />
           </Stack>
-        ) : null;
-      case 'compensation':
-        return me.isSuperAdmin ? (
+        );
+
+      case 'attendance':
+        return (
           <Stack>
-            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
-              Cơ cấu lương
-            </Text>
-            <CompensationConfigPanel />
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Điểm danh</Text>
+            <AttendancePanel />
           </Stack>
-        ) : null;
+        );
+
+      case 'grading':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Chấm bài</Text>
+            <GradingPanel />
+          </Stack>
+        );
+
+      case 'assessment':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Học bạ</Text>
+            <AssessmentPanel />
+          </Stack>
+        );
+
+      // ── Class management ──────────────────────────────────────────────────
+      case 'classes':
+        return <Workspace navAction={navAction} />;
+
+      case 'meetings':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Họp phụ huynh</Text>
+            <MeetingsPanel />
+          </Stack>
+        );
+
+      case 'levelup':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Duyệt cấp độ</Text>
+            <LevelApprovalPanel />
+          </Stack>
+        );
+
+      case 'certificate':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Chứng chỉ</Text>
+            <CertificatePanel />
+          </Stack>
+        );
+
+      // ── Finance / CRM ─────────────────────────────────────────────────────
       case 'finance':
-        return canFinance ? (
+        return (
           <Stack>
-            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
-              Tài chính
-            </Text>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Tài chính</Text>
             <FinancePanel />
           </Stack>
-        ) : null;
+        );
+
       case 'crm':
-        return canCrm ? (
+        return (
           <Stack>
-            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
-              CRM
-            </Text>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">CRM</Text>
             <CrmPanel />
           </Stack>
-        ) : null;
+        );
+
       case 'cskh':
-        return canCskh ? (
+        return (
           <Stack>
-            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
-              Chăm sóc khách hàng
-            </Text>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Chăm sóc khách hàng</Text>
             <CskhPanel />
           </Stack>
-        ) : null;
+        );
+
       case 'rewards':
-        return canRewards ? (
+        return (
           <Stack>
-            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
-              Đổi quà
-            </Text>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Đổi quà</Text>
             <RewardsPanel />
           </Stack>
-        ) : null;
+        );
+
+      // ── HR / Payroll ──────────────────────────────────────────────────────
+      case 'hr':
+        return <HrPayrollSection />;
+
+      case 'kpi':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Đánh giá KPI</Text>
+            <KpiEvaluationPanel />
+          </Stack>
+        );
+
+      case 'compensation':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Cơ cấu lương</Text>
+            <CompensationConfigPanel />
+          </Stack>
+        );
+
+      case 'my-payslips':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Phiếu lương của tôi</Text>
+            <MyPayslipsPanel />
+          </Stack>
+        );
+
       default:
         return null;
     }
@@ -886,7 +772,7 @@ function Dashboard() {
 
 export function App() {
   return (
-    <LoginGate appTitle="Admin">
+    <LoginGate appTitle="CMC Staff">
       <Dashboard />
     </LoginGate>
   );
