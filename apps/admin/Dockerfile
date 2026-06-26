@@ -32,6 +32,7 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
 
 # All source files (packages/ui + apps/admin; api source not needed — only
 # "import type" references to @cmc/api are used, which esbuild strips at build time)
+COPY tsconfig.base.json ./
 COPY packages ./packages
 COPY apps/admin ./apps/admin
 
