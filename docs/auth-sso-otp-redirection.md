@@ -155,11 +155,14 @@ GRAPH_SENDER_NOTIFY="..."  GRAPH_SENDER_PAYROLL="..."  GRAPH_SENDER_HR="..."
 | R2 | Remove superseded: activation + password-reset endpoints/service/templates; drop `activation_token`; `ParentAccount.passwordHash` nullable | auth | ✅ done |
 | R3 | LMS parent **Email OTP**: `login_otp` model, `otpRequest`/`otpVerify`, sync Graph send, race-safe attempt cap, throttle | **auth** | ✅ done |
 | R4 | ERP staff **SSO (OIDC)**: `@azure/msal-node`, `/auth/sso/login` + `/callback`, id_token validation, AppUser match, break-glass restricted to super_admin | **auth** | ✅ done |
-| R5 | Frontend: ERP "Đăng nhập CMC EDU" button + LMS email→OTP screens | normal | ⏳ pending |
+| R5 | Frontend: ERP "Đăng nhập CMC EDU" button + LMS email→OTP screens | normal | ✅ done |
 | R6 | Azure config + live smoke test (secret + redirect URIs supplied) | ops | ⏳ pending |
 
 **Backend R1–R4 done & verified (2026-06-26):** API typecheck + lint clean; 12 unit + 172 integration
 tests green against live Postgres (migrations applied). SSO + OTP are no-op until `ENTRA_CLIENT_SECRET`
 is set; the dev OTP fallback logs the code (non-prod only) so the flow is testable now. `ENTRA_TENANT_ID`
-must be the tenant **GUID** (not a domain). Remaining: R5 frontend screens, R6 Azure config + live test.
+must be the tenant **GUID** (not a domain). Frontend (R5) done: staff login has a "Đăng nhập bằng tài
+khoản CMC EDU" button (`packages/ui/src/login-gate.tsx`) and the LMS parent tab is a two-step email→OTP
+flow (`packages/ui/src/lms-login-gate.tsx`). Remaining: **R6 only** — Azure config (secret + redirect
+URI + Mail.Send consent) then the live smoke test.
 ```
