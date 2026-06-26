@@ -23,9 +23,25 @@
 | 01 | Critical security & stability | ✅ DONE (verified + review fixes) | HIGH | — |
 | 02 | Data integrity: logic bugs ✅ + schema ✅ (RLS deferred) | HIGH | — |
 | 03 | KPI system: Callio + manual override + audit | ✅ DONE (27 tests, committed 2fe695c) | HIGH | 01 |
-| 04 | Teaching operational UI (6 nav items) | planned | NORMAL | 02 |
-| 05 | LMS student course tab + reward fixes | planned | NORMAL | 02 |
-| 06 | Backend↔UI feature completion | planned | NORMAL | 02 |
+| 04 | Teaching operational UI (6 nav items) | ✅ DONE (commit 998d840, schedule.mySessions 4 int-test) | NORMAL | 02 |
+| 05 | LMS student course tab + reward fixes | ✅ DONE (commit 0400383, 5 int-test) | NORMAL | 02 |
+| 06 | Backend↔UI feature completion | ✅ DONE (commit 93072bc; crm contacts còn thiếu — minor) | NORMAL | 02 |
+
+## Milestone (2026-06-26): full api suite GREEN 156/156 (đầu phiên 34 fail)
+
+7 commit phiên này: teaching cross-class UI, LMS student, admin wiring, payroll fixes (bulkPay shape + grade-audit), vitest setupFiles, academic guards (H3/H8). Pre-existing 7 fail → 0. Background Sonnet agents nhiều lần chết mid-report (connection) → orchestrator tiếp quản integration glue, recover đầy đủ.
+
+**Còn lại:**
+- H2 (assessment final-grade period filter): **escalate spec** — periodKey là label tùy ý (test dùng `uniq('MONTH')`), không map sang date range; hành vi all-time hiện tại là test-backed. Cần product quyết định ngữ nghĩa "period".
+- Phase 06 minor: crm contactList UI chưa wire (procedure đã có).
+- Open commission questions (Phase 03): cap-enforcement, retention default, kpiSetAuto SoD, override-on-approved.
+
+## Pending api fixes (áp sau khi Phase 04 nhả apps/api — fix 2/7 pre-existing genuine fails)
+
+1. **payslipBulkPay** (payroll.ts:441): input `z.array(...)` → `z.object({ ids: z.array(z.string().uuid()).min(1).max(200) })`; body `input`→`input.ids` (3 chỗ). RLS đã xử cross-facility. Test `payroll-bulk-pay-byid` (4) sẽ xanh.
+2. **profileUpsert grade audit** (payroll.ts:36): thêm input `reason?`; fetch existing; nếu `existing.grade && input.grade && khác nhau` + thiếu reason → BAD_REQUEST; log `Đổi bậc lương {old}→{new}: {reason}` khi đổi, else generic. Test `salary-grade-change-audit` (2) sẽ xanh. Không regression (test khác create mới/không đổi grade).
+
+Còn lại pre-existing: crm-hooks lead-token (1) — CRM_LEAD_TOKEN env trong full-suite.
 
 ## Progress Log
 
