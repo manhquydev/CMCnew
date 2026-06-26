@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { withRls, Program } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, protectedProcedure, requireRole, Role } from '../trpc.js';
+import { router, protectedProcedure, requirePermission } from '../trpc.js';
 
 const program = z.nativeEnum(Program);
 
@@ -14,7 +14,7 @@ export const courseRouter = router({
     ),
   ),
 
-  create: requireRole(Role.quan_ly)
+  create: requirePermission('course', 'create')
     .input(
       z.object({
         code: z.string().min(1),
@@ -36,7 +36,7 @@ export const courseRouter = router({
       }),
     ),
 
-  archive: requireRole(Role.quan_ly)
+  archive: requirePermission('course', 'archive')
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {

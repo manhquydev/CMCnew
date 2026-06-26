@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { withRls, hashPassword, Role } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, superAdminProcedure, requireRole } from '../trpc.js';
+import { router, superAdminProcedure, requirePermission } from '../trpc.js';
 import { enqueueEmail } from '../services/email-outbox.js';
 
 const role = z.nativeEnum(Role);
@@ -28,7 +28,7 @@ export const userRouter = router({
 
   // Teacher picker for scheduling. RLS (app_user_facility_roster) scopes this to staff
   // sharing a facility with the caller — a quan_ly cannot enumerate teachers elsewhere.
-  listTeachers: requireRole(Role.quan_ly)
+  listTeachers: requirePermission('user', 'listTeachers')
     .input(z.object({ facilityId: z.number().int().positive().optional() }).optional())
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>

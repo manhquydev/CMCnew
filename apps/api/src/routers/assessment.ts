@@ -8,7 +8,7 @@ import {
   type Program as GradingProgram,
   type QuantFormula,
 } from '@cmc/domain-grading';
-import { router, requireRole, lmsProcedure, Role } from '../trpc.js';
+import { router, requirePermission, lmsProcedure } from '../trpc.js';
 
 const criteriaSchema = z.record(z.string(), z.number());
 const DEFAULT_FORMULA: QuantFormula = { homework: 0.5, test: 0.3, attendance: 0.2 };
@@ -18,7 +18,7 @@ export const assessmentRouter = router({
   // Pillars + quant formula a teacher needs to fill a qualitative assessment / read a final grade.
   // Pillars come from the program's GradingTemplate (seed), not the client — keeps the form
   // aligned with the configured rubric. Falls back to an empty pillar list + default formula.
-  template: requireRole(Role.giao_vien, Role.head_teacher, Role.quan_ly)
+  template: requirePermission('assessment', 'template')
     .input(z.object({ program: z.nativeEnum(Program), level: z.string().optional() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -35,7 +35,7 @@ export const assessmentRouter = router({
     ),
 
   // ── Academic terms (date-bounded grading periods) ──────────────────────────────
-  termList: requireRole(Role.giao_vien, Role.head_teacher, Role.quan_ly)
+  termList: requirePermission('assessment', 'termList')
     .input(z.object({ facilityId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -46,7 +46,7 @@ export const assessmentRouter = router({
       ),
     ),
 
-  termCreate: requireRole(Role.head_teacher, Role.quan_ly)
+  termCreate: requirePermission('assessment', 'termCreate')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -72,7 +72,7 @@ export const assessmentRouter = router({
       ),
     ),
 
-  termUpdate: requireRole(Role.head_teacher, Role.quan_ly)
+  termUpdate: requirePermission('assessment', 'termUpdate')
     .input(
       z.object({
         id: z.string().uuid(),
@@ -95,7 +95,7 @@ export const assessmentRouter = router({
     ),
 
   // Teacher / head-teacher records a qualitative assessment for a (student, period). 1 per key.
-  upsertQualitative: requireRole(Role.giao_vien, Role.head_teacher, Role.quan_ly)
+  upsertQualitative: requirePermission('assessment', 'upsertQualitative')
     .input(
       z.object({
         studentId: z.string().uuid(),
@@ -141,7 +141,7 @@ export const assessmentRouter = router({
 
   // Compute + store the FinalGrade for (student, program, period). Idempotent (upsert by key).
   // Numbers come from @cmc/domain-grading; this only gathers the inputs.
-  computeFinalGrade: requireRole(Role.giao_vien, Role.head_teacher, Role.quan_ly)
+  computeFinalGrade: requirePermission('assessment', 'computeFinalGrade')
     .input(
       z.object({
         studentId: z.string().uuid(),

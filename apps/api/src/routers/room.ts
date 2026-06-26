@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, protectedProcedure, requireRole, Role } from '../trpc.js';
+import { router, protectedProcedure, requirePermission } from '../trpc.js';
 
 export const roomRouter = router({
   list: protectedProcedure.query(({ ctx }) =>
@@ -11,7 +11,7 @@ export const roomRouter = router({
     ),
   ),
 
-  create: requireRole(Role.quan_ly)
+  create: requirePermission('room', 'create')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -34,7 +34,7 @@ export const roomRouter = router({
       }),
     ),
 
-  update: requireRole(Role.quan_ly)
+  update: requirePermission('room', 'update')
     .input(
       z.object({
         id: z.string().uuid(),
@@ -58,7 +58,7 @@ export const roomRouter = router({
       }),
     ),
 
-  archive: requireRole(Role.quan_ly)
+  archive: requirePermission('room', 'archive')
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {

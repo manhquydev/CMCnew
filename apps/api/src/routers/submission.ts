@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
 import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, lmsProcedure, studentProcedure, requireRole, Role } from '../trpc.js';
+import { router, lmsProcedure, studentProcedure, requirePermission } from '../trpc.js';
 import { annotationDataSchema, type AnnotationData } from '../annotation.js';
 
 const ENTITY = 'submission';
@@ -32,7 +32,7 @@ const submissionSelect = {
 
 export const submissionRouter = router({
   // Staff: all submissions for an exercise (to grade). RLS scopes to facility.
-  listByExercise: requireRole(Role.giao_vien, Role.quan_ly)
+  listByExercise: requirePermission('submission', 'listByExercise')
     .input(z.object({ exerciseId: z.string().uuid() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -80,7 +80,7 @@ export const submissionRouter = router({
   // Staff: both annotation layers for grading a submission — the student's marks (rendered
   // read-only under the teacher's) and any existing grade layer to keep editing. RLS scopes
   // to facility. Json cast to AnnotationData so the client output type is concrete.
-  layerForGrading: requireRole(Role.giao_vien, Role.quan_ly)
+  layerForGrading: requirePermission('submission', 'layerForGrading')
     .input(z.object({ submissionId: z.string().uuid() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {

@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { withRls, Prisma } from '@cmc/db';
 import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, requireRole, protectedProcedure, superAdminProcedure, lmsProcedure } from '../trpc.js';
+import { router, requirePermission, protectedProcedure, superAdminProcedure, lmsProcedure } from '../trpc.js';
 import { runParentMeetingReminders } from '../services/parent-meeting-reminder.js';
 import { generateParentMeetings } from '../services/parent-meeting-cadence.js';
 
@@ -23,7 +23,7 @@ export const parentMeetingRouter = router({
       ),
     ),
 
-  setStatus: requireRole('giao_vien', 'head_teacher', 'quan_ly')
+  setStatus: requirePermission('parentMeeting', 'setStatus')
     .input(z.object({ id: z.string().uuid(), status: z.enum(['scheduled', 'done', 'cancelled']) }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -47,7 +47,7 @@ export const parentMeetingRouter = router({
   ),
 
   // Staff sets the confirmed datetime for a TBD meeting; flips timeConfirmed = true.
-  setSchedule: requireRole('giao_vien', 'head_teacher', 'quan_ly')
+  setSchedule: requirePermission('parentMeeting', 'setSchedule')
     .input(z.object({ id: z.string().uuid(), scheduledAt: z.coerce.date() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {

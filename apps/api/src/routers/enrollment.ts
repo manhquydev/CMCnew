@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
 import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent, logStatusChange } from '@cmc/audit';
-import { router, protectedProcedure, requireRole, Role, lmsProcedure } from '../trpc.js';
+import { router, protectedProcedure, requirePermission, lmsProcedure } from '../trpc.js';
 import { emitStaffNotif } from '../lib/emit-staff-notif.js';
 
 export const enrollmentRouter = router({
@@ -48,7 +48,7 @@ export const enrollmentRouter = router({
       ),
     ),
 
-  enroll: requireRole(Role.quan_ly, Role.sale)
+  enroll: requirePermission('enrollment', 'enroll')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -129,7 +129,7 @@ export const enrollmentRouter = router({
     ),
 
   // Hoàn tất thủ công (khi đóng lớp).
-  complete: requireRole(Role.quan_ly)
+  complete: requirePermission('enrollment', 'complete')
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {

@@ -4,7 +4,7 @@ import { withRls, ClassStatus } from '@cmc/db';
 import type { Prisma } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent, logStatusChange, addFollower } from '@cmc/audit';
-import { router, protectedProcedure, requireRole, Role } from '../trpc.js';
+import { router, protectedProcedure, requirePermission } from '../trpc.js';
 import { nextBatchCode } from '../services/batch-code.js';
 import { emitStaffNotif } from '../lib/emit-staff-notif.js';
 
@@ -57,7 +57,7 @@ export const classBatchRouter = router({
     ),
   ),
 
-  create: requireRole(Role.quan_ly)
+  create: requirePermission('classBatch', 'create')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -98,7 +98,7 @@ export const classBatchRouter = router({
       }),
     ),
 
-  setStatus: requireRole(Role.quan_ly)
+  setStatus: requirePermission('classBatch', 'setStatus')
     .input(z.object({ id: z.string().uuid(), status: z.nativeEnum(ClassStatus) }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -136,7 +136,7 @@ export const classBatchRouter = router({
     ),
 
   // Hủy lớp linh hoạt: từ bất kỳ trạng thái, BẮT BUỘC lý do; buổi học tương lai → cancelled.
-  cancel: requireRole(Role.quan_ly)
+  cancel: requirePermission('classBatch', 'cancel')
     .input(z.object({ id: z.string().uuid(), reason: z.string().min(1) }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -195,7 +195,7 @@ export const classBatchRouter = router({
     ),
 
   // Mở lại lớp đã hủy.
-  reopen: requireRole(Role.quan_ly)
+  reopen: requirePermission('classBatch', 'reopen')
     .input(z.object({ id: z.string().uuid(), toStatus: z.nativeEnum(ClassStatus), reason: z.string().min(1) }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {

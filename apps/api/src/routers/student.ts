@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { withRls, Program, StudentLifecycle } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, protectedProcedure, requireRole, Role } from '../trpc.js';
+import { router, protectedProcedure, requirePermission } from '../trpc.js';
 
 const program = z.nativeEnum(Program);
 const lifecycle = z.nativeEnum(StudentLifecycle);
@@ -14,7 +14,7 @@ export const studentRouter = router({
     ),
   ),
 
-  create: requireRole(Role.quan_ly, Role.sale)
+  create: requirePermission('student', 'create')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -49,7 +49,7 @@ export const studentRouter = router({
 
   // Correct a student's profile after creation (name, DOB, program, lifecycle). Without this,
   // fixes required raw DB access. RLS keeps the update inside the caller's facility scope.
-  update: requireRole(Role.quan_ly, Role.sale)
+  update: requirePermission('student', 'update')
     .input(
       z.object({
         id: z.string().uuid(),

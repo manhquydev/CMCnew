@@ -4,7 +4,7 @@ import { withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { enumerateSessions, detectConflicts, type SessionLike } from '@cmc/domain-academic';
-import { router, protectedProcedure, requireRole, Role } from '../trpc.js';
+import { router, protectedProcedure, requirePermission } from '../trpc.js';
 
 const dateKey = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -20,7 +20,7 @@ export const scheduleRouter = router({
       ),
     ),
 
-  addSlot: requireRole(Role.quan_ly)
+  addSlot: requirePermission('schedule', 'addSlot')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -110,7 +110,7 @@ export const scheduleRouter = router({
     ),
 
   // Sinh buổi học từ khung lịch — idempotent + chặn cứng trùng phòng/giáo viên.
-  generateSessions: requireRole(Role.quan_ly)
+  generateSessions: requirePermission('schedule', 'generateSessions')
     .input(
       z.object({
         classBatchId: z.string().uuid(),

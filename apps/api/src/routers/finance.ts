@@ -13,7 +13,7 @@ import {
   type DiscountTier,
 } from '@cmc/domain-finance';
 import { nextReceiptCode } from '../services/receipt-code.js';
-import { router, requireRole, Role } from '../trpc.js';
+import { router, requirePermission } from '../trpc.js';
 import { emitStaffNotif } from '../lib/emit-staff-notif.js';
 
 /** Discount tiers configured for a facility, or the charter defaults when none are set. */
@@ -30,7 +30,7 @@ async function tiersFor(
 
 export const financeRouter = router({
   // ── Config: course price (effective-dated) ──────────────────────────────────
-  priceCreate: requireRole(Role.quan_ly, Role.ke_toan)
+  priceCreate: requirePermission('finance', 'priceCreate')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -62,7 +62,7 @@ export const financeRouter = router({
       }),
     ),
 
-  priceList: requireRole(Role.quan_ly, Role.ke_toan)
+  priceList: requirePermission('finance', 'priceList')
     .input(z.object({ courseId: z.string().uuid() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -74,7 +74,7 @@ export const financeRouter = router({
     ),
 
   // ── Config: voucher ─────────────────────────────────────────────────────────
-  voucherCreate: requireRole(Role.quan_ly, Role.ke_toan)
+  voucherCreate: requirePermission('finance', 'voucherCreate')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -109,7 +109,7 @@ export const financeRouter = router({
       }),
     ),
 
-  voucherList: requireRole(Role.quan_ly, Role.ke_toan)
+  voucherList: requirePermission('finance', 'voucherList')
     .input(z.object({ facilityId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -121,7 +121,7 @@ export const financeRouter = router({
     ),
 
   // ── Receipt: draft → approve → cancel ────────────────────────────────────────
-  receiptList: requireRole(Role.ke_toan, Role.quan_ly)
+  receiptList: requirePermission('finance', 'receiptList')
     .input(z.object({ studentId: z.string().uuid().optional() }).optional())
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -135,7 +135,7 @@ export const financeRouter = router({
 
   // Create a draft: resolve the price effective at creation date, stack tier + voucher under
   // the 35% cap, and store the computed amounts. The voucher is NOT consumed until approve.
-  receiptCreate: requireRole(Role.ke_toan, Role.quan_ly)
+  receiptCreate: requirePermission('finance', 'receiptCreate')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -226,7 +226,7 @@ export const financeRouter = router({
 
   // Approve: consume the voucher ATOMICALLY (0-row = CONFLICT, fixes legacy M2), allocate the
   // official PT-YYYY-NNNN number, and lock the receipt. Re-checks the validity window at approve.
-  receiptApprove: requireRole(Role.ke_toan, Role.quan_ly)
+  receiptApprove: requirePermission('finance', 'receiptApprove')
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -286,7 +286,7 @@ export const financeRouter = router({
     ),
 
   // Mark an approved receipt as sent (manual delivery — no online payment in scope).
-  receiptMarkSent: requireRole(Role.ke_toan, Role.quan_ly)
+  receiptMarkSent: requirePermission('finance', 'receiptMarkSent')
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -312,7 +312,7 @@ export const financeRouter = router({
     ),
 
   // Reconcile against the cash/bank ledger (manual — no payment gateway).
-  receiptReconcile: requireRole(Role.ke_toan, Role.quan_ly)
+  receiptReconcile: requirePermission('finance', 'receiptReconcile')
     .input(z.object({ id: z.string().uuid(), note: z.string().optional() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -338,7 +338,7 @@ export const financeRouter = router({
     ),
 
   // Cancel: refund the voucher use if the receipt had already consumed one.
-  receiptCancel: requireRole(Role.ke_toan, Role.quan_ly)
+  receiptCancel: requirePermission('finance', 'receiptCancel')
     .input(z.object({ id: z.string().uuid(), reason: z.string().min(1) }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {

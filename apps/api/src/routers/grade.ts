@@ -3,7 +3,7 @@ import { withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { earnEntry, evaluateBadges } from '@cmc/domain-rewards';
-import { router, requireRole, Role } from '../trpc.js';
+import { router, requirePermission } from '../trpc.js';
 import { emitNotification } from '../events.js';
 import { annotationDataSchema } from '../annotation.js';
 
@@ -22,7 +22,7 @@ const gradeSelect = {
 
 export const gradeRouter = router({
   // Teacher grades a submission (creates/updates the grade, marks submission graded).
-  grade: requireRole(Role.giao_vien, Role.quan_ly)
+  grade: requirePermission('grade', 'grade')
     .input(
       z.object({
         submissionId: z.string().uuid(),
@@ -74,7 +74,7 @@ export const gradeRouter = router({
     ),
 
   // Publish the grade → student/parent can see it + earn stars (idempotent) + notify.
-  publish: requireRole(Role.giao_vien, Role.quan_ly)
+  publish: requirePermission('grade', 'publish')
     .input(z.object({ submissionId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await withRls(rlsContextOf(ctx.session), async (tx) => {

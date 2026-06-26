@@ -3,10 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { withRls, Program, OpportunityStage, TestType, type RlsContext } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, publicProcedure, requireRole, Role } from '../trpc.js';
-
-const CRM_ROLES = [Role.sale, Role.cskh, Role.quan_ly] as const;
-const TEST_GRADE_ROLES = [Role.giao_vien, Role.head_teacher, Role.quan_ly] as const;
+import { router, publicProcedure, requirePermission } from '../trpc.js';
 
 const STAGE_ORDER: OpportunityStage[] = [
   OpportunityStage.O1_LEAD,
@@ -50,7 +47,7 @@ async function upsertContact(
 }
 
 export const crmRouter = router({
-  contactList: requireRole(...CRM_ROLES)
+  contactList: requirePermission('crm', 'contactList')
     .input(z.object({ facilityId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -62,7 +59,7 @@ export const crmRouter = router({
       ),
     ),
 
-  contactCreate: requireRole(...CRM_ROLES)
+  contactCreate: requirePermission('crm', 'contactCreate')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -89,7 +86,7 @@ export const crmRouter = router({
     ),
 
   // Opportunities (with their contact) for a facility's pipeline board.
-  opportunityList: requireRole(...CRM_ROLES)
+  opportunityList: requirePermission('crm', 'opportunityList')
     .input(z.object({ facilityId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -102,7 +99,7 @@ export const crmRouter = router({
       ),
     ),
 
-  opportunityCreate: requireRole(...CRM_ROLES)
+  opportunityCreate: requirePermission('crm', 'opportunityCreate')
     .input(
       z.object({
         contactId: z.string().uuid(),
@@ -137,7 +134,7 @@ export const crmRouter = router({
     ),
 
   // Manual stage move (forward or back). Reaching O5 closes the opportunity (won).
-  opportunityTransition: requireRole(...CRM_ROLES)
+  opportunityTransition: requirePermission('crm', 'opportunityTransition')
     .input(
       z.object({
         id: z.string().uuid(),
@@ -169,7 +166,7 @@ export const crmRouter = router({
       }),
     ),
 
-  opportunityMarkLost: requireRole(...CRM_ROLES)
+  opportunityMarkLost: requirePermission('crm', 'opportunityMarkLost')
     .input(z.object({ id: z.string().uuid(), reason: z.string().min(1) }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -200,7 +197,7 @@ export const crmRouter = router({
     ),
 
   // Re-open a closed (lost) opportunity back into the pipeline.
-  opportunityReopen: requireRole(...CRM_ROLES)
+  opportunityReopen: requirePermission('crm', 'opportunityReopen')
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -225,7 +222,7 @@ export const crmRouter = router({
     ),
 
   // ── Test appointments (S3) — entrance test auto-advances its opportunity ─────
-  testList: requireRole(...CRM_ROLES)
+  testList: requirePermission('crm', 'testList')
     .input(z.object({ facilityId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -238,7 +235,7 @@ export const crmRouter = router({
     ),
 
   // Schedule a test. An entrance test linked to an opportunity auto-advances it to O3.
-  testCreate: requireRole(...CRM_ROLES)
+  testCreate: requirePermission('crm', 'testCreate')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -290,7 +287,7 @@ export const crmRouter = router({
     ),
 
   // Record a result. An entrance test graded → opportunity auto-advances to O4.
-  testGrade: requireRole(...TEST_GRADE_ROLES)
+  testGrade: requirePermission('crm', 'testGrade')
     .input(z.object({ id: z.string().uuid(), score: z.number(), result: z.string().optional() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {

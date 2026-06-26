@@ -2,12 +2,10 @@ import { z } from 'zod';
 import { withRls, Program } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, requireRole, Role } from '../trpc.js';
-
-const ISSUE_ROLES = [Role.head_teacher, Role.quan_ly] as const;
+import { router, requirePermission } from '../trpc.js';
 
 export const certificateRouter = router({
-  list: requireRole(Role.head_teacher, Role.quan_ly, Role.giao_vien)
+  list: requirePermission('certificate', 'list')
     .input(z.object({ facilityId: z.number().int().positive(), studentId: z.string().uuid().optional() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -19,7 +17,7 @@ export const certificateRouter = router({
       ),
     ),
 
-  issue: requireRole(...ISSUE_ROLES)
+  issue: requirePermission('certificate', 'issue')
     .input(
       z.object({
         studentId: z.string().uuid(),

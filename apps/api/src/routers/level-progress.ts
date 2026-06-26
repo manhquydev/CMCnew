@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
 import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, requireRole, lmsProcedure, Role } from '../trpc.js';
+import { router, requirePermission, lmsProcedure } from '../trpc.js';
 import { emitNotification } from '../events.js';
 
 const ENTITY = 'level_progress';
@@ -11,7 +11,7 @@ const ENTITY = 'level_progress';
 export const levelProgressRouter = router({
   // Teacher proposes a level-up. fromLevel snapshots the student's current level. One open
   // proposal per student at a time (a second pending would be ambiguous for the approver).
-  propose: requireRole(Role.giao_vien, Role.head_teacher, Role.quan_ly)
+  propose: requirePermission('levelProgress', 'propose')
     .input(z.object({ studentId: z.string().uuid(), toLevel: z.string().min(1), reason: z.string().optional() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -49,7 +49,7 @@ export const levelProgressRouter = router({
     ),
 
   // Approver queue: pending proposals in the head_teacher's facilities.
-  listPending: requireRole(Role.head_teacher, Role.quan_ly)
+  listPending: requirePermission('levelProgress', 'listPending')
     .query(({ ctx }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
         tx.levelProgress.findMany({
@@ -69,7 +69,7 @@ export const levelProgressRouter = router({
 
   // Only head_teacher (or super) decides (charter). Approve writes Student.level in the same tx
   // and notifies the student/parent over SSE; reject just records the decision.
-  decide: requireRole(Role.head_teacher)
+  decide: requirePermission('levelProgress', 'decide')
     .input(
       z.object({
         id: z.string().uuid(),

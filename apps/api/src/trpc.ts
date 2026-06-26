@@ -1,5 +1,5 @@
 import { initTRPC, TRPCError } from '@trpc/server';
-import { Role, type RequestSession, type LmsSession } from '@cmc/auth';
+import { Role, can, type RequestSession, type LmsSession } from '@cmc/auth';
 import type { ApiContext } from './context.js';
 
 const t = initTRPC.context<ApiContext>().create({
@@ -55,6 +55,21 @@ export function requireRole(...roles: Role[]) {
   return protectedProcedure.use(({ ctx, next }) => {
     if (ctx.session.isSuperAdmin) return next();
     if (!roles.some((r) => ctx.session.roles.includes(r))) {
+      throw new TRPCError({ code: 'FORBIDDEN' });
+    }
+    return next();
+  });
+}
+
+/**
+ * Gate a procedure through the centralized PERMISSIONS registry in @cmc/auth.
+ * Pure policy (Role[]) lives in packages/auth; this binding wires it to the tRPC middleware layer.
+ * Use instead of requireRole for all new and refactored in-scope procedures.
+ */
+export function requirePermission(module: string, action: string) {
+  return protectedProcedure.use(({ ctx, next }) => {
+    if (ctx.session.isSuperAdmin) return next();
+    if (!can(ctx.session.roles, ctx.session.isSuperAdmin, module, action)) {
       throw new TRPCError({ code: 'FORBIDDEN' });
     }
     return next();

@@ -3,7 +3,7 @@ import { withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { compensationParamsSchema, DEFAULT_PARAMS, type CompensationParams } from '@cmc/domain-payroll';
-import { router, requireRole, superAdminProcedure, Role } from '../trpc.js';
+import { router, requirePermission, superAdminProcedure } from '../trpc.js';
 
 /** Last calendar day of a YYYY-MM period — the cutoff for "policy effective at this period". */
 function periodEnd(periodKey: string): Date {
@@ -39,7 +39,7 @@ export const compensationRouter = router({
   ),
 
   // The params effective at a period (or DEFAULT_PARAMS if none). HR/ke_toan/super may read.
-  effective: requireRole(Role.hr, Role.ke_toan)
+  effective: requirePermission('compensation', 'effective')
     .input(z.object({ periodKey: z.string().regex(/^\d{4}-\d{2}$/) }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) => effectiveParamsAt(tx, input.periodKey)),

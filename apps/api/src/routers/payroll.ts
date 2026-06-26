@@ -18,13 +18,9 @@ import {
   ratioToScore,
 } from '@cmc/domain-payroll';
 import { effectiveParamsAt } from './compensation.js';
-import { router, requireRole, protectedProcedure, Role } from '../trpc.js';
+import { router, requirePermission, protectedProcedure, Role } from '../trpc.js';
 import { canOverrideKpi } from '../lib/kpi-authz.js';
 import { callioConfigFromEnv, fetchPeriodCdrs, aggregateValidCalls } from '../lib/callio-client.js';
-
-// Payroll is HR-confidential: every procedure is role-gated to hr/ke_toan (super passes).
-// Non-HR staff have no code path to salary data. RLS adds facility isolation on top.
-const HR_ROLES = [Role.hr, Role.ke_toan] as const;
 
 /** Last calendar day of a YYYY-MM period (UTC), used to resolve the effective salary rate. */
 function periodEnd(periodKey: string): Date {
@@ -187,7 +183,7 @@ async function assembleSlipData(
 
 export const payrollRouter = router({
   // Facility staff roster (id + name) for picking an employee — RLS-visible to facility staff.
-  roster: requireRole(...HR_ROLES)
+  roster: requirePermission('payroll', 'roster')
     .input(z.object({ facilityId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -199,7 +195,7 @@ export const payrollRouter = router({
       ),
     ),
 
-  profileUpsert: requireRole(...HR_ROLES)
+  profileUpsert: requirePermission('payroll', 'profileUpsert')
     .input(
       z.object({
         userId: z.string().uuid(),
@@ -252,7 +248,7 @@ export const payrollRouter = router({
       }),
     ),
 
-  profileList: requireRole(...HR_ROLES)
+  profileList: requirePermission('payroll', 'profileList')
     .input(z.object({ facilityId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -260,7 +256,7 @@ export const payrollRouter = router({
       ),
     ),
 
-  rateCreate: requireRole(...HR_ROLES)
+  rateCreate: requirePermission('payroll', 'rateCreate')
     .input(
       z.object({
         userId: z.string().uuid(),
@@ -283,7 +279,7 @@ export const payrollRouter = router({
       }),
     ),
 
-  rateList: requireRole(...HR_ROLES)
+  rateList: requirePermission('payroll', 'rateList')
     .input(z.object({ userId: z.string().uuid() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -296,7 +292,7 @@ export const payrollRouter = router({
   // period; quota = the sale's effective SalaryRate.monthlyQuota. v1 treats the sale as a CVTV
   // (manager/team rollup deferred) and takes the centre retention ratio as an input (default 1 =
   // gate met) until centre-retention is computed from CRM. A preview for HR to fill variablePay.
-  commissionForSale: requireRole(...HR_ROLES)
+  commissionForSale: requirePermission('payroll', 'commissionForSale')
     .input(
       z.object({
         userId: z.string().uuid(),
@@ -357,7 +353,7 @@ export const payrollRouter = router({
   // Compute (or recompute) a draft payslip for (employee, period). Finalize gating: a finalized
   // or paid slip cannot be recomputed. All figures come from assembleSlipData → @cmc/domain-payroll.
   // kpiScore is optional: when omitted, resolved from KpiScore record (overrideScore ?? autoScore).
-  payslipCompute: requireRole(...HR_ROLES)
+  payslipCompute: requirePermission('payroll', 'payslipCompute')
     .input(
       z.object({
         userId: z.string().uuid(),
@@ -429,7 +425,7 @@ export const payrollRouter = router({
       }),
     ),
 
-  payslipList: requireRole(...HR_ROLES)
+  payslipList: requirePermission('payroll', 'payslipList')
     .input(z.object({ facilityId: z.number().int().positive(), periodKey: z.string().regex(/^\d{4}-\d{2}$/).optional() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -441,7 +437,7 @@ export const payrollRouter = router({
       ),
     ),
 
-  payslipFinalize: requireRole(...HR_ROLES)
+  payslipFinalize: requirePermission('payroll', 'payslipFinalize')
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const { slip, staff } = await withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -473,7 +469,7 @@ export const payrollRouter = router({
       return slip;
     }),
 
-  payslipMarkPaid: requireRole(...HR_ROLES)
+  payslipMarkPaid: requirePermission('payroll', 'payslipMarkPaid')
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -487,7 +483,7 @@ export const payrollRouter = router({
 
   // Period payroll sheet: fund totals + per-status breakdown for one (facility, period).
   // Powers the "bảng lương kỳ" view — how much is drafted vs frozen vs already paid.
-  payslipPeriodSummary: requireRole(...HR_ROLES)
+  payslipPeriodSummary: requirePermission('payroll', 'payslipPeriodSummary')
     .input(z.object({ facilityId: z.number().int().positive(), periodKey: z.string().regex(/^\d{4}-\d{2}$/) }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -518,7 +514,7 @@ export const payrollRouter = router({
 
   // Pay out a whole period at once: flip every finalized (not draft, not already-paid) slip
   // to paid. Audited per slip so the trail stays complete. Returns how many were paid.
-  payslipBulkMarkPaid: requireRole(...HR_ROLES)
+  payslipBulkMarkPaid: requirePermission('payroll', 'payslipBulkMarkPaid')
     .input(z.object({ facilityId: z.number().int().positive(), periodKey: z.string().regex(/^\d{4}-\d{2}$/) }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -540,7 +536,7 @@ export const payrollRouter = router({
 
   // HR staff-scoped payslip list: all payslips for a given employee, newest first, last 12.
   // Used by the HR panel drawer to show per-staff payslip history and enable bulk-pay selection.
-  listByStaff: requireRole(...HR_ROLES)
+  listByStaff: requirePermission('payroll', 'listByStaff')
     .input(z.object({ staffId: z.string().uuid() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -562,7 +558,7 @@ export const payrollRouter = router({
 
   // Bulk-pay by explicit slip IDs: marks each finalized slip as paid. IDs that are not in
   // 'finalized' state are skipped (not errored) and returned in `failed`. Audited per slip.
-  payslipBulkPay: requireRole(...HR_ROLES)
+  payslipBulkPay: requirePermission('payroll', 'payslipBulkPay')
     .input(z.object({ ids: z.array(z.string().uuid()).min(1).max(200) }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -598,7 +594,7 @@ export const payrollRouter = router({
     ),
 
   // Reopen a finalized (not yet paid) slip back to draft for correction — audited.
-  payslipReopen: requireRole(...HR_ROLES)
+  payslipReopen: requirePermission('payroll', 'payslipReopen')
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -728,7 +724,7 @@ export const payrollRouter = router({
   // HR starts; employee self-submits; manager confirms; BGD approves (≠ confirmer).
 
   /** HR creates/resets a draft KPI sheet for (employee, period). CONFLICT if already beyond draft. */
-  kpiEvalStart: requireRole(...HR_ROLES)
+  kpiEvalStart: requirePermission('payroll', 'kpiEvalStart')
     .input(
       z.object({
         userId: z.string().uuid(),
@@ -821,7 +817,7 @@ export const payrollRouter = router({
     ),
 
   /** Quan_ly / BGD confirms a submitted KPI sheet. Moves to confirmed status. */
-  kpiEvalConfirm: requireRole(Role.quan_ly, Role.bgd)
+  kpiEvalConfirm: requirePermission('payroll', 'kpiEvalConfirm')
     .input(
       z.object({
         userId: z.string().uuid(),
@@ -853,7 +849,7 @@ export const payrollRouter = router({
     ),
 
   /** BGD approves a confirmed KPI sheet. Separation of duties: approver ≠ confirmer. */
-  kpiEvalApprove: requireRole(Role.bgd)
+  kpiEvalApprove: requirePermission('payroll', 'kpiEvalApprove')
     .input(
       z.object({
         userId: z.string().uuid(),
@@ -901,7 +897,7 @@ export const payrollRouter = router({
     ),
 
   /** HR reads a single KPI sheet + its criteriaConfig for display. */
-  kpiEvalGet: requireRole(...HR_ROLES)
+  kpiEvalGet: requirePermission('payroll', 'kpiEvalGet')
     .input(
       z.object({
         userId: z.string().uuid(),
@@ -920,7 +916,7 @@ export const payrollRouter = router({
     ),
 
   /** HR lists all KPI sheets for a facility in a period (for the admin panel). */
-  kpiList: requireRole(...HR_ROLES)
+  kpiList: requirePermission('payroll', 'kpiList')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -940,7 +936,7 @@ export const payrollRouter = router({
    *  Sales block: doanh_so = ratioToScore(approvedRevenue/quota).
    *  Training block: chuyen_mon (avg grade ratio) + tuan_thu (attendance-marked sessions ratio).
    *  Non-draft status → CONFLICT. Non-existent sheet → NOT_FOUND. Audit written. */
-  kpiAutoPrefill: requireRole(...HR_ROLES)
+  kpiAutoPrefill: requirePermission('payroll', 'kpiAutoPrefill')
     .input(
       z.object({
         userId: z.string().uuid(),
@@ -1115,7 +1111,7 @@ export const payrollRouter = router({
     ),
 
   /** HR test-helper / backfill: upsert a KpiScore row with a given autoScore (used for wiring). */
-  kpiSetAuto: requireRole(...HR_ROLES)
+  kpiSetAuto: requirePermission('payroll', 'kpiSetAuto')
     .input(
       z.object({
         userId: z.string().uuid(),
@@ -1157,7 +1153,7 @@ export const payrollRouter = router({
   // Polls Callio CDRs for a period, aggregates outbound >5s per extension, and snapshots
   // the tallies in CallMetric (idempotent per user+period). Token unset → no-op.
 
-  syncCallMetrics: requireRole(...HR_ROLES)
+  syncCallMetrics: requirePermission('payroll', 'syncCallMetrics')
     .input(
       z.object({
         facilityId: z.number().int().positive(),

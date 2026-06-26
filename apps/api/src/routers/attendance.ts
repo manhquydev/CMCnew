@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { withRls, AttendanceStatus } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, protectedProcedure, requireRole, Role } from '../trpc.js';
+import { router, protectedProcedure, requirePermission } from '../trpc.js';
 
 export const attendanceRouter = router({
   listBySession: protectedProcedure
@@ -14,7 +14,7 @@ export const attendanceRouter = router({
     ),
 
   // Giáo viên/quản lý chấm điểm danh (upsert, idempotent).
-  mark: requireRole(Role.giao_vien, Role.quan_ly)
+  mark: requirePermission('attendance', 'mark')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
