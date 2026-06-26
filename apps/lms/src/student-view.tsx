@@ -31,11 +31,14 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import { IconCircleCheck, IconClock, IconPencil, IconAlertCircle } from '@tabler/icons-react';
 
-export type StudentTab = 'overview' | 'exercises' | 'results' | 'gradebook' | 'badges' | 'ranking' | 'rewards';
+export type StudentTab = 'overview' | 'exercises' | 'results' | 'gradebook' | 'badges' | 'ranking' | 'rewards' | 'courses';
 
 type Exercise = Awaited<ReturnType<typeof trpc.exercise.listForPrincipal.query>>[number];
 type Submission = Awaited<ReturnType<typeof trpc.submission.mine.query>>[number];
 type Gift = Awaited<ReturnType<typeof trpc.rewards.gifts.query>>[number];
+type EnrollmentRow = Awaited<ReturnType<typeof trpc.enrollment.mine.query>>[number];
+type Gradebook = Awaited<ReturnType<typeof trpc.assessment.gradebook.query>>;
+type QualitativeRow = Gradebook['qualitative'][number];
 
 const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleDateString('vi-VN') : '—');
 
@@ -419,10 +422,15 @@ function ExercisesTab({ refreshKey, gradedOnly }: { refreshKey: number; gradedOn
   );
 }
 
-type FinalGrade = Awaited<ReturnType<typeof trpc.assessment.gradebook.query>>['finalGrades'][number];
+type FinalGrade = Gradebook['finalGrades'][number];
+
+const PERIOD_LABEL: Record<string, string> = {
+  MONTHLY: 'Hàng tháng',
+  END_LEVEL: 'Cuối cấp độ',
+};
 
 function StudentGradebookTab({ studentId, refreshKey }: { studentId: string; refreshKey: number }) {
-  const [grades, setGrades] = useState<FinalGrade[]>([]);
+  const [gradebook, setGradebook] = useState<Gradebook | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
@@ -431,7 +439,7 @@ function StudentGradebookTab({ studentId, refreshKey }: { studentId: string; ref
     setErr('');
     trpc.assessment.gradebook
       .query({ studentId })
-      .then((r) => setGrades(r.finalGrades))
+      .then(setGradebook)
       .catch((e) => {
         setErr('Không tải được học bạ.');
         notifyError(e, 'Tải học bạ thất bại');
@@ -441,37 +449,159 @@ function StudentGradebookTab({ studentId, refreshKey }: { studentId: string; ref
 
   if (loading) return <Center py="xl"><Loader /></Center>;
   if (err) return <Alert color="red" mt="md">{err}</Alert>;
-  if (grades.length === 0) return <Text c="dimmed" p="xl">Chưa có kết quả học kỳ nào.</Text>;
+
+  const grades = gradebook?.finalGrades ?? [];
+  const qualitative = gradebook?.qualitative ?? [];
+
+  if (grades.length === 0 && qualitative.length === 0) {
+    return <Text c="dimmed" p="xl">Chưa có kết quả học kỳ nào.</Text>;
+  }
+
+  return (
+    <Stack>
+      {grades.length > 0 && (
+        <Card radius="lg" style={{ border: '1px solid var(--cmc-border)' }} p={0}>
+          <Table striped withTableBorder={false}>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Kỳ</Table.Th>
+                <Table.Th>Chương trình</Table.Th>
+                <Table.Th>Bài tập TB</Table.Th>
+                <Table.Th>Thi</Table.Th>
+                <Table.Th>Điểm tổng</Table.Th>
+                <Table.Th>Kết quả</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {grades.map((g: FinalGrade) => (
+                <Table.Tr key={g.id}>
+                  <Table.Td>{g.periodKey}</Table.Td>
+                  <Table.Td>{g.program}</Table.Td>
+                  <Table.Td>{g.homeworkAvg != null ? g.homeworkAvg.toFixed(1) : '—'}</Table.Td>
+                  <Table.Td>{g.testScore != null ? g.testScore.toFixed(1) : '—'}</Table.Td>
+                  <Table.Td fw={600}>{g.finalScore != null ? g.finalScore.toFixed(1) : '—'}</Table.Td>
+                  <Table.Td>
+                    {g.complete ? (
+                      <Badge color={g.passed ? 'teal' : 'red'} variant="light" radius="xl">
+                        {g.passed ? 'Đạt' : 'Chưa đạt'}
+                      </Badge>
+                    ) : (
+                      <Badge color="gray" variant="light" radius="xl">Đang học</Badge>
+                    )}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Card>
+      )}
+
+      {/* Qualitative assessments — mirrors the parent gradebook view */}
+      {qualitative.length > 0 && (
+        <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+          <Text size="sm" fw={600} mb="md" style={{ color: 'var(--cmc-text-2)' }}>
+            Đánh giá định tính ({qualitative.length})
+          </Text>
+          <Stack gap="sm">
+            {qualitative.map((q: QualitativeRow) => (
+              <div key={q.id}>
+                <Group gap="xs" mb={4}>
+                  <Text fw={600} size="sm">{q.periodKey}</Text>
+                  <Badge size="xs" variant="light" radius="xl">
+                    {PERIOD_LABEL[q.period] ?? q.period}
+                  </Badge>
+                </Group>
+                <Group gap="xs" mb={q.narrative ? 4 : 0}>
+                  {Object.entries(q.criteria as Record<string, number>).map(([pillar, score]) => (
+                    <Badge key={pillar} size="sm" variant="outline" color="cmc" radius="xl">
+                      {pillar}: {score}
+                    </Badge>
+                  ))}
+                </Group>
+                {q.narrative && (
+                  <Text size="sm" c="dimmed">{q.narrative}</Text>
+                )}
+              </div>
+            ))}
+          </Stack>
+        </Card>
+      )}
+    </Stack>
+  );
+}
+
+// ── Courses tab — lists the student's active enrollments (RLS-scoped via enrollment.mine) ──
+
+const ENROLL_STATUS_LABEL: Record<string, string> = {
+  active: 'Đang học',
+  completed: 'Đã hoàn thành',
+  withdrawn: 'Đã rút',
+};
+
+function CoursesTab({ refreshKey }: { refreshKey: number }) {
+  const [enrollments, setEnrollments] = useState<EnrollmentRow[] | null>(null);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    setEnrollments(null);
+    setErr('');
+    trpc.enrollment.mine
+      .query()
+      .then(setEnrollments)
+      .catch((e) => {
+        setErr('Không tải được danh sách lớp học.');
+        notifyError(e, 'Tải khóa học thất bại');
+      });
+  }, [refreshKey]);
+
+  if (!enrollments) return <Center py="xl"><Loader /></Center>;
+  if (err) return <Alert color="red" mt="md">{err}</Alert>;
+  if (enrollments.length === 0) {
+    return (
+      <Card radius="lg" style={{ border: '1px solid var(--cmc-border)' }} p="xl">
+        <Text c="dimmed">Bạn chưa được ghi danh vào lớp nào.</Text>
+      </Card>
+    );
+  }
 
   return (
     <Card radius="lg" style={{ border: '1px solid var(--cmc-border)' }} p={0}>
-      <Table striped withTableBorder={false}>
+      <Table striped highlightOnHover withTableBorder={false}>
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>Kỳ</Table.Th>
-            <Table.Th>Chương trình</Table.Th>
-            <Table.Th>Bài tập TB</Table.Th>
-            <Table.Th>Thi</Table.Th>
-            <Table.Th>Điểm tổng</Table.Th>
-            <Table.Th>Kết quả</Table.Th>
+            <Table.Th style={thStyle}>Lớp học</Table.Th>
+            <Table.Th style={thStyle}>Khóa học</Table.Th>
+            <Table.Th style={thStyle}>Chương trình</Table.Th>
+            <Table.Th style={thStyle}>Trạng thái</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {grades.map((g) => (
-            <Table.Tr key={g.id}>
-              <Table.Td>{g.periodKey}</Table.Td>
-              <Table.Td>{g.program}</Table.Td>
-              <Table.Td>{g.homeworkAvg != null ? g.homeworkAvg.toFixed(1) : '—'}</Table.Td>
-              <Table.Td>{g.testScore != null ? g.testScore.toFixed(1) : '—'}</Table.Td>
-              <Table.Td fw={600}>{g.finalScore != null ? g.finalScore.toFixed(1) : '—'}</Table.Td>
+          {enrollments.map((e) => (
+            <Table.Tr key={e.id}>
               <Table.Td>
-                {g.complete ? (
-                  <Badge color={g.passed ? 'teal' : 'red'} variant="light" radius="xl">
-                    {g.passed ? 'Đạt' : 'Chưa đạt'}
-                  </Badge>
-                ) : (
-                  <Badge color="gray" variant="light" radius="xl">Đang học</Badge>
-                )}
+                <Stack gap={0}>
+                  <Text size="sm" fw={600}>{e.batch.name}</Text>
+                  <Text size="xs" c="dimmed">{e.batch.code}</Text>
+                </Stack>
+              </Table.Td>
+              <Table.Td>
+                <Stack gap={0}>
+                  <Text size="sm">{e.batch.course.name}</Text>
+                  <Text size="xs" c="dimmed">{e.batch.course.code}</Text>
+                </Stack>
+              </Table.Td>
+              <Table.Td>
+                <Text size="sm">{e.batch.course.program}</Text>
+              </Table.Td>
+              <Table.Td>
+                <Badge
+                  size="sm"
+                  variant="light"
+                  color={e.status === 'active' ? 'teal' : 'gray'}
+                  radius="xl"
+                >
+                  {ENROLL_STATUS_LABEL[e.status] ?? e.status}
+                </Badge>
               </Table.Td>
             </Table.Tr>
           ))}
@@ -746,6 +876,8 @@ export function StudentView({ principal, activeTab, onTabChange: _onTabChange, o
         );
       case 'rewards':
         return <RewardsTab refreshKey={refreshKey} />;
+      case 'courses':
+        return <CoursesTab refreshKey={refreshKey} />;
       default:
         return <ExercisesTab refreshKey={refreshKey} />;
     }

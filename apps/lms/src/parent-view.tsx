@@ -139,17 +139,39 @@ function LevelHistoryCard({ childId, refreshKey }: { childId: string; refreshKey
 
 type Meeting = Awaited<ReturnType<typeof trpc.parentMeeting.myMeetings.query>>[number];
 
-function UpcomingMeetingsCard({ refreshKey }: { refreshKey: number }) {
+/** Render a single meeting row (shared by upcoming and past sections). */
+function MeetingRow({ m }: { m: Meeting }) {
+  return (
+    <Group gap="xs" wrap="nowrap">
+      <Badge variant="light" color="cmc" radius="xl">
+        {m.timeConfirmed
+          ? fmtDateTime(m.scheduledAt)
+          : new Date(m.scheduledAt).toLocaleDateString('vi-VN')}
+      </Badge>
+      {!m.timeConfirmed && (
+        <Text size="xs" c="dimmed">(chưa chốt giờ)</Text>
+      )}
+      <Text fw={600} size="sm">{m.title}</Text>
+      {m.location && <Text size="sm" c="dimmed">· {m.location}</Text>}
+      {m.note && <Text size="sm" c="dimmed">— {m.note}</Text>}
+    </Group>
+  );
+}
+
+/**
+ * Shows all parent meetings split into upcoming and past sections so parents can
+ * see meeting history, not just future meetings (previously hidden when empty upcoming).
+ */
+function MeetingsCard({ refreshKey }: { refreshKey: number }) {
   const [meetings, setMeetings] = useState<Meeting[] | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    setMeetings(null);
     setError('');
     trpc.parentMeeting.myMeetings
       .query()
-      .then((rows) =>
-        setMeetings(rows.filter((m) => new Date(m.scheduledAt).getTime() >= Date.now())),
-      )
+      .then(setMeetings)
       .catch((e) => {
         setError('Không tải được lịch họp phụ huynh: ' + (e instanceof Error ? e.message : ''));
         notifyError(e, 'Tải lịch họp thất bại');
@@ -159,28 +181,36 @@ function UpcomingMeetingsCard({ refreshKey }: { refreshKey: number }) {
   if (error) return <Alert color="red">{error}</Alert>;
   if (!meetings || meetings.length === 0) return null;
 
+  const now = Date.now();
+  const upcoming = meetings
+    .filter((m) => new Date(m.scheduledAt).getTime() >= now)
+    .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
+  const past = meetings
+    .filter((m) => new Date(m.scheduledAt).getTime() < now)
+    .sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime());
+
   return (
     <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-      <Text size="sm" fw={600} mb="sm" style={{ color: 'var(--cmc-text-2)' }}>
-        Lịch họp phụ huynh sắp tới ({meetings.length})
-      </Text>
-      <Stack gap="xs">
-        {meetings.map((m) => (
-          <Group key={m.id} gap="xs" wrap="nowrap">
-            <Badge variant="light" color="cmc" radius="xl">
-              {m.timeConfirmed
-                ? fmtDateTime(m.scheduledAt)
-                : new Date(m.scheduledAt).toLocaleDateString('vi-VN')}
-            </Badge>
-            {!m.timeConfirmed && (
-              <Text size="xs" c="dimmed">(chưa chốt giờ)</Text>
-            )}
-            <Text fw={600} size="sm">{m.title}</Text>
-            {m.location && <Text size="sm" c="dimmed">· {m.location}</Text>}
-            {m.note && <Text size="sm" c="dimmed">— {m.note}</Text>}
-          </Group>
-        ))}
-      </Stack>
+      {upcoming.length > 0 && (
+        <>
+          <Text size="sm" fw={600} mb="sm" style={{ color: 'var(--cmc-text-2)' }}>
+            Lịch họp sắp tới ({upcoming.length})
+          </Text>
+          <Stack gap="xs" mb={past.length > 0 ? 'md' : 0}>
+            {upcoming.map((m) => <MeetingRow key={m.id} m={m} />)}
+          </Stack>
+        </>
+      )}
+      {past.length > 0 && (
+        <>
+          <Text size="sm" fw={600} mb="sm" style={{ color: 'var(--cmc-text-2)' }}>
+            Lịch họp đã qua ({past.length})
+          </Text>
+          <Stack gap="xs">
+            {past.map((m) => <MeetingRow key={m.id} m={m} />)}
+          </Stack>
+        </>
+      )}
     </Card>
   );
 }
@@ -569,7 +599,7 @@ export function ParentView({ principal, activeTab, onTabChange: _onTabChange, on
         </Alert>
       )}
 
-      <UpcomingMeetingsCard refreshKey={refreshKey} />
+      <MeetingsCard refreshKey={refreshKey} />
 
       {childId && (
         <ChildDashboard

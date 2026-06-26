@@ -1,12 +1,41 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
-import { rlsContextOf } from '@cmc/auth';
+import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent, logStatusChange } from '@cmc/audit';
-import { router, protectedProcedure, requireRole, Role } from '../trpc.js';
+import { router, protectedProcedure, requireRole, Role, lmsProcedure } from '../trpc.js';
 import { emitStaffNotif } from '../lib/emit-staff-notif.js';
 
 export const enrollmentRouter = router({
+  /**
+   * Student/parent view: returns all non-archived enrollments the LMS principal owns.
+   *
+   * Security: uses lmsProcedure (requires LMS session, no SYSTEM bypass) and
+   * withRls(lmsRlsContextOf(ctx.lms)) which sets app.principal_kind + app.student_ids.
+   * The enrollment_isolation RLS policy then filters `student_id = ANY(app.student_ids)`,
+   * so this query is always scoped to the caller's own students — no cross-facility leak.
+   */
+  mine: lmsProcedure.query(({ ctx }) =>
+    withRls(lmsRlsContextOf(ctx.lms), (tx) =>
+      tx.enrollment.findMany({
+        where: { archivedAt: null },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          status: true,
+          // Prisma relation field is named 'batch' (the FK column is class_batch_id).
+          batch: {
+            select: {
+              code: true,
+              name: true,
+              course: { select: { code: true, name: true, program: true } },
+            },
+          },
+        },
+      }),
+    ),
+  ),
+
   listByBatch: protectedProcedure
     .input(z.object({ classBatchId: z.string().uuid() }))
     .query(({ ctx, input }) =>

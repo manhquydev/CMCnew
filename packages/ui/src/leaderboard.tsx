@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Card, Stack, Table, Text } from '@mantine/core';
+import { Badge, Card, Center, Loader, Stack, Table, Text } from '@mantine/core';
 import { trpc } from './client.js';
 
 type Board = Awaited<ReturnType<typeof trpc.leaderboard.forStudent.query>>[number];
@@ -18,7 +18,16 @@ export function Leaderboard({ studentId, refreshKey = 0 }: { studentId: string; 
   }, [studentId]);
   useEffect(load, [load, refreshKey]);
 
-  if (boards && boards.length === 0) {
+  // null = still loading; [] = loaded but no classes
+  if (boards === null) {
+    return (
+      <Center py="md">
+        <Loader size="sm" />
+      </Center>
+    );
+  }
+
+  if (boards.length === 0) {
     return (
       <Card withBorder>
         <Text c="dimmed" size="sm">
@@ -30,7 +39,7 @@ export function Leaderboard({ studentId, refreshKey = 0 }: { studentId: string; 
 
   return (
     <Stack>
-      {(boards ?? []).map((b) => (
+      {boards.map((b) => (
         <Card key={b.classBatchId} withBorder>
           <Text fw={600} mb="xs">
             {b.className} <Text span c="dimmed" size="sm">· {b.classCode}</Text>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Card, Group, SimpleGrid, Stack, Text } from '@mantine/core';
+import { Badge, Card, Center, Group, Loader, SimpleGrid, Stack, Text } from '@mantine/core';
 import { trpc } from './client.js';
 
 type EarnedBadge = Awaited<ReturnType<typeof trpc.badge.myBadges.query>>[number];
@@ -20,7 +20,16 @@ export function BadgeShelf({ studentId, refreshKey = 0 }: { studentId: string; r
   }, [studentId]);
   useEffect(load, [load, refreshKey]);
 
-  if (badges && badges.length === 0) {
+  // null = still loading; [] = loaded but empty
+  if (badges === null) {
+    return (
+      <Center py="md">
+        <Loader size="sm" />
+      </Center>
+    );
+  }
+
+  if (badges.length === 0) {
     return (
       <Card withBorder>
         <Text c="dimmed" size="sm">
@@ -32,7 +41,7 @@ export function BadgeShelf({ studentId, refreshKey = 0 }: { studentId: string; r
 
   return (
     <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }}>
-      {(badges ?? []).map((b) => (
+      {badges.map((b) => (
         <Card key={b.id} withBorder padding="sm">
           <Stack gap={4} align="center" ta="center">
             {b.badge.iconUrl ? (
