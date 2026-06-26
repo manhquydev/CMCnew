@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { AppShell, ActionIcon, Avatar, Badge, Button, Group, NavLink, Text, UnstyledButton } from '@mantine/core';
-import { useSession } from '@cmc/ui';
+import { AppShell, ActionIcon, Avatar, Badge, Box, Button, Group, NavLink, Popover, ScrollArea, Stack, Text, UnstyledButton } from '@mantine/core';
+import { useSession, useStaffNotif } from '@cmc/ui';
+import type { StaffNotifItem } from '@cmc/ui';
 import {
   IconBook,
   IconBuilding,
@@ -102,6 +103,54 @@ function GroupLabel({ label }: { label: string }) {
   );
 }
 
+// ─── Staff notification dropdown ──────────────────────────────────────────────
+
+function StaffNotifDropdown({
+  items,
+  onMarkAll,
+  isMarkingAll,
+}: {
+  items: StaffNotifItem[];
+  onMarkAll: () => void;
+  isMarkingAll: boolean;
+}) {
+  return (
+    <Stack gap={0} style={{ minWidth: 300 }}>
+      <Group
+        justify="space-between"
+        px="sm"
+        py="xs"
+        style={{ borderBottom: '1px solid var(--cmc-border)' }}
+      >
+        <Text size="sm" fw={600}>Thông báo</Text>
+        <Button variant="subtle" size="xs" onClick={onMarkAll} loading={isMarkingAll}>
+          Đọc tất cả
+        </Button>
+      </Group>
+      <ScrollArea h={320}>
+        {items.length === 0 ? (
+          <Text size="sm" c="dimmed" ta="center" py="xl">Không có thông báo mới</Text>
+        ) : (
+          items.map((n) => (
+            <Box
+              key={n.id}
+              px="sm"
+              py="xs"
+              style={{
+                backgroundColor: n.readAt ? 'transparent' : 'var(--cmc-brand-muted)',
+                borderBottom: '1px solid var(--cmc-border-faint)',
+              }}
+            >
+              <Text size="sm" fw={n.readAt ? 400 : 500}>{n.title}</Text>
+              <Text size="xs" c="dimmed" lineClamp={2}>{n.body}</Text>
+            </Box>
+          ))
+        )}
+      </ScrollArea>
+    </Stack>
+  );
+}
+
 // ─── Shell ─────────────────────────────────────────────────────────────────────
 
 export type { SectionKey };
@@ -121,6 +170,8 @@ export function Shell({
 }) {
   const { me, logout } = useSession();
   const [mobileOpened, setMobileOpened] = useState(false);
+  const facilityId = me.facilityIds[0] ?? null;
+  const { unreadCount, notifications, fetchList, markAllRead, isMarkingAll } = useStaffNotif(facilityId);
   return (
     <AppShell
       header={{ height: 56 }}
@@ -166,40 +217,52 @@ export function Shell({
             </Text>
           </Group>
           <Group gap="sm">
-            <UnstyledButton
-              aria-label="Thông báo"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 36,
-                height: 36,
-                borderRadius: 10,
-                color: 'var(--cmc-text-muted)',
-                position: 'relative',
-                transition: 'background-color 200ms',
-              }}
-            >
-              <IconBell size={20} stroke={1.5} />
-              {/* Placeholder badge — replace with real unread count when staff-notif router is ready */}
-              <Badge
-                size="xs"
-                color="red"
-                variant="filled"
-                style={{
-                  position: 'absolute',
-                  top: 4,
-                  right: 4,
-                  minWidth: 16,
-                  height: 16,
-                  padding: '0 4px',
-                  fontSize: 9,
-                  display: 'none', // hidden until real data available
-                }}
-              >
-                0
-              </Badge>
-            </UnstyledButton>
+            <Popover width={320} position="bottom-end" withArrow>
+              <Popover.Target>
+                <UnstyledButton
+                  aria-label="Thông báo"
+                  onClick={fetchList}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    color: 'var(--cmc-text-muted)',
+                    position: 'relative',
+                    transition: 'background-color 200ms',
+                  }}
+                >
+                  <IconBell size={20} stroke={1.5} />
+                  {unreadCount > 0 && (
+                    <Badge
+                      size="xs"
+                      color="red"
+                      variant="filled"
+                      style={{
+                        position: 'absolute',
+                        top: 4,
+                        right: 4,
+                        minWidth: 16,
+                        height: 16,
+                        padding: '0 4px',
+                        fontSize: 9,
+                      }}
+                    >
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Badge>
+                  )}
+                </UnstyledButton>
+              </Popover.Target>
+              <Popover.Dropdown style={{ padding: 0 }}>
+                <StaffNotifDropdown
+                  items={notifications}
+                  onMarkAll={markAllRead}
+                  isMarkingAll={isMarkingAll}
+                />
+              </Popover.Dropdown>
+            </Popover>
             <Avatar size={32} radius="xl" color="blue" title={me.displayName}>
               {me.displayName.slice(0, 2).toUpperCase()}
             </Avatar>

@@ -14,3 +14,4 @@ export { Chatter } from './chatter.js';
 export { BadgeShelf } from './badge-shelf.js';
 export { Leaderboard } from './leaderboard.js';
 export { NotificationCenter } from './notification-center.js';
+export { useStaffNotif, type StaffNotifItem } from './use-staff-notif.js';
