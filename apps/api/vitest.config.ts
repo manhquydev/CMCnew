@@ -7,6 +7,8 @@ import { defineConfig } from 'vitest/config';
 // include pattern and is used by `pnpm test:int`.
 export default defineConfig({
   test: {
+    // Loads .env + deterministic test env (e.g. CRM_LEAD_TOKEN) — parity with the integration config.
+    setupFiles: ['./test/setup.ts'],
     fileParallelism: false,
     pool: 'forks',
     poolOptions: { forks: { singleFork: true } },
