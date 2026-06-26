@@ -1,10 +1,11 @@
 import { z } from 'zod';
-import { withRls, Program } from '@cmc/db';
+import { withRls, Program, StudentLifecycle } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, protectedProcedure, requireRole, Role } from '../trpc.js';
 
 const program = z.nativeEnum(Program);
+const lifecycle = z.nativeEnum(StudentLifecycle);
 
 export const studentRouter = router({
   list: protectedProcedure.query(({ ctx }) =>
@@ -40,6 +41,43 @@ export const studentRouter = router({
           entityType: 'student',
           entityId: student.id,
           type: 'created',
+          actorId: ctx.session.userId,
+        });
+        return student;
+      }),
+    ),
+
+  // Correct a student's profile after creation (name, DOB, program, lifecycle). Without this,
+  // fixes required raw DB access. RLS keeps the update inside the caller's facility scope.
+  update: requireRole(Role.quan_ly, Role.sale)
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        fullName: z.string().min(1).optional(),
+        program: program.optional(),
+        dateOfBirth: z.string().date().nullable().optional(),
+        lifecycle: lifecycle.optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const before = await tx.student.findUniqueOrThrow({ where: { id: input.id } });
+        const student = await tx.student.update({
+          where: { id: input.id },
+          data: {
+            fullName: input.fullName ?? undefined,
+            program: input.program ?? undefined,
+            dateOfBirth:
+              input.dateOfBirth === undefined ? undefined : input.dateOfBirth ? new Date(input.dateOfBirth) : null,
+            lifecycle: input.lifecycle ?? undefined,
+          },
+        });
+        await logEvent(tx, {
+          facilityId: before.facilityId,
+          entityType: 'student',
+          entityId: student.id,
+          type: 'updated',
+          body: `Cập nhật hồ sơ HS ${student.fullName}`,
           actorId: ctx.session.userId,
         });
         return student;

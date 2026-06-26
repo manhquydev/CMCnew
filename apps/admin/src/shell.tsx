@@ -14,6 +14,8 @@ import {
   IconTargetArrow,
   IconTrendingUp,
   IconUsers,
+  IconSchool,
+  IconGift,
 } from '@tabler/icons-react';
 
 // ─── Nav config ────────────────────────────────────────────────────────────────
@@ -21,6 +23,7 @@ import {
 type SectionKey =
   | 'overview'
   | 'courses'
+  | 'students'
   | 'org'
   | 'guardians'
   | 'hr'
@@ -28,7 +31,8 @@ type SectionKey =
   | 'compensation'
   | 'finance'
   | 'crm'
-  | 'cskh';
+  | 'cskh'
+  | 'rewards';
 
 type NavItem = {
   key: SectionKey;
@@ -332,6 +336,8 @@ export function buildNavGroups({
   canCskh,
   canOrg,
   canGuardians,
+  canStudents,
+  canRewards,
   isSuperAdmin,
 }: {
   canHr: boolean;
@@ -341,6 +347,8 @@ export function buildNavGroups({
   canCskh: boolean;
   canOrg: boolean;
   canGuardians: boolean;
+  canStudents: boolean;
+  canRewards: boolean;
   isSuperAdmin: boolean;
 }): NavGroup[] {
   return [
@@ -358,6 +366,12 @@ export function buildNavGroups({
           label: 'Khóa học',
           icon: <IconBook size={18} stroke={1.5} />,
           visible: true,
+        },
+        {
+          key: 'students',
+          label: 'Học sinh',
+          icon: <IconSchool size={18} stroke={1.5} />,
+          visible: canStudents,
         },
       ],
     },
@@ -399,6 +413,12 @@ export function buildNavGroups({
           icon: <IconHeadset size={18} stroke={1.5} />,
           visible: canCskh,
         },
+        {
+          key: 'rewards',
+          label: 'Đổi quà',
+          icon: <IconGift size={18} stroke={1.5} />,
+          visible: canRewards,
+        },
       ],
     },
     {
@@ -432,6 +452,7 @@ export function buildNavGroups({
 export const SECTION_TITLES: Record<SectionKey, string> = {
   overview: 'Tổng quan',
   courses: 'Khóa học',
+  students: 'Học sinh',
   org: 'Cơ sở & Người dùng',
   guardians: 'Phụ huynh',
   finance: 'Tài chính',
@@ -440,4 +461,5 @@ export const SECTION_TITLES: Record<SectionKey, string> = {
   hr: 'Nhân sự & Lương',
   kpi: 'Đánh giá KPI',
   compensation: 'Cơ cấu lương',
+  rewards: 'Đổi quà',
 };

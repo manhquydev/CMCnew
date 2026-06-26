@@ -40,6 +40,8 @@ import { KpiEvaluationPanel } from './kpi-evaluation-panel';
 import { FinancePanel } from './finance-panel';
 import { CrmPanel } from './crm-panel';
 import { CskhPanel } from './cskh-panel';
+import { StudentsPanel } from './students-panel';
+import { RewardsPanel } from './rewards-panel';
 import { Shell, buildNavGroups, SECTION_TITLES, type SectionKey } from './shell';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
@@ -698,7 +700,7 @@ function HrPayrollSection() {
 // ─── Dashboard (AppShell wrapper) ─────────────────────────────────────────────
 
 const ALL_ADMIN_KEYS = new Set<string>([
-  'overview', 'courses', 'org', 'guardians', 'hr', 'kpi', 'compensation', 'finance', 'crm', 'cskh',
+  'overview', 'courses', 'students', 'org', 'guardians', 'hr', 'kpi', 'compensation', 'finance', 'crm', 'cskh', 'rewards',
 ]);
 
 function hashToAdminSection(): SectionKey | undefined {
@@ -723,6 +725,11 @@ function Dashboard() {
     me.isSuperAdmin || me.roles.some((r) => ['quan_ly', 'bgd', 'hr'].includes(r));
   const canGuardians =
     me.isSuperAdmin || me.roles.some((r) => ['quan_ly', 'bgd', 'cskh'].includes(r));
+  // students = hồ sơ HS (create/update gated quan_ly/sale); rewards = duyệt đổi quà.
+  const canStudents =
+    me.isSuperAdmin || me.roles.some((r) => ['quan_ly', 'sale', 'bgd'].includes(r));
+  const canRewards =
+    me.isSuperAdmin || me.roles.some((r) => ['quan_ly', 'head_teacher', 'bgd'].includes(r));
 
   const [activeSection, setActiveSection] = useState<SectionKey>(
     hashToAdminSection() ?? 'overview',
@@ -745,6 +752,8 @@ function Dashboard() {
     canCskh,
     canOrg,
     canGuardians,
+    canStudents,
+    canRewards,
     isSuperAdmin: me.isSuperAdmin,
   });
 
@@ -758,6 +767,8 @@ function Dashboard() {
     if (key === 'cskh' && !canCskh) return;
     if (key === 'org' && !canOrg) return;
     if (key === 'guardians' && !canGuardians) return;
+    if (key === 'students' && !canStudents) return;
+    if (key === 'rewards' && !canRewards) return;
     window.location.hash = key;
     setActiveSection(key);
   };
@@ -768,6 +779,15 @@ function Dashboard() {
         return <OverviewPanel />;
       case 'courses':
         return <Courses />;
+      case 'students':
+        return canStudents ? (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
+              Học sinh
+            </Text>
+            <StudentsPanel />
+          </Stack>
+        ) : null;
       case 'org':
         return canOrg ? <OrgPanel /> : null;
       case 'guardians':
@@ -824,6 +844,15 @@ function Dashboard() {
               Chăm sóc khách hàng
             </Text>
             <CskhPanel />
+          </Stack>
+        ) : null;
+      case 'rewards':
+        return canRewards ? (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
+              Đổi quà
+            </Text>
+            <RewardsPanel />
           </Stack>
         ) : null;
       default:
