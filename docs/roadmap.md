@@ -47,6 +47,7 @@ Mục tiêu: xương sống học thuật + giá trị LMS đầu tiên.
 - **Payroll deferrals M4/M5/M9/M10/M11 nêu rõ là quyết định mở** (không âm thầm bỏ).
 - **Done-evidence:** tính → duyệt → đánh dấu đã trả payslip; non-HR không thấy số lương.
 - **CV5 HR UI (✅ done 2026-06-25):** Tab "Nhân sự & Lương" trong admin (hr/ke_toan/super_admin); SalaryRateCard có ô quota tháng; CommissionCard gọi `commissionForSale`, hiển thị breakdown attainment/rate/HH, nút "Đưa vào variablePay". _Harness: CV5-hr-ui · Int-test: PAY-FINALIZE, PAY-MYSLIPS, FIN-COMMISSION · E2E: admin-smoke (login gate)._
+- **Bell notification (✅ done 2026-06-26):** Staff bell wired in admin+teaching AppShell (useStaffNotif hook, SSE + tRPC staffNotif router, Popover dropdown). Teaching shell fully wired (AppShell NavLink sidebar replacing Tabs). Docker full stack prod-ready (4 Dockerfiles + nginx + docker-compose.prod.yml). HR panel staff table + payslip drawer via payroll.roster. Class list pagination 20/page. _Harness: BELL-NOTIF, HR-PANEL-UI, TEACH-SHELL, DOCKER-PROD, TEACH-PAGINATE._
 
 ## Phase 5 — After-sale, Guardian, Exec & hoàn thiện
 
@@ -72,7 +73,7 @@ Mỗi phase chỉ "done" khi có **cả 3 lớp bằng chứng**:
 "done-by-evidence (self-reported)" không còn hợp lệ nếu không có harness story ID đi kèm.
 RLS + atomic + finalize là checklist bắt buộc ở mọi phase chạm tenant/tiền/lương.
 
-### Evidence registry (2026-06-25)
+### Evidence registry (2026-06-26)
 
 | Domain | Harness IDs | E2E coverage |
 |---|---|---|
@@ -82,3 +83,4 @@ RLS + atomic + finalize là checklist bắt buộc ở mọi phase chạm tenant
 | Payroll | PAY-FINAL, PAY-MYSLIP, CV5-hr-ui | admin-smoke |
 | LMS/Rewards | LMS-BADGE, LMS-ASSESS, LMS-LEVEL, LMS-NO-CERT, LMS-STAR, LMS-REWARD | lms-smoke |
 | CRM/After-sale | AFS-LIFECYCLE, CRM-HOOKS, CRM-BATCH | teaching-smoke |
+| UI/Infra | BELL-NOTIF, HR-PANEL-UI, TEACH-SHELL, DOCKER-PROD, TEACH-PAGINATE | admin-smoke, teaching-smoke |

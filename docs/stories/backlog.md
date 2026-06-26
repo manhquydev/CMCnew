@@ -42,3 +42,8 @@
 | LMS-REWARD | Reward review + star refund on rejection | normal | E06-rewards | `apps/api/test/reward-review-refund.int.test.ts` |
 | CRM-HOOKS | CRM stage hooks fire on opportunity transitions | normal | E07-crm-aftersale | `apps/api/test/crm-hooks.int.test.ts` |
 | CRM-BATCH | Batch code counter is atomic (concurrent generation) | normal | E07-crm-aftersale | `apps/api/test/batch-code-atomicity.int.test.ts` |
+| BELL-NOTIF | Staff bell notification: SSE-fed unread badge + dropdown in admin and teaching shells | normal | UI/Infra | `packages/ui/src/use-staff-notif.ts`, `apps/admin/src/shell.tsx`, `apps/teaching/src/shell.tsx` |
+| HR-PANEL-UI | Admin HR panel: StaffTable roster view + StaffDetailDrawer with payslip list and bulk-pay | normal | UI/Infra | `apps/admin/src/payroll-panel.tsx`, `apps/api/src/routers/payroll.ts` |
+| TEACH-SHELL | Teaching AppShell: grouped NavLink sidebar wired into App.tsx replacing flat Workbench layout | normal | UI/Infra | `apps/teaching/src/shell.tsx`, `apps/teaching/src/App.tsx` |
+| DOCKER-PROD | Full-stack Docker production setup: per-app Dockerfiles, docker-compose.prod.yml, nginx reverse proxy | normal | UI/Infra | `apps/*/Dockerfile`, `docker/docker-compose.prod.yml`, `docker/nginx.conf` |
+| TEACH-PAGINATE | Teaching class list: PAGE_SIZE=20 pagination, Pagination component, search filter with page-reset | normal | UI/Infra | `apps/teaching/src/App.tsx` (Workspace: classPage, setClassPage, Pagination) |
