@@ -73,6 +73,11 @@ export const compensationParamsSchema = z.object({
     retentionFloor: z.number().min(0).max(1),
     /** Commission budget cap as a fraction of real revenue (chốt: ≤6% theo file Excel KPI). */
     budgetPct: z.number().min(0).max(1),
+    /** Centre-retention ratio assumed for auto-fed renewal commission BEFORE CRM feeds the real
+     *  figure. Conservative default (< 1) per ERP accrue-then-reconcile practice to avoid overpay;
+     *  a tree-manager can override the final commission on the payslip. HR/BGD tune this.
+     *  `.default` keeps existing stored policies (without this key) parseable — backward-compatible. */
+    renewalRetentionDefault: z.number().min(0).max(2).default(0.9),
   }),
   /** Teaching overtime unit price (VND/hour) by teacher grade. */
   overtimeRates: z.record(z.string(), z.number().int().nonnegative()),
@@ -145,6 +150,9 @@ export const DEFAULT_PARAMS: CompensationParams = {
     renewal: { tpkd: 0.005, gdtt: 0.005, gv: 0.01, cskh: 0.008 },
     retentionFloor: 0.5,
     budgetPct: 0.06,
+    // Conservative pre-CRM assumption (90% retention) — accrue slightly below full to limit
+    // overpay, reconcilable via a tree-manager override on the payslip. HR/BGD may raise to 1.
+    renewalRetentionDefault: 0.9,
   },
   overtimeRates: { B1: 100_000, B2: 120_000, B3: 130_000, B4: 150_000 },
   parttimePackages: { PT3: 3_000_000, PT4: 4_000_000, PT5: 5_000_000 },

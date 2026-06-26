@@ -286,9 +286,12 @@ export const payrollRouter = router({
           const newRevenue = grouped.find((g) => g.kind === 'new')?._sum.netAmount ?? 0;
           const renewalRevenue = grouped.find((g) => g.kind === 'renewal')?._sum.netAmount ?? 0;
           const attainment = quota > 0 ? newRevenue / quota : 0;
+          // Renewal uses the policy's pre-CRM retention assumption (conservative, tunable) rather
+          // than a hardcoded 100%; a tree-manager can override the final commission afterwards.
+          const retentionAssumption = params.commission.renewalRetentionDefault;
           const commission =
             commissionAmount(newRevenue, cvtvNewCustomerRate(attainment, params)) +
-            commissionAmount(renewalRevenue, renewalRate('cvtv', 1, params));
+            commissionAmount(renewalRevenue, renewalRate('cvtv', retentionAssumption, params));
           resolvedVariablePay = Math.round(commission);
           resolvedVariableNote = `Hoa hồng ${input.periodKey}: ${resolvedVariablePay.toLocaleString('vi-VN')}đ`;
         }

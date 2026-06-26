@@ -757,6 +757,24 @@ model FinalGrade {
   @@map("final_grade")
 }
 
+/// Kỳ học có mốc ngày (decision 2026-06-26): final grade gộp điểm/điểm danh TRONG khoảng kỳ.
+/// periodKey khớp với FinalGrade/QualitativeAssessment.periodKey; computeFinalGrade lọc theo
+/// [startDate, endDate]. Không có term cho periodKey → fallback all-time (tương thích ngược).
+model AcademicTerm {
+  id         String   @id @default(uuid()) @db.Uuid
+  facilityId Int      @map("facility_id")
+  periodKey  String   @map("period_key")
+  name       String
+  startDate  DateTime @map("start_date") @db.Date
+  endDate    DateTime @map("end_date") @db.Date
+  program    Program?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([facilityId, periodKey])
+  @@index([facilityId])
+  @@map("academic_term")
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Phase 3 — Doanh thu & CRM. Slice S1: giá khóa (effective-dated) + discount tier +
 // voucher (consume nguyên tử, sửa M2) + phiếu thu. Logic số ở @cmc/domain-finance.
