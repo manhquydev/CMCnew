@@ -1,14 +1,14 @@
 import '@mantine/dates/styles.css';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dayjs from 'dayjs';
-import { LoginGate, useSession, trpc, Chatter } from '@cmc/ui';
+import { LoginGate, useSession, trpc, Chatter, notifyError } from '@cmc/ui';
 import {
   Badge,
   Button,
   Card,
-  Checkbox,
   Grid,
   Group,
+  Loader,
   Modal,
   NumberInput,
   Pagination,
@@ -32,6 +32,10 @@ import { CskhPanel } from './cskh-panel';
 import { CertificatePanel } from './certificate-panel';
 import { PayrollPanel } from './payroll-panel';
 import { MyPayslipsPanel } from './my-payslips-panel';
+import { SchedulePanel } from './schedule-panel';
+import { AttendancePanel } from './attendance-panel';
+import { MeetingsPanel } from './meetings-panel';
+import { AttendanceRoster } from './attendance-roster';
 import { Shell, type SectionKey } from './shell';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
@@ -153,6 +157,7 @@ function ScheduleTab({
   const [teacherId, setTeacherId] = useState<string | null>(null);
   const [range, setRange] = useState<{ from: Date | null; to: Date | null }>({ from: null, to: null });
   const [msg, setMsg] = useState('');
+  const [loadingSlots, setLoadingSlots] = useState(false);
   const roomLabel = useCallback(
     (id: string | null) => (id ? (rooms.find((r) => r.id === id)?.code ?? '—') : '—'),
     [rooms],
@@ -162,21 +167,30 @@ function ScheduleTab({
     [teachers],
   );
   const load = useCallback(() => {
-    trpc.schedule.listSlots.query({ classBatchId: batch.id }).then(setSlots).catch(() => {});
+    setLoadingSlots(true);
+    trpc.schedule.listSlots
+      .query({ classBatchId: batch.id })
+      .then(setSlots)
+      .catch((e) => notifyError(e, 'Không tải được khung lịch'))
+      .finally(() => setLoadingSlots(false));
   }, [batch.id]);
   useEffect(load, [load]);
 
   async function addSlot() {
-    await trpc.schedule.addSlot.mutate({
-      facilityId,
-      classBatchId: batch.id,
-      dayOfWeek: Number(day),
-      startTime: start,
-      endTime: end,
-      roomId: roomId ?? undefined,
-      teacherId: teacherId ?? undefined,
-    });
-    load();
+    try {
+      await trpc.schedule.addSlot.mutate({
+        facilityId,
+        classBatchId: batch.id,
+        dayOfWeek: Number(day),
+        startTime: start,
+        endTime: end,
+        roomId: roomId ?? undefined,
+        teacherId: teacherId ?? undefined,
+      });
+      load();
+    } catch (e) {
+      notifyError(e, 'Thêm khung lịch thất bại');
+    }
   }
   async function generate() {
     setMsg('');
@@ -232,28 +246,32 @@ function ScheduleTab({
         <Text size="xs" c="dimmed" mt={6}>
           Gán phòng/giáo viên để hệ thống chặn cứng trùng phòng và trùng giáo viên khi sinh lịch.
         </Text>
-        <Table mt="sm">
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Thứ</Table.Th>
-              <Table.Th>Giờ</Table.Th>
-              <Table.Th>Phòng</Table.Th>
-              <Table.Th>Giáo viên</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {slots.map((s) => (
-              <Table.Tr key={s.id}>
-                <Table.Td>{DOW[s.dayOfWeek]}</Table.Td>
-                <Table.Td>
-                  {s.startTime} - {s.endTime}
-                </Table.Td>
-                <Table.Td>{roomLabel(s.roomId)}</Table.Td>
-                <Table.Td>{teacherLabel(s.teacherId)}</Table.Td>
+        {loadingSlots ? (
+          <Loader size="sm" mt="sm" />
+        ) : (
+          <Table mt="sm">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Thứ</Table.Th>
+                <Table.Th>Giờ</Table.Th>
+                <Table.Th>Phòng</Table.Th>
+                <Table.Th>Giáo viên</Table.Th>
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {slots.map((s) => (
+                <Table.Tr key={s.id}>
+                  <Table.Td>{DOW[s.dayOfWeek]}</Table.Td>
+                  <Table.Td>
+                    {s.startTime} - {s.endTime}
+                  </Table.Td>
+                  <Table.Td>{roomLabel(s.roomId)}</Table.Td>
+                  <Table.Td>{teacherLabel(s.teacherId)}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
       </Card>
       <Card withBorder>
         <Text fw={600} mb="xs">
@@ -288,12 +306,23 @@ function ScheduleTab({
 
 function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Room[]; teachers: Teacher[] }) {
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [loading, setLoading] = useState(false);
+
   useEffect(() => {
-    trpc.schedule.listSessions.query({ classBatchId: batchId }).then(setSessions).catch(() => {});
+    setLoading(true);
+    trpc.schedule.listSessions
+      .query({ classBatchId: batchId })
+      .then(setSessions)
+      .catch((e) => notifyError(e, 'Không tải được buổi học'))
+      .finally(() => setLoading(false));
   }, [batchId]);
+
   const roomLabel = (id: string | null) => (id ? (rooms.find((r) => r.id === id)?.code ?? '—') : '—');
   const teacherLabel = (id: string | null) =>
     id ? (teachers.find((t) => t.id === id)?.displayName ?? '—') : '—';
+
+  if (loading) return <Loader size="sm" />;
+
   return (
     <Table striped>
       <Table.Thead>
@@ -321,6 +350,15 @@ function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Roo
             </Table.Td>
           </Table.Tr>
         ))}
+        {sessions.length === 0 && (
+          <Table.Tr>
+            <Table.Td colSpan={5}>
+              <Text c="dimmed" size="sm">
+                Chưa có buổi học. Vào tab "Lịch" để sinh buổi.
+              </Text>
+            </Table.Td>
+          </Table.Tr>
+        )}
       </Table.Tbody>
     </Table>
   );
@@ -392,10 +430,22 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
   const [students, setStudents] = useState<StudentT[]>([]);
   const [studentId, setStudentId] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
+  const [loading, setLoading] = useState(false);
+
   const load = useCallback(() => {
-    trpc.enrollment.listByBatch.query({ classBatchId: batch.id }).then(setEnrollments).catch(() => {});
-    trpc.student.list.query().then(setStudents).catch(() => {});
-  }, [batch.id]);
+    setLoading(true);
+    Promise.all([
+      trpc.enrollment.listByBatch.query({ classBatchId: batch.id }),
+      trpc.student.list.query(),
+    ])
+      .then(([enrs, studs]) => {
+        setEnrollments(enrs);
+        // Filter to only show students belonging to the active facility
+        setStudents(studs.filter((s) => s.facilityId === facilityId));
+      })
+      .catch((e) => notifyError(e, 'Không tải được danh sách ghi danh'))
+      .finally(() => setLoading(false));
+  }, [batch.id, facilityId]);
   useEffect(load, [load]);
 
   async function enroll() {
@@ -412,13 +462,19 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
   }
 
   async function complete(id: string) {
-    await trpc.enrollment.complete.mutate({ id });
-    load();
+    try {
+      await trpc.enrollment.complete.mutate({ id });
+      load();
+    } catch (e) {
+      notifyError(e, 'Hoàn tất ghi danh thất bại');
+    }
   }
 
-  // Enroll only students not already in this batch.
+  // Enroll only students from this facility not already in this batch
   const enrolledIds = new Set(enrollments.map((e) => e.studentId));
   const enrollable = students.filter((s) => !enrolledIds.has(s.id));
+
+  if (loading) return <Loader size="sm" />;
 
   return (
     <Stack>
@@ -472,15 +528,25 @@ type ParentMeeting = Awaited<ReturnType<typeof trpc.parentMeeting.list.query>>[n
 
 function MeetingsTab({ batch, facilityId }: { batch: Batch; facilityId: number }) {
   const [meetings, setMeetings] = useState<ParentMeeting[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const load = useCallback(() => {
-    trpc.parentMeeting.list.query({ facilityId, classBatchId: batch.id }).then(setMeetings).catch(() => {});
+    setLoading(true);
+    trpc.parentMeeting.list
+      .query({ facilityId, classBatchId: batch.id })
+      .then(setMeetings)
+      .catch((e) => notifyError(e, 'Không tải được cuộc họp phụ huynh'))
+      .finally(() => setLoading(false));
   }, [facilityId, batch.id]);
   useEffect(load, [load]);
 
   async function setStatus(id: string, status: 'done' | 'cancelled') {
-    await trpc.parentMeeting.setStatus.mutate({ id, status });
-    load();
+    try {
+      await trpc.parentMeeting.setStatus.mutate({ id, status });
+      load();
+    } catch (e) {
+      notifyError(e, 'Cập nhật thất bại');
+    }
   }
 
   const ST: Record<string, { label: string; color: string }> = {
@@ -489,6 +555,8 @@ function MeetingsTab({ batch, facilityId }: { batch: Batch; facilityId: number }
     cancelled: { label: 'Đã hủy', color: 'gray' },
   };
 
+  if (loading) return <Loader size="sm" />;
+
   return (
     <Stack>
       <Table striped>
@@ -496,110 +564,76 @@ function MeetingsTab({ batch, facilityId }: { batch: Batch; facilityId: number }
           {meetings.map((m) => {
             const st = ST[m.status] ?? { label: m.status, color: 'gray' };
             return (
-            <Table.Tr key={m.id}>
-              <Table.Td>{dayjs(m.scheduledAt).format('DD/MM/YYYY HH:mm')}</Table.Td>
-              <Table.Td>{m.title}</Table.Td>
-              <Table.Td>{m.location ?? ''}</Table.Td>
-              <Table.Td>
-                <Badge size="sm" color={st.color}>{st.label}</Badge>
-              </Table.Td>
-              <Table.Td w={170}>
-                {m.status === 'scheduled' && (
-                  <Group gap="xs">
-                    <Button size="compact-xs" color="teal" variant="subtle" onClick={() => setStatus(m.id, 'done')}>Đã họp</Button>
-                    <Button size="compact-xs" color="gray" variant="subtle" onClick={() => setStatus(m.id, 'cancelled')}>Hủy</Button>
-                  </Group>
-                )}
-              </Table.Td>
-            </Table.Tr>
+              <Table.Tr key={m.id}>
+                <Table.Td>{dayjs(m.scheduledAt).format('DD/MM/YYYY HH:mm')}</Table.Td>
+                <Table.Td>{m.title}</Table.Td>
+                <Table.Td>{m.location ?? ''}</Table.Td>
+                <Table.Td>
+                  <Badge size="sm" color={st.color}>{st.label}</Badge>
+                </Table.Td>
+                <Table.Td w={170}>
+                  {m.status === 'scheduled' && (
+                    <Group gap="xs">
+                      <Button size="compact-xs" color="teal" variant="subtle" onClick={() => setStatus(m.id, 'done')}>Đã họp</Button>
+                      <Button size="compact-xs" color="gray" variant="subtle" onClick={() => setStatus(m.id, 'cancelled')}>Hủy</Button>
+                    </Group>
+                  )}
+                </Table.Td>
+              </Table.Tr>
             );
           })}
+          {meetings.length === 0 && (
+            <Table.Tr>
+              <Table.Td colSpan={5}>
+                <Text c="dimmed" size="sm">Chưa có cuộc họp nào cho lớp này.</Text>
+              </Table.Td>
+            </Table.Tr>
+          )}
         </Table.Tbody>
       </Table>
     </Stack>
   );
 }
 
+/**
+ * AttendanceTab — class-scoped attendance inside ClassDetail.
+ * Session selection stays here; the roster marking table is delegated to
+ * AttendanceRoster so the same component can be reused in AttendancePanel.
+ */
 function AttendanceTab({ batch, facilityId }: { batch: Batch; facilityId: number }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
-  const [marks, setMarks] = useState<Record<string, { status: string; excused: boolean }>>({});
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    trpc.schedule.listSessions.query({ classBatchId: batch.id }).then(setSessions).catch(() => {});
-    trpc.enrollment.listByBatch.query({ classBatchId: batch.id }).then(setEnrollments).catch(() => {});
+    setLoading(true);
+    trpc.schedule.listSessions
+      .query({ classBatchId: batch.id })
+      .then(setSessions)
+      .catch((e) => notifyError(e, 'Không tải được buổi học'))
+      .finally(() => setLoading(false));
   }, [batch.id]);
 
-  useEffect(() => {
-    if (!sessionId) return;
-    trpc.attendance.listBySession.query({ classSessionId: sessionId }).then((rows) => {
-      const m: Record<string, { status: string; excused: boolean }> = {};
-      for (const r of rows) m[r.enrollmentId] = { status: r.status, excused: r.excused };
-      setMarks(m);
-    });
-  }, [sessionId]);
-
-  async function mark(enrollmentId: string, status: string, excused: boolean) {
-    if (!sessionId || !status) return;
-    await trpc.attendance.mark.mutate({
-      facilityId,
-      classSessionId: sessionId,
-      enrollmentId,
-      status: status as 'present' | 'absent' | 'late',
-      excused,
-    });
-    setMarks((m) => ({ ...m, [enrollmentId]: { status, excused } }));
-  }
+  if (loading) return <Loader size="sm" />;
 
   return (
     <Stack>
       <Select
         label="Chọn buổi học"
-        placeholder="Chọn buổi"
+        placeholder={sessions.length ? 'Chọn buổi' : 'Chưa có buổi học — sinh lịch ở tab Lịch'}
         data={sessions.map((s) => ({ value: s.id, label: `${fmtDate(s.sessionDate)} ${s.startTime}` }))}
         value={sessionId}
         onChange={setSessionId}
+        disabled={sessions.length === 0}
       />
       {sessionId && (
-        <Table>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Học sinh</Table.Th>
-              <Table.Th>Điểm danh</Table.Th>
-              <Table.Th>Có phép</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {enrollments.map((e) => {
-              const cur = marks[e.id];
-              return (
-                <Table.Tr key={e.id}>
-                  <Table.Td>{e.student.fullName}</Table.Td>
-                  <Table.Td>
-                    <SegmentedControl
-                      size="xs"
-                      data={[
-                        { value: 'present', label: 'Có mặt' },
-                        { value: 'late', label: 'Muộn' },
-                        { value: 'absent', label: 'Vắng' },
-                      ]}
-                      value={cur?.status ?? ''}
-                      onChange={(v) => mark(e.id, v, cur?.excused ?? false)}
-                    />
-                  </Table.Td>
-                  <Table.Td>
-                    <Checkbox
-                      checked={cur?.excused ?? false}
-                      disabled={!cur?.status}
-                      onChange={(ev) => mark(e.id, cur?.status ?? '', ev.currentTarget.checked)}
-                    />
-                  </Table.Td>
-                </Table.Tr>
-              );
-            })}
-          </Table.Tbody>
-        </Table>
+        /* key ensures AttendanceRoster remounts and re-fetches when session changes */
+        <AttendanceRoster
+          key={sessionId}
+          classSessionId={sessionId}
+          batchId={batch.id}
+          facilityId={facilityId}
+        />
       )}
     </Stack>
   );
@@ -611,29 +645,44 @@ function ClassDetail({
   rooms,
   teachers,
   onChanged,
+  initialTab = 'schedule',
 }: {
   batch: Batch;
   facilityId: number;
   rooms: Room[];
   teachers: Teacher[];
   onChanged: () => void;
+  /** Tab to open on mount. Controlled via key in Workspace for navigation shortcuts. */
+  initialTab?: string;
 }) {
   const [cancelOpen, cancel] = useDisclosure(false);
   const [reason, setReason] = useState('');
 
   async function doCancel() {
-    await trpc.classBatch.cancel.mutate({ id: batch.id, reason });
-    cancel.close();
-    setReason('');
-    onChanged();
+    try {
+      await trpc.classBatch.cancel.mutate({ id: batch.id, reason });
+      cancel.close();
+      setReason('');
+      onChanged();
+    } catch (e) {
+      notifyError(e, 'Hủy lớp thất bại');
+    }
   }
   async function doReopen() {
-    await trpc.classBatch.reopen.mutate({ id: batch.id, toStatus: 'planned', reason: 'Mở lại từ giao diện' });
-    onChanged();
+    try {
+      await trpc.classBatch.reopen.mutate({ id: batch.id, toStatus: 'planned', reason: 'Mở lại từ giao diện' });
+      onChanged();
+    } catch (e) {
+      notifyError(e, 'Mở lại lớp thất bại');
+    }
   }
   async function setStatus(status: string) {
-    await trpc.classBatch.setStatus.mutate({ id: batch.id, status: status as 'open' | 'running' | 'closed' });
-    onChanged();
+    try {
+      await trpc.classBatch.setStatus.mutate({ id: batch.id, status: status as 'open' | 'running' | 'closed' });
+      onChanged();
+    } catch (e) {
+      notifyError(e, 'Đổi trạng thái thất bại');
+    }
   }
 
   return (
@@ -670,7 +719,7 @@ function ClassDetail({
         </Group>
       </Group>
 
-      <Tabs defaultValue="schedule">
+      <Tabs defaultValue={initialTab}>
         <Tabs.List>
           <Tabs.Tab value="schedule">Lịch</Tabs.Tab>
           <Tabs.Tab value="sessions">Buổi học</Tabs.Tab>
@@ -801,7 +850,22 @@ function RoomsManager({
   );
 }
 
-function Workspace() {
+/**
+ * NavAction — describes a programmatic navigation into the class workspace.
+ * ts is a monotonic timestamp so repeated calls to goToClass with the same
+ * arguments still produce a new action that Workspace can react to.
+ */
+interface NavAction {
+  batchId?: string;
+  tab: string;
+  ts: number;
+}
+
+function Workspace({
+  navAction,
+}: {
+  navAction: NavAction | null;
+}) {
   const { me } = useSession();
   const canManageClass = me.isSuperAdmin || me.roles.includes('quan_ly');
   const [facilities, setFacilities] = useState<Facility[]>([]);
@@ -810,34 +874,55 @@ function Workspace() {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [selected, setSelected] = useState<Batch | null>(null);
+  // detailKey controls ClassDetail remounting to apply a new initialTab
+  const [detailKey, setDetailKey] = useState('default');
+  const [detailTab, setDetailTab] = useState('schedule');
+
+  // Track which nav action we last applied so we don't re-apply on batches reload
+  const appliedNavTs = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     trpc.facility.list.query().then((fs) => {
       setFacilities(fs);
       setFacilityId((cur) => cur ?? fs[0]?.id ?? null);
-    });
-    trpc.course.list.query().then(setCourses).catch(() => {});
+    }).catch((e) => notifyError(e, 'Không tải được cơ sở'));
+    trpc.course.list.query().then(setCourses).catch((e) => notifyError(e, 'Không tải được khóa học'));
   }, []);
 
   const loadBatches = useCallback(() => {
     trpc.classBatch.list.query().then((bs) => {
       setBatches(bs);
       setSelected((sel) => (sel ? (bs.find((b) => b.id === sel.id) ?? null) : null));
-    });
+    }).catch((e) => notifyError(e, 'Không tải được danh sách lớp'));
   }, []);
   useEffect(loadBatches, [loadBatches]);
 
   const loadRooms = useCallback(() => {
-    trpc.room.list.query().then(setRooms).catch(() => {});
+    trpc.room.list.query().then(setRooms).catch((e) => notifyError(e, 'Không tải được phòng học'));
   }, []);
   useEffect(loadRooms, [loadRooms]);
 
-  // Teachers are RLS-scoped to the caller's facilities; reload per selected facility.
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   useEffect(() => {
     if (!facilityId) return;
     trpc.user.listTeachers.query({ facilityId }).then(setTeachers).catch(() => setTeachers([]));
   }, [facilityId]);
+
+  // Apply navAction when it changes (ts acts as a change token)
+  useEffect(() => {
+    if (!navAction || navAction.ts === appliedNavTs.current) return;
+    appliedNavTs.current = navAction.ts;
+
+    setDetailTab(navAction.tab);
+
+    if (navAction.batchId) {
+      // Try to select the target batch (may not be loaded yet; best-effort)
+      const found = batches.find((b) => b.id === navAction.batchId);
+      if (found) setSelected(found);
+    }
+    // Bump detailKey to force ClassDetail remount so initialTab takes effect
+    setDetailKey(`nav-${navAction.ts}`);
+  }, [navAction, batches]);
 
   const visible = facilityId ? batches.filter((b) => b.facilityId === facilityId) : batches;
   const facilityRooms = facilityId ? rooms.filter((r) => r.facilityId === facilityId) : rooms;
@@ -867,6 +952,21 @@ function Workspace() {
     setClassStatusFilter(v);
     setClassPage(1);
   }
+
+  // Manual batch selection from the list resets the tab to 'schedule'
+  function handleSelectBatch(b: Batch) {
+    setSelected(b);
+    setDetailTab('schedule');
+    setDetailKey(`click-${b.id}`);
+  }
+
+  // Contextual empty-state hint when arriving via a shortcut (enrollment / classlog)
+  const hintText =
+    detailTab === 'enroll'
+      ? 'Chọn một lớp để ghi danh.'
+      : detailTab === 'log'
+      ? 'Chọn một lớp để xem nhật ký.'
+      : `Chọn một lớp để xem chi tiết. Xin chào ${me.displayName}.`;
 
   return (
     <Stack>
@@ -919,7 +1019,7 @@ function Workspace() {
                     key={b.id}
                     style={{ cursor: 'pointer' }}
                     bg={selected?.id === b.id ? 'var(--mantine-color-cmc-0)' : undefined}
-                    onClick={() => setSelected(b)}
+                    onClick={() => handleSelectBatch(b)}
                   >
                     <Table.Td>
                       <Text fw={600}>{b.code}</Text>
@@ -960,17 +1060,17 @@ function Workspace() {
         <Grid.Col span={{ base: 12, md: 8 }}>
           {selected && facilityId ? (
             <ClassDetail
+              key={detailKey}
               batch={selected}
               facilityId={facilityId}
               rooms={facilityRooms}
               teachers={teachers}
+              initialTab={detailTab}
               onChanged={loadBatches}
             />
           ) : (
             <Card withBorder>
-              <Text c="dimmed">
-                Chọn một lớp để xem chi tiết, hoặc tạo lớp mới. Xin chào {me.displayName}.
-              </Text>
+              <Text c="dimmed">{hintText}</Text>
             </Card>
           )}
         </Grid.Col>
@@ -979,12 +1079,40 @@ function Workspace() {
   );
 }
 
+/**
+ * Workbench — top-level orchestrator. Owns activeSection + navigation state.
+ * goToClass(batchId?, tab) redirects to the class workspace with the target tab
+ * pre-selected; used by SchedulePanel rows and enrollment/classlog nav shortcuts.
+ */
 function Workbench() {
-  const [activeSection, setActiveSection] = useState<SectionKey>('classes');
+  const [activeSection, setActiveSection] = useState<SectionKey>('schedule');
+  const [navAction, setNavAction] = useState<NavAction | null>(null);
+
+  const goToClass = useCallback((batchId: string | undefined, tab: string) => {
+    setActiveSection('classes');
+    setNavAction({ batchId, tab, ts: Date.now() });
+  }, []);
+
+  function handleSectionChange(key: SectionKey) {
+    // enrollment and classlog are class-workspace shortcuts, not standalone panels
+    if (key === 'enrollment') {
+      goToClass(undefined, 'enroll');
+      return;
+    }
+    if (key === 'classlog') {
+      goToClass(undefined, 'log');
+      return;
+    }
+    setNavAction(null);
+    setActiveSection(key);
+  }
 
   return (
-    <Shell activeSection={activeSection} onSectionChange={setActiveSection}>
-      {activeSection === 'classes' && <Workspace />}
+    <Shell activeSection={activeSection} onSectionChange={handleSectionChange}>
+      {activeSection === 'schedule' && <SchedulePanel goToClass={goToClass} />}
+      {activeSection === 'attendance' && <AttendancePanel />}
+      {activeSection === 'meetings' && <MeetingsPanel />}
+      {activeSection === 'classes' && <Workspace navAction={navAction} />}
       {activeSection === 'grading' && <GradingPanel />}
       {activeSection === 'assessment' && <AssessmentPanel />}
       {activeSection === 'levelup' && <LevelApprovalPanel />}

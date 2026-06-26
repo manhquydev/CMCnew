@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { AppShell, Badge, Button, Group, NavLink, Text, ActionIcon, Popover, ScrollArea, Box, Stack, Avatar, UnstyledButton } from '@mantine/core';
 import {
   IconCalendar,
-  IconSchool,
   IconClipboardCheck,
   IconPencil,
   IconReport,
@@ -24,7 +23,6 @@ import type { StaffNotifItem } from '@cmc/ui';
 
 export type SectionKey =
   | 'schedule'
-  | 'sessions'
   | 'attendance'
   | 'grading'
   | 'assessment'
@@ -41,7 +39,7 @@ export type SectionKey =
   | 'payroll';
 
 export const ALL_TEACHING_KEYS = new Set<string>([
-  'schedule', 'sessions', 'attendance', 'grading', 'assessment',
+  'schedule', 'attendance', 'grading', 'assessment',
   'classes', 'enrollment', 'levelup', 'certificate', 'meetings',
   'classlog', 'cskh', 'crm', 'finance', 'my-payslips', 'payroll',
 ]);
@@ -79,46 +77,63 @@ function buildGroups({
   canManageClass,
   canLevelApproval,
 }: BuildGroupsOpts): NavGroup[] {
-  // Class-management actions are backend-gated; hide the nav items too so non-authorized roles
-  // (e.g. plain giáo viên) don't hit a FORBIDDEN wall. enrollment = quan_ly/sale; levelup +
-  // certificate = head_teacher/quan_ly (mirrors requireRole on the procedures).
+  // HÔM NAY: standalone cross-class panels; visible to all roles.
+  const todayItems: NavItem[] = [
+    { key: 'schedule', label: 'Lịch dạy', icon: <IconCalendar size={ICON_SIZE} stroke={ICON_STROKE} /> },
+    { key: 'attendance', label: 'Điểm danh', icon: <IconClipboardCheck size={ICON_SIZE} stroke={ICON_STROKE} /> },
+    { key: 'meetings', label: 'Họp PH', icon: <IconUsers size={ICON_SIZE} stroke={ICON_STROKE} /> },
+  ];
+
+  // QUẢN LÝ LỚP: class workspace + class-scoped shortcuts.
+  // enrollment = class-scoped shortcut (quan_ly/sale only); classlog = shortcut for all.
+  // levelup + certificate gated by canLevelApproval.
   const classMgmtItems: NavItem[] = [
     { key: 'classes', label: 'Lớp học', icon: <IconDoor size={ICON_SIZE} stroke={ICON_STROKE} /> },
   ];
   if (canManageClass) {
-    classMgmtItems.push({ key: 'enrollment', label: 'Ghi danh', icon: <IconUserPlus size={ICON_SIZE} stroke={ICON_STROKE} /> });
+    classMgmtItems.push({
+      key: 'enrollment',
+      label: 'Ghi danh',
+      icon: <IconUserPlus size={ICON_SIZE} stroke={ICON_STROKE} />,
+    });
   }
+  classMgmtItems.push({
+    key: 'classlog',
+    label: 'Nhật ký lớp',
+    icon: <IconNotes size={ICON_SIZE} stroke={ICON_STROKE} />,
+  });
   if (canLevelApproval) {
-    classMgmtItems.push({ key: 'levelup', label: 'Duyệt cấp độ', icon: <IconArrowUp size={ICON_SIZE} stroke={ICON_STROKE} /> });
-    classMgmtItems.push({ key: 'certificate', label: 'Chứng chỉ', icon: <IconCertificate size={ICON_SIZE} stroke={ICON_STROKE} /> });
+    classMgmtItems.push({
+      key: 'levelup',
+      label: 'Duyệt cấp độ',
+      icon: <IconArrowUp size={ICON_SIZE} stroke={ICON_STROKE} />,
+    });
+    classMgmtItems.push({
+      key: 'certificate',
+      label: 'Chứng chỉ',
+      icon: <IconCertificate size={ICON_SIZE} stroke={ICON_STROKE} />,
+    });
   }
 
   const groups: NavGroup[] = [
+    { label: 'HÔM NAY', items: todayItems },
+    { label: 'QUẢN LÝ LỚP', items: classMgmtItems },
     {
       label: 'GIẢNG DẠY',
       items: [
-        { key: 'schedule', label: 'Lịch dạy', icon: <IconCalendar size={ICON_SIZE} stroke={ICON_STROKE} /> },
-        { key: 'sessions', label: 'Buổi học', icon: <IconSchool size={ICON_SIZE} stroke={ICON_STROKE} /> },
-        { key: 'attendance', label: 'Điểm danh', icon: <IconClipboardCheck size={ICON_SIZE} stroke={ICON_STROKE} /> },
         { key: 'grading', label: 'Chấm bài', icon: <IconPencil size={ICON_SIZE} stroke={ICON_STROKE} /> },
         { key: 'assessment', label: 'Học bạ', icon: <IconReport size={ICON_SIZE} stroke={ICON_STROKE} /> },
       ],
     },
-    {
-      label: 'QUẢN LÝ LỚP',
-      items: classMgmtItems,
-    },
   ];
 
-  // GIAO TIẾP: meetings + classlog always; CSKH only for cskh/quan_ly staff
-  const commsItems: NavItem[] = [
-    { key: 'meetings', label: 'Họp PH', icon: <IconUsers size={ICON_SIZE} stroke={ICON_STROKE} /> },
-    { key: 'classlog', label: 'Nhật ký lớp', icon: <IconNotes size={ICON_SIZE} stroke={ICON_STROKE} /> },
-  ];
+  // CSKH appended to its own group when the role allows it
   if (canCskh) {
-    commsItems.push({ key: 'cskh', label: 'CSKH', icon: <IconHeadset size={ICON_SIZE} stroke={ICON_STROKE} /> });
+    groups.push({
+      label: 'CSKH',
+      items: [{ key: 'cskh', label: 'CSKH', icon: <IconHeadset size={ICON_SIZE} stroke={ICON_STROKE} /> }],
+    });
   }
-  groups.push({ label: 'GIAO TIẾP', items: commsItems });
 
   // KINH DOANH: only visible to roles that can use these sections
   const bizItems: NavItem[] = [];
@@ -144,7 +159,6 @@ function buildGroups({
 
 const SECTION_LABEL: Record<SectionKey, string> = {
   schedule: 'Lịch dạy',
-  sessions: 'Buổi học',
   attendance: 'Điểm danh',
   grading: 'Chấm bài',
   assessment: 'Học bạ',

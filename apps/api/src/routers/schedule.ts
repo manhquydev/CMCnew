@@ -61,6 +61,54 @@ export const scheduleRouter = router({
       ),
     ),
 
+  // Lịch giảng dạy đa lớp — cross-class agenda cho giáo viên và quản lý.
+  // giao_vien defaults to own sessions; quan_ly / head_teacher / super may view all facility or filter by teacherId.
+  mySessions: protectedProcedure
+    .input(
+      z.object({
+        facilityId: z.number().int().positive(),
+        from: z.string().date(),
+        to: z.string().date(),
+        teacherId: z.string().uuid().optional(),
+      }),
+    )
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const { session } = ctx;
+        const isManager =
+          session.isSuperAdmin ||
+          session.roles.some((r) => ['quan_ly', 'head_teacher'].includes(r));
+        // Managers may pass an explicit teacherId or omit to see all; giao_vien always own only.
+        const teacherFilter = isManager ? input.teacherId : session.userId;
+
+        const sessions = await tx.classSession.findMany({
+          where: {
+            facilityId: input.facilityId,
+            sessionDate: {
+              gte: new Date(input.from),
+              lte: new Date(input.to),
+            },
+            ...(teacherFilter ? { teacherId: teacherFilter } : {}),
+          },
+          include: { batch: { select: { id: true, code: true, name: true } } },
+          orderBy: [{ sessionDate: 'asc' }, { startTime: 'asc' }],
+        });
+
+        // ClassSession has no Prisma relation to Room — resolve room names in one secondary query.
+        const roomIds = [...new Set(sessions.map((s) => s.roomId).filter(Boolean))] as string[];
+        const rooms =
+          roomIds.length > 0
+            ? await tx.room.findMany({ where: { id: { in: roomIds } }, select: { id: true, name: true } })
+            : [];
+        const roomMap = new Map(rooms.map((r) => [r.id, r.name]));
+
+        return sessions.map((s) => ({
+          ...s,
+          roomName: s.roomId ? (roomMap.get(s.roomId) ?? null) : null,
+        }));
+      }),
+    ),
+
   // Sinh buổi học từ khung lịch — idempotent + chặn cứng trùng phòng/giáo viên.
   generateSessions: requireRole(Role.quan_ly)
     .input(
