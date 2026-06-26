@@ -61,10 +61,22 @@ export const payrollRouter = router({
         dependents: z.number().int().min(0).default(0),
         startedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         callioExt: z.string().optional(),
+        // Required when changing an existing grade — a salary-band change must be justified + audited.
+        reason: z.string().optional(),
       }),
     )
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
+        // A grade change on an existing profile is a sensitive payroll action: it must carry a
+        // reason and is audited old→new. Initial create or unchanged grade needs no reason.
+        const existing = await tx.employmentProfile.findUnique({
+          where: { userId: input.userId },
+          select: { grade: true },
+        });
+        const gradeChanged = !!(existing && existing.grade && input.grade && existing.grade !== input.grade);
+        if (gradeChanged && !input.reason?.trim()) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Đổi bậc lương cần lý do' });
+        }
         const profile = await tx.employmentProfile.upsert({
           where: { userId: input.userId },
           update: {
@@ -84,7 +96,10 @@ export const payrollRouter = router({
             callioExt: input.callioExt,
           },
         });
-        await logEvent(tx, { facilityId: profile.facilityId, entityType: 'employment_profile', entityId: profile.id, type: 'updated', body: `Hồ sơ NS: ${input.position}${input.grade ? ' ' + input.grade : ''}`, actorId: ctx.session.userId });
+        const body = gradeChanged
+          ? `Đổi bậc lương ${existing!.grade}→${input.grade}: ${input.reason!.trim()}`
+          : `Hồ sơ NS: ${input.position}${input.grade ? ' ' + input.grade : ''}`;
+        await logEvent(tx, { facilityId: profile.facilityId, entityType: 'employment_profile', entityId: profile.id, type: 'updated', body, actorId: ctx.session.userId });
         return profile;
       }),
     ),
@@ -439,14 +454,14 @@ export const payrollRouter = router({
   // Bulk-pay by explicit slip IDs: marks each finalized slip as paid. IDs that are not in
   // 'finalized' state are skipped (not errored) and returned in `failed`. Audited per slip.
   payslipBulkPay: requireRole(...HR_ROLES)
-    .input(z.array(z.string().uuid()).min(1).max(200))
+    .input(z.object({ ids: z.array(z.string().uuid()).min(1).max(200) }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const due = await tx.payslip.findMany({
-          where: { id: { in: input }, status: 'finalized' },
+          where: { id: { in: input.ids }, status: 'finalized' },
           select: { id: true, facilityId: true, periodKey: true },
         });
-        if (due.length === 0) return { succeeded: [] as string[], failed: input };
+        if (due.length === 0) return { succeeded: [] as string[], failed: input.ids };
         const paidAt = new Date();
         await tx.payslip.updateMany({
           where: { id: { in: due.map((s) => s.id) } },
@@ -468,7 +483,7 @@ export const payrollRouter = router({
         const succeededSet = new Set(due.map((s) => s.id));
         return {
           succeeded: due.map((s) => s.id),
-          failed: input.filter((id) => !succeededSet.has(id)),
+          failed: input.ids.filter((id) => !succeededSet.has(id)),
         };
       }),
     ),

@@ -64,7 +64,7 @@ const payrollApi = trpc.payroll as unknown as {
   payslipFinalize: { mutate: (i: { id: string }) => Promise<PayslipRow> };
   payslipMarkPaid: { mutate: (i: { id: string }) => Promise<PayslipRow> };
   payslipReopen: { mutate: (i: { id: string }) => Promise<PayslipRow> };
-  payslipBulkPay: { mutate: (i: string[]) => Promise<BulkPayResult> };
+  payslipBulkPay: { mutate: (i: { ids: string[] }) => Promise<BulkPayResult> };
   payslipPeriodSummary: {
     query: (i: { facilityId: number; periodKey: string }) => Promise<PeriodSummary>;
   };
@@ -369,7 +369,7 @@ function StaffDetailDrawer({
     setBulkBusy(true);
     setMsg(null);
     try {
-      const r = await payrollApi.payslipBulkPay.mutate(selected);
+      const r = await payrollApi.payslipBulkPay.mutate({ ids: selected });
       const failNote = r.failed.length > 0 ? ` (${r.failed.length} phiếu bị bỏ qua)` : '';
       setMsg({ kind: 'ok', text: `Đã thanh toán ${r.succeeded.length} phiếu${failNote}` });
       setSelected([]);
