@@ -25,15 +25,18 @@ COPY packages/domain-finance/package.json    packages/domain-finance/
 COPY packages/domain-grading/package.json    packages/domain-grading/
 COPY packages/domain-payroll/package.json    packages/domain-payroll/
 COPY packages/domain-rewards/package.json    packages/domain-rewards/
-# --filter @cmc/db (no ...) includes devDeps of @cmc/db (prisma CLI + engines)
-# --filter @cmc/api... installs api + all transitive workspace prod deps
+# Full workspace install so prisma CLI (devDep of @cmc/db) is hoisted to
+# node_modules/.bin/. Filtered installs skip devDeps of transitive workspace
+# packages, so prisma generate would fail. Runner stage is still lean because
+# it only copies the subset of node_modules it actually needs at runtime.
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile --filter @cmc/api... --filter @cmc/db
+    pnpm install --frozen-lockfile
 
 # Copy schema and generate Prisma client while pnpm store cache is still active.
-# Generated output lands in node_modules/@prisma/client and node_modules/.prisma/client.
+# prisma is a devDep of @cmc/db so it's not hoisted to root node_modules/.bin/;
+# use pnpm --filter to run the "generate" script in the package's own context.
 COPY packages/db/prisma ./packages/db/prisma
-RUN node_modules/.bin/prisma generate --schema=packages/db/prisma/schema.prisma
+RUN pnpm --filter @cmc/db run generate
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
