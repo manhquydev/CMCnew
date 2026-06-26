@@ -431,6 +431,8 @@ model ParentAccount {
   isActive     Boolean    @default(true) @map("is_active")
   /// Bump khi khóa tài khoản / đổi quyền → vô hiệu JWT đang phát hành.
   tokenVersion Int        @default(0) @map("token_version")
+  /// Phụ huynh có nhận email thông báo (digest/nhắc lịch) không. Email giao dịch luôn gửi.
+  emailNotifications Boolean @default(true) @map("email_notifications")
   createdAt    DateTime   @default(now()) @map("created_at")
   guardians    Guardian[]
 
@@ -646,6 +648,30 @@ model EmailOutbox {
   @@index([status, scheduledFor])
   @@index([facilityId])
   @@map("email_outbox")
+}
+
+/// Loại token kích hoạt / đặt lại mật khẩu (gửi qua email).
+enum ActivationKind {
+  parent_account
+  staff_account
+  password_reset
+}
+
+/// Token một-lần cho luồng kích hoạt tài khoản (onboarding passwordless) và đặt lại mật khẩu.
+/// Chỉ lưu SHA-256 của token (tokenHash) — token thô chỉ tồn tại trong email. Hết hạn ngắn, dùng 1 lần.
+/// System-scoped (cấp/đổi qua endpoint không session) — không gắn facility.
+model ActivationToken {
+  id          String         @id @default(uuid()) @db.Uuid
+  kind        ActivationKind
+  subjectType String         @map("subject_type")
+  subjectId   String         @map("subject_id") @db.Uuid
+  tokenHash   String         @unique @map("token_hash")
+  expiresAt   DateTime       @map("expires_at")
+  consumedAt  DateTime?      @map("consumed_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  @@index([subjectType, subjectId])
+  @@map("activation_token")
 }
 
 /// Huy hiệu (S3) — danh mục facility-scoped. unlockCriteria (Json) do @cmc/domain-rewards diễn giải.

@@ -3,6 +3,8 @@ import { withRls, hashPassword, Role } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, superAdminProcedure, requireRole } from '../trpc.js';
+import { issueActivation } from '../services/account-activation.js';
+import { enqueueEmail } from '../services/email-outbox.js';
 
 const role = z.nativeEnum(Role);
 
@@ -78,6 +80,17 @@ export const userRouter = router({
           type: 'created',
           actorId: ctx.session.userId,
         });
+        // Onboarding: email the new staff member an activation link to set their own password.
+        // Same (super) tx — atomic with creation; idempotent via dedupKey.
+        await issueActivation(tx, {
+          kind: 'staff_account',
+          subjectType: 'staff',
+          subjectId: user.id,
+          email: user.email,
+          name: user.displayName,
+          dedupKey: `staff_welcome:${user.id}`,
+          mailbox: 'hr',
+        });
         return user;
       }),
     ),
@@ -95,8 +108,8 @@ export const userRouter = router({
           path: ['primaryRole'],
         }),
     )
-    .mutation(({ ctx, input }) =>
-      withRls(rlsContextOf(ctx.session), async (tx) => {
+    .mutation(async ({ ctx, input }) => {
+      const user = await withRls(rlsContextOf(ctx.session), async (tx) => {
         const before = await tx.appUser.findUniqueOrThrow({
           where: { id: input.id },
           select: { roles: true, primaryRole: true },
@@ -122,8 +135,10 @@ export const userRouter = router({
           ],
         });
         return user;
-      }),
-    ),
+      });
+      await emailSecurityAlert(user.id, user.email, 'Cập nhật vai trò tài khoản');
+      return user;
+    }),
 
   setFacilities: superAdminProcedure
     .input(z.object({ id: z.string().uuid(), facilityIds: z.array(z.number().int().positive()) }))
@@ -161,8 +176,8 @@ export const userRouter = router({
 
   setActive: superAdminProcedure
     .input(z.object({ id: z.string().uuid(), isActive: z.boolean() }))
-    .mutation(({ ctx, input }) =>
-      withRls(rlsContextOf(ctx.session), async (tx) => {
+    .mutation(async ({ ctx, input }) => {
+      const user = await withRls(rlsContextOf(ctx.session), async (tx) => {
         const before = await tx.appUser.findUniqueOrThrow({
           where: { id: input.id },
           select: { isActive: true },
@@ -180,6 +195,32 @@ export const userRouter = router({
           changes: [{ field: 'isActive', old: before.isActive, new: input.isActive }],
         });
         return user;
-      }),
-    ),
+      });
+      await emailSecurityAlert(
+        user.id,
+        user.email,
+        input.isActive ? 'Kích hoạt lại tài khoản' : 'Vô hiệu hóa tài khoản',
+      );
+      return user;
+    }),
 });
+
+// Post-commit, best-effort security-alert email on a sensitive account change. Runs in its OWN
+// super-scoped tx with a try/catch so a mail-queue failure never rolls back the deactivation /
+// role change. Not idempotent by design (dedupKey carries a timestamp): every change should alert.
+const SYSTEM_CTX = { facilityIds: [] as number[], isSuperAdmin: true };
+async function emailSecurityAlert(userId: string, email: string, action: string): Promise<void> {
+  try {
+    await withRls(SYSTEM_CTX, (tx) =>
+      enqueueEmail(tx, {
+        dedupKey: `security_alert:${userId}:${Date.now()}`,
+        to: email,
+        mailbox: 'notify',
+        kind: 'account_security_alert',
+        data: { action, at: new Date().toISOString().slice(0, 19).replace('T', ' ') },
+      }),
+    );
+  } catch (e) {
+    console.error('security alert email enqueue failed', e);
+  }
+}

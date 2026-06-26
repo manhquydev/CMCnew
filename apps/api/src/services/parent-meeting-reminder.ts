@@ -1,5 +1,7 @@
 import { withRls } from '@cmc/db';
 import { logEvent } from '@cmc/audit';
+import { enqueueEmail } from './email-outbox.js';
+import { notifiableParentEmails } from '../lib/parent-email.js';
 
 // System context: the reminder runs across all facilities (cron has no session). super bypass.
 const SYSTEM_CTX = { facilityIds: [] as number[], isSuperAdmin: true };
@@ -7,6 +9,7 @@ const SYSTEM_CTX = { facilityIds: [] as number[], isSuperAdmin: true };
 export interface ReminderResult {
   meetingsReminded: number;
   notificationsCreated: number;
+  emailsQueued: number;
 }
 
 /**
@@ -27,6 +30,7 @@ export async function runParentMeetingReminders(windowHours = 24, now = new Date
       select: { id: true, facilityId: true, classBatchId: true, title: true, scheduledAt: true, location: true },
     });
     let notificationsCreated = 0;
+    let emailsQueued = 0;
     for (const m of due) {
       const enrollments = await tx.enrollment.findMany({
         where: { classBatchId: m.classBatchId, status: 'active', archivedAt: null },
@@ -50,6 +54,24 @@ export async function runParentMeetingReminders(windowHours = 24, now = new Date
           })),
         });
         notificationsCreated += studentIds.length;
+
+        // Second channel: email opted-in parents. Idempotent per (meeting, parent); the remindedAt
+        // stamp below also stops the whole meeting from being re-processed on the next tick.
+        const scheduledLabel = m.scheduledAt.toISOString().slice(0, 16).replace('T', ' ');
+        for (const studentId of studentIds) {
+          const parents = await notifiableParentEmails(tx, studentId);
+          for (const parent of parents) {
+            await enqueueEmail(tx, {
+              facilityId: m.facilityId,
+              dedupKey: `pm_reminder:${m.id}:${parent.parentAccountId}`,
+              to: parent.email,
+              mailbox: 'notify',
+              kind: 'parent_meeting',
+              data: { title: m.title, scheduledAt: scheduledLabel, location: m.location ?? null },
+            });
+            emailsQueued++;
+          }
+        }
       }
       await tx.parentMeeting.update({ where: { id: m.id }, data: { remindedAt: now } });
       await logEvent(tx, {
@@ -61,6 +83,6 @@ export async function runParentMeetingReminders(windowHours = 24, now = new Date
         actorId: null,
       });
     }
-    return { meetingsReminded: due.length, notificationsCreated };
+    return { meetingsReminded: due.length, notificationsCreated, emailsQueued };
   });
 }

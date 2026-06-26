@@ -79,7 +79,16 @@ export interface OutboxRunResult {
   rescheduled: number;
   /** true when Graph is unconfigured and the run was a no-op. */
   disabled: boolean;
+  /** true when a previous run was still in flight and this tick was skipped. */
+  skipped?: boolean;
 }
+
+// Single-instance overlap guard: node-cron does not prevent a new tick firing while the previous
+// run is still sending (a batch can outlast the 1-min interval under Graph latency). Skipping the
+// overlapping tick prevents the same claimed rows being sent twice. NOTE: this is only correct for
+// the current single-api-instance topology (same caveat as rate-limit.ts). A second replica would
+// require DB-level claiming (SELECT ... FOR UPDATE SKIP LOCKED) instead.
+let workerRunning = false;
 
 /**
  * Drain up to RATE_PER_RUN due rows and send them. Claims rows by flipping them to 'sending'
@@ -92,7 +101,22 @@ export async function runEmailOutbox(now: Date = new Date(), deps: SendDeps = {}
   if (!cfg) {
     return { sent: 0, failed: 0, rescheduled: 0, disabled: true };
   }
+  if (workerRunning) {
+    return { sent: 0, failed: 0, rescheduled: 0, disabled: false, skipped: true };
+  }
+  workerRunning = true;
+  try {
+    return await drainOutbox(cfg, now, deps);
+  } finally {
+    workerRunning = false;
+  }
+}
 
+async function drainOutbox(
+  cfg: NonNullable<ReturnType<typeof graphMailerFromEnv>>,
+  now: Date,
+  deps: SendDeps,
+): Promise<OutboxRunResult> {
   // 1) Claim a batch atomically.
   const staleBefore = new Date(now.getTime() - LEASE_MS);
   const claimed = await withRls(SYSTEM_CTX, async (tx) => {
@@ -120,7 +144,8 @@ export async function runEmailOutbox(now: Date = new Date(), deps: SendDeps = {}
   let rescheduled = 0;
 
   // 2) Send each claimed row outside the transaction, then record the outcome in a short txn.
-  for (const row of claimed) {
+  for (let i = 0; i < claimed.length; i++) {
+    const row = claimed[i]!;
     try {
       await sendViaGraph(
         cfg,
@@ -144,17 +169,18 @@ export async function runEmailOutbox(now: Date = new Date(), deps: SendDeps = {}
       sent++;
     } catch (e) {
       if (e instanceof RateLimitError) {
-        // Back off: return to queued with a future schedule. No attempt is counted.
-        await withRls(SYSTEM_CTX, async (tx) => {
-          await tx.emailOutbox.update({
-            where: { id: row.id },
-            data: {
-              status: 'queued',
-              scheduledFor: new Date(now.getTime() + e.retryAfterSec * 1000),
-            },
-          });
-        });
-        rescheduled++;
+        // Back off the whole remaining batch: return this row AND the rest of the claimed (still
+        // 'sending') rows to 'queued' with a future schedule, so they retry on the next due tick
+        // instead of waiting out the 5-min lease. No attempt is counted.
+        const retryAt = new Date(now.getTime() + e.retryAfterSec * 1000);
+        const remainingIds = claimed.slice(i).map((r) => r.id);
+        await withRls(SYSTEM_CTX, (tx) =>
+          tx.emailOutbox.updateMany({
+            where: { id: { in: remainingIds } },
+            data: { status: 'queued', scheduledFor: retryAt },
+          }),
+        );
+        rescheduled += remainingIds.length;
         break; // stop the batch on rate-limit; next tick resumes
       }
       const attempts = row.attempts + 1;

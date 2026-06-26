@@ -3,6 +3,11 @@ import { withRls, hashPassword, GuardianRelation } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, requireRole, Role } from '../trpc.js';
+import { issueActivation } from '../services/account-activation.js';
+
+// activation_token is super-only for writes (forged-token defense), so provisioning emails for a
+// parent created by a non-super lead are issued in a separate system transaction, best-effort.
+const SYSTEM_CTX = { facilityIds: [] as number[], isSuperAdmin: true };
 
 // Parent/student accounts are SYSTEM-WIDE identities (no facility_id) — facilities are linked
 // branches, not silos (docs/specs/facility-model-decision.md). Leadership (bgd/quan_ly, super)
@@ -32,20 +37,39 @@ export const guardianRouter = router({
         })
         .refine((v) => v.email || v.phone, { message: 'Cần email hoặc số điện thoại' }),
     )
-    .mutation(({ ctx, input }) =>
-      withRls(rlsContextOf(ctx.session), async (tx) => {
-        const parent = await tx.parentAccount.create({
+    .mutation(async ({ ctx, input }) => {
+      const passwordHash = await hashPassword(input.password);
+      const parent = await withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.parentAccount.create({
           data: {
             displayName: input.displayName,
             email: input.email,
             phone: input.phone,
-            passwordHash: await hashPassword(input.password),
+            passwordHash,
           },
           select: { id: true, email: true, phone: true, displayName: true },
-        });
-        return parent;
-      }),
-    ),
+        }),
+      );
+      // Best-effort welcome + activation link when the parent has an email. Idempotent via dedupKey;
+      // a failure here never fails account creation (the manual password still works).
+      if (parent.email) {
+        try {
+          await withRls(SYSTEM_CTX, (tx) =>
+            issueActivation(tx, {
+              kind: 'parent_account',
+              subjectType: 'parent',
+              subjectId: parent.id,
+              email: parent.email!,
+              name: parent.displayName,
+              dedupKey: `parent_welcome:${parent.id}`,
+            }),
+          );
+        } catch (e) {
+          console.error('parent activation email enqueue failed', e);
+        }
+      }
+      return parent;
+    }),
 
   // Guardians of a student, with the parent's identity.
   listForStudent: requireRole(...LEAD_ROLES)

@@ -1,6 +1,18 @@
 # Email System Integration — Microsoft 365 (A1 Education) via Microsoft Graph API
 
-**Status:** PLANNED (awaiting review) · **Branch:** `feature/email-graph-integration` (worktree)
+**Status:** BACKEND IMPLEMENTED & VERIFIED (179 tests green) · UI pages + Phase 06 config pending
+**Branch:** `feature/email-graph-integration` (worktree)
+
+## Build status (2026-06-26)
+- **Phase 01–05 backend: DONE & verified** — API typecheck + lint clean; 8 unit + 171 integration
+  tests pass against a live Postgres (migrations applied). Email is no-op until `GRAPH_*` env is set.
+- **Remaining to be fully usable end-to-end:**
+  - Frontend `/activate` + `/reset` + `/forgot` pages in `apps/lms` (parent) and `apps/admin` (staff)
+    — thin forms over the verified endpoints (`auth.activateVerify/activateSetPassword/
+    requestPasswordReset/resetPassword`, same on `lmsAuth`). Backend contracts are final.
+  - Phase 06: Microsoft tenant config + DNS + live smoke test (operator runbook, no code).
+- **Deferred (saved):** receipt + certificate emails (Phase 03 design retained, not built).
+
 **Lane:** HIGH-RISK (Auth · External provider · Data model · Audit/security · Public contracts)
 **Owner:** Nguyễn Mạnh Quý · **Created:** 2026-06-26
 

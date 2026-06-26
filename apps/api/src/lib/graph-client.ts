@@ -38,17 +38,19 @@ export function graphMailerFromEnv(): GraphMailerConfig | null {
   const tenantId = process.env.GRAPH_TENANT_ID;
   const clientId = process.env.GRAPH_CLIENT_ID;
   const certPath = process.env.GRAPH_CERT_PATH;
-  if (!tenantId || !clientId || !certPath) return null;
+  const notify = process.env.GRAPH_SENDER_NOTIFY;
+  const payroll = process.env.GRAPH_SENDER_PAYROLL;
+  const hr = process.env.GRAPH_SENDER_HR;
+  // Require the full set: auth credentials AND all three sender mailboxes. A half-configured tenant
+  // returns null (stays in no-op, rows queued) rather than claiming rows and permanently failing
+  // them when a missing sender address makes senderAddress() throw past MAX_ATTEMPTS.
+  if (!tenantId || !clientId || !certPath || !notify || !payroll || !hr) return null;
   return {
     tenantId,
     clientId,
     certPath,
     certPassword: process.env.GRAPH_CERT_PASSWORD || undefined,
-    senders: {
-      notify: process.env.GRAPH_SENDER_NOTIFY ?? '',
-      payroll: process.env.GRAPH_SENDER_PAYROLL ?? '',
-      hr: process.env.GRAPH_SENDER_HR ?? '',
-    },
+    senders: { notify, payroll, hr },
   };
 }
 

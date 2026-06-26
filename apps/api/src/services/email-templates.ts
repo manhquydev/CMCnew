@@ -8,8 +8,7 @@ export type EmailTemplateKind =
   | 'payslip_ready'
   | 'password_reset'
   | 'account_security_alert'
-  | 'parent_meeting'
-  | 'level_up';
+  | 'parent_meeting';
 
 const BRAND = 'CMC';
 
@@ -68,7 +67,6 @@ export interface TemplatePayloads {
   password_reset: { name?: string; resetUrl: string; expiresMinutes: number };
   account_security_alert: { name?: string; action: string; at: string };
   parent_meeting: { title: string; scheduledAt: string; location?: string | null };
-  level_up: { studentName?: string; fromLevel: string; toLevel: string };
 }
 
 type Renderer<K extends EmailTemplateKind> = (data: TemplatePayloads[K]) => RenderedEmail;
@@ -142,16 +140,6 @@ const renderers: { [K in EmailTemplateKind]: Renderer<K> } = {
         p('Kính gửi Quý phụ huynh,') +
         p(`Buổi họp <strong>${esc(d.title)}</strong> sẽ diễn ra lúc <strong>${esc(d.scheduledAt)}</strong>${d.location ? ` tại ${esc(d.location)}` : ''}.`) +
         p('Kính mong Quý phụ huynh sắp xếp tham dự.'),
-    }),
-  }),
-  level_up: (d) => ({
-    subject: 'Chúc mừng: học sinh được lên cấp độ mới',
-    html: layout({
-      title: 'Lên cấp độ học tập',
-      preheader: 'Học sinh vừa được duyệt lên cấp độ mới',
-      bodyHtml:
-        p('Kính gửi Quý phụ huynh,') +
-        p(`Học sinh ${esc(d.studentName ?? '')} đã được duyệt lên cấp độ <strong>${esc(d.toLevel)}</strong> (từ ${esc(d.fromLevel)}). Xin chúc mừng!`),
     }),
   }),
 };

@@ -2,9 +2,14 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { setCookie, deleteCookie } from 'hono/cookie';
 import { loginParent, loginStudent, type LmsSession } from '@cmc/auth';
+import { withRls, hashPassword } from '@cmc/db';
 import { router, publicProcedure, lmsProcedure } from '../trpc.js';
 import { LMS_COOKIE_NAME } from '../context.js';
-import { checkLoginLimit, clearLoginLimit, recordLoginFailure } from '../rate-limit.js';
+import { checkLoginLimit, clearLoginLimit, recordLoginFailure, throttle } from '../rate-limit.js';
+import { issueActivation, verifyToken, consumeToken } from '../services/account-activation.js';
+
+const SYSTEM_CTX = { facilityIds: [] as number[], isSuperAdmin: true };
+const RESET_REQUEST_LIMIT = Number(process.env.PWRESET_RATE_LIMIT ?? 5);
 
 function publicLms(s: LmsSession) {
   return {
@@ -64,4 +69,74 @@ export const lmsAuthRouter = router({
     deleteCookie(ctx.c, LMS_COOKIE_NAME, { path: '/' });
     return { ok: true };
   }),
+
+  // ── Parent password reset (email only; phone-only parents reset via staff) ────────────────────
+  requestPasswordReset: publicProcedure
+    .input(z.object({ email: z.string().email() }))
+    .mutation(async ({ ctx, input }) => {
+      throttle(`pwreset:ip:${ctx.ip}`, RESET_REQUEST_LIMIT);
+      throttle(`pwreset:em:${input.email.toLowerCase()}`, RESET_REQUEST_LIMIT);
+      await withRls(SYSTEM_CTX, async (tx) => {
+        const parent = await tx.parentAccount.findFirst({
+          where: { email: input.email, isActive: true },
+          select: { id: true, email: true, displayName: true },
+        });
+        if (!parent?.email) return; // silent, no enumeration
+        await issueActivation(tx, {
+          kind: 'password_reset',
+          subjectType: 'parent',
+          subjectId: parent.id,
+          email: parent.email,
+          name: parent.displayName,
+          dedupKey: `pwreset:parent:${parent.id}:${Date.now()}`,
+        });
+      });
+      return { ok: true };
+    }),
+
+  resetPassword: publicProcedure
+    .input(z.object({ token: z.string().min(1), newPassword: z.string().min(8) }))
+    .mutation(async ({ input }) => {
+      await withRls(SYSTEM_CTX, async (tx) => {
+        const v = await verifyToken(tx, input.token, ['password_reset']);
+        if (!v || v.subjectType !== 'parent') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Liên kết không hợp lệ hoặc đã hết hạn' });
+        }
+        await tx.parentAccount.update({
+          where: { id: v.subjectId },
+          data: { passwordHash: await hashPassword(input.newPassword), tokenVersion: { increment: 1 } },
+        });
+        await consumeToken(tx, v.id);
+      });
+      return { ok: true };
+    }),
+
+  // ── Parent account activation (welcome → set initial password) ────────────────────────────────
+  activateVerify: publicProcedure
+    .input(z.object({ token: z.string().min(1) }))
+    .query(({ input }) =>
+      withRls(SYSTEM_CTX, async (tx) => {
+        const v = await verifyToken(tx, input.token, ['parent_account']);
+        if (!v || v.subjectType !== 'parent') return { valid: false as const };
+        const p = await tx.parentAccount.findUnique({ where: { id: v.subjectId }, select: { displayName: true } });
+        return { valid: true as const, displayName: p?.displayName ?? null };
+      }),
+    ),
+
+  activateSetPassword: publicProcedure
+    .input(z.object({ token: z.string().min(1), newPassword: z.string().min(8) }))
+    .mutation(async ({ input }) => {
+      await withRls(SYSTEM_CTX, async (tx) => {
+        const v = await verifyToken(tx, input.token, ['parent_account']);
+        if (!v || v.subjectType !== 'parent') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Liên kết không hợp lệ hoặc đã hết hạn' });
+        }
+        await tx.parentAccount.update({
+          where: { id: v.subjectId },
+          data: { passwordHash: await hashPassword(input.newPassword), isActive: true, tokenVersion: { increment: 1 } },
+        });
+        await consumeToken(tx, v.id);
+      });
+      return { ok: true };
+    }),
 });

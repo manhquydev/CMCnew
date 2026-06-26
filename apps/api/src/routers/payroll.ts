@@ -4,6 +4,11 @@ import { withRls } from '@cmc/db';
 import type { Prisma } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
+import { enqueueEmail } from '../services/email-outbox.js';
+
+// Post-commit, best-effort email runs under super-bypass so the outbox insert is decoupled from the
+// staff-scoped business tx (a mail failure never rolls back the payslip).
+const SYSTEM_CTX = { facilityIds: [] as number[], isSuperAdmin: true };
 import {
   assemblePayslip,
   cvtvNewCustomerRate,
@@ -438,15 +443,35 @@ export const payrollRouter = router({
 
   payslipFinalize: requireRole(...HR_ROLES)
     .input(z.object({ id: z.string().uuid() }))
-    .mutation(({ ctx, input }) =>
-      withRls(rlsContextOf(ctx.session), async (tx) => {
+    .mutation(async ({ ctx, input }) => {
+      const { slip, staff } = await withRls(rlsContextOf(ctx.session), async (tx) => {
         const before = await tx.payslip.findUniqueOrThrow({ where: { id: input.id } });
         if (before.status !== 'draft') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Chỉ chốt được phiếu nháp' });
         const slip = await tx.payslip.update({ where: { id: input.id }, data: { status: 'finalized', finalizedById: ctx.session.userId, finalizedAt: new Date() } });
         await logEvent(tx, { facilityId: slip.facilityId, entityType: 'payslip', entityId: slip.id, type: 'status_changed', body: `Chốt phiếu lương ${slip.periodKey}`, changes: [{ field: 'status', old: 'draft', new: 'finalized' }], actorId: ctx.session.userId });
-        return slip;
-      }),
-    ),
+        const staff = await tx.appUser.findUnique({ where: { id: slip.userId }, select: { email: true, displayName: true } });
+        return { slip, staff };
+      });
+      // Notify the staff member their payslip is ready (sensitive → payroll mailbox). Best-effort:
+      // a mail-queue failure must never undo the finalize, so it runs in its own tx after commit.
+      if (staff?.email) {
+        try {
+          await withRls(SYSTEM_CTX, (tx) =>
+            enqueueEmail(tx, {
+              facilityId: slip.facilityId,
+              dedupKey: `payslip_ready:${slip.id}`,
+              to: staff.email!,
+              mailbox: 'payroll',
+              kind: 'payslip_ready',
+              data: { displayName: staff.displayName, period: slip.periodKey },
+            }),
+          );
+        } catch (e) {
+          console.error('payslip_ready email enqueue failed', e);
+        }
+      }
+      return slip;
+    }),
 
   payslipMarkPaid: requireRole(...HR_ROLES)
     .input(z.object({ id: z.string().uuid() }))

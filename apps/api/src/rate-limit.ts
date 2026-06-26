@@ -84,6 +84,25 @@ export function clearLoginLimit(ip: string, identifier: string): void {
   buckets.delete(pairKey(ip, identifier));
 }
 
+/**
+ * Generic fixed-window throttle for non-login endpoints (e.g. password-reset requests). Unlike the
+ * login limiter, EVERY call counts — there is no "success clears it" notion. Throws once the window
+ * is exhausted (window = the shared LOGIN_RATE_WINDOW_MS). Pass a stable bucket key (e.g.
+ * `pwreset:<ip>` and/or `pwreset:<email>`).
+ */
+export function throttle(bucketKey: string, limit: number): void {
+  const now = Date.now();
+  sweep(now);
+  const b = buckets.get(bucketKey);
+  if (b && now <= b.resetAt && b.count >= limit) {
+    throw new TRPCError({
+      code: 'TOO_MANY_REQUESTS',
+      message: 'Quá nhiều yêu cầu. Vui lòng thử lại sau ít phút.',
+    });
+  }
+  bump(bucketKey, now);
+}
+
 /** Test-only: wipe all counters between cases. */
 export function __resetRateLimitStore(): void {
   buckets.clear();
