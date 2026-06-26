@@ -149,12 +149,17 @@ GRAPH_SENDER_NOTIFY="..."  GRAPH_SENDER_PAYROLL="..."  GRAPH_SENDER_HR="..."
 
 ## 8. Implementation phases (revised)
 
-| # | Work | Risk |
-|---|------|------|
-| R1 | graph-client → client-secret auth; `ENTRA_*`/`GRAPH_CLIENT_SECRET` env | low |
-| R2 | Remove superseded: activation + password-reset endpoints/service/templates; drop `activation_token`; `ParentAccount.passwordHash` nullable | auth |
-| R3 | LMS parent **Email OTP**: `login_otp` model, `otpRequest`/`otpVerify`, sync Graph send, throttle | **auth** |
-| R4 | ERP staff **SSO (OIDC)**: `@azure/msal-node`, `/auth/sso/login` + `/callback`, id_token validation, AppUser match, break-glass restricted to super_admin | **auth** |
-| R5 | Frontend: ERP "Đăng nhập CMC EDU" button + LMS email→OTP screens | normal |
-| R6 | Azure config + live smoke test (secret + redirect URIs supplied) | ops |
+| # | Work | Risk | Status |
+|---|------|------|--------|
+| R1 | graph-client → client-secret auth; `ENTRA_*`/`GRAPH_CLIENT_SECRET` env | low | ✅ done |
+| R2 | Remove superseded: activation + password-reset endpoints/service/templates; drop `activation_token`; `ParentAccount.passwordHash` nullable | auth | ✅ done |
+| R3 | LMS parent **Email OTP**: `login_otp` model, `otpRequest`/`otpVerify`, sync Graph send, race-safe attempt cap, throttle | **auth** | ✅ done |
+| R4 | ERP staff **SSO (OIDC)**: `@azure/msal-node`, `/auth/sso/login` + `/callback`, id_token validation, AppUser match, break-glass restricted to super_admin | **auth** | ✅ done |
+| R5 | Frontend: ERP "Đăng nhập CMC EDU" button + LMS email→OTP screens | normal | ⏳ pending |
+| R6 | Azure config + live smoke test (secret + redirect URIs supplied) | ops | ⏳ pending |
+
+**Backend R1–R4 done & verified (2026-06-26):** API typecheck + lint clean; 12 unit + 172 integration
+tests green against live Postgres (migrations applied). SSO + OTP are no-op until `ENTRA_CLIENT_SECRET`
+is set; the dev OTP fallback logs the code (non-prod only) so the flow is testable now. `ENTRA_TENANT_ID`
+must be the tenant **GUID** (not a domain). Remaining: R5 frontend screens, R6 Azure config + live test.
 ```
