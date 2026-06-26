@@ -16,7 +16,9 @@ export type MailboxKey = 'notify' | 'payroll' | 'hr';
 export interface GraphMailerConfig {
   tenantId: string;
   clientId: string;
-  certPath: string;
+  /** Client-credentials auth: a client secret (preferred, per the CMC Entra app) OR a certificate. */
+  clientSecret?: string;
+  certPath?: string;
   certPassword?: string;
   senders: Record<MailboxKey, string>;
 }
@@ -35,20 +37,23 @@ export class RateLimitError extends Error {
  * the address at send time (so a partially-configured tenant fails loudly only for the used mailbox).
  */
 export function graphMailerFromEnv(): GraphMailerConfig | null {
-  const tenantId = process.env.GRAPH_TENANT_ID;
-  const clientId = process.env.GRAPH_CLIENT_ID;
+  // Canonical names are ENTRA_* (shared with SSO); GRAPH_* kept as aliases.
+  const tenantId = process.env.GRAPH_TENANT_ID || process.env.ENTRA_TENANT_ID;
+  const clientId = process.env.GRAPH_CLIENT_ID || process.env.ENTRA_CLIENT_ID;
+  const clientSecret = process.env.GRAPH_CLIENT_SECRET || process.env.ENTRA_CLIENT_SECRET;
   const certPath = process.env.GRAPH_CERT_PATH;
   const notify = process.env.GRAPH_SENDER_NOTIFY;
   const payroll = process.env.GRAPH_SENDER_PAYROLL;
   const hr = process.env.GRAPH_SENDER_HR;
-  // Require the full set: auth credentials AND all three sender mailboxes. A half-configured tenant
-  // returns null (stays in no-op, rows queued) rather than claiming rows and permanently failing
-  // them when a missing sender address makes senderAddress() throw past MAX_ATTEMPTS.
-  if (!tenantId || !clientId || !certPath || !notify || !payroll || !hr) return null;
+  // Require the full set: tenant + client + (secret OR cert) + all three sender mailboxes. A
+  // half-configured tenant returns null (no-op, rows queued) rather than claiming rows and failing
+  // them permanently when a missing sender makes senderAddress() throw past MAX_ATTEMPTS.
+  if (!tenantId || !clientId || (!clientSecret && !certPath) || !notify || !payroll || !hr) return null;
   return {
     tenantId,
     clientId,
-    certPath,
+    clientSecret: clientSecret || undefined,
+    certPath: certPath || undefined,
     certPassword: process.env.GRAPH_CERT_PASSWORD || undefined,
     senders: { notify, payroll, hr },
   };
@@ -77,13 +82,18 @@ export interface SendDeps {
   fetchImpl?: FetchLike;
 }
 
-/** Default token acquisition via certificate (client-credentials). Lazy-imports @azure/identity. */
+/**
+ * Default token acquisition (client-credentials). Prefers a client secret (the CMC Entra app),
+ * falls back to a certificate. Lazy-imports @azure/identity so the dep never loads in test/no-op.
+ */
 const defaultGetToken: GetToken = async (cfg) => {
-  const { ClientCertificateCredential } = await import('@azure/identity');
-  const credential = new ClientCertificateCredential(cfg.tenantId, cfg.clientId, {
-    certificatePath: cfg.certPath,
-    ...(cfg.certPassword ? { certificatePassword: cfg.certPassword } : {}),
-  });
+  const identity = await import('@azure/identity');
+  const credential = cfg.clientSecret
+    ? new identity.ClientSecretCredential(cfg.tenantId, cfg.clientId, cfg.clientSecret)
+    : new identity.ClientCertificateCredential(cfg.tenantId, cfg.clientId, {
+        certificatePath: cfg.certPath!,
+        ...(cfg.certPassword ? { certificatePassword: cfg.certPassword } : {}),
+      });
   const token = await credential.getToken(GRAPH_SCOPE);
   if (!token?.token) throw new Error('Graph token acquisition returned no token');
   return token.token;

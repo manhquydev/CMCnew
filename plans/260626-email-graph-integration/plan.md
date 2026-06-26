@@ -3,6 +3,13 @@
 **Status:** BACKEND IMPLEMENTED & VERIFIED (179 tests green) · UI pages + Phase 06 config pending
 **Branch:** `feature/email-graph-integration` (worktree)
 
+## ⚠️ Auth re-architecture (2026-06-26, later same day)
+The org provided the Entra app "CMC" and a new auth direction. Staff → **Microsoft SSO (OIDC)**;
+parent LMS → **Email OTP passwordless**. This **supersedes** the password-based activation (Phase 02)
+and password-reset (Phase 04) added earlier in this branch. Authoritative design + redirection log:
+**`docs/auth-sso-otp-redirection.md`** (revised phases R1–R6). Graph auth switched cert → **client
+secret** (R1, done). Removal of superseded code + OTP + SSO (R2–R5) pending.
+
 ## Build status (2026-06-26)
 - **Phase 01–05 backend: DONE & verified** — API typecheck + lint clean; 8 unit + 171 integration
   tests pass against a live Postgres (migrations applied). Email is no-op until `GRAPH_*` env is set.
