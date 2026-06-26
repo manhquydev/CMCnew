@@ -6,10 +6,11 @@ import cron from 'node-cron';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { getCookie } from 'hono/cookie';
+import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { streamSSE } from 'hono/streaming';
 import { trpcServer } from '@hono/trpc-server';
-import { resolveLmsSession, resolveSession, rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
+import { resolveLmsSession, resolveSession, rlsContextOf, lmsRlsContextOf, mintStaffSession } from '@cmc/auth';
+import { ssoConfigFromEnv, buildAuthUrl, redeemCode } from './lib/sso.js';
 import { withRls } from '@cmc/db';
 import { appRouter } from './routers/index.js';
 import { createContext, COOKIE_NAME, LMS_COOKIE_NAME } from './context.js';
@@ -236,6 +237,64 @@ app.get('/sse/staff', async (c) => {
     }
     unsubscribe();
   });
+});
+
+// ── Staff SSO via Microsoft Entra (OIDC authorization-code flow, R4) ───────────────────────────
+// /auth/sso/login redirects to Microsoft; /auth/sso/callback redeems the code, matches an existing
+// AppUser by org-domain email, and sets the normal staff session cookie. Microsoft passwords are
+// never stored. Disabled (503) until ENTRA_CLIENT_SECRET is configured.
+const SSO_TX_COOKIE = 'cmc.sso_tx';
+const erpOrigin = () => process.env.ADMIN_APP_ORIGIN ?? 'http://localhost:5173';
+const cookieSecure = () => process.env.COOKIE_SECURE !== 'false';
+
+app.get('/auth/sso/login', async (c) => {
+  const cfg = ssoConfigFromEnv();
+  if (!cfg) return c.text('SSO chưa được cấu hình', 503);
+  const { url, tx } = await buildAuthUrl(cfg);
+  setCookie(c, SSO_TX_COOKIE, JSON.stringify(tx), {
+    httpOnly: true,
+    sameSite: 'Lax',
+    path: '/auth/sso',
+    maxAge: 600, // 10 min to complete the round-trip
+    secure: cookieSecure(),
+  });
+  return c.redirect(url);
+});
+
+app.get('/auth/sso/callback', async (c) => {
+  const cfg = ssoConfigFromEnv();
+  if (!cfg) return c.text('SSO chưa được cấu hình', 503);
+  const fail = (reason: string) => c.redirect(`${erpOrigin()}/login?sso_error=${reason}`);
+
+  if (c.req.query('error')) return fail('denied');
+  const code = c.req.query('code');
+  const state = c.req.query('state');
+  const raw = getCookie(c, SSO_TX_COOKIE);
+  deleteCookie(c, SSO_TX_COOKIE, { path: '/auth/sso' });
+  if (!code || !state || !raw) return fail('state');
+
+  let tx: { state: string; verifier: string };
+  try {
+    tx = JSON.parse(raw);
+  } catch {
+    return fail('state');
+  }
+  if (tx.state !== state) return fail('state'); // CSRF guard
+
+  const email = await redeemCode(cfg, code, tx.verifier).catch(() => null);
+  if (!email) return fail('domain'); // wrong tenant / non-org email / token invalid
+
+  const result = await mintStaffSession(email);
+  if (!result) return fail('not_provisioned'); // admin must pre-create the AppUser
+
+  setCookie(c, COOKIE_NAME, result.token, {
+    httpOnly: true,
+    sameSite: 'Lax',
+    path: '/',
+    maxAge: 60 * 60 * 12,
+    secure: cookieSecure(),
+  });
+  return c.redirect(erpOrigin());
 });
 
 app.use(

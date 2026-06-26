@@ -93,6 +93,9 @@ importers:
       '@azure/identity':
         specifier: ^4.5.0
         version: 4.13.1
+      '@azure/msal-node':
+        specifier: ^2.16.2
+        version: 2.16.3
       '@cmc/audit':
         specifier: workspace:*
         version: link:../../packages/audit
@@ -419,9 +422,17 @@ packages:
     resolution: {integrity: sha512-2NYT6v+eeQn8kmNddr9LnbXSvXbVELpmFMmfFvtRxD7I/5+5GlkMlncApeuRFj+mY6C9syOwQip1a0Y+TIbyiA==}
     engines: {node: '>=0.8.0'}
 
+  '@azure/msal-common@14.16.1':
+    resolution: {integrity: sha512-nyxsA6NA4SVKh5YyRpbSXiMr7oQbwark7JU9LMeg6tJYTSPyAGkdx61wPT4gyxZfxlSxMMEyAsWaubBlNyIa1w==}
+    engines: {node: '>=0.8.0'}
+
   '@azure/msal-common@16.10.0':
     resolution: {integrity: sha512-iYtjpanlv6963Jprs0MvzIap07V+QhultjQctfbEDQCflsDAEeO3R7XnVA5gk30fhoBFLdgJT7VqO0TGsEsN9w==}
     engines: {node: '>=0.8.0'}
+
+  '@azure/msal-node@2.16.3':
+    resolution: {integrity: sha512-CO+SE4weOsfJf+C5LM8argzvotrXw252/ZU6SM2Tz63fEblhH1uuVaaO4ISYFuN4Q6BhTo7I3qIdi8ydUQCqhw==}
+    engines: {node: '>=16'}
 
   '@azure/msal-node@5.3.0':
     resolution: {integrity: sha512-fXtJX811pX8y8QlrQqBSH6+plvWyKZDI0IxkheAcyAw9OtcpXyFivmTC7eGUqutLWaDlKXuQ3yOESD4zAmkjHg==}
@@ -2866,6 +2877,11 @@ packages:
       '@types/react':
         optional: true
 
+  uuid@8.3.2:
+    resolution: {integrity: sha512-+NYs2QeMWy+GWFOEm9xnn6HCDp0l7QBD7ml8zLUmJ+93Q5NF0NocErnwkTkXVFNiX3/fpC6afS8Dhb/gz7R7eg==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+    hasBin: true
+
   vite-node@2.1.9:
     resolution: {integrity: sha512-AM9aQ/IPrW/6ENLQg3AGY4K1N2TGZdR5e4gu/MmmR2xR3Ll1+dib+nook92g4TV3PXVyeyxdWwtaCAiUL0hMxA==}
     engines: {node: ^18.0.0 || >=20.0.0}
@@ -3088,7 +3104,15 @@ snapshots:
     dependencies:
       '@azure/msal-common': 16.10.0
 
+  '@azure/msal-common@14.16.1': {}
+
   '@azure/msal-common@16.10.0': {}
+
+  '@azure/msal-node@2.16.3':
+    dependencies:
+      '@azure/msal-common': 14.16.1
+      jsonwebtoken: 9.0.3
+      uuid: 8.3.2
 
   '@azure/msal-node@5.3.0':
     dependencies:
@@ -5577,6 +5601,8 @@ snapshots:
       tslib: 2.8.1
     optionalDependencies:
       '@types/react': 19.2.17
+
+  uuid@8.3.2: {}
 
   vite-node@2.1.9(@types/node@22.20.0):
     dependencies:

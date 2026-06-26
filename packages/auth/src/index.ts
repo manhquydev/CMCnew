@@ -68,6 +68,27 @@ export async function login(
   return { token: await signSession(claims), session: toSession(user) };
 }
 
+/**
+ * Mint a staff session by email WITHOUT a password — used after an external IdP (Microsoft SSO) has
+ * already authenticated the user. Returns null if no active AppUser matches (admin must pre-provision;
+ * SSO never auto-creates accounts). The caller is responsible for trusting the email's origin.
+ */
+export async function mintStaffSession(
+  email: string,
+): Promise<{ token: string; session: RequestSession } | null> {
+  const user = await withRls(SYSTEM_RLS, (tx) =>
+    tx.appUser.findUnique({ where: { email }, include: { facilities: true } }),
+  );
+  if (!user || !user.isActive) return null;
+  const claims: SessionClaims = {
+    sub: user.id,
+    roles: user.roles,
+    primaryRole: user.primaryRole,
+    tokenVersion: user.tokenVersion,
+  };
+  return { token: await signSession(claims), session: toSession(user) };
+}
+
 /** Verify a JWT and re-check it against live DB state (active + tokenVersion). */
 export async function resolveSession(token: string): Promise<RequestSession | null> {
   const claims = await verifySession(token);
