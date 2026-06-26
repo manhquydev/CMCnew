@@ -74,6 +74,10 @@ services:
       REDIS_URL:        redis://redis:6379
       JWT_SECRET:       ${JWT_SECRET:?JWT_SECRET is required}
       AUTH_COOKIE_NAME: cmc.session
+      # Session cookies default to Secure (HTTPS-only). Set COOKIE_SECURE=false when serving
+      # over plain HTTP (e.g. http://localhost) or the browser will drop the cookie and login
+      # will silently fail. Behind real TLS, leave it unset/true.
+      COOKIE_SECURE:    ${COOKIE_SECURE:-}
       # Allowed CORS origins (comma-separated). Must include all frontend origins.
       # In a single-nginx setup everything is same-origin, but set it anyway.
       CORS_ORIGINS:     ${CORS_ORIGINS:-http://localhost}

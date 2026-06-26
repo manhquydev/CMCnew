@@ -45,6 +45,38 @@ async function main(): Promise<void> {
   }
   console.log(`✓ Facilities: ${hq.code} (#${hq.id}), ${branch.code} (#${branch.id})`);
 
+  // ── Operational staff accounts (one per role at HQ) — the first accounts needed
+  // to run the business end-to-end. Idempotent. All share SEED_SUPERADMIN_PASSWORD
+  // for a simple first login; change per-user in the admin app after launch. ──────
+  const STAFF: Array<{ email: string; name: string; role: Role }> = [
+    { email: 'quanly@cmc.local', name: 'Quản Lý Cơ Sở', role: Role.quan_ly },
+    { email: 'bgd@cmc.local', name: 'Ban Giám Đốc', role: Role.bgd },
+    { email: 'headteacher@cmc.local', name: 'Trưởng Bộ Môn', role: Role.head_teacher },
+    { email: 'giaovien@cmc.local', name: 'Giáo Viên', role: Role.giao_vien },
+    { email: 'ketoan@cmc.local', name: 'Kế Toán', role: Role.ke_toan },
+    { email: 'hr@cmc.local', name: 'Nhân Sự (HR)', role: Role.hr },
+    { email: 'sale@cmc.local', name: 'Tư Vấn Tuyển Sinh', role: Role.sale },
+    { email: 'cskh@cmc.local', name: 'Chăm Sóc Khách Hàng', role: Role.cskh },
+    { email: 'mkt@cmc.local', name: 'Cộng Tác Viên MKT', role: Role.ctv_mkt },
+  ];
+  for (const s of STAFF) {
+    if (await prisma.appUser.findUnique({ where: { email: s.email } })) {
+      console.log(`• ${s.role} <${s.email}> already exists — skipped`);
+      continue;
+    }
+    await prisma.appUser.create({
+      data: {
+        email: s.email,
+        displayName: s.name,
+        passwordHash: await hashPassword(password),
+        roles: [s.role],
+        primaryRole: s.role,
+        facilities: { create: { facilityId: hq.id } },
+      },
+    });
+    console.log(`✓ Seeded ${s.role} <${s.email}>`);
+  }
+
   // ── LMS seed: student + parent accounts ─────────────────────────────────────
   const lmsPassword = password; // reuse SEED_SUPERADMIN_PASSWORD for simplicity
 
