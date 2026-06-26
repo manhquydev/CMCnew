@@ -149,6 +149,16 @@ export const submissionRouter = router({
       withRls(lmsRlsContextOf(ctx.lms), async (tx) => {
         const studentId = ctx.lms.studentIds[0];
         if (!studentId) throw new TRPCError({ code: 'FORBIDDEN' });
+        // Must have a draft to submit; guard so a missing row is a clean NOT_FOUND (not a P2025 500)
+        // and a re-submit of an already submitted/graded row is rejected (never silently resets a grade).
+        const current = await tx.submission.findUnique({
+          where: { exerciseId_studentId: { exerciseId: input.exerciseId, studentId } },
+          select: { status: true },
+        });
+        if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: 'Chưa có bài để nộp' });
+        if (current.status !== 'draft') {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Bài đã nộp hoặc đã chấm' });
+        }
         const sub = await tx.submission.update({
           where: { exerciseId_studentId: { exerciseId: input.exerciseId, studentId } },
           data: { status: 'submitted', submittedAt: new Date() },

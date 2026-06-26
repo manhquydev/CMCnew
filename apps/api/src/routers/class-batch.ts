@@ -226,6 +226,22 @@ export const classBatchRouter = router({
           actorId: ctx.session.userId,
         });
         const now = new Date(new Date().toISOString().slice(0, 10));
+        // Mirror cancel(): restore future sessions that the cancellation soft-cancelled so the
+        // teacher's schedule isn't blank after reopen. Future cancelled → planned.
+        const restoredSessions = await tx.classSession.updateMany({
+          where: { classBatchId: batch.id, status: 'cancelled', sessionDate: { gte: now } },
+          data: { status: 'planned' },
+        });
+        if (restoredSessions.count > 0) {
+          await logEvent(tx, {
+            facilityId: batch.facilityId,
+            entityType: ENTITY,
+            entityId: batch.id,
+            type: 'note',
+            body: `Khôi phục ${restoredSessions.count} buổi học tương lai (mở lại lớp)`,
+            actorId: ctx.session.userId,
+          });
+        }
         const restoredMeetings = await restoreFutureParentMeetings(tx, batch.id, now);
         if (restoredMeetings > 0) {
           await logEvent(tx, {
