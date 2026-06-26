@@ -8,6 +8,7 @@ import {
   Checkbox,
   Drawer,
   Group,
+  Modal,
   NumberInput,
   Select,
   Stack,
@@ -67,6 +68,10 @@ const payrollApi = trpc.payroll as unknown as {
   payslipBulkPay: { mutate: (i: { ids: string[] }) => Promise<BulkPayResult> };
   payslipPeriodSummary: {
     query: (i: { facilityId: number; periodKey: string }) => Promise<PeriodSummary>;
+  };
+  /** Tree-manager commission override (phase-07). Backend enforces tree-authority. */
+  payslipOverrideVariablePay: {
+    mutate: (i: { userId: string; periodKey: string; amount: number; reason: string }) => Promise<PayslipRow>;
   };
 };
 
@@ -317,6 +322,108 @@ function ComputeForm({
   );
 }
 
+// ─── Commission Override Modal ────────────────────────────────────────────────
+// Shows only on draft payslips; visible to quan_ly / head_teacher / bgd / super.
+// The backend re-enforces tree-authority so a UI bypass is harmless but the
+// button is hidden for unrelated roles to avoid confusing error messages.
+
+function CommissionOverrideModal({
+  staffId,
+  periodKey,
+  opened,
+  onClose,
+  onDone,
+}: {
+  staffId: string;
+  periodKey: string;
+  opened: boolean;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [amount, setAmount] = useState<number | string>(0);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  function reset() {
+    setAmount(0);
+    setReason('');
+    setErr('');
+  }
+
+  async function submit() {
+    if (typeof amount !== 'number' || amount < 0) {
+      setErr('Số tiền phải ≥ 0');
+      return;
+    }
+    if (!reason.trim()) {
+      setErr('Nhập lý do điều chỉnh');
+      return;
+    }
+    setErr('');
+    setBusy(true);
+    try {
+      await payrollApi.payslipOverrideVariablePay.mutate({
+        userId: staffId,
+        periodKey,
+        amount: amount as number,
+        reason: reason.trim(),
+      });
+      notifySuccess(`Đã điều chỉnh hoa hồng kỳ ${periodKey}: ${vnd(amount as number)}`);
+      reset();
+      onClose();
+      onDone();
+    } catch (e: unknown) {
+      notifyError(e, 'Điều chỉnh hoa hồng thất bại');
+      setErr(e instanceof Error ? e.message : 'Lỗi điều chỉnh');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      opened={opened}
+      onClose={() => { reset(); onClose(); }}
+      title={`Điều chỉnh hoa hồng — kỳ ${periodKey}`}
+      radius="xl"
+      centered
+    >
+      <Stack gap="sm">
+        {err && <Alert color="red">{err}</Alert>}
+        <Text size="sm" c="dimmed">
+          Ghi đè giá trị hoa hồng tự động. Gross/thuế/thực lĩnh sẽ được tính lại ngay lập tức.
+          Chỉ áp dụng cho phiếu ở trạng thái nháp.
+        </Text>
+        <NumberInput
+          label="Hoa hồng mới (VNĐ)"
+          description="Nhập 0 nếu muốn xóa hoa hồng"
+          min={0}
+          step={100_000}
+          value={amount}
+          onChange={setAmount}
+          withAsterisk
+        />
+        <TextInput
+          label="Lý do điều chỉnh"
+          placeholder="VD: Bù hoa hồng theo biên bản xác nhận ngày..."
+          value={reason}
+          onChange={(e) => setReason(e.currentTarget.value)}
+          withAsterisk
+        />
+        <Group justify="flex-end" mt="xs">
+          <Button variant="subtle" onClick={() => { reset(); onClose(); }}>
+            Hủy
+          </Button>
+          <Button variant="filled" color="orange" radius={9999} loading={busy} onClick={() => void submit()}>
+            Xác nhận điều chỉnh
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
 // ─── Staff Detail Drawer ──────────────────────────────────────────────────────
 
 function StaffDetailDrawer({
@@ -330,6 +437,12 @@ function StaffDetailDrawer({
   facilityId: number;
   onClose: () => void;
 }) {
+  const { me } = useSession();
+  // Roles that may attempt commission override; backend re-enforces tree-authority.
+  const canOverride =
+    me.isSuperAdmin ||
+    me.roles.some((r) => ['quan_ly', 'head_teacher', 'bgd'].includes(r));
+
   const [payslips, setPayslips] = useState<PayslipRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -338,6 +451,8 @@ function StaffDetailDrawer({
   const [bulkBusy, setBulkBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [showCompute, setShowCompute] = useState(false);
+  // Override modal: null = closed; string = periodKey of the draft slip being overridden.
+  const [overridePeriodKey, setOverridePeriodKey] = useState<string | null>(null);
 
   const loadPayslips = useCallback((id: string) => {
     setLoading(true);
@@ -535,6 +650,17 @@ function StaffDetailDrawer({
                               Chốt
                             </Button>
                           )}
+                          {/* Commission override — draft only, for tree-manager roles */}
+                          {p.status === 'draft' && canOverride && (
+                            <Button
+                              size="compact-xs"
+                              variant="subtle"
+                              color="orange"
+                              onClick={() => setOverridePeriodKey(p.periodKey)}
+                            >
+                              Điều chỉnh HH
+                            </Button>
+                          )}
                           {/* finalized → paid */}
                           {p.status === 'finalized' && (
                             <Button
@@ -580,6 +706,20 @@ function StaffDetailDrawer({
             </Table>
           )}
         </Stack>
+      )}
+
+      {/* Commission override modal — rendered outside the table to avoid z-index issues */}
+      {staffId && overridePeriodKey && (
+        <CommissionOverrideModal
+          staffId={staffId}
+          periodKey={overridePeriodKey}
+          opened={!!overridePeriodKey}
+          onClose={() => setOverridePeriodKey(null)}
+          onDone={() => {
+            setOverridePeriodKey(null);
+            loadPayslips(staffId);
+          }}
+        />
       )}
     </Drawer>
   );

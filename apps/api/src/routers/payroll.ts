@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
+import type { Prisma } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import {
@@ -34,6 +35,148 @@ function periodRange(periodKey: string): { start: Date; end: Date } {
   return {
     start: new Date(Date.UTC(y!, m! - 1, 1)),
     end: new Date(Date.UTC(y!, m!, 1)), // exclusive: first day of following month
+  };
+}
+
+/**
+ * Shared payslip assembly helper — the single source of truth for gross/taxable/PIT/net
+ * computation. Both payslipCompute and payslipOverrideVariablePay call this so their
+ * figures are always consistent.
+ *
+ * When variablePayOverride is set, it is used as variablePay directly and the commission
+ * auto-feed for sale-block staff is skipped. When absent, the auto-feed runs for sales or
+ * the caller-supplied variablePayInput is used for other blocks.
+ */
+async function assembleSlipData(
+  tx: Prisma.TransactionClient,
+  args: {
+    userId: string;
+    facilityId: number;
+    periodKey: string;
+    standardDays: number;
+    workdays: number;
+    /** Explicit KPI score; undefined → resolve from KpiScore record (overrideScore ?? autoScore). */
+    kpiScoreInput?: number;
+    /** Base variable pay from caller (used when block≠sales and no override). */
+    variablePayInput: number;
+    variableNoteInput?: string;
+    insuranceDeduction: number;
+    /** Explicit dependents count; undefined → read from EmploymentProfile. */
+    dependentsInput?: number;
+    /** When set, use this value as variablePay and skip the commission auto-feed. */
+    variablePayOverride?: number;
+    /** Note to store when variablePayOverride is set. */
+    variableNoteOverride?: string;
+  },
+): Promise<{
+  kpiScore: number;
+  kpiGrade: string;
+  baseEarned: number;
+  allowanceEarned: number;
+  kpiBonus: number;
+  variablePay: number;
+  variableNote: string | undefined;
+  insuranceDeduction: number;
+  dependents: number;
+  grossIncome: number;
+  taxableIncome: number;
+  pitAmount: number;
+  netIncome: number;
+}> {
+  const rate = await tx.salaryRate.findFirst({
+    where: { userId: args.userId, archivedAt: null, effectiveFrom: { lte: periodEnd(args.periodKey) } },
+    orderBy: { effectiveFrom: 'desc' },
+  });
+  if (!rate) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nhân sự chưa có mức lương hiệu lực' });
+
+  const dependents =
+    args.dependentsInput !== undefined
+      ? args.dependentsInput
+      : (await tx.employmentProfile.findUnique({ where: { userId: args.userId } }))?.dependents ?? 0;
+
+  const params = await effectiveParamsAt(tx, args.periodKey);
+  const emp = await tx.appUser.findUnique({ where: { id: args.userId }, select: { roles: true } });
+  const block: 'training' | 'sales' = emp?.roles.includes(Role.sale) ? 'sales' : 'training';
+
+  // Resolve kpiScore: explicit input > KpiScore record (overrideScore ?? autoScore) > 0.
+  let kpiScore: number;
+  if (args.kpiScoreInput !== undefined) {
+    kpiScore = args.kpiScoreInput;
+  } else {
+    const kpiRow = await tx.kpiScore.findUnique({
+      where: { userId_periodKey: { userId: args.userId, periodKey: args.periodKey } },
+      select: { autoScore: true, overrideScore: true },
+    });
+    kpiScore = kpiRow ? (kpiRow.overrideScore ?? kpiRow.autoScore) : 0;
+  }
+
+  // Determine variable pay: override takes precedence; then auto-feed for sales; then input.
+  let resolvedVariablePay: number;
+  let resolvedVariableNote: string | undefined;
+  if (args.variablePayOverride !== undefined) {
+    // Tree-manager commission override: bypass auto-feed entirely, use the supplied amount.
+    resolvedVariablePay = args.variablePayOverride;
+    resolvedVariableNote = args.variableNoteOverride;
+  } else if (block === 'sales') {
+    // Commission auto-feed for sale roles (CV4): compute from approved receipts in the period.
+    // Renewal uses the policy's pre-CRM retention assumption (conservative, tunable by HR/BGD).
+    const { start: pStart, end: pEnd } = periodRange(args.periodKey);
+    const quota = rate.monthlyQuota;
+    const grouped = await tx.receipt.groupBy({
+      by: ['kind'],
+      where: {
+        soldById: args.userId,
+        facilityId: args.facilityId,
+        status: { in: ['approved', 'sent', 'reconciled'] },
+        approvedAt: { gte: pStart, lt: pEnd },
+      },
+      _sum: { netAmount: true },
+    });
+    const newRevenue = grouped.find((g) => g.kind === 'new')?._sum.netAmount ?? 0;
+    const renewalRevenue = grouped.find((g) => g.kind === 'renewal')?._sum.netAmount ?? 0;
+    const attainment = quota > 0 ? newRevenue / quota : 0;
+    const retentionAssumption = params.commission.renewalRetentionDefault;
+    const commission =
+      commissionAmount(newRevenue, cvtvNewCustomerRate(attainment, params)) +
+      commissionAmount(renewalRevenue, renewalRate('cvtv', retentionAssumption, params));
+    resolvedVariablePay = Math.round(commission);
+    resolvedVariableNote = `Hoa hồng ${args.periodKey}: ${resolvedVariablePay.toLocaleString('vi-VN')}đ`;
+  } else {
+    resolvedVariablePay = args.variablePayInput;
+    resolvedVariableNote = args.variableNoteInput;
+  }
+
+  const r = assemblePayslip(
+    {
+      baseSalary: rate.baseSalary,
+      mealAllowance: rate.mealAllowance,
+      otherAllowance: rate.otherAllowance,
+      kpiMax: rate.kpiMax,
+      kpiScore,
+      block,
+      workdays: args.workdays,
+      standardDays: args.standardDays,
+      variablePay: resolvedVariablePay,
+      insuranceDeduction: args.insuranceDeduction,
+      dependents,
+    },
+    params,
+  );
+
+  return {
+    kpiScore,
+    kpiGrade: r.kpiGrade,
+    baseEarned: r.baseEarned,
+    allowanceEarned: r.allowanceEarned,
+    kpiBonus: r.kpiBonus,
+    variablePay: r.variablePay,
+    variableNote: resolvedVariableNote,
+    insuranceDeduction: r.insuranceDeduction,
+    dependents,
+    grossIncome: r.grossIncome,
+    taxableIncome: r.taxableIncome,
+    pitAmount: r.pitAmount,
+    netIncome: r.netIncome,
   };
 }
 
@@ -207,7 +350,7 @@ export const payrollRouter = router({
     ),
 
   // Compute (or recompute) a draft payslip for (employee, period). Finalize gating: a finalized
-  // or paid slip cannot be recomputed. All figures come from @cmc/domain-payroll.
+  // or paid slip cannot be recomputed. All figures come from assembleSlipData → @cmc/domain-payroll.
   // kpiScore is optional: when omitted, resolved from KpiScore record (overrideScore ?? autoScore).
   payslipCompute: requireRole(...HR_ROLES)
     .input(
@@ -233,104 +376,42 @@ export const payrollRouter = router({
         if (existing && existing.status !== 'draft') {
           throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu lương đã chốt — không tính lại được' });
         }
-        const rate = await tx.salaryRate.findFirst({
-          where: { userId: input.userId, archivedAt: null, effectiveFrom: { lte: periodEnd(input.periodKey) } },
-          orderBy: { effectiveFrom: 'desc' },
+
+        // Delegate all computation to the shared helper so payslipCompute and
+        // payslipOverrideVariablePay produce identical gross/tax/PIT/net for the same inputs.
+        const computed = await assembleSlipData(tx, {
+          userId: input.userId,
+          facilityId: input.facilityId,
+          periodKey: input.periodKey,
+          standardDays: input.standardDays,
+          workdays: input.workdays,
+          kpiScoreInput: input.kpiScore,
+          variablePayInput: input.variablePay,
+          variableNoteInput: input.variableNote,
+          insuranceDeduction: input.insuranceDeduction,
+          dependentsInput: input.dependents,
+          // No variablePayOverride → sales auto-feed runs normally.
         });
-        if (!rate) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nhân sự chưa có mức lương hiệu lực' });
-        const profile = await tx.employmentProfile.findUnique({ where: { userId: input.userId } });
-        const dependents = input.dependents ?? profile?.dependents ?? 0;
 
-        // Compute with the CompensationPolicy effective at the period (CV6 — close the config loop):
-        // PIT brackets/reliefs + KPI band come from the live policy, not hardcoded constants. KPI band
-        // is block-specific — a 'sale' is graded on the sales band, everyone else on training.
-        const params = await effectiveParamsAt(tx, input.periodKey);
-        const emp = await tx.appUser.findUnique({ where: { id: input.userId }, select: { roles: true } });
-        const block: 'training' | 'sales' = emp?.roles.includes(Role.sale) ? 'sales' : 'training';
-
-        // Resolve kpiScore: if not provided, read from KpiScore record (overrideScore ?? autoScore).
-        let kpiScore: number;
-        if (input.kpiScore !== undefined) {
-          kpiScore = input.kpiScore;
-        } else {
-          const kpiRow = await tx.kpiScore.findUnique({
-            where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
-            select: { autoScore: true, overrideScore: true },
-          });
-          kpiScore = kpiRow ? (kpiRow.overrideScore ?? kpiRow.autoScore) : 0;
-        }
-
-        // Commission auto-feed for sale roles (CV4): compute commission from approved receipts
-        // and override variablePay so the payslip is fully data-driven for sales staff.
-        // centreRetentionRatio defaults to 1 (gate met) until CRM feeds it.
-        let resolvedVariablePay = input.variablePay;
-        let resolvedVariableNote = input.variableNote;
-        if (block === 'sales') {
-          const { start: pStart, end: pEnd } = periodRange(input.periodKey);
-          const rateRow = await tx.salaryRate.findFirst({
-            where: { userId: input.userId, archivedAt: null, effectiveFrom: { lte: periodEnd(input.periodKey) } },
-            orderBy: { effectiveFrom: 'desc' },
-            select: { monthlyQuota: true },
-          });
-          const quota = rateRow?.monthlyQuota ?? 0;
-          const grouped = await tx.receipt.groupBy({
-            by: ['kind'],
-            where: {
-              soldById: input.userId,
-              facilityId: input.facilityId,
-              status: { in: ['approved', 'sent', 'reconciled'] },
-              approvedAt: { gte: pStart, lt: pEnd },
-            },
-            _sum: { netAmount: true },
-          });
-          const newRevenue = grouped.find((g) => g.kind === 'new')?._sum.netAmount ?? 0;
-          const renewalRevenue = grouped.find((g) => g.kind === 'renewal')?._sum.netAmount ?? 0;
-          const attainment = quota > 0 ? newRevenue / quota : 0;
-          // Renewal uses the policy's pre-CRM retention assumption (conservative, tunable) rather
-          // than a hardcoded 100%; a tree-manager can override the final commission afterwards.
-          const retentionAssumption = params.commission.renewalRetentionDefault;
-          const commission =
-            commissionAmount(newRevenue, cvtvNewCustomerRate(attainment, params)) +
-            commissionAmount(renewalRevenue, renewalRate('cvtv', retentionAssumption, params));
-          resolvedVariablePay = Math.round(commission);
-          resolvedVariableNote = `Hoa hồng ${input.periodKey}: ${resolvedVariablePay.toLocaleString('vi-VN')}đ`;
-        }
-
-        const r = assemblePayslip(
-          {
-            baseSalary: rate.baseSalary,
-            mealAllowance: rate.mealAllowance,
-            otherAllowance: rate.otherAllowance,
-            kpiMax: rate.kpiMax,
-            kpiScore,
-            block,
-            workdays: input.workdays,
-            standardDays: input.standardDays,
-            variablePay: resolvedVariablePay,
-            insuranceDeduction: input.insuranceDeduction,
-            dependents,
-          },
-          params,
-        );
         const data = {
           facilityId: input.facilityId,
           userId: input.userId,
           periodKey: input.periodKey,
           standardDays: input.standardDays,
           workdays: input.workdays,
-          kpiScore,
-          kpiGrade: r.kpiGrade,
-          baseEarned: r.baseEarned,
-          allowanceEarned: r.allowanceEarned,
-          kpiBonus: r.kpiBonus,
-          variablePay: r.variablePay,
-          variableNote: resolvedVariableNote,
-          insuranceDeduction: r.insuranceDeduction,
-          dependents,
-          grossIncome: r.grossIncome,
-          taxableIncome: r.taxableIncome,
-          pitAmount: r.pitAmount,
-          netIncome: r.netIncome,
+          kpiScore: computed.kpiScore,
+          kpiGrade: computed.kpiGrade,
+          baseEarned: computed.baseEarned,
+          allowanceEarned: computed.allowanceEarned,
+          kpiBonus: computed.kpiBonus,
+          variablePay: computed.variablePay,
+          variableNote: computed.variableNote,
+          insuranceDeduction: computed.insuranceDeduction,
+          dependents: computed.dependents,
+          grossIncome: computed.grossIncome,
+          taxableIncome: computed.taxableIncome,
+          pitAmount: computed.pitAmount,
+          netIncome: computed.netIncome,
           computedById: ctx.session.userId,
         };
         const slip = await tx.payslip.upsert({
@@ -338,7 +419,7 @@ export const payrollRouter = router({
           update: data,
           create: data,
         });
-        await logEvent(tx, { facilityId: slip.facilityId, entityType: 'payslip', entityId: slip.id, type: existing ? 'updated' : 'created', body: `Tính lương ${input.periodKey}: thực lĩnh ${r.netIncome.toLocaleString('vi-VN')}đ (${r.kpiGrade})`, actorId: ctx.session.userId });
+        await logEvent(tx, { facilityId: slip.facilityId, entityType: 'payslip', entityId: slip.id, type: existing ? 'updated' : 'created', body: `Tính lương ${input.periodKey}: thực lĩnh ${computed.netIncome.toLocaleString('vi-VN')}đ (${computed.kpiGrade})`, actorId: ctx.session.userId });
         return slip;
       }),
     ),
@@ -501,6 +582,88 @@ export const payrollRouter = router({
         const slip = await tx.payslip.update({ where: { id: input.id }, data: { status: 'draft', finalizedById: null, finalizedAt: null } });
         await logEvent(tx, { facilityId: slip.facilityId, entityType: 'payslip', entityId: slip.id, type: 'status_changed', body: `Mở lại phiếu lương ${slip.periodKey}`, changes: [{ field: 'status', old: 'finalized', new: 'draft' }], actorId: ctx.session.userId });
         return slip;
+      }),
+    ),
+
+  // Tree-manager commission override (decision phase-07): a direct manager (or above) may adjust
+  // the variablePay on a draft payslip, with a mandatory reason. Authority is tree-based
+  // (canOverrideKpi), not flat-role — same rule as KPI override. Only draft slips can be
+  // overridden; finalized/paid slips must be reopened first. Gross/tax/PIT/net are always
+  // recomputed via assembleSlipData so no divergence is possible.
+  payslipOverrideVariablePay: protectedProcedure
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+        amount: z.number().int().nonnegative(),
+        reason: z.string().min(1),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        // Load the draft payslip — provides facilityId and current figures for recompute.
+        const slip = await tx.payslip.findUnique({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+        });
+        if (!slip) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu lương' });
+        if (slip.status !== 'draft') {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Chỉ điều chỉnh được phiếu ở trạng thái nháp — mở lại trước khi override' });
+        }
+
+        // Authorize: tree-authority check (canOverrideKpi blocks self and non-tree actors).
+        const target = await tx.appUser.findUnique({ where: { id: input.userId }, select: { roles: true } });
+        const targetRoles = (target?.roles ?? []) as Role[];
+        const actor = {
+          userId: ctx.session.userId,
+          roles: ctx.session.roles as Role[],
+          isSuperAdmin: ctx.session.isSuperAdmin,
+        };
+        if (!canOverrideKpi(actor, input.userId, targetRoles)) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Không có quyền điều chỉnh hoa hồng cho nhân sự này' });
+        }
+
+        // Recompute the slip using the same inputs as the original compute, but with
+        // variablePayOverride forcing variablePay to amount (sales auto-feed is skipped).
+        // kpiScore is re-resolved from KpiScore record so the latest override/auto score applies.
+        const oldVariablePay = slip.variablePay;
+        const computed = await assembleSlipData(tx, {
+          userId: input.userId,
+          facilityId: slip.facilityId,
+          periodKey: input.periodKey,
+          standardDays: slip.standardDays,
+          workdays: slip.workdays,
+          // kpiScoreInput left undefined → re-resolved from KpiScore record (consistent with payslipCompute).
+          insuranceDeduction: slip.insuranceDeduction,
+          dependentsInput: slip.dependents,
+          variablePayInput: 0,       // unused when variablePayOverride is set
+          variablePayOverride: input.amount,
+          variableNoteOverride: `Điều chỉnh HH ${input.periodKey}: ${input.reason}`,
+        });
+
+        const data = {
+          kpiScore: computed.kpiScore,
+          kpiGrade: computed.kpiGrade,
+          baseEarned: computed.baseEarned,
+          allowanceEarned: computed.allowanceEarned,
+          kpiBonus: computed.kpiBonus,
+          variablePay: computed.variablePay,
+          variableNote: computed.variableNote,
+          grossIncome: computed.grossIncome,
+          taxableIncome: computed.taxableIncome,
+          pitAmount: computed.pitAmount,
+          netIncome: computed.netIncome,
+        };
+        const updated = await tx.payslip.update({ where: { id: slip.id }, data });
+        await logEvent(tx, {
+          facilityId: slip.facilityId,
+          entityType: 'payslip',
+          entityId: slip.id,
+          type: 'updated',
+          body: `Điều chỉnh hoa hồng ${input.periodKey}: ${oldVariablePay.toLocaleString('vi-VN')}đ→${input.amount.toLocaleString('vi-VN')}đ. Lý do: ${input.reason}`,
+          changes: [{ field: 'variablePay', old: String(oldVariablePay), new: String(input.amount) }],
+          actorId: ctx.session.userId,
+        });
+        return updated;
       }),
     ),
 

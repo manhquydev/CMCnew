@@ -42,6 +42,7 @@ import { CrmPanel } from './crm-panel';
 import { CskhPanel } from './cskh-panel';
 import { StudentsPanel } from './students-panel';
 import { RewardsPanel } from './rewards-panel';
+import { TermsPanel } from './terms-panel';
 import { Shell, buildNavGroups, SECTION_TITLES, type SectionKey } from './shell';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
@@ -778,7 +779,16 @@ function Dashboard() {
       case 'overview':
         return <OverviewPanel />;
       case 'courses':
-        return <Courses />;
+        return (
+          <Stack>
+            <Courses />
+            {/* Academic Terms: date-bounded grading periods scoped to a facility.
+                Shown when the user has a facility context; super_admin sees facility #1. */}
+            {(me.facilityIds[0] ?? (me.isSuperAdmin ? 1 : null)) && (
+              <TermsPanel facilityId={me.facilityIds[0] ?? 1} />
+            )}
+          </Stack>
+        );
       case 'students':
         return canStudents ? (
           <Stack>
