@@ -60,7 +60,15 @@ interface NavGroup {
 const ICON_SIZE = 18;
 const ICON_STROKE = 1.5;
 
-function buildGroups(canPayroll: boolean, canMyPayslips: boolean): NavGroup[] {
+interface BuildGroupsOpts {
+  canPayroll: boolean;
+  canMyPayslips: boolean;
+  canCrm: boolean;
+  canFinance: boolean;
+  canCskh: boolean;
+}
+
+function buildGroups({ canPayroll, canMyPayslips, canCrm, canFinance, canCskh }: BuildGroupsOpts): NavGroup[] {
   const groups: NavGroup[] = [
     {
       label: 'GIẢNG DẠY',
@@ -81,22 +89,25 @@ function buildGroups(canPayroll: boolean, canMyPayslips: boolean): NavGroup[] {
         { key: 'certificate', label: 'Chứng chỉ', icon: <IconCertificate size={ICON_SIZE} stroke={ICON_STROKE} /> },
       ],
     },
-    {
-      label: 'GIAO TIẾP',
-      items: [
-        { key: 'meetings', label: 'Họp PH', icon: <IconUsers size={ICON_SIZE} stroke={ICON_STROKE} /> },
-        { key: 'classlog', label: 'Nhật ký lớp', icon: <IconNotes size={ICON_SIZE} stroke={ICON_STROKE} /> },
-        { key: 'cskh', label: 'CSKH', icon: <IconHeadset size={ICON_SIZE} stroke={ICON_STROKE} /> },
-      ],
-    },
-    {
-      label: 'KINH DOANH',
-      items: [
-        { key: 'crm', label: 'CRM', icon: <IconBriefcase size={ICON_SIZE} stroke={ICON_STROKE} /> },
-        { key: 'finance', label: 'Phiếu thu', icon: <IconReceipt size={ICON_SIZE} stroke={ICON_STROKE} /> },
-      ],
-    },
   ];
+
+  // GIAO TIẾP: meetings + classlog always; CSKH only for cskh/quan_ly staff
+  const commsItems: NavItem[] = [
+    { key: 'meetings', label: 'Họp PH', icon: <IconUsers size={ICON_SIZE} stroke={ICON_STROKE} /> },
+    { key: 'classlog', label: 'Nhật ký lớp', icon: <IconNotes size={ICON_SIZE} stroke={ICON_STROKE} /> },
+  ];
+  if (canCskh) {
+    commsItems.push({ key: 'cskh', label: 'CSKH', icon: <IconHeadset size={ICON_SIZE} stroke={ICON_STROKE} /> });
+  }
+  groups.push({ label: 'GIAO TIẾP', items: commsItems });
+
+  // KINH DOANH: only visible to roles that can use these sections
+  const bizItems: NavItem[] = [];
+  if (canCrm) bizItems.push({ key: 'crm', label: 'CRM', icon: <IconBriefcase size={ICON_SIZE} stroke={ICON_STROKE} /> });
+  if (canFinance) bizItems.push({ key: 'finance', label: 'Phiếu thu', icon: <IconReceipt size={ICON_SIZE} stroke={ICON_STROKE} /> });
+  if (bizItems.length > 0) {
+    groups.push({ label: 'KINH DOANH', items: bizItems });
+  }
 
   const hrItems: NavItem[] = [];
   if (canMyPayslips) {
@@ -192,9 +203,11 @@ export function Shell({ activeSection, onSectionChange, children }: ShellProps) 
   const { unreadCount, notifications, fetchList, markAllRead, isMarkingAll } = useStaffNotif(facilityId);
 
   const canPayroll = me.isSuperAdmin || me.roles.includes('hr') || me.roles.includes('ke_toan');
-  // All authenticated teachers/staff can see their own payslips
-  const canMyPayslips = true;
-  const groups = buildGroups(canPayroll, canMyPayslips);
+  const canCrm = me.isSuperAdmin || me.roles.some((r) => ['sale', 'quan_ly', 'cskh'].includes(r));
+  const canFinance = me.isSuperAdmin || me.roles.some((r) => ['ke_toan', 'quan_ly'].includes(r));
+  const canCskh = me.isSuperAdmin || me.roles.some((r) => ['cskh', 'quan_ly'].includes(r));
+  const canMyPayslips = true; // all staff can view their own payslips
+  const groups = buildGroups({ canPayroll, canMyPayslips, canCrm, canFinance, canCskh });
 
   return (
     <AppShell

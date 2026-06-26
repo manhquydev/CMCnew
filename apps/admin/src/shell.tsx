@@ -7,6 +7,7 @@ import {
   IconBuilding,
   IconBell,
   IconCurrencyDong,
+  IconHeadset,
   IconId,
   IconLayoutDashboard,
   IconReceipt,
@@ -26,7 +27,8 @@ type SectionKey =
   | 'kpi'
   | 'compensation'
   | 'finance'
-  | 'crm';
+  | 'crm'
+  | 'cskh';
 
 type NavItem = {
   key: SectionKey;
@@ -327,12 +329,14 @@ export function buildNavGroups({
   canKpi,
   canFinance,
   canCrm,
+  canCskh,
   isSuperAdmin,
 }: {
   canHr: boolean;
   canKpi: boolean;
   canFinance: boolean;
   canCrm: boolean;
+  canCskh: boolean;
   isSuperAdmin: boolean;
 }): NavGroup[] {
   return [
@@ -385,6 +389,12 @@ export function buildNavGroups({
           icon: <IconTrendingUp size={18} stroke={1.5} />,
           visible: canCrm,
         },
+        {
+          key: 'cskh',
+          label: 'Chăm sóc KH',
+          icon: <IconHeadset size={18} stroke={1.5} />,
+          visible: canCskh,
+        },
       ],
     },
     {
@@ -422,6 +432,7 @@ export const SECTION_TITLES: Record<SectionKey, string> = {
   guardians: 'Phụ huynh',
   finance: 'Tài chính',
   crm: 'CRM',
+  cskh: 'Chăm sóc khách hàng',
   hr: 'Nhân sự & Lương',
   kpi: 'Đánh giá KPI',
   compensation: 'Cơ cấu lương',

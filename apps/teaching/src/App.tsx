@@ -803,6 +803,7 @@ function RoomsManager({
 
 function Workspace() {
   const { me } = useSession();
+  const canManageClass = me.isSuperAdmin || me.roles.includes('quan_ly');
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facilityId, setFacilityId] = useState<number | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -877,7 +878,7 @@ function Workspace() {
           onChange={(v) => { setFacilityId(v ? Number(v) : null); setClassPage(1); }}
           w={240}
         />
-        {facilityId && (
+        {facilityId && canManageClass && (
           <Group gap="xs" align="flex-end">
             <RoomsManager facilityId={facilityId} rooms={facilityRooms} reload={loadRooms} />
             <CreateClassModal facilityId={facilityId} courses={courses} onCreated={loadBatches} />

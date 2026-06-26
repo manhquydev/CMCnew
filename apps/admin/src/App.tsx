@@ -39,6 +39,7 @@ import { PayrollPanel } from './payroll-panel';
 import { KpiEvaluationPanel } from './kpi-evaluation-panel';
 import { FinancePanel } from './finance-panel';
 import { CrmPanel } from './crm-panel';
+import { CskhPanel } from './cskh-panel';
 import { Shell, buildNavGroups, SECTION_TITLES, type SectionKey } from './shell';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
@@ -697,7 +698,7 @@ function HrPayrollSection() {
 // ─── Dashboard (AppShell wrapper) ─────────────────────────────────────────────
 
 const ALL_ADMIN_KEYS = new Set<string>([
-  'overview', 'courses', 'org', 'guardians', 'hr', 'kpi', 'compensation', 'finance', 'crm',
+  'overview', 'courses', 'org', 'guardians', 'hr', 'kpi', 'compensation', 'finance', 'crm', 'cskh',
 ]);
 
 function hashToAdminSection(): SectionKey | undefined {
@@ -715,6 +716,8 @@ function Dashboard() {
     me.isSuperAdmin || me.roles.some((r) => ['ke_toan', 'quan_ly'].includes(r));
   const canCrm =
     me.isSuperAdmin || me.roles.some((r) => ['sale', 'quan_ly', 'cskh'].includes(r));
+  const canCskh =
+    me.isSuperAdmin || me.roles.some((r) => ['cskh', 'quan_ly'].includes(r));
 
   const [activeSection, setActiveSection] = useState<SectionKey>(
     hashToAdminSection() ?? 'overview',
@@ -734,6 +737,7 @@ function Dashboard() {
     canKpi,
     canFinance,
     canCrm,
+    canCskh,
     isSuperAdmin: me.isSuperAdmin,
   });
 
@@ -744,6 +748,7 @@ function Dashboard() {
     if (key === 'compensation' && !me.isSuperAdmin) return;
     if (key === 'finance' && !canFinance) return;
     if (key === 'crm' && !canCrm) return;
+    if (key === 'cskh' && !canCskh) return;
     window.location.hash = key;
     setActiveSection(key);
   };
@@ -801,6 +806,15 @@ function Dashboard() {
               CRM
             </Text>
             <CrmPanel />
+          </Stack>
+        ) : null;
+      case 'cskh':
+        return canCskh ? (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
+              Chăm sóc khách hàng
+            </Text>
+            <CskhPanel />
           </Stack>
         ) : null;
       default:
