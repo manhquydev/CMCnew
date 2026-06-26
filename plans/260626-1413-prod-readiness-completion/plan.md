@@ -27,6 +27,13 @@
 | 05 | LMS student course tab + reward fixes | ✅ DONE (commit 0400383, 5 int-test) | NORMAL | 02 |
 | 06 | Backend↔UI feature completion | ✅ DONE (commit 93072bc; crm contacts còn thiếu — minor) | NORMAL | 02 |
 
+## Phase 07 progress (2026-06-26)
+
+- ✅ **07A term-scoped grades**: AcademicTerm model + migration `20260626130000` (RLS) + term CRUD; `computeFinalGrade` lọc theo [startDate,endDate], fallback all-time. Commit done. Full suite 156/156 + domain 56/56 green.
+- ✅ **Retention config**: `commission.renewalRetentionDefault` (default 0.9, `.default()` backward-compat); payslip auto-feed dùng param thay hardcode 1.
+- ✅ **Commission cap**: giữ nguyên (user chốt) — no change.
+- ⏳ **Remaining 07** (focused next): commission tree-override `payslipOverrideVariablePay` (extract compute helper, recompute gross/PIT/net, canOverrideKpi tree-gate, audit, draft-only) + int-test; term-scoped grade int-test; admin terms panel + override button.
+
 ## Milestone (2026-06-26): full api suite GREEN 156/156 (đầu phiên 34 fail)
 
 7 commit phiên này: teaching cross-class UI, LMS student, admin wiring, payroll fixes (bulkPay shape + grade-audit), vitest setupFiles, academic guards (H3/H8). Pre-existing 7 fail → 0. Background Sonnet agents nhiều lần chết mid-report (connection) → orchestrator tiếp quản integration glue, recover đầy đủ.
