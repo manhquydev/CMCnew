@@ -1,88 +1,67 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, notifyError, notifySuccess } from '@cmc/ui';
 import {
-  Alert,
+  trpc,
+  notifyError,
+  notifySuccess,
+  PageHeader,
+  DataTable,
+  StatusBadge,
+  EmptyState,
+  type DataTableColumn,
+  type StatusDef,
+} from '@cmc/ui';
+import {
   Badge,
   Button,
-  Card,
   Group,
   Modal,
-  Pagination,
   Select,
   Stack,
-  Table,
   Text,
   TextInput,
-  Title,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { IconSearch, IconRefresh, IconExternalLink } from '@tabler/icons-react';
+import { IconRefresh, IconExternalLink, IconSchool } from '@tabler/icons-react';
 import { StudentDetailPanel } from './student-detail.js';
 
 type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 
-const LIFECYCLES: Record<string, string> = {
-  admitted: 'Đã nhận',
-  active: 'Đang học',
-  on_hold: 'Tạm dừng',
-  transferred: 'Chuyển',
-  withdrawn: 'Nghỉ',
-  completed: 'Hoàn thành',
+const LIFECYCLE: Record<string, StatusDef> = {
+  admitted: { label: 'Đã nhận', tone: 'info' },
+  active: { label: 'Đang học', tone: 'active' },
+  on_hold: { label: 'Tạm dừng', tone: 'pending' },
+  transferred: { label: 'Chuyển', tone: 'pending' },
+  withdrawn: { label: 'Nghỉ', tone: 'rejected' },
+  completed: { label: 'Hoàn thành', tone: 'active' },
 };
-
-const LIFECYCLE_COLOR: Record<string, string> = {
-  admitted: 'blue',
-  active: 'teal',
-  on_hold: 'yellow',
-  transferred: 'orange',
-  withdrawn: 'red',
-  completed: 'green',
-};
-
-const PAGE_SIZE = 20;
-
-type LoadState = 'loading' | 'empty' | 'error' | 'ok';
 
 export function StudentsPanel() {
   const [students, setStudents] = useState<StudentT[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
-  const [loadState, setLoadState] = useState<LoadState>('loading');
-  const [loadError, setLoadError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Detail navigation — null = show list, string = show student detail
   const [detailStudentId, setDetailStudentId] = useState<string | null>(null);
-
-  // Filters
   const [facilityId, setFacilityId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
 
-  // Edit modal — restricted to fullName + dateOfBirth (data-correction fields only)
   const [editTarget, setEditTarget] = useState<StudentT | null>(null);
   const [editBusy, setEditBusy] = useState(false);
 
   const editForm = useForm({
-    initialValues: {
-      fullName: '',
-      dateOfBirth: '',
-    },
+    initialValues: { fullName: '', dateOfBirth: '' },
   });
 
   const load = useCallback(() => {
-    setLoadState('loading');
-    setLoadError('');
+    setLoading(true);
+    setLoadError(null);
     trpc.student.list
       .query()
-      .then((rows) => {
-        setStudents(rows);
-        setLoadState(rows.length === 0 ? 'empty' : 'ok');
-      })
-      .catch((e: unknown) => {
-        const msg = e instanceof Error ? e.message : 'Lỗi tải danh sách học sinh';
-        setLoadError(msg);
-        setLoadState('error');
-      });
+      .then((rows) => setStudents(rows))
+      .catch((e: unknown) =>
+        setLoadError(e instanceof Error ? e.message : 'Lỗi tải danh sách học sinh'),
+      )
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -93,7 +72,6 @@ export function StudentsPanel() {
       .catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
   }, [load]);
 
-  // Show detail view when a student is selected
   if (detailStudentId) {
     return (
       <StudentDetailPanel
@@ -103,20 +81,9 @@ export function StudentsPanel() {
     );
   }
 
-  // Client-side filtering
-  const filtered = students.filter((s) => {
-    if (facilityId && String(s.facilityId) !== facilityId) return false;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      if (!s.fullName.toLowerCase().includes(q) && !s.studentCode.toLowerCase().includes(q)) {
-        return false;
-      }
-    }
-    return true;
-  });
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const rows = facilityId
+    ? students.filter((s) => String(s.facilityId) === facilityId)
+    : students;
 
   function openEdit(s: StudentT) {
     setEditTarget(s);
@@ -145,152 +112,122 @@ export function StudentsPanel() {
     }
   }
 
-  // Reset page on filter change
-  const handleFacilityChange = (v: string | null) => {
-    setFacilityId(v);
-    setPage(1);
-  };
-  const handleSearchChange = (v: string) => {
-    setSearch(v);
-    setPage(1);
-  };
+  const columns: DataTableColumn<StudentT>[] = [
+    {
+      key: 'code',
+      header: 'Mã',
+      width: 130,
+      sortValue: (s) => s.studentCode,
+      render: (s) => (
+        <Text size="sm" fw={500} style={{ fontFamily: 'var(--cmc-font-mono)' }}>
+          {s.studentCode}
+        </Text>
+      ),
+    },
+    {
+      key: 'name',
+      header: 'Họ tên',
+      sortValue: (s) => s.fullName,
+      render: (s) => s.fullName,
+    },
+    {
+      key: 'program',
+      header: 'Chương trình',
+      render: (s) => (
+        <Badge size="sm" variant="light" radius="xl">
+          {s.program}
+        </Badge>
+      ),
+    },
+    {
+      key: 'lifecycle',
+      header: 'Vòng đời',
+      sortValue: (s) => s.lifecycle ?? '',
+      render: (s) => <StatusBadge status={s.lifecycle ?? ''} map={LIFECYCLE} />,
+    },
+    {
+      key: 'facility',
+      header: 'Cơ sở',
+      width: 90,
+      render: (s) => {
+        const fac = facilities.find((f) => f.id === s.facilityId);
+        return (
+          <Text size="xs" c="dimmed">
+            {fac?.code ?? `#${s.facilityId}`}
+          </Text>
+        );
+      },
+    },
+    {
+      key: 'actions',
+      header: '',
+      width: 150,
+      align: 'right',
+      render: (s) => (
+        <Group gap={4} wrap="nowrap" justify="flex-end">
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            leftSection={<IconExternalLink size={12} />}
+            onClick={() => setDetailStudentId(s.id)}
+          >
+            Chi tiết
+          </Button>
+          <Button size="compact-xs" variant="subtle" onClick={() => openEdit(s)}>
+            Sửa
+          </Button>
+        </Group>
+      ),
+    },
+  ];
 
   return (
     <Stack>
-      <Title order={5}>Học sinh ({filtered.length})</Title>
+      <PageHeader
+        title="Học sinh"
+        subtitle={`${rows.length} hồ sơ`}
+        actions={
+          <Button
+            variant="subtle"
+            leftSection={<IconRefresh size={14} />}
+            onClick={load}
+            disabled={loading}
+          >
+            Làm mới
+          </Button>
+        }
+      />
 
-      {/* ─── Filters ── */}
-      <Group align="flex-end">
-        <Select
-          label="Cơ sở"
-          placeholder="Tất cả"
-          data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-          value={facilityId}
-          onChange={handleFacilityChange}
-          clearable
-          w={220}
-        />
-        <TextInput
-          label="Tìm kiếm"
-          placeholder="Mã hoặc tên học sinh"
-          leftSection={<IconSearch size={14} />}
-          value={search}
-          onChange={(e) => handleSearchChange(e.currentTarget.value)}
-          w={260}
-        />
-        <Button
-          variant="subtle"
-          leftSection={<IconRefresh size={14} />}
-          onClick={load}
-          disabled={loadState === 'loading'}
-        >
-          Làm mới
-        </Button>
-      </Group>
+      <DataTable
+        data={rows}
+        columns={columns}
+        getRowKey={(s) => s.id}
+        loading={loading}
+        error={loadError}
+        onRetry={load}
+        searchText={(s) => `${s.fullName} ${s.studentCode}`}
+        searchPlaceholder="Mã hoặc tên học sinh"
+        onRowClick={(s) => setDetailStudentId(s.id)}
+        toolbar={
+          <Select
+            label="Cơ sở"
+            placeholder="Tất cả"
+            data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
+            value={facilityId}
+            onChange={setFacilityId}
+            clearable
+            w={220}
+          />
+        }
+        emptyState={
+          <EmptyState
+            icon={<IconSchool size={28} stroke={1.5} />}
+            title="Chưa có học sinh"
+            description="Học sinh được tạo qua phiếu thu hoặc nhập học từ CRM."
+          />
+        }
+      />
 
-      {/* ─── Table ── */}
-      <Card withBorder>
-        {loadState === 'loading' && (
-          <Text c="dimmed" ta="center" py="xl">
-            Đang tải...
-          </Text>
-        )}
-        {loadState === 'error' && (
-          <Alert color="red" title="Lỗi tải dữ liệu" withCloseButton={false}>
-            {loadError}
-            <Button size="xs" variant="subtle" mt="sm" onClick={load}>
-              Thử lại
-            </Button>
-          </Alert>
-        )}
-        {loadState === 'empty' && (
-          <Text c="dimmed" ta="center" py="xl">
-            Chưa có học sinh nào.
-          </Text>
-        )}
-        {loadState === 'ok' && paged.length === 0 && (
-          <Text c="dimmed" ta="center" py="xl">
-            Không tìm thấy học sinh phù hợp.
-          </Text>
-        )}
-        {loadState === 'ok' && paged.length > 0 && (
-          <>
-            <Table striped highlightOnHover>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Mã</Table.Th>
-                  <Table.Th>Họ tên</Table.Th>
-                  <Table.Th>Chương trình</Table.Th>
-                  <Table.Th>Vòng đời</Table.Th>
-                  <Table.Th>Cơ sở</Table.Th>
-                  <Table.Th />
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {paged.map((s) => {
-                  const fac = facilities.find((f) => f.id === s.facilityId);
-                  const lcLabel = LIFECYCLES[s.lifecycle ?? ''] ?? s.lifecycle ?? '—';
-                  return (
-                    <Table.Tr key={s.id}>
-                      <Table.Td>
-                        <Text size="sm" fw={500}>
-                          {s.studentCode}
-                        </Text>
-                      </Table.Td>
-                      <Table.Td>{s.fullName}</Table.Td>
-                      <Table.Td>
-                        <Badge size="xs" variant="light">
-                          {s.program}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td>
-                        <Badge
-                          size="xs"
-                          variant="dot"
-                          color={LIFECYCLE_COLOR[s.lifecycle ?? ''] ?? 'gray'}
-                        >
-                          {lcLabel}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text size="xs" c="dimmed">
-                          {fac?.code ?? `#${s.facilityId}`}
-                        </Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Group gap={4} wrap="nowrap">
-                          <Button
-                            size="compact-xs"
-                            variant="subtle"
-                            leftSection={<IconExternalLink size={12} />}
-                            onClick={() => setDetailStudentId(s.id)}
-                          >
-                            Chi tiết
-                          </Button>
-                          <Button
-                            size="compact-xs"
-                            variant="subtle"
-                            onClick={() => openEdit(s)}
-                          >
-                            Sửa
-                          </Button>
-                        </Group>
-                      </Table.Td>
-                    </Table.Tr>
-                  );
-                })}
-              </Table.Tbody>
-            </Table>
-            {totalPages > 1 && (
-              <Group justify="center" mt="md">
-                <Pagination total={totalPages} value={page} onChange={setPage} size="sm" />
-              </Group>
-            )}
-          </>
-        )}
-      </Card>
-
-      {/* ─── Edit modal — data-correction only: fullName + dateOfBirth ── */}
       <Modal
         opened={!!editTarget}
         onClose={() => setEditTarget(null)}

@@ -614,12 +614,7 @@ function Dashboard() {
 
       // ── Students ──────────────────────────────────────────────────────────
       case 'students':
-        return (
-          <Stack>
-            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Học sinh</Text>
-            <StudentsPanel />
-          </Stack>
-        );
+        return <StudentsPanel />;
 
       case 'guardians':
         return (
@@ -700,12 +695,7 @@ function Dashboard() {
         );
 
       case 'crm':
-        return (
-          <Stack>
-            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">CRM</Text>
-            <CrmPanel />
-          </Stack>
-        );
+        return <CrmPanel />;
 
       case 'cskh':
         return (

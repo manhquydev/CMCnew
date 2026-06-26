@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, Chatter, notifyError, notifySuccess, useSession } from '@cmc/ui';
 import {
-  Badge,
+  trpc,
+  Chatter,
+  notifyError,
+  notifySuccess,
+  useSession,
+  PageHeader,
+  DataTable,
+  StatusBadge,
+  EmptyState,
+  type DataTableColumn,
+  type StatusTone,
+} from '@cmc/ui';
+import {
   Button,
   Card,
   Group,
@@ -9,13 +20,13 @@ import {
   NumberInput,
   Select,
   Stack,
-  Table,
   Text,
   TextInput,
   Textarea,
   Title,
 } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
+import { IconTargetArrow, IconCalendarStats } from '@tabler/icons-react';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Opp = Awaited<ReturnType<typeof trpc.crm.opportunityList.query>>[number];
@@ -34,10 +45,16 @@ const PROGRAMS = [
   { value: 'BLACK_HOLE', label: 'Black Hole' },
 ];
 
-function statusOf(o: Opp): { label: string; color: string } {
-  if (o.lostReason) return { label: 'Mất', color: 'red' };
-  if (o.stage === 'O5_ENROLLED' && o.closedAt) return { label: 'Thành công', color: 'teal' };
-  return { label: 'Đang mở', color: 'blue' };
+function statusOf(o: Opp): { label: string; tone: StatusTone } {
+  if (o.lostReason) return { label: 'Mất', tone: 'rejected' };
+  if (o.stage === 'O5_ENROLLED' && o.closedAt) return { label: 'Thành công', tone: 'active' };
+  return { label: 'Đang mở', tone: 'info' };
+}
+
+function testStatus(t: TestAppt): { label: string; tone: StatusTone } {
+  if (t.status === 'done') return { label: 'Đã test', tone: 'active' };
+  if (t.status === 'no_show') return { label: 'Vắng', tone: 'rejected' };
+  return { label: 'Đã đặt', tone: 'inactive' };
 }
 
 export function CrmPanel() {
@@ -52,6 +69,9 @@ export function CrmPanel() {
   const [lostTarget, setLostTarget] = useState<Opp | null>(null);
   const [lostReason, setLostReason] = useState('');
   const [tests, setTests] = useState<TestAppt[]>([]);
+  const [oppsLoading, setOppsLoading] = useState(true);
+  const [oppsError, setOppsError] = useState<string | null>(null);
+  const [testsLoading, setTestsLoading] = useState(true);
   const { me } = useSession();
   const canGrade = me.isSuperAdmin || me.roles.some((r) => ['giao_vien', 'head_teacher', 'quan_ly'].includes(r));
 
@@ -71,8 +91,22 @@ export function CrmPanel() {
 
   const load = useCallback(() => {
     if (!facilityId) return;
-    trpc.crm.opportunityList.query({ facilityId }).then(setOpps).catch((e) => notifyError(e, 'Không tải được cơ hội'));
-    trpc.crm.testList.query({ facilityId }).then(setTests).catch((e) => notifyError(e, 'Không tải được lịch test'));
+    setOppsLoading(true);
+    setOppsError(null);
+    trpc.crm.opportunityList
+      .query({ facilityId })
+      .then(setOpps)
+      .catch((e) => {
+        setOppsError(e instanceof Error ? e.message : 'Không tải được cơ hội');
+        notifyError(e, 'Không tải được cơ hội');
+      })
+      .finally(() => setOppsLoading(false));
+    setTestsLoading(true);
+    trpc.crm.testList
+      .query({ facilityId })
+      .then(setTests)
+      .catch((e) => notifyError(e, 'Không tải được lịch test'))
+      .finally(() => setTestsLoading(false));
   }, [facilityId]);
   useEffect(load, [load]);
 
@@ -168,15 +202,119 @@ export function CrmPanel() {
     }
   }
 
+  const oppColumns: DataTableColumn<Opp>[] = [
+    {
+      key: 'name',
+      header: 'Học sinh / Liên hệ',
+      sortValue: (o) => o.studentName || o.contact.fullName,
+      render: (o) => o.studentName || o.contact.fullName,
+    },
+    { key: 'phone', header: 'SĐT', width: 130, render: (o) => o.contact.phone },
+    {
+      key: 'stage',
+      header: 'Bước',
+      width: 210,
+      render: (o) => {
+        const closed = !!o.lostReason || !!(o.closedAt && o.stage === 'O5_ENROLLED');
+        return (
+          <Select
+            size="xs"
+            data={STAGES}
+            value={o.stage}
+            disabled={closed}
+            onChange={(v) => v && transition(o, v)}
+            allowDeselect={false}
+          />
+        );
+      },
+    },
+    {
+      key: 'status',
+      header: 'Trạng thái',
+      width: 130,
+      render: (o) => {
+        const st = statusOf(o);
+        return <StatusBadge status={st.label} label={st.label} tone={st.tone} />;
+      },
+    },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      render: (o) => {
+        const closed = !!o.lostReason || !!(o.closedAt && o.stage === 'O5_ENROLLED');
+        return (
+          <Group gap="xs" justify="flex-end" wrap="nowrap">
+            <Button size="compact-xs" variant="subtle" color="gray" onClick={() => setDetailTarget(o)}>
+              Nhật ký
+            </Button>
+            {!closed && (
+              <Button size="compact-xs" variant="light" onClick={() => setTestTarget(o)}>
+                Đặt test
+              </Button>
+            )}
+            {closed ? (
+              <Button size="compact-xs" variant="light" onClick={() => reopen(o)}>
+                Mở lại
+              </Button>
+            ) : (
+              <Button size="compact-xs" variant="light" color="red" onClick={() => setLostTarget(o)}>
+                Mất
+              </Button>
+            )}
+          </Group>
+        );
+      },
+    },
+  ];
+
+  const testColumns: DataTableColumn<TestAppt>[] = [
+    { key: 'student', header: 'Học sinh', render: (t) => t.studentName || '—' },
+    { key: 'type', header: 'Loại', width: 100, render: (t) => (t.type === 'entrance' ? 'Đầu vào' : 'Định kỳ') },
+    {
+      key: 'when',
+      header: 'Lịch',
+      sortValue: (t) => t.scheduledAt,
+      render: (t) => new Date(t.scheduledAt).toLocaleString('vi-VN'),
+    },
+    {
+      key: 'status',
+      header: 'Trạng thái',
+      width: 120,
+      render: (t) => {
+        const st = testStatus(t);
+        return <StatusBadge status={st.label} label={st.label} tone={st.tone} />;
+      },
+    },
+    { key: 'score', header: 'Điểm', width: 70, render: (t) => t.score ?? '—' },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      render: (t) =>
+        t.status === 'scheduled' && canGrade ? (
+          <Button size="compact-xs" variant="light" onClick={() => setGradeTarget(t)}>
+            Chấm
+          </Button>
+        ) : null,
+    },
+  ];
+
   return (
     <Stack>
-      <Select
-        label="Cơ sở"
-        w={280}
-        data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-        value={facilityId ? String(facilityId) : null}
-        onChange={(v) => setFacilityId(v ? Number(v) : null)}
-        allowDeselect={false}
+      <PageHeader
+        title="CRM"
+        subtitle="Quản lý cơ hội tuyển sinh & lịch test"
+        actions={
+          <Select
+            aria-label="Cơ sở"
+            w={240}
+            data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
+            value={facilityId ? String(facilityId) : null}
+            onChange={(v) => setFacilityId(v ? Number(v) : null)}
+            allowDeselect={false}
+          />
+        }
       />
 
       <Card withBorder>
@@ -202,125 +340,45 @@ export function CrmPanel() {
         </Group>
       </Card>
 
-      <Card withBorder>
-        <Title order={6} mb="sm">
-          Pipeline cơ hội
-        </Title>
-        {opps.length === 0 ? (
-          <Text c="dimmed" size="sm">
-            Chưa có cơ hội nào.
-          </Text>
-        ) : (
-          <Table>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Học sinh / Liên hệ</Table.Th>
-                <Table.Th>SĐT</Table.Th>
-                <Table.Th w={210}>Bước</Table.Th>
-                <Table.Th>Trạng thái</Table.Th>
-                <Table.Th />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {opps.map((o) => {
-                const st = statusOf(o);
-                const closed = !!o.lostReason || !!(o.closedAt && o.stage === 'O5_ENROLLED');
-                return (
-                  <Table.Tr key={o.id}>
-                    <Table.Td>{o.studentName || o.contact.fullName}</Table.Td>
-                    <Table.Td>{o.contact.phone}</Table.Td>
-                    <Table.Td>
-                      <Select
-                        size="xs"
-                        data={STAGES}
-                        value={o.stage}
-                        disabled={closed}
-                        onChange={(v) => v && transition(o, v)}
-                        allowDeselect={false}
-                      />
-                    </Table.Td>
-                    <Table.Td>
-                      <Badge color={st.color}>{st.label}</Badge>
-                    </Table.Td>
-                    <Table.Td>
-                      <Group gap="xs" justify="flex-end">
-                        <Button size="compact-xs" variant="subtle" color="gray" onClick={() => setDetailTarget(o)}>
-                          Nhật ký
-                        </Button>
-                        {!closed && (
-                          <Button size="compact-xs" variant="light" onClick={() => setTestTarget(o)}>
-                            Đặt test
-                          </Button>
-                        )}
-                        {closed ? (
-                          <Button size="compact-xs" variant="light" onClick={() => reopen(o)}>
-                            Mở lại
-                          </Button>
-                        ) : (
-                          <Button
-                            size="compact-xs"
-                            variant="light"
-                            color="red"
-                            onClick={() => setLostTarget(o)}
-                          >
-                            Mất
-                          </Button>
-                        )}
-                      </Group>
-                    </Table.Td>
-                  </Table.Tr>
-                );
-              })}
-            </Table.Tbody>
-          </Table>
-        )}
-      </Card>
+      <Stack gap="xs">
+        <Title order={5}>Pipeline cơ hội</Title>
+        <DataTable
+          data={opps}
+          columns={oppColumns}
+          getRowKey={(o) => o.id}
+          loading={oppsLoading}
+          error={oppsError}
+          onRetry={load}
+          searchText={(o) => `${o.studentName ?? ''} ${o.contact.fullName} ${o.contact.phone}`}
+          searchPlaceholder="Tên hoặc SĐT"
+          pageSize={15}
+          emptyState={
+            <EmptyState
+              icon={<IconTargetArrow size={28} stroke={1.5} />}
+              title="Chưa có cơ hội nào"
+              description="Tạo cơ hội đầu tiên ở khung phía trên để bắt đầu theo dõi pipeline tuyển sinh."
+            />
+          }
+        />
+      </Stack>
 
-      <Card withBorder>
-        <Title order={6} mb="sm">
-          Lịch test
-        </Title>
-        {tests.length === 0 ? (
-          <Text c="dimmed" size="sm">
-            Chưa có lịch test.
-          </Text>
-        ) : (
-          <Table>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Học sinh</Table.Th>
-                <Table.Th>Loại</Table.Th>
-                <Table.Th>Lịch</Table.Th>
-                <Table.Th>Trạng thái</Table.Th>
-                <Table.Th>Điểm</Table.Th>
-                <Table.Th />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {tests.map((t) => (
-                <Table.Tr key={t.id}>
-                  <Table.Td>{t.studentName || '—'}</Table.Td>
-                  <Table.Td>{t.type === 'entrance' ? 'Đầu vào' : 'Định kỳ'}</Table.Td>
-                  <Table.Td>{new Date(t.scheduledAt).toLocaleString('vi-VN')}</Table.Td>
-                  <Table.Td>
-                    <Badge color={t.status === 'done' ? 'teal' : t.status === 'no_show' ? 'red' : 'gray'}>
-                      {t.status === 'done' ? 'Đã test' : t.status === 'no_show' ? 'Vắng' : 'Đã đặt'}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>{t.score ?? '—'}</Table.Td>
-                  <Table.Td>
-                    {t.status === 'scheduled' && canGrade && (
-                      <Button size="compact-xs" variant="light" onClick={() => setGradeTarget(t)}>
-                        Chấm
-                      </Button>
-                    )}
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        )}
-      </Card>
+      <Stack gap="xs">
+        <Title order={5}>Lịch test</Title>
+        <DataTable
+          data={tests}
+          columns={testColumns}
+          getRowKey={(t) => t.id}
+          loading={testsLoading}
+          pageSize={15}
+          emptyState={
+            <EmptyState
+              icon={<IconCalendarStats size={28} stroke={1.5} />}
+              title="Chưa có lịch test"
+              description="Đặt lịch test cho một cơ hội ở pipeline để hiển thị tại đây."
+            />
+          }
+        />
+      </Stack>
 
       <Modal opened={!!testTarget} onClose={() => setTestTarget(null)} title="Đặt lịch test đầu vào">
         <Stack>
