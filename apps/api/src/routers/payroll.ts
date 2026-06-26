@@ -3,9 +3,18 @@ import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { assemblePayslip, cvtvNewCustomerRate, renewalRate, commissionAmount } from '@cmc/domain-payroll';
+import {
+  assemblePayslip,
+  cvtvNewCustomerRate,
+  renewalRate,
+  commissionAmount,
+  weightedKpi,
+  ratioToScore,
+} from '@cmc/domain-payroll';
 import { effectiveParamsAt } from './compensation.js';
 import { router, requireRole, protectedProcedure, Role } from '../trpc.js';
+import { canOverrideKpi } from '../lib/kpi-authz.js';
+import { callioConfigFromEnv, fetchPeriodCdrs, aggregateValidCalls } from '../lib/callio-client.js';
 
 // Payroll is HR-confidential: every procedure is role-gated to hr/ke_toan (super passes).
 // Non-HR staff have no code path to salary data. RLS adds facility isolation on top.
@@ -17,6 +26,15 @@ function periodEnd(periodKey: string): Date {
   const y = Number(parts[0]);
   const m = Number(parts[1]);
   return new Date(Date.UTC(y, m, 0)); // day 0 of next month = last day of month m
+}
+
+/** First and one-past-last UTC instants of a YYYY-MM period — for date-range filters. */
+function periodRange(periodKey: string): { start: Date; end: Date } {
+  const [y, m] = periodKey.split('-').map(Number);
+  return {
+    start: new Date(Date.UTC(y!, m! - 1, 1)),
+    end: new Date(Date.UTC(y!, m!, 1)), // exclusive: first day of following month
+  };
 }
 
 export const payrollRouter = router({
@@ -42,13 +60,20 @@ export const payrollRouter = router({
         grade: z.string().optional(),
         dependents: z.number().int().min(0).default(0),
         startedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        callioExt: z.string().optional(),
       }),
     )
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const profile = await tx.employmentProfile.upsert({
           where: { userId: input.userId },
-          update: { position: input.position, grade: input.grade, dependents: input.dependents, startedAt: input.startedAt ? new Date(input.startedAt) : undefined },
+          update: {
+            position: input.position,
+            grade: input.grade,
+            dependents: input.dependents,
+            startedAt: input.startedAt ? new Date(input.startedAt) : undefined,
+            callioExt: input.callioExt,
+          },
           create: {
             facilityId: input.facilityId,
             userId: input.userId,
@@ -56,6 +81,7 @@ export const payrollRouter = router({
             grade: input.grade,
             dependents: input.dependents,
             startedAt: input.startedAt ? new Date(input.startedAt) : undefined,
+            callioExt: input.callioExt,
           },
         });
         await logEvent(tx, { facilityId: profile.facilityId, entityType: 'employment_profile', entityId: profile.id, type: 'updated', body: `Hồ sơ NS: ${input.position}${input.grade ? ' ' + input.grade : ''}`, actorId: ctx.session.userId });
@@ -167,6 +193,7 @@ export const payrollRouter = router({
 
   // Compute (or recompute) a draft payslip for (employee, period). Finalize gating: a finalized
   // or paid slip cannot be recomputed. All figures come from @cmc/domain-payroll.
+  // kpiScore is optional: when omitted, resolved from KpiScore record (overrideScore ?? autoScore).
   payslipCompute: requireRole(...HR_ROLES)
     .input(
       z.object({
@@ -175,7 +202,7 @@ export const payrollRouter = router({
         periodKey: z.string().regex(/^\d{4}-\d{2}$/),
         standardDays: z.number().int().positive(),
         workdays: z.number().int().min(0),
-        kpiScore: z.number().min(0).max(100),
+        kpiScore: z.number().min(0).max(100).optional(),
         variablePay: z.number().int().nonnegative().default(0),
         variableNote: z.string().optional(),
         insuranceDeduction: z.number().int().nonnegative().default(0),
@@ -206,17 +233,62 @@ export const payrollRouter = router({
         const emp = await tx.appUser.findUnique({ where: { id: input.userId }, select: { roles: true } });
         const block: 'training' | 'sales' = emp?.roles.includes(Role.sale) ? 'sales' : 'training';
 
+        // Resolve kpiScore: if not provided, read from KpiScore record (overrideScore ?? autoScore).
+        let kpiScore: number;
+        if (input.kpiScore !== undefined) {
+          kpiScore = input.kpiScore;
+        } else {
+          const kpiRow = await tx.kpiScore.findUnique({
+            where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+            select: { autoScore: true, overrideScore: true },
+          });
+          kpiScore = kpiRow ? (kpiRow.overrideScore ?? kpiRow.autoScore) : 0;
+        }
+
+        // Commission auto-feed for sale roles (CV4): compute commission from approved receipts
+        // and override variablePay so the payslip is fully data-driven for sales staff.
+        // centreRetentionRatio defaults to 1 (gate met) until CRM feeds it.
+        let resolvedVariablePay = input.variablePay;
+        let resolvedVariableNote = input.variableNote;
+        if (block === 'sales') {
+          const { start: pStart, end: pEnd } = periodRange(input.periodKey);
+          const rateRow = await tx.salaryRate.findFirst({
+            where: { userId: input.userId, archivedAt: null, effectiveFrom: { lte: periodEnd(input.periodKey) } },
+            orderBy: { effectiveFrom: 'desc' },
+            select: { monthlyQuota: true },
+          });
+          const quota = rateRow?.monthlyQuota ?? 0;
+          const grouped = await tx.receipt.groupBy({
+            by: ['kind'],
+            where: {
+              soldById: input.userId,
+              facilityId: input.facilityId,
+              status: { in: ['approved', 'sent', 'reconciled'] },
+              approvedAt: { gte: pStart, lt: pEnd },
+            },
+            _sum: { netAmount: true },
+          });
+          const newRevenue = grouped.find((g) => g.kind === 'new')?._sum.netAmount ?? 0;
+          const renewalRevenue = grouped.find((g) => g.kind === 'renewal')?._sum.netAmount ?? 0;
+          const attainment = quota > 0 ? newRevenue / quota : 0;
+          const commission =
+            commissionAmount(newRevenue, cvtvNewCustomerRate(attainment, params)) +
+            commissionAmount(renewalRevenue, renewalRate('cvtv', 1, params));
+          resolvedVariablePay = Math.round(commission);
+          resolvedVariableNote = `Hoa hồng ${input.periodKey}: ${resolvedVariablePay.toLocaleString('vi-VN')}đ`;
+        }
+
         const r = assemblePayslip(
           {
             baseSalary: rate.baseSalary,
             mealAllowance: rate.mealAllowance,
             otherAllowance: rate.otherAllowance,
             kpiMax: rate.kpiMax,
-            kpiScore: input.kpiScore,
+            kpiScore,
             block,
             workdays: input.workdays,
             standardDays: input.standardDays,
-            variablePay: input.variablePay,
+            variablePay: resolvedVariablePay,
             insuranceDeduction: input.insuranceDeduction,
             dependents,
           },
@@ -228,13 +300,13 @@ export const payrollRouter = router({
           periodKey: input.periodKey,
           standardDays: input.standardDays,
           workdays: input.workdays,
-          kpiScore: input.kpiScore,
+          kpiScore,
           kpiGrade: r.kpiGrade,
           baseEarned: r.baseEarned,
           allowanceEarned: r.allowanceEarned,
           kpiBonus: r.kpiBonus,
           variablePay: r.variablePay,
-          variableNote: input.variableNote,
+          variableNote: resolvedVariableNote,
           insuranceDeduction: r.insuranceDeduction,
           dependents,
           grossIncome: r.grossIncome,
@@ -444,4 +516,498 @@ export const payrollRouter = router({
       }),
     ),
   ),
+
+  // ─── KPI Evaluation Workflow (P05, decision 0011) ────────────────────────────
+  // draft → submitted → confirmed → approved
+  // HR starts; employee self-submits; manager confirms; BGD approves (≠ confirmer).
+
+  /** HR creates/resets a draft KPI sheet for (employee, period). CONFLICT if already beyond draft. */
+  kpiEvalStart: requireRole(...HR_ROLES)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        facilityId: z.number().int().positive(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+        block: z.enum(['training', 'sales']),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const existing = await tx.kpiScore.findUnique({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+        });
+        if (existing && existing.status !== 'draft') {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu KPI đã qua trạng thái nháp — không thể khởi tạo lại' });
+        }
+        const params = await effectiveParamsAt(tx, input.periodKey);
+        const criterionScores = params.kpiCriteria[input.block].map((c) => ({ key: c.key, score: 0 }));
+        const sharedData = {
+          facilityId: input.facilityId,
+          userId: input.userId,
+          periodKey: input.periodKey,
+          block: input.block,
+          autoScore: 0,
+          criterionScores,
+          status: 'draft' as const,
+        };
+        const row = await tx.kpiScore.upsert({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+          update: { autoScore: 0, criterionScores, block: input.block },
+          create: sharedData,
+        });
+        await logEvent(tx, {
+          facilityId: input.facilityId,
+          entityType: 'kpi_score',
+          entityId: row.id,
+          type: existing ? 'updated' : 'created',
+          body: `Khởi tạo phiếu KPI ${input.periodKey} [${input.block}]`,
+          actorId: ctx.session.userId,
+        });
+        return row;
+      }),
+    ),
+
+  /** Employee self-submits their KPI scores. Session userId is the target (no IDOR). */
+  kpiEvalSubmit: protectedProcedure
+    .input(
+      z.object({
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+        scores: z.array(z.object({ key: z.string(), score: z.number().min(0).max(100) })).min(1),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const row = await tx.kpiScore.findUnique({
+          where: { userId_periodKey: { userId: ctx.session.userId, periodKey: input.periodKey } },
+        });
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
+        if (row.status !== 'draft') throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu KPI không ở trạng thái nháp' });
+
+        const params = await effectiveParamsAt(tx, input.periodKey);
+        const blockCriteria = params.kpiCriteria[row.block as 'training' | 'sales'];
+        // Build the weighted set from the policy criteria (whose weights sum to 1), filling each
+        // from the submitted score (missing → 0). This keeps weightedKpi's weight-sum invariant
+        // intact even when an employee omits or sends extra/unknown keys — no raw Error → 500.
+        const scoreByKey = new Map(input.scores.map((s) => [s.key, s.score]));
+        const criteria = blockCriteria.map((c) => ({ criterion: c.key, weight: c.weight, score: scoreByKey.get(c.key) ?? 0 }));
+        const { score: autoScore } = weightedKpi(criteria);
+
+        const updated = await tx.kpiScore.update({
+          where: { id: row.id },
+          data: {
+            criterionScores: input.scores,
+            autoScore,
+            status: 'submitted',
+            submittedById: ctx.session.userId,
+            submittedAt: new Date(),
+          },
+        });
+        await logEvent(tx, {
+          facilityId: row.facilityId,
+          entityType: 'kpi_score',
+          entityId: row.id,
+          type: 'updated',
+          body: `Nộp phiếu KPI ${input.periodKey}: điểm ${autoScore}`,
+          actorId: ctx.session.userId,
+        });
+        return updated;
+      }),
+    ),
+
+  /** Quan_ly / BGD confirms a submitted KPI sheet. Moves to confirmed status. */
+  kpiEvalConfirm: requireRole(Role.quan_ly, Role.bgd)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const row = await tx.kpiScore.findUnique({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+        });
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
+        if (row.status !== 'submitted') throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu KPI chưa được nộp' });
+
+        const updated = await tx.kpiScore.update({
+          where: { id: row.id },
+          data: { status: 'confirmed', confirmedById: ctx.session.userId, confirmedAt: new Date() },
+        });
+        await logEvent(tx, {
+          facilityId: row.facilityId,
+          entityType: 'kpi_score',
+          entityId: row.id,
+          type: 'updated',
+          body: `Xác nhận phiếu KPI ${input.periodKey}`,
+          actorId: ctx.session.userId,
+        });
+        return updated;
+      }),
+    ),
+
+  /** BGD approves a confirmed KPI sheet. Separation of duties: approver ≠ confirmer. */
+  kpiEvalApprove: requireRole(Role.bgd)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const row = await tx.kpiScore.findUnique({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+        });
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
+        if (row.status !== 'confirmed') throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu KPI chưa được xác nhận' });
+        if (row.confirmedById && row.confirmedById === ctx.session.userId) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Không thể duyệt phiếu do chính mình xác nhận (tách trách nhiệm)' });
+        }
+
+        // Recompute autoScore from stored criterionScores + current policy weights.
+        const params = await effectiveParamsAt(tx, input.periodKey);
+        const blockCriteria = params.kpiCriteria[row.block as 'training' | 'sales'];
+        const criterionScores = (row.criterionScores as { key: string; score: number }[] | null) ?? [];
+        let autoScore = 0;
+        if (criterionScores.length > 0) {
+          // Same policy-anchored build as submit: weights come from blockCriteria (sum=1), scores
+          // from the stored sheet — so recompute is stable regardless of which keys were stored.
+          const scoreByKey = new Map(criterionScores.map((s) => [s.key, s.score]));
+          const criteria = blockCriteria.map((c) => ({ criterion: c.key, weight: c.weight, score: scoreByKey.get(c.key) ?? 0 }));
+          autoScore = weightedKpi(criteria).score;
+        }
+
+        const updated = await tx.kpiScore.update({
+          where: { id: row.id },
+          data: { status: 'approved', autoScore, approvedById: ctx.session.userId, approvedAt: new Date() },
+        });
+        await logEvent(tx, {
+          facilityId: row.facilityId,
+          entityType: 'kpi_score',
+          entityId: row.id,
+          type: 'updated',
+          body: `Phê duyệt phiếu KPI ${input.periodKey}: điểm ${autoScore}`,
+          actorId: ctx.session.userId,
+        });
+        return updated;
+      }),
+    ),
+
+  /** HR reads a single KPI sheet + its criteriaConfig for display. */
+  kpiEvalGet: requireRole(...HR_ROLES)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+      }),
+    )
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const row = await tx.kpiScore.findUnique({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+        });
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
+        const params = await effectiveParamsAt(tx, input.periodKey);
+        return { row, criteriaConfig: params.kpiCriteria[row.block as 'training' | 'sales'] };
+      }),
+    ),
+
+  /** HR lists all KPI sheets for a facility in a period (for the admin panel). */
+  kpiList: requireRole(...HR_ROLES)
+    .input(
+      z.object({
+        facilityId: z.number().int().positive(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+      }),
+    )
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.kpiScore.findMany({
+          where: { facilityId: input.facilityId, periodKey: input.periodKey },
+          orderBy: { createdAt: 'desc' },
+        }),
+      ),
+    ),
+
+  /** Auto-fill quantitative KPI criteria from real operational data (P06, decision 0011).
+   *  Sales block: doanh_so = ratioToScore(approvedRevenue/quota).
+   *  Training block: chuyen_mon (avg grade ratio) + tuan_thu (attendance-marked sessions ratio).
+   *  Non-draft status → CONFLICT. Non-existent sheet → NOT_FOUND. Audit written. */
+  kpiAutoPrefill: requireRole(...HR_ROLES)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        facilityId: z.number().int().positive(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const row = await tx.kpiScore.findUnique({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+        });
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
+        if (row.status !== 'draft') throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu KPI không ở trạng thái nháp' });
+
+        const { start, end } = periodRange(input.periodKey);
+        const block = row.block as 'training' | 'sales';
+
+        type ComputedItem = { key: string; score: number; dataAvailable: boolean };
+        let computed: ComputedItem[] = [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- context shape varies by block
+        let context: Record<string, any> = {};
+
+        if (block === 'sales') {
+          // doanh_so: total approved revenue in period / monthly quota
+          const rate = await tx.salaryRate.findFirst({
+            where: { userId: input.userId, archivedAt: null, effectiveFrom: { lte: periodEnd(input.periodKey) } },
+            orderBy: { effectiveFrom: 'desc' },
+            select: { monthlyQuota: true },
+          });
+          const quota = rate?.monthlyQuota ?? 0;
+
+          const revenueAgg = await tx.receipt.aggregate({
+            where: {
+              soldById: input.userId,
+              facilityId: input.facilityId,
+              status: 'approved',
+              approvedAt: { gte: start, lt: end },
+            },
+            _sum: { netAmount: true },
+          });
+          const approvedRevenue = revenueAgg._sum.netAmount ?? 0;
+
+          const score = quota > 0 ? ratioToScore(approvedRevenue / quota) : 0;
+          computed = [{ key: 'doanh_so', score, dataAvailable: quota > 0 }];
+          context = { approvedRevenue, quota };
+        } else {
+          // training block: chuyen_mon + tuan_thu
+
+          // chuyen_mon: avg(score/maxScore) × 100 for published grades gradedById=userId in period
+          const grades = await tx.grade.findMany({
+            where: {
+              gradedById: input.userId,
+              isPublished: true,
+              gradedAt: { gte: start, lt: end },
+            },
+            select: { score: true, maxScore: true },
+          });
+          // Only grades with a positive maxScore yield a meaningful ratio (guard against /0 → Infinity).
+          const scorable = grades.filter((g) => g.maxScore > 0);
+          let chuyenMonScore = 0;
+          const hasGrades = scorable.length > 0;
+          if (hasGrades) {
+            const avgRatio = scorable.reduce((sum, g) => sum + g.score / g.maxScore, 0) / scorable.length;
+            chuyenMonScore = Math.round(avgRatio * 100 * 100) / 100; // same precision as ratioToScore
+          }
+
+          // tuan_thu: sessions with >=1 attendance markedAt / total confirmed sessions
+          const [totalSessions, sessionsWith] = await Promise.all([
+            tx.classSession.count({
+              where: {
+                teacherId: input.userId,
+                status: 'confirmed',
+                sessionDate: { gte: start, lt: end },
+              },
+            }),
+            tx.classSession.count({
+              where: {
+                teacherId: input.userId,
+                status: 'confirmed',
+                sessionDate: { gte: start, lt: end },
+                attendances: { some: { markedAt: { not: null } } },
+              },
+            }),
+          ]);
+          const tuanThuScore = totalSessions > 0 ? (sessionsWith / totalSessions) * 100 : 0;
+
+          computed = [
+            { key: 'chuyen_mon', score: chuyenMonScore, dataAvailable: hasGrades },
+            { key: 'tuan_thu', score: tuanThuScore, dataAvailable: totalSessions > 0 },
+          ];
+          context = { gradeCount: grades.length, totalSessions, sessionsWithAttendance: sessionsWith };
+        }
+
+        // Merge computed scores into existing criterionScores, preserving uncomputed keys.
+        const existingScores = (row.criterionScores as { key: string; score: number }[] | null) ?? [];
+        const computedMap = new Map(computed.map((c) => [c.key, c.score]));
+        const mergedScores = existingScores.map((cs) => {
+          const newScore = computedMap.get(cs.key);
+          return newScore !== undefined ? { key: cs.key, score: newScore } : cs;
+        });
+
+        await tx.kpiScore.update({
+          where: { id: row.id },
+          data: { criterionScores: mergedScores },
+        });
+        await logEvent(tx, {
+          facilityId: input.facilityId,
+          entityType: 'kpi_score',
+          entityId: row.id,
+          type: 'updated',
+          body: `Tự điền KPI định lượng ${input.periodKey}`,
+          actorId: ctx.session.userId,
+        });
+        return { computed, context };
+      }),
+    ),
+
+  /** Override a subordinate's KPI score (decision 0011). Requires tree authority via canOverrideKpi.
+   *  Audit logs old→new + reason. Self-override is blocked. */
+  kpiOverride: protectedProcedure
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+        overrideScore: z.number().min(0).max(100),
+        reason: z.string().min(1),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        // Load target user roles for authority check.
+        const target = await tx.appUser.findUnique({
+          where: { id: input.userId },
+          select: { roles: true },
+        });
+        const targetRoles = (target?.roles ?? []) as Role[];
+
+        const actor = {
+          userId: ctx.session.userId,
+          roles: ctx.session.roles as Role[],
+          isSuperAdmin: ctx.session.isSuperAdmin,
+        };
+        if (!canOverrideKpi(actor, input.userId, targetRoles)) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Không có quyền chỉnh điểm KPI cho nhân sự này' });
+        }
+
+        const row = await tx.kpiScore.findUnique({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+        });
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
+
+        const updated = await tx.kpiScore.update({
+          where: { id: row.id },
+          data: {
+            overrideScore: input.overrideScore,
+            overrideReason: input.reason,
+            overriddenById: ctx.session.userId,
+            overriddenAt: new Date(),
+          },
+        });
+        await logEvent(tx, {
+          facilityId: row.facilityId,
+          entityType: 'kpi_score',
+          entityId: row.id,
+          type: 'updated',
+          body: `Override KPI ${input.periodKey}: ${row.autoScore}→${input.overrideScore}. Lý do: ${input.reason}`,
+          actorId: ctx.session.userId,
+        });
+        return updated;
+      }),
+    ),
+
+  /** HR test-helper / backfill: upsert a KpiScore row with a given autoScore (used for wiring). */
+  kpiSetAuto: requireRole(...HR_ROLES)
+    .input(
+      z.object({
+        userId: z.string().uuid(),
+        facilityId: z.number().int().positive(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+        block: z.enum(['training', 'sales']),
+        autoScore: z.number().min(0).max(100),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const params = await effectiveParamsAt(tx, input.periodKey);
+        const criterionScores = params.kpiCriteria[input.block].map((c) => ({ key: c.key, score: 0 }));
+        const row = await tx.kpiScore.upsert({
+          where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
+          update: { autoScore: input.autoScore },
+          create: {
+            facilityId: input.facilityId,
+            userId: input.userId,
+            periodKey: input.periodKey,
+            block: input.block,
+            autoScore: input.autoScore,
+            criterionScores,
+          },
+        });
+        await logEvent(tx, {
+          facilityId: input.facilityId,
+          entityType: 'kpi_score',
+          entityId: row.id,
+          type: 'updated',
+          body: `Cập nhật điểm KPI tự động ${input.periodKey}: ${input.autoScore}`,
+          actorId: ctx.session.userId,
+        });
+        return row;
+      }),
+    ),
+
+  // ─── Callio call-metrics sync (decision 0010) ────────────────────────────────
+  // Polls Callio CDRs for a period, aggregates outbound >5s per extension, and snapshots
+  // the tallies in CallMetric (idempotent per user+period). Token unset → no-op.
+
+  syncCallMetrics: requireRole(...HR_ROLES)
+    .input(
+      z.object({
+        facilityId: z.number().int().positive(),
+        periodKey: z.string().regex(/^\d{4}-\d{2}$/),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const cfg = callioConfigFromEnv();
+        if (!cfg) return { synced: 0, skipped: 'callio-not-configured' as const };
+
+        const { start, end } = periodRange(input.periodKey);
+
+        // Fetch all CDRs for the period from Callio.
+        const cdrs = await fetchPeriodCdrs(cfg, start.getTime(), end.getTime());
+
+        // Aggregate valid calls per extension.
+        const talliesByExt = aggregateValidCalls(cdrs);
+        if (talliesByExt.size === 0) return { synced: 0 };
+
+        // Map extensions → staff via EmploymentProfile.callioExt.
+        const profiles = await tx.employmentProfile.findMany({
+          where: { facilityId: input.facilityId, callioExt: { not: null } },
+          select: { userId: true, callioExt: true },
+        });
+
+        let synced = 0;
+        const syncedAt = new Date();
+
+        for (const profile of profiles) {
+          if (!profile.callioExt) continue;
+          const tally = talliesByExt.get(profile.callioExt);
+          if (!tally) continue;
+
+          await tx.callMetric.upsert({
+            where: { userId_periodKey: { userId: profile.userId, periodKey: input.periodKey } },
+            update: {
+              validCalls: tally.validCalls,
+              totalCalls: tally.totalCalls,
+              totalTalkSec: tally.totalTalkSec,
+              syncedAt,
+            },
+            create: {
+              facilityId: input.facilityId,
+              userId: profile.userId,
+              periodKey: input.periodKey,
+              validCalls: tally.validCalls,
+              totalCalls: tally.totalCalls,
+              totalTalkSec: tally.totalTalkSec,
+              syncedAt,
+            },
+          });
+          synced++;
+        }
+
+        return { synced };
+      }),
+    ),
 });
