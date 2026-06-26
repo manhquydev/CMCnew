@@ -27,7 +27,8 @@ COPY packages/domain-payroll/package.json    packages/domain-payroll/
 COPY packages/domain-rewards/package.json    packages/domain-rewards/
 # Skip Prisma client auto-generation — not needed in the frontend build stage.
 ENV PRISMA_SKIP_POSTINSTALL_GENERATE=true
-RUN pnpm install --frozen-lockfile --filter @cmc/admin...
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --filter @cmc/admin...
 
 # All source files (packages/ui + apps/admin; api source not needed — only
 # "import type" references to @cmc/api are used, which esbuild strips at build time)

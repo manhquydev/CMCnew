@@ -25,7 +25,8 @@ COPY packages/domain-grading/package.json    packages/domain-grading/
 COPY packages/domain-payroll/package.json    packages/domain-payroll/
 COPY packages/domain-rewards/package.json    packages/domain-rewards/
 ENV PRISMA_SKIP_POSTINSTALL_GENERATE=true
-RUN pnpm install --frozen-lockfile --filter @cmc/lms...
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --filter @cmc/lms...
 
 COPY packages  ./packages
 COPY apps/lms  ./apps/lms

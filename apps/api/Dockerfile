@@ -25,7 +25,8 @@ COPY packages/domain-grading/package.json    packages/domain-grading/
 COPY packages/domain-payroll/package.json    packages/domain-payroll/
 COPY packages/domain-rewards/package.json    packages/domain-rewards/
 # Install prod + dev deps (tsx is a devDep but needed at runtime)
-RUN pnpm install --frozen-lockfile --filter @cmc/api...
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --filter @cmc/api...
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
