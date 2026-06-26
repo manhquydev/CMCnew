@@ -4,7 +4,8 @@
 # No separate TypeScript compile step — API is run directly with tsx,
 # so the runner stage includes source files and tsx in node_modules.
 #
-# Prisma client is generated in the runner stage after source is copied.
+# Prisma client is generated in the deps stage (prisma CLI is a devDep of
+# @cmc/db; adding --filter @cmc/db ensures it's installed alongside api deps).
 # The cmc_app DB role is created by migration 20260623045316_rls_tenancy;
 # run "pnpm --filter @cmc/db migrate" (via DIRECT_URL) before first start.
 
@@ -24,9 +25,15 @@ COPY packages/domain-finance/package.json    packages/domain-finance/
 COPY packages/domain-grading/package.json    packages/domain-grading/
 COPY packages/domain-payroll/package.json    packages/domain-payroll/
 COPY packages/domain-rewards/package.json    packages/domain-rewards/
-# Install prod + dev deps (tsx is a devDep but needed at runtime)
+# --filter @cmc/db (no ...) includes devDeps of @cmc/db (prisma CLI + engines)
+# --filter @cmc/api... installs api + all transitive workspace prod deps
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile --filter @cmc/api...
+    pnpm install --frozen-lockfile --filter @cmc/api... --filter @cmc/db
+
+# Copy schema and generate Prisma client while pnpm store cache is still active.
+# Generated output lands in node_modules/@prisma/client and node_modules/.prisma/client.
+COPY packages/db/prisma ./packages/db/prisma
+RUN node_modules/.bin/prisma generate --schema=packages/db/prisma/schema.prisma
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
@@ -34,7 +41,7 @@ RUN corepack enable && corepack prepare pnpm@10.24.0 --activate
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Hoisted node_modules (includes tsx, prisma, all workspace dep modules)
+# node_modules includes tsx, generated Prisma client, and all workspace deps
 COPY --from=deps /app/node_modules ./node_modules
 
 # Workspace manifests so pnpm can resolve workspace links when running scripts
@@ -43,9 +50,6 @@ COPY package.json pnpm-workspace.yaml ./
 # All backend package sources (tsx compiles TypeScript at runtime — no build step)
 COPY packages ./packages
 COPY apps/api  ./apps/api
-
-# Generate the Prisma client against the engine binary installed by pnpm
-RUN node_modules/.bin/prisma generate --schema=packages/db/prisma/schema.prisma
 
 EXPOSE 4000
 
