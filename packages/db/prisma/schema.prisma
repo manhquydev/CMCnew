@@ -158,6 +158,11 @@ model Student {
   lifecycle   StudentLifecycle @default(admitted)
   archivedAt  DateTime?        @map("archived_at")
   createdAt   DateTime         @default(now()) @map("created_at")
+  /// Set only when THIS receipt atomically created this student at approve time.
+  /// Null for pre-existing students (seed, dedupe-matched, manually created before F1).
+  /// Never set on dedupe-match (reuse): provenance tracks who CREATED, not who paid.
+  createdByReceiptId String?  @map("created_by_receipt_id") @db.Uuid
+  createdByReceipt   Receipt? @relation("StudentProvenance", fields: [createdByReceiptId], references: [id], onDelete: SetNull)
   enrollments Enrollment[]
   account         StudentAccount?
   guardians       Guardian[]
@@ -168,11 +173,12 @@ model Student {
   finalGrades     FinalGrade[]
   badges          StudentBadge[]
   levelProgresses LevelProgress[]
-  receipts        Receipt[]
+  receipts        Receipt[] @relation("ReceiptStudent")
   afterSaleCases  AfterSaleCase[]
   certificates    Certificate[]
 
   @@index([facilityId])
+  @@index([createdByReceiptId])
   @@map("student")
 }
 
@@ -195,6 +201,7 @@ model ClassBatch {
   enrollments Enrollment[]
   exercises  Exercise[]
   parentMeetings ParentMeeting[]
+  receipts   Receipt[] @relation("ReceiptBatch")
 
   @@index([facilityId])
   @@map("class_batch")
@@ -297,12 +304,17 @@ model Enrollment {
   student       Student          @relation(fields: [studentId], references: [id])
   status        EnrollmentStatus @default(active)
   opportunityId String?          @map("opportunity_id") // truy vết CRM (Phase 3)
+  /// Set when receipt.approve created this enrollment atomically. Used for rollback scoping
+  /// in receiptCancel: only enrollments with this receipt's id are wound down.
+  createdByReceiptId String?     @map("created_by_receipt_id") @db.Uuid
+  createdByReceipt   Receipt?    @relation("EnrollmentProvenance", fields: [createdByReceiptId], references: [id], onDelete: SetNull)
   archivedAt    DateTime?        @map("archived_at")
   createdAt     DateTime         @default(now()) @map("created_at")
   attendances   Attendance[]
 
   @@unique([classBatchId, studentId])
   @@index([facilityId])
+  @@index([createdByReceiptId])
   @@map("enrollment")
 }
 
@@ -901,12 +913,16 @@ model Voucher {
 
 /// Phiếu thu — facility-scoped. net = gross × (1 − min(tier+voucher, 35)/100). Mã PT-YYYY-NNNN
 /// cấp tại approve. draft→approved→sent→reconciled (+cancelled). Voucher consume tại approve.
+/// Student provisioning (F1): studentId is nullable for the NEW-student path. If parentPhone+studentName
+/// are present and studentId is null, receipt.approve creates/dedupes the Student atomically.
 model Receipt {
   id                       String        @id @default(uuid()) @db.Uuid
   facilityId               Int           @map("facility_id")
   code                     String?       @unique
-  studentId                String        @map("student_id") @db.Uuid
-  student                  Student       @relation(fields: [studentId], references: [id])
+  /// Nullable: null until receipt.approve resolves or creates the student (new-student provisioning).
+  /// Set immediately when the receipt is for an existing student (renewal/explicit-link path).
+  studentId                String?       @map("student_id") @db.Uuid
+  student                  Student?      @relation("ReceiptStudent", fields: [studentId], references: [id])
   courseId                 String        @map("course_id") @db.Uuid
   course                   Course        @relation(fields: [courseId], references: [id])
   period                   String?
@@ -937,10 +953,22 @@ model Receipt {
   cancelledAt              DateTime?     @map("cancelled_at")
   cancelReason             String?       @map("cancel_reason")
   createdAt                DateTime      @default(now()) @map("created_at")
+  /// New-student provisioning fields (F1). Only populated when this receipt creates a new student.
+  parentPhone              String?       @map("parent_phone")   // dedupe key via ParentAccount.phone
+  parentName               String?       @map("parent_name")    // display name for ParentAccount
+  studentName              String?       @map("student_name")   // Student creation + multi-child disambiguation
+  studentDob               DateTime?     @map("student_dob") @db.Date
+  /// Optional: which class to enroll the student into at approve. Null = payment only, no class yet.
+  classBatchId             String?       @map("class_batch_id") @db.Uuid
+  classBatch               ClassBatch?   @relation("ReceiptBatch", fields: [classBatchId], references: [id], onDelete: SetNull)
+  /// Reverse provenance: students and enrollments created atomically by this receipt.
+  studentsCreated          Student[]     @relation("StudentProvenance")
+  enrollmentsCreated       Enrollment[]  @relation("EnrollmentProvenance")
 
   @@index([facilityId])
   @@index([studentId])
   @@index([soldById, status])
+  @@index([classBatchId])
   @@map("receipt")
 }
 

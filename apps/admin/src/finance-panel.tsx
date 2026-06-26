@@ -420,7 +420,7 @@ function ReceiptsCard({
   const [cancelReason, setCancelReason] = useState('');
   const [detailTarget, setDetailTarget] = useState<Receipt | null>(null);
 
-  const studentName = (id: string) => students.find((s) => s.id === id)?.fullName ?? id.slice(0, 8);
+  const studentName = (id: string | null) => id ? (students.find((s) => s.id === id)?.fullName ?? id.slice(0, 8)) : '—';
   const courseName = (id: string) => courses.find((c) => c.id === id)?.code ?? id.slice(0, 8);
 
   const loadReceipts = useCallback(() => {
@@ -442,13 +442,10 @@ function ReceiptsCard({
     loadReceipts();
   }, [loadReceipts]);
 
-  // Client-side facility filter via student lookup
-  const facilityStudentIds = filterFacilityId
-    ? new Set(students.filter((s) => String(s.facilityId) === filterFacilityId).map((s) => s.id))
-    : null;
-
-  const filtered = facilityStudentIds
-    ? receipts.filter((r) => facilityStudentIds.has(r.studentId))
+  // Filter by receipt.facilityId directly. New-student drafts have studentId=null until approve
+  // and must remain visible when filtering by their facility.
+  const filtered = filterFacilityId
+    ? receipts.filter((r) => String(r.facilityId) === filterFacilityId)
     : receipts;
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / RECEIPT_PAGE_SIZE));
@@ -646,47 +643,91 @@ function ReceiptsCard({
 
 // ─── Receipt Create Card ──────────────────────────────────────────────────────
 
+type BatchT = Awaited<ReturnType<typeof trpc.classBatch.list.query>>[number];
+
 function ReceiptCreateCard({
   students,
   courses,
+  facilities,
   onCreated,
 }: {
   students: StudentT[];
   courses: CourseT[];
+  facilities: Facility[];
   onCreated: () => void;
 }) {
+  const [mode, setMode] = useState<'existing' | 'new'>('existing');
+  const [batches, setBatches] = useState<BatchT[]>([]);
+
+  // Existing-student fields
   const [studentId, setStudentId] = useState<string | null>(null);
   const [courseId, setCourseId] = useState<string | null>(null);
+
+  // New-student fields
+  const [newFacilityId, setNewFacilityId] = useState<string | null>(null);
+  const [newCourseId, setNewCourseId] = useState<string | null>(null);
+  const [parentPhone, setParentPhone] = useState('');
+  const [studentName, setStudentName] = useState('');
+  const [studentDob, setStudentDob] = useState('');
+  const [classBatchId, setClassBatchId] = useState<string | null>(null);
+
+  // Shared
   const [years, setYears] = useState('1');
   const [voucherCode, setVoucherCode] = useState('');
   const [period, setPeriod] = useState('');
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    trpc.classBatch.list.query().then(setBatches).catch(() => {});
+  }, []);
+
+  const filteredBatches = newFacilityId
+    ? batches.filter((b) => String(b.facilityId) === newFacilityId)
+    : batches;
+
   async function createDraft() {
-    const student = students.find((s) => s.id === studentId);
-    if (!student || !courseId) {
-      notifyError('Vui lòng chọn học sinh và khóa học.', 'Thiếu thông tin');
-      return;
-    }
     setBusy(true);
     try {
-      const r = await trpc.finance.receiptCreate.mutate({
-        facilityId: student.facilityId,
-        studentId: student.id,
-        courseId,
-        yearsPrepaid: Number(years),
-        period: period.trim() || undefined,
-        voucherCode: voucherCode.trim() || undefined,
-      });
+      let r;
+      if (mode === 'existing') {
+        const student = students.find((s) => s.id === studentId);
+        if (!student || !courseId) {
+          notifyError('Vui lòng chọn học sinh và khóa học.', 'Thiếu thông tin');
+          return;
+        }
+        r = await trpc.finance.receiptCreate.mutate({
+          facilityId: student.facilityId,
+          studentId: student.id,
+          courseId,
+          yearsPrepaid: Number(years),
+          period: period.trim() || undefined,
+          voucherCode: voucherCode.trim() || undefined,
+        });
+      } else {
+        if (!newFacilityId || !newCourseId || !parentPhone.trim() || !studentName.trim()) {
+          notifyError('Vui lòng điền: cơ sở, khóa học, SĐT phụ huynh và tên học sinh.', 'Thiếu thông tin');
+          return;
+        }
+        r = await trpc.finance.receiptCreate.mutate({
+          facilityId: Number(newFacilityId),
+          courseId: newCourseId,
+          yearsPrepaid: Number(years),
+          period: period.trim() || undefined,
+          voucherCode: voucherCode.trim() || undefined,
+          parentPhone: parentPhone.trim(),
+          studentName: studentName.trim(),
+          studentDob: studentDob.trim() || undefined,
+          classBatchId: classBatchId ?? undefined,
+        });
+      }
       notifySuccess(
         `Đã tạo phiếu nháp: gốc ${vnd(r.grossAmount)} → giảm ${r.effectiveDiscountPercent}% → còn ${vnd(r.netAmount)}`,
         'Tạo phiếu thu thành công',
       );
-      setStudentId(null);
-      setCourseId(null);
-      setYears('1');
-      setVoucherCode('');
-      setPeriod('');
+      setStudentId(null); setCourseId(null);
+      setNewFacilityId(null); setNewCourseId(null);
+      setParentPhone(''); setStudentName(''); setStudentDob(''); setClassBatchId(null);
+      setYears('1'); setVoucherCode(''); setPeriod('');
       onCreated();
     } catch (e) {
       notifyError(e, 'Tạo phiếu thu thất bại');
@@ -700,24 +741,93 @@ function ReceiptCreateCard({
       <Title order={5} mb="sm">
         Lập phiếu thu
       </Title>
-      <Group grow align="flex-end">
-        <Select
-          label="Học sinh"
-          searchable
-          placeholder={students.length ? 'Chọn học sinh' : 'Chưa có học sinh'}
-          data={students.map((s) => ({ value: s.id, label: `${s.studentCode} — ${s.fullName}` }))}
-          value={studentId}
-          onChange={setStudentId}
-        />
-        <Select
-          label="Khóa học"
-          searchable
-          placeholder={courses.length ? 'Chọn khóa' : 'Chưa có khóa'}
-          data={courses.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` }))}
-          value={courseId}
-          onChange={setCourseId}
-        />
+
+      {/* Mode toggle: existing student vs. new student */}
+      <Group mb="sm">
+        <Button size="xs" variant={mode === 'existing' ? 'filled' : 'subtle'} onClick={() => setMode('existing')}>
+          Học sinh hiện có
+        </Button>
+        <Button size="xs" variant={mode === 'new' ? 'filled' : 'subtle'} onClick={() => setMode('new')}>
+          Học sinh mới
+        </Button>
       </Group>
+
+      {mode === 'existing' ? (
+        <Group grow align="flex-end">
+          <Select
+            label="Học sinh"
+            searchable
+            placeholder={students.length ? 'Chọn học sinh' : 'Chưa có học sinh'}
+            data={students.map((s) => ({ value: s.id, label: `${s.studentCode} — ${s.fullName}` }))}
+            value={studentId}
+            onChange={setStudentId}
+          />
+          <Select
+            label="Khóa học"
+            searchable
+            placeholder={courses.length ? 'Chọn khóa' : 'Chưa có khóa'}
+            data={courses.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` }))}
+            value={courseId}
+            onChange={setCourseId}
+          />
+        </Group>
+      ) : (
+        <Stack gap="sm">
+          <Group grow align="flex-end">
+            <Select
+              label="Cơ sở"
+              withAsterisk
+              placeholder="Chọn cơ sở"
+              data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
+              value={newFacilityId}
+              onChange={(v) => { setNewFacilityId(v); setClassBatchId(null); }}
+            />
+            <Select
+              label="Khóa học"
+              withAsterisk
+              searchable
+              placeholder={courses.length ? 'Chọn khóa' : 'Chưa có khóa'}
+              data={courses.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` }))}
+              value={newCourseId}
+              onChange={setNewCourseId}
+            />
+          </Group>
+          <Group grow align="flex-end">
+            <TextInput
+              label="SĐT phụ huynh"
+              withAsterisk
+              placeholder="vd 0901234567"
+              value={parentPhone}
+              onChange={(e) => setParentPhone(e.currentTarget.value)}
+            />
+            <TextInput
+              label="Tên học sinh"
+              withAsterisk
+              placeholder="Họ và tên đầy đủ"
+              value={studentName}
+              onChange={(e) => setStudentName(e.currentTarget.value)}
+            />
+          </Group>
+          <Group grow align="flex-end">
+            <TextInput
+              label="Ngày sinh (tùy chọn)"
+              placeholder="YYYY-MM-DD"
+              value={studentDob}
+              onChange={(e) => setStudentDob(e.currentTarget.value)}
+            />
+            <Select
+              label="Lớp học (tùy chọn)"
+              placeholder="Chọn lớp"
+              searchable
+              clearable
+              data={filteredBatches.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }))}
+              value={classBatchId}
+              onChange={setClassBatchId}
+            />
+          </Group>
+        </Stack>
+      )}
+
       <Group grow align="flex-end" mt="sm">
         <Select
           label="Đóng trước"
@@ -782,6 +892,7 @@ export function FinancePanel() {
       <ReceiptCreateCard
         students={students}
         courses={courses}
+        facilities={facilities}
         onCreated={() => setReloadKey((k) => k + 1)}
       />
       {/* key forces ReceiptsCard to re-mount and reload after a new receipt is created */}

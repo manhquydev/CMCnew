@@ -16,7 +16,7 @@ import {
   Title,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { IconPlus, IconSearch, IconRefresh } from '@tabler/icons-react';
+import { IconSearch, IconRefresh } from '@tabler/icons-react';
 
 type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
@@ -60,29 +60,9 @@ export function StudentsPanel() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
-  // Create modal
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createBusy, setCreateBusy] = useState(false);
-
   // Edit modal
   const [editTarget, setEditTarget] = useState<StudentT | null>(null);
   const [editBusy, setEditBusy] = useState(false);
-
-  const createForm = useForm({
-    initialValues: {
-      facilityId: '',
-      studentCode: '',
-      fullName: '',
-      program: 'UCREA' as 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE',
-      dateOfBirth: '',
-    },
-    validate: {
-      facilityId: (v) => (!v ? 'Chọn cơ sở' : null),
-      studentCode: (v) => (!v.trim() ? 'Nhập mã học sinh' : null),
-      fullName: (v) => (!v.trim() ? 'Nhập họ tên' : null),
-      program: (v) => (!v ? 'Chọn chương trình' : null),
-    },
-  });
 
   const editForm = useForm({
     initialValues: {
@@ -131,27 +111,6 @@ export function StudentsPanel() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  async function onCreate(values: typeof createForm.values) {
-    setCreateBusy(true);
-    try {
-      await trpc.student.create.mutate({
-        facilityId: Number(values.facilityId),
-        studentCode: values.studentCode.trim(),
-        fullName: values.fullName.trim(),
-        program: values.program,
-        dateOfBirth: values.dateOfBirth.trim() || undefined,
-      });
-      notifySuccess(`Đã tạo học sinh "${values.fullName}"`);
-      setCreateOpen(false);
-      createForm.reset();
-      load();
-    } catch (e) {
-      notifyError(e, 'Tạo học sinh thất bại');
-    } finally {
-      setCreateBusy(false);
-    }
-  }
 
   function openEdit(s: StudentT) {
     setEditTarget(s);
@@ -204,18 +163,7 @@ export function StudentsPanel() {
 
   return (
     <Stack>
-      {/* ─── Create button ── */}
-      <Group justify="space-between">
-        <Title order={5}>Học sinh ({filtered.length})</Title>
-        <Button
-          variant="filled"
-          radius={9999}
-          leftSection={<IconPlus size={16} />}
-          onClick={() => setCreateOpen(true)}
-        >
-          Thêm học sinh
-        </Button>
-      </Group>
+      <Title order={5}>Học sinh ({filtered.length})</Title>
 
       {/* ─── Filters ── */}
       <Group align="flex-end">
@@ -338,46 +286,7 @@ export function StudentsPanel() {
         )}
       </Card>
 
-      {/* ─── Create modal ── */}
-      <Modal
-        opened={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title="Thêm học sinh"
-        radius="xl"
-        centered
-      >
-        <form onSubmit={createForm.onSubmit(onCreate)}>
-          <Stack>
-            <Select
-              label="Cơ sở"
-              withAsterisk
-              data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-              {...createForm.getInputProps('facilityId')}
-            />
-            <TextInput label="Mã học sinh" withAsterisk {...createForm.getInputProps('studentCode')} />
-            <TextInput label="Họ tên" withAsterisk {...createForm.getInputProps('fullName')} />
-            <Select
-              label="Chương trình"
-              withAsterisk
-              data={PROGRAMS}
-              {...createForm.getInputProps('program')}
-            />
-            <TextInput
-              label="Ngày sinh (tùy chọn)"
-              placeholder="YYYY-MM-DD"
-              {...createForm.getInputProps('dateOfBirth')}
-            />
-            <Group justify="flex-end" mt="xs">
-              <Button variant="subtle" onClick={() => setCreateOpen(false)}>
-                Hủy
-              </Button>
-              <Button type="submit" variant="filled" radius={9999} loading={createBusy}>
-                Tạo
-              </Button>
-            </Group>
-          </Stack>
-        </form>
-      </Modal>
+
 
       {/* ─── Edit modal ── */}
       <Modal

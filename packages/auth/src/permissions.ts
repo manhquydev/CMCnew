@@ -194,7 +194,8 @@ export const PERMISSIONS: Record<string, Record<string, Role[]>> = {
   },
 
   student: {
-    create: [Role.quan_ly, Role.sale],
+    // student.create is gated to superAdminProcedure (break-glass only); not in registry.
+    // Normal students are created atomically at receipt.approve.
     update: [Role.quan_ly, Role.sale],
   },
 

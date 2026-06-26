@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { withRls, Program, StudentLifecycle } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, protectedProcedure, requirePermission } from '../trpc.js';
+import { router, protectedProcedure, requirePermission, superAdminProcedure } from '../trpc.js';
 
 const program = z.nativeEnum(Program);
 const lifecycle = z.nativeEnum(StudentLifecycle);
@@ -14,7 +14,10 @@ export const studentRouter = router({
     ),
   ),
 
-  create: requirePermission('student', 'create')
+  // Break-glass / seed / migration path only. Normal student creation happens atomically at
+  // receipt.approve (F1). This procedure is gated to super_admin so that no regular staff
+  // UI path can create an orphan student outside the financial provisioning seam.
+  create: superAdminProcedure
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -41,6 +44,7 @@ export const studentRouter = router({
           entityType: 'student',
           entityId: student.id,
           type: 'created',
+          body: 'Học sinh tạo thủ công (break-glass/seed — không qua phiếu thu)',
           actorId: ctx.session.userId,
         });
         return student;

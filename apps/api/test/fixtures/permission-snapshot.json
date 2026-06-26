@@ -98,7 +98,6 @@
   "room.archive": ["quan_ly"],
   "schedule.addSlot": ["quan_ly"],
   "schedule.generateSessions": ["quan_ly"],
-  "student.create": ["quan_ly", "sale"],
   "student.update": ["quan_ly", "sale"],
   "submission.listByExercise": ["giao_vien", "quan_ly"],
   "submission.layerForGrading": ["giao_vien", "quan_ly"],

@@ -103,7 +103,7 @@ app.get('/files/receipt/:id', async (c) => {
     const r = await tx.receipt.findUnique({ where: { id } });
     if (!r) return null;
     const [student, course, facility] = await Promise.all([
-      tx.student.findUnique({ where: { id: r.studentId }, select: { fullName: true, studentCode: true } }),
+      r.studentId ? tx.student.findUnique({ where: { id: r.studentId }, select: { fullName: true, studentCode: true } }) : Promise.resolve(null),
       tx.course.findUnique({ where: { id: r.courseId }, select: { code: true, name: true } }),
       tx.facility.findUnique({ where: { id: r.facilityId }, select: { name: true } }),
     ]);
@@ -115,7 +115,7 @@ app.get('/files/receipt/:id', async (c) => {
   const html = renderReceiptHtml({
     code: r.code,
     facilityName: facility?.name ?? '',
-    studentName: student ? `${student.fullName} (${student.studentCode})` : r.studentId.slice(0, 8),
+    studentName: student ? `${student.fullName} (${student.studentCode})` : (r.studentId ? r.studentId.slice(0, 8) : '—'),
     courseLabel: course ? `${course.code} — ${course.name}` : r.courseId.slice(0, 8),
     period: r.period,
     yearsPrepaid: r.yearsPrepaid,
