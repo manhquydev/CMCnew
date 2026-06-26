@@ -595,7 +595,7 @@ export const payrollRouter = router({
       z.object({
         userId: z.string().uuid(),
         periodKey: z.string().regex(/^\d{4}-\d{2}$/),
-        amount: z.number().int().nonnegative(),
+        amount: z.number().int().nonnegative().max(1_000_000_000),
         reason: z.string().min(1),
       }),
     )

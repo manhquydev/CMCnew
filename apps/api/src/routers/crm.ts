@@ -204,6 +204,10 @@ export const crmRouter = router({
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
+        const current = await tx.opportunity.findUniqueOrThrow({ where: { id: input.id } });
+        if (current.closedAt === null) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cơ hội chưa đóng, không cần mở lại' });
+        }
         const opp = await tx.opportunity.update({
           where: { id: input.id },
           data: { closedAt: null, lostReason: null },

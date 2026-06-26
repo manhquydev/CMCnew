@@ -82,8 +82,23 @@ export const enrollmentRouter = router({
             opportunityId: input.opportunityId,
           },
         });
-        // HS có enrollment → chuyển lifecycle sang active.
-        await tx.student.update({ where: { id: input.studentId }, data: { lifecycle: 'active' } });
+        // HS có enrollment → chuyển lifecycle sang active (chỉ khi chưa active; log transition).
+        const student = await tx.student.findUniqueOrThrow({
+          where: { id: input.studentId },
+          select: { fullName: true, studentCode: true, lifecycle: true },
+        });
+        if (student.lifecycle !== 'active') {
+          await tx.student.update({ where: { id: input.studentId }, data: { lifecycle: 'active' } });
+          await logEvent(tx, {
+            facilityId: input.facilityId,
+            entityType: 'student',
+            entityId: input.studentId,
+            type: 'status_changed',
+            body: `Lifecycle: ${student.lifecycle}→active (ghi danh)`,
+            changes: [{ field: 'lifecycle', old: student.lifecycle, new: 'active' }],
+            actorId: ctx.session.userId,
+          });
+        }
         await logEvent(tx, {
           facilityId: input.facilityId,
           entityType: 'enrollment',
@@ -99,7 +114,6 @@ export const enrollmentRouter = router({
         const notifyIds = facilityUsers
           .filter((uf) => uf.user.roles.includes('quan_ly') || uf.user.roles.includes('head_teacher'))
           .map((uf) => uf.userId);
-        const student = await tx.student.findUnique({ where: { id: input.studentId }, select: { fullName: true, studentCode: true } });
         const pushNotifs = await emitStaffNotif(tx, {
           recipientIds: notifyIds,
           event: 'enrollment_new',

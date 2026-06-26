@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TRPCError } from '@trpc/server';
 import { withRls, CaseStatus, CasePriority, StudentLifecycle } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
@@ -88,6 +89,15 @@ export const afterSaleRouter = router({
     .input(z.object({ id: z.string().uuid(), assignedToId: z.string().uuid().nullable() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
+        const existing = await tx.afterSaleCase.findUniqueOrThrow({ where: { id: input.id } });
+        if (input.assignedToId !== null) {
+          const member = await tx.userFacility.findFirst({
+            where: { userId: input.assignedToId, facilityId: existing.facilityId },
+          });
+          if (!member) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Người được giao không thuộc cơ sở này' });
+          }
+        }
         const kase = await tx.afterSaleCase.update({
           where: { id: input.id },
           data: { assignedToId: input.assignedToId },

@@ -33,4 +33,45 @@ export const roomRouter = router({
         return room;
       }),
     ),
+
+  update: requireRole(Role.quan_ly)
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        code: z.string().min(1).optional(),
+        name: z.string().min(1).optional(),
+        capacity: z.number().int().positive().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const { id, ...data } = input;
+        const room = await tx.room.update({ where: { id }, data });
+        await logEvent(tx, {
+          facilityId: room.facilityId,
+          entityType: 'room',
+          entityId: room.id,
+          type: 'updated',
+          actorId: ctx.session.userId,
+        });
+        return room;
+      }),
+    ),
+
+  archive: requireRole(Role.quan_ly)
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const room = await tx.room.update({ where: { id: input.id }, data: { archivedAt: new Date() } });
+        await logEvent(tx, {
+          facilityId: room.facilityId,
+          entityType: 'room',
+          entityId: room.id,
+          type: 'updated',
+          body: 'Lưu trữ phòng học',
+          actorId: ctx.session.userId,
+        });
+        return room;
+      }),
+    ),
 });

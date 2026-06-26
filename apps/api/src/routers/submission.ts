@@ -130,7 +130,7 @@ export const submissionRouter = router({
     .query(({ ctx, input }) =>
       withRls(lmsRlsContextOf(ctx.lms), async (tx) => {
         const studentId = ctx.lms.studentIds[0];
-        if (!studentId) return { mine: null, teacher: null };
+        if (!studentId) throw new TRPCError({ code: 'FORBIDDEN' });
         const sub = await tx.submission.findUnique({
           where: { exerciseId_studentId: { exerciseId: input.exerciseId, studentId } },
           select: { annotationLayer: true, grade: { select: { annotationLayer: true, isPublished: true } } },

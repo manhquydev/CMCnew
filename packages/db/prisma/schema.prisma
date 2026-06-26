@@ -874,6 +874,7 @@ model Receipt {
   soldById                 String?       @map("sold_by_id") @db.Uuid
   kind                     ReceiptKind?
   opportunityId            String?       @map("opportunity_id") @db.Uuid
+  opportunity              Opportunity?  @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
   approvedById             String?       @map("approved_by_id") @db.Uuid
   approvedAt               DateTime?     @map("approved_at")
   sentAt                   DateTime?     @map("sent_at")
@@ -946,6 +947,7 @@ model Opportunity {
   archivedAt  DateTime?        @map("archived_at")
   createdAt   DateTime         @default(now()) @map("created_at")
   tests       TestAppointment[]
+  receipts    Receipt[]
 
   @@index([facilityId])
   @@index([contactId])

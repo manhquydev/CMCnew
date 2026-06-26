@@ -172,20 +172,19 @@ export const scheduleRouter = router({
           });
         }
 
-        for (const c of fresh) {
-          await tx.classSession.create({
-            data: {
-              facilityId: batch.facilityId,
-              classBatchId: input.classBatchId,
-              sessionDate: new Date(c.sessionDate),
-              startTime: c.startTime,
-              endTime: c.endTime,
-              roomId: c.roomId ?? null,
-              teacherId: c.teacherId ?? null,
-              status: 'planned',
-            },
-          });
-        }
+        await tx.classSession.createMany({
+          data: fresh.map((c) => ({
+            facilityId: batch.facilityId,
+            classBatchId: input.classBatchId,
+            sessionDate: new Date(c.sessionDate),
+            startTime: c.startTime,
+            endTime: c.endTime,
+            roomId: c.roomId ?? null,
+            teacherId: c.teacherId ?? null,
+            status: 'planned',
+          })),
+          skipDuplicates: true,
+        });
         await logEvent(tx, {
           facilityId: batch.facilityId,
           entityType: 'class_batch',
