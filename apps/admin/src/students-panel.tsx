@@ -16,25 +16,20 @@ import {
   Title,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
-import { IconSearch, IconRefresh } from '@tabler/icons-react';
+import { IconSearch, IconRefresh, IconExternalLink } from '@tabler/icons-react';
+import { StudentDetailPanel } from './student-detail.js';
 
 type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 
-const PROGRAMS = [
-  { value: 'UCREA', label: 'UCREA' },
-  { value: 'BRIGHT_IG', label: 'Bright I.G' },
-  { value: 'BLACK_HOLE', label: 'Black Hole' },
-];
-
-const LIFECYCLES = [
-  { value: 'admitted', label: 'Đã nhận' },
-  { value: 'active', label: 'Đang học' },
-  { value: 'on_hold', label: 'Tạm dừng' },
-  { value: 'transferred', label: 'Chuyển' },
-  { value: 'withdrawn', label: 'Nghỉ' },
-  { value: 'completed', label: 'Hoàn thành' },
-];
+const LIFECYCLES: Record<string, string> = {
+  admitted: 'Đã nhận',
+  active: 'Đang học',
+  on_hold: 'Tạm dừng',
+  transferred: 'Chuyển',
+  withdrawn: 'Nghỉ',
+  completed: 'Hoàn thành',
+};
 
 const LIFECYCLE_COLOR: Record<string, string> = {
   admitted: 'blue',
@@ -55,21 +50,22 @@ export function StudentsPanel() {
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [loadError, setLoadError] = useState('');
 
+  // Detail navigation — null = show list, string = show student detail
+  const [detailStudentId, setDetailStudentId] = useState<string | null>(null);
+
   // Filters
   const [facilityId, setFacilityId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
-  // Edit modal
+  // Edit modal — restricted to fullName + dateOfBirth (data-correction fields only)
   const [editTarget, setEditTarget] = useState<StudentT | null>(null);
   const [editBusy, setEditBusy] = useState(false);
 
   const editForm = useForm({
     initialValues: {
       fullName: '',
-      program: '' as 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE' | '',
       dateOfBirth: '',
-      lifecycle: '' as string,
     },
   });
 
@@ -97,6 +93,16 @@ export function StudentsPanel() {
       .catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
   }, [load]);
 
+  // Show detail view when a student is selected
+  if (detailStudentId) {
+    return (
+      <StudentDetailPanel
+        studentId={detailStudentId}
+        onBack={() => setDetailStudentId(null)}
+      />
+    );
+  }
+
   // Client-side filtering
   const filtered = students.filter((s) => {
     if (facilityId && String(s.facilityId) !== facilityId) return false;
@@ -116,9 +122,7 @@ export function StudentsPanel() {
     setEditTarget(s);
     editForm.setValues({
       fullName: s.fullName,
-      program: s.program as 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE',
       dateOfBirth: s.dateOfBirth ? new Date(s.dateOfBirth).toISOString().split('T')[0] : '',
-      lifecycle: s.lifecycle ?? '',
     });
   }
 
@@ -129,17 +133,7 @@ export function StudentsPanel() {
       await trpc.student.update.mutate({
         id: editTarget.id,
         fullName: values.fullName.trim() || undefined,
-        program: (values.program || undefined) as 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE' | undefined,
         dateOfBirth: values.dateOfBirth ? values.dateOfBirth : null,
-        lifecycle: (values.lifecycle ||
-          undefined) as
-          | 'admitted'
-          | 'active'
-          | 'on_hold'
-          | 'transferred'
-          | 'withdrawn'
-          | 'completed'
-          | undefined,
       });
       notifySuccess('Đã cập nhật hồ sơ học sinh');
       setEditTarget(null);
@@ -211,7 +205,7 @@ export function StudentsPanel() {
         )}
         {loadState === 'empty' && (
           <Text c="dimmed" ta="center" py="xl">
-            Chưa có học sinh nào. Hãy tạo học sinh đầu tiên.
+            Chưa có học sinh nào.
           </Text>
         )}
         {loadState === 'ok' && paged.length === 0 && (
@@ -235,7 +229,7 @@ export function StudentsPanel() {
               <Table.Tbody>
                 {paged.map((s) => {
                   const fac = facilities.find((f) => f.id === s.facilityId);
-                  const lc = LIFECYCLES.find((l) => l.value === s.lifecycle);
+                  const lcLabel = LIFECYCLES[s.lifecycle ?? ''] ?? s.lifecycle ?? '—';
                   return (
                     <Table.Tr key={s.id}>
                       <Table.Td>
@@ -255,7 +249,7 @@ export function StudentsPanel() {
                           variant="dot"
                           color={LIFECYCLE_COLOR[s.lifecycle ?? ''] ?? 'gray'}
                         >
-                          {lc?.label ?? s.lifecycle ?? '—'}
+                          {lcLabel}
                         </Badge>
                       </Table.Td>
                       <Table.Td>
@@ -264,13 +258,23 @@ export function StudentsPanel() {
                         </Text>
                       </Table.Td>
                       <Table.Td>
-                        <Button
-                          size="compact-xs"
-                          variant="subtle"
-                          onClick={() => openEdit(s)}
-                        >
-                          Sửa
-                        </Button>
+                        <Group gap={4} wrap="nowrap">
+                          <Button
+                            size="compact-xs"
+                            variant="subtle"
+                            leftSection={<IconExternalLink size={12} />}
+                            onClick={() => setDetailStudentId(s.id)}
+                          >
+                            Chi tiết
+                          </Button>
+                          <Button
+                            size="compact-xs"
+                            variant="subtle"
+                            onClick={() => openEdit(s)}
+                          >
+                            Sửa
+                          </Button>
+                        </Group>
                       </Table.Td>
                     </Table.Tr>
                   );
@@ -286,9 +290,7 @@ export function StudentsPanel() {
         )}
       </Card>
 
-
-
-      {/* ─── Edit modal ── */}
+      {/* ─── Edit modal — data-correction only: fullName + dateOfBirth ── */}
       <Modal
         opened={!!editTarget}
         onClose={() => setEditTarget(null)}
@@ -299,18 +301,14 @@ export function StudentsPanel() {
         <form onSubmit={editForm.onSubmit(onEdit)}>
           <Stack>
             <TextInput label="Họ tên" {...editForm.getInputProps('fullName')} />
-            <Select label="Chương trình" data={PROGRAMS} {...editForm.getInputProps('program')} />
             <TextInput
               label="Ngày sinh"
               placeholder="YYYY-MM-DD hoặc để trống để xóa"
               {...editForm.getInputProps('dateOfBirth')}
             />
-            <Select
-              label="Vòng đời"
-              data={LIFECYCLES}
-              {...editForm.getInputProps('lifecycle')}
-              clearable
-            />
+            <Text size="xs" c="dimmed">
+              Đổi chương trình: thực hiện qua phiếu thu. Đổi vòng đời: thực hiện qua Chăm sóc KH.
+            </Text>
             <Group justify="flex-end" mt="xs">
               <Button variant="subtle" onClick={() => setEditTarget(null)}>
                 Hủy

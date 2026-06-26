@@ -94,7 +94,9 @@ export const scheduleRouter = router({
           orderBy: [{ sessionDate: 'asc' }, { startTime: 'asc' }],
         });
 
-        // ClassSession has no Prisma relation to Room — resolve room names in one secondary query.
+        // Resolve room names via a secondary query (ClassSession.roomId FK added in migration
+        // 20260627010000; Prisma include would work but a batched secondary query avoids
+        // pulling full Room rows for each session when only the name is needed).
         const roomIds = [...new Set(sessions.map((s) => s.roomId).filter(Boolean))] as string[];
         const rooms =
           roomIds.length > 0
@@ -147,9 +149,23 @@ export const scheduleRouter = router({
         const existingKeys = new Set(existing.map((s) => `${dateKey(s.sessionDate)}|${s.startTime}`));
         const fresh = candidates.filter((c) => !existingKeys.has(`${c.sessionDate}|${c.startTime}`));
 
-        // Trùng lịch (room/teacher) so với mọi buổi chưa hủy trong cùng cơ sở.
+        // Không có buổi mới (re-run idempotent) → không có gì để kiểm tra/tạo.
+        // Phải return sớm trước reduce bên dưới vì reduce không có initial value sẽ ném trên mảng rỗng.
+        if (fresh.length === 0) {
+          return { created: 0, skipped: candidates.length };
+        }
+
+        // Trùng lịch (room/teacher) so với buổi chưa hủy trong cùng cơ sở, giới hạn trong
+        // cửa sổ ngày của các buổi mới — tránh nạp toàn bộ lịch sử cơ sở (Bug A fix).
+        const candidateDates = fresh.map((c) => new Date(c.sessionDate));
+        const windowMin = candidateDates.reduce((a, b) => (a < b ? a : b));
+        const windowMax = candidateDates.reduce((a, b) => (a > b ? a : b));
         const facilitySessions = await tx.classSession.findMany({
-          where: { facilityId: batch.facilityId, status: { not: 'cancelled' } },
+          where: {
+            facilityId: batch.facilityId,
+            status: { not: 'cancelled' },
+            sessionDate: { gte: windowMin, lte: windowMax },
+          },
           select: { sessionDate: true, startTime: true, endTime: true, roomId: true, teacherId: true },
         });
         const conflicts = detectConflicts(
