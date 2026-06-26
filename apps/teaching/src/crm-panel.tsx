@@ -79,8 +79,14 @@ export function CrmPanel() {
 
   const load = useCallback(() => {
     if (!facilityId) return;
-    trpc.crm.opportunityList.query({ facilityId }).then(setOpps).catch(() => setOpps([]));
-    trpc.crm.testList.query({ facilityId }).then(setTests).catch(() => setTests([]));
+    trpc.crm.opportunityList
+      .query({ facilityId })
+      .then(setOpps)
+      .catch((e) => { setOpps([]); notifyError(e, 'Không tải được danh sách cơ hội'); });
+    trpc.crm.testList
+      .query({ facilityId })
+      .then(setTests)
+      .catch((e) => { setTests([]); notifyError(e, 'Không tải được lịch test'); });
   }, [facilityId]);
   useEffect(load, [load]);
 

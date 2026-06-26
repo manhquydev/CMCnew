@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Card, Center, Group, Loader, SimpleGrid, Stack, Text } from '@mantine/core';
+import { Alert, Badge, Card, Center, Group, Loader, SimpleGrid, Stack, Text } from '@mantine/core';
 import { trpc } from './client.js';
 
 type EarnedBadge = Awaited<ReturnType<typeof trpc.badge.myBadges.query>>[number];
@@ -10,18 +10,20 @@ const SOURCE_LABEL: Record<string, string> = { auto: 'Tự đạt', manual: 'GV 
  * `refreshKey` bumps it on a realtime badge_awarded notification. */
 export function BadgeShelf({ studentId, refreshKey = 0 }: { studentId: string; refreshKey?: number }) {
   const [badges, setBadges] = useState<EarnedBadge[] | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(() => {
     setBadges(null);
+    setLoadError(false);
     trpc.badge.myBadges
       .query({ studentId })
       .then(setBadges)
-      .catch(() => setBadges([]));
+      .catch(() => setLoadError(true));
   }, [studentId]);
   useEffect(load, [load, refreshKey]);
 
-  // null = still loading; [] = loaded but empty
-  if (badges === null) {
+  // null = still loading; loadError = fetch failed; [] = loaded but empty
+  if (badges === null && !loadError) {
     return (
       <Center py="md">
         <Loader size="sm" />
@@ -29,7 +31,15 @@ export function BadgeShelf({ studentId, refreshKey = 0 }: { studentId: string; r
     );
   }
 
-  if (badges.length === 0) {
+  if (loadError) {
+    return (
+      <Alert color="red" variant="light">
+        Không thể tải huy hiệu — thử lại sau.
+      </Alert>
+    );
+  }
+
+  if ((badges ?? []).length === 0) {
     return (
       <Card withBorder>
         <Text c="dimmed" size="sm">
@@ -41,7 +51,7 @@ export function BadgeShelf({ studentId, refreshKey = 0 }: { studentId: string; r
 
   return (
     <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }}>
-      {badges.map((b) => (
+      {(badges ?? []).map((b) => (
         <Card key={b.id} withBorder padding="sm">
           <Stack gap={4} align="center" ta="center">
             {b.badge.iconUrl ? (

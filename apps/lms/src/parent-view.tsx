@@ -215,6 +215,95 @@ function MeetingsCard({ refreshKey }: { refreshKey: number }) {
   );
 }
 
+type ParentNotif = Awaited<ReturnType<typeof trpc.notification.list.query>>[number];
+
+/** Human-readable label for each notification type shown in the parent inbox. */
+function describeNotif(n: ParentNotif): { icon: string; text: string } {
+  const p = n.payload as Record<string, unknown>;
+  switch (n.type) {
+    case 'grade_published': {
+      const score = p.score != null ? ` ${p.score} điểm` : '';
+      const stars = p.starsEarned ? ` · +${p.starsEarned} ⭐` : '';
+      return { icon: '📝', text: `Bài "${p.exercise ?? ''}" đã có điểm:${score}${stars}` };
+    }
+    case 'badge_awarded':
+      return { icon: '🏅', text: `Con đạt huy hiệu "${p.badge ?? ''}"` };
+    case 'level_up':
+      return { icon: '🎉', text: `Con lên cấp độ ${p.toLevel ?? ''}` };
+    default:
+      return { icon: '🔔', text: 'Thông báo mới' };
+  }
+}
+
+/**
+ * Inline parent notification list — shows all LMS notifications from the parent's
+ * session inbox (grade published, badge earned, level-up events for their child).
+ * Refresh-keyed so it re-fetches when a live event arrives.
+ */
+function ParentNotifCard({ refreshKey }: { refreshKey: number }) {
+  const [items, setItems] = useState<ParentNotif[] | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setItems(null);
+    setError('');
+    trpc.notification.list
+      .query()
+      .then(setItems)
+      .catch((e) => {
+        setError('Không tải được thông báo: ' + (e instanceof Error ? e.message : ''));
+        notifyError(e, 'Tải thông báo thất bại');
+      });
+  }, [refreshKey]);
+
+  if (error) return <Alert color="red">{error}</Alert>;
+  if (items === null) {
+    return (
+      <Center py="md">
+        <Loader size="sm" />
+      </Center>
+    );
+  }
+  if (items.length === 0) {
+    return (
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text c="dimmed" size="sm" ta="center">Chưa có thông báo nào.</Text>
+      </Card>
+    );
+  }
+
+  return (
+    <Card radius="lg" p={0} style={{ border: '1px solid var(--cmc-border)' }}>
+      <Text size="sm" fw={600} p="md" style={{ color: 'var(--cmc-text-2)', borderBottom: '1px solid var(--cmc-border-faint)' }}>
+        Thông báo ({items.length})
+      </Text>
+      <Stack gap={0}>
+        {items.map((n) => {
+          const d = describeNotif(n);
+          return (
+            <Group
+              key={n.id}
+              align="flex-start"
+              wrap="nowrap"
+              px="md"
+              py="xs"
+              bg={n.readAt ? undefined : 'var(--mantine-color-cmc-0)'}
+              style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}
+            >
+              <Text>{d.icon}</Text>
+              <div style={{ flex: 1 }}>
+                <Text size="sm">{d.text}</Text>
+                <Text c="dimmed" size="xs">{fmtDateTime(n.createdAt)}</Text>
+              </div>
+              {!n.readAt && <Badge size="xs" color="red" variant="filled" circle />}
+            </Group>
+          );
+        })}
+      </Stack>
+    </Card>
+  );
+}
+
 function ChildDashboard({
   childId,
   refreshKey,
@@ -475,6 +564,7 @@ function ChildDashboard({
   if (tab === 'notifications') {
     return (
       <Stack>
+        <ParentNotifCard refreshKey={refreshKey} />
         <LevelHistoryCard childId={childId} refreshKey={refreshKey} />
       </Stack>
     );

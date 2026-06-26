@@ -53,11 +53,17 @@ export function CskhPanel() {
   const [lcValue, setLcValue] = useState<string | null>(null);
 
   useEffect(() => {
-    trpc.facility.list.query().then((fs) => {
-      setFacilities(fs);
-      setFacilityId((cur) => cur ?? fs[0]?.id ?? null);
-    });
-    trpc.student.list.query().then(setStudents).catch(() => setStudents([]));
+    trpc.facility.list
+      .query()
+      .then((fs) => {
+        setFacilities(fs);
+        setFacilityId((cur) => cur ?? fs[0]?.id ?? null);
+      })
+      .catch((e) => { setFacilities([]); notifyError(e, 'Tải danh sách cơ sở thất bại'); });
+    trpc.student.list
+      .query()
+      .then(setStudents)
+      .catch((e) => { setStudents([]); notifyError(e, 'Tải danh sách học sinh thất bại'); });
   }, []);
 
   const studentName = useCallback(
@@ -67,7 +73,10 @@ export function CskhPanel() {
 
   const load = useCallback(() => {
     if (!facilityId) return;
-    trpc.afterSale.list.query({ facilityId }).then(setCases).catch(() => setCases([]));
+    trpc.afterSale.list
+      .query({ facilityId })
+      .then(setCases)
+      .catch((e) => { setCases([]); notifyError(e, 'Tải danh sách ca CSKH thất bại'); });
   }, [facilityId]);
   useEffect(load, [load]);
 

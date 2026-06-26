@@ -25,11 +25,17 @@ export function CertificatePanel() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    trpc.facility.list.query().then((fs) => {
-      setFacilities(fs);
-      setFacilityId((cur) => cur ?? fs[0]?.id ?? null);
-    });
-    trpc.student.list.query().then(setStudents).catch(() => setStudents([]));
+    trpc.facility.list
+      .query()
+      .then((fs) => {
+        setFacilities(fs);
+        setFacilityId((cur) => cur ?? fs[0]?.id ?? null);
+      })
+      .catch((e) => notifyError(e, 'Tải danh sách cơ sở thất bại'));
+    trpc.student.list
+      .query()
+      .then(setStudents)
+      .catch((e) => { setStudents([]); notifyError(e, 'Tải danh sách học sinh thất bại'); });
   }, []);
 
   const studentName = useCallback(
@@ -39,7 +45,10 @@ export function CertificatePanel() {
 
   const load = useCallback(() => {
     if (!facilityId) return;
-    trpc.certificate.list.query({ facilityId }).then(setCerts).catch(() => setCerts([]));
+    trpc.certificate.list
+      .query({ facilityId })
+      .then(setCerts)
+      .catch((e) => { setCerts([]); notifyError(e, 'Tải chứng chỉ thất bại'); });
   }, [facilityId]);
   useEffect(load, [load]);
 

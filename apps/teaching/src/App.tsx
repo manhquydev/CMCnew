@@ -905,7 +905,10 @@ function Workspace({
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   useEffect(() => {
     if (!facilityId) return;
-    trpc.user.listTeachers.query({ facilityId }).then(setTeachers).catch(() => setTeachers([]));
+    trpc.user.listTeachers
+      .query({ facilityId })
+      .then(setTeachers)
+      .catch((e) => { setTeachers([]); notifyError(e, 'Không tải được danh sách giáo viên'); });
   }, [facilityId]);
 
   // Apply navAction when it changes (ts acts as a change token)

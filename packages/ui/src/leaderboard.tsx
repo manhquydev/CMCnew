@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Card, Center, Loader, Stack, Table, Text } from '@mantine/core';
+import { Alert, Badge, Card, Center, Loader, Stack, Table, Text } from '@mantine/core';
 import { trpc } from './client.js';
 
 type Board = Awaited<ReturnType<typeof trpc.leaderboard.forStudent.query>>[number];
@@ -8,18 +8,20 @@ type Board = Awaited<ReturnType<typeof trpc.leaderboard.forStudent.query>>[numbe
  * decision: in-class scope, names hidden for classmates). `refreshKey` re-pulls on a star earn. */
 export function Leaderboard({ studentId, refreshKey = 0 }: { studentId: string; refreshKey?: number }) {
   const [boards, setBoards] = useState<Board[] | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(() => {
     setBoards(null);
+    setLoadError(false);
     trpc.leaderboard.forStudent
       .query({ studentId })
       .then(setBoards)
-      .catch(() => setBoards([]));
+      .catch(() => setLoadError(true));
   }, [studentId]);
   useEffect(load, [load, refreshKey]);
 
-  // null = still loading; [] = loaded but no classes
-  if (boards === null) {
+  // null = still loading; loadError = fetch failed; [] = loaded but no classes
+  if (boards === null && !loadError) {
     return (
       <Center py="md">
         <Loader size="sm" />
@@ -27,7 +29,15 @@ export function Leaderboard({ studentId, refreshKey = 0 }: { studentId: string; 
     );
   }
 
-  if (boards.length === 0) {
+  if (loadError) {
+    return (
+      <Alert color="red" variant="light">
+        Không thể tải bảng xếp hạng — thử lại sau.
+      </Alert>
+    );
+  }
+
+  if ((boards ?? []).length === 0) {
     return (
       <Card withBorder>
         <Text c="dimmed" size="sm">
@@ -39,7 +49,7 @@ export function Leaderboard({ studentId, refreshKey = 0 }: { studentId: string; 
 
   return (
     <Stack>
-      {boards.map((b) => (
+      {(boards ?? []).map((b) => (
         <Card key={b.classBatchId} withBorder>
           <Text fw={600} mb="xs">
             {b.className} <Text span c="dimmed" size="sm">· {b.classCode}</Text>
