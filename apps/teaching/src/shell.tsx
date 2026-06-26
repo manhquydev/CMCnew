@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AppShell, Button, Group, NavLink, Text, ActionIcon, ScrollArea, Box, Avatar } from '@mantine/core';
+import { AppShell, Badge, Button, Group, NavLink, Text, ActionIcon, Popover, ScrollArea, Box, Stack, Avatar, UnstyledButton } from '@mantine/core';
 import {
   IconCalendar,
   IconSchool,
@@ -19,7 +19,8 @@ import {
   IconCurrencyDong,
   IconBell,
 } from '@tabler/icons-react';
-import { useSession } from '@cmc/ui';
+import { useSession, useStaffNotif } from '@cmc/ui';
+import type { StaffNotifItem } from '@cmc/ui';
 
 export type SectionKey =
   | 'schedule'
@@ -130,6 +131,54 @@ const SECTION_LABEL: Record<SectionKey, string> = {
   payroll: 'Bảng lương',
 };
 
+// ─── Staff notification dropdown ──────────────────────────────────────────────
+
+function StaffNotifDropdown({
+  items,
+  onMarkAll,
+  isMarkingAll,
+}: {
+  items: StaffNotifItem[];
+  onMarkAll: () => void;
+  isMarkingAll: boolean;
+}) {
+  return (
+    <Stack gap={0} style={{ minWidth: 300 }}>
+      <Group
+        justify="space-between"
+        px="sm"
+        py="xs"
+        style={{ borderBottom: '1px solid var(--cmc-border)' }}
+      >
+        <Text size="sm" fw={600}>Thông báo</Text>
+        <Button variant="subtle" size="xs" onClick={onMarkAll} loading={isMarkingAll}>
+          Đọc tất cả
+        </Button>
+      </Group>
+      <ScrollArea h={320}>
+        {items.length === 0 ? (
+          <Text size="sm" c="dimmed" ta="center" py="xl">Không có thông báo mới</Text>
+        ) : (
+          items.map((n) => (
+            <Box
+              key={n.id}
+              px="sm"
+              py="xs"
+              style={{
+                backgroundColor: n.readAt ? 'transparent' : 'var(--cmc-brand-muted)',
+                borderBottom: '1px solid var(--cmc-border-faint)',
+              }}
+            >
+              <Text size="sm" fw={n.readAt ? 400 : 500}>{n.title}</Text>
+              <Text size="xs" c="dimmed" lineClamp={2}>{n.body}</Text>
+            </Box>
+          ))
+        )}
+      </ScrollArea>
+    </Stack>
+  );
+}
+
 interface ShellProps {
   activeSection: SectionKey;
   onSectionChange: (key: SectionKey) => void;
@@ -139,7 +188,8 @@ interface ShellProps {
 export function Shell({ activeSection, onSectionChange, children }: ShellProps) {
   const { me, logout } = useSession();
   const [mobileOpened, setMobileOpened] = useState(false);
-
+  const facilityId = me.facilityIds[0] ?? null;
+  const { unreadCount, notifications, fetchList, markAllRead, isMarkingAll } = useStaffNotif(facilityId);
 
   const canPayroll = me.isSuperAdmin || me.roles.includes('hr') || me.roles.includes('ke_toan');
   // All authenticated teachers/staff can see their own payslips
@@ -185,30 +235,64 @@ export function Shell({ activeSection, onSectionChange, children }: ShellProps) 
               </svg>
             </ActionIcon>
             <Group gap={8}>
-              <Box
-                style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 6,
-                  backgroundColor: 'var(--cmc-brand)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+              <Text
+                fw={700}
+                style={{ color: 'var(--cmc-brand)', fontSize: 18, letterSpacing: '-0.02em' }}
               >
-                <Text size="xs" fw={700} style={{ color: '#fff', lineHeight: 1 }}>
-                  C
-                </Text>
-              </Box>
+                CMC
+              </Text>
               <Text size="sm" fw={600} style={{ color: 'var(--cmc-text)' }}>
                 {SECTION_LABEL[activeSection]}
               </Text>
             </Group>
           </Group>
           <Group gap="sm">
-            <ActionIcon variant="subtle" radius="md" aria-label="Thông báo">
-              <IconBell size={18} stroke={ICON_STROKE} />
-            </ActionIcon>
+            <Popover width={320} position="bottom-end" withArrow>
+              <Popover.Target>
+                <UnstyledButton
+                  aria-label="Thông báo"
+                  onClick={fetchList}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 36,
+                    height: 36,
+                    borderRadius: 10,
+                    color: 'var(--cmc-text-muted)',
+                    position: 'relative',
+                    transition: 'background-color 200ms',
+                  }}
+                >
+                  <IconBell size={20} stroke={ICON_STROKE} />
+                  {unreadCount > 0 && (
+                    <Badge
+                      size="xs"
+                      color="red"
+                      variant="filled"
+                      style={{
+                        position: 'absolute',
+                        top: 4,
+                        right: 4,
+                        minWidth: 16,
+                        height: 16,
+                        padding: '0 4px',
+                        fontSize: 9,
+                      }}
+                    >
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Badge>
+                  )}
+                </UnstyledButton>
+              </Popover.Target>
+              <Popover.Dropdown style={{ padding: 0 }}>
+                <StaffNotifDropdown
+                  items={notifications}
+                  onMarkAll={markAllRead}
+                  isMarkingAll={isMarkingAll}
+                />
+              </Popover.Dropdown>
+            </Popover>
             <Avatar
               size={32}
               radius="xl"
