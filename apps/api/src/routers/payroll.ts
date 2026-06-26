@@ -180,6 +180,9 @@ export const payrollRouter = router({
         variableNote: z.string().optional(),
         insuranceDeduction: z.number().int().nonnegative().default(0),
         dependents: z.number().int().min(0).optional(),
+      }).refine((v) => v.workdays <= v.standardDays, {
+        message: 'Số ngày công không được vượt quá số ngày chuẩn',
+        path: ['workdays'],
       }),
     )
     .mutation(({ ctx, input }) =>

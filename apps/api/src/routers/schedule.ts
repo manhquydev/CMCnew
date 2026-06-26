@@ -30,6 +30,9 @@ export const scheduleRouter = router({
         endTime: z.string().regex(/^\d{2}:\d{2}$/),
         roomId: z.string().uuid().optional(),
         teacherId: z.string().uuid().optional(),
+      }).refine((v) => v.startTime < v.endTime, {
+        message: 'Giờ bắt đầu phải trước giờ kết thúc',
+        path: ['endTime'],
       }),
     )
     .mutation(({ ctx, input }) =>

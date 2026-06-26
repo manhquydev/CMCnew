@@ -174,6 +174,11 @@ export const crmRouter = router({
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const before = await tx.opportunity.findUniqueOrThrow({ where: { id: input.id } });
+        // A WON deal (O5_ENROLLED + closedAt, lostReason null) has frozen commission attribution;
+        // marking it lost would corrupt the won/lost split without reversing the receipt.
+        if (before.stage === 'O5_ENROLLED' && before.closedAt) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Không thể đánh dấu mất cơ hội đã thắng' });
+        }
         if (before.closedAt && before.lostReason) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cơ hội đã đóng (mất)' });
         }

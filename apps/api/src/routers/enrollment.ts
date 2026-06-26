@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent, logStatusChange } from '@cmc/audit';
@@ -31,6 +32,15 @@ export const enrollmentRouter = router({
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const batch = await tx.classBatch.findUniqueOrThrow({ where: { id: input.classBatchId } });
+        // Friendly guard before the DB unique([classBatchId, studentId]) fires a raw P2002 (→ 500).
+        // A frontend double-submit or re-enroll of an active student returns a clean CONFLICT instead.
+        const dup = await tx.enrollment.findFirst({
+          where: { classBatchId: input.classBatchId, studentId: input.studentId, archivedAt: null },
+          select: { id: true },
+        });
+        if (dup) {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Học sinh đã được ghi danh vào lớp này' });
+        }
         const activeCount = await tx.enrollment.count({
           where: { classBatchId: input.classBatchId, status: 'active', archivedAt: null },
         });

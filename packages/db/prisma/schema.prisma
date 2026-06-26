@@ -473,7 +473,8 @@ model Exercise {
   id           String         @id @default(uuid()) @db.Uuid
   facilityId   Int            @map("facility_id")
   classBatchId String         @map("class_batch_id") @db.Uuid
-  batch        ClassBatch     @relation(fields: [classBatchId], references: [id], onDelete: Cascade)
+  // Restrict: xóa lớp KHÔNG được cuốn theo bài tập → bài nộp → điểm (chặn mất điểm dây chuyền).
+  batch        ClassBatch     @relation(fields: [classBatchId], references: [id], onDelete: Restrict)
   title        String
   description  String?
   basePdfRef   String?        @map("base_pdf_ref")
@@ -554,7 +555,11 @@ model Gift {
   @@map("gift")
 }
 
-/// Sổ cái sao (số dư = SUM(amount)). @@unique(type, reference) → earn/redeem idempotent.
+/// Sổ cái sao (số dư = SUM(amount)). Idempotency = partial unique index (type, reference)
+/// WHERE reference IS NOT NULL, quản lý bằng raw SQL trong migration — Prisma @@unique không biểu
+/// đạt được partial index, và (type, NULL) trong Postgres KHÔNG bị @@unique chặn (mỗi NULL là distinct
+/// → cho phép trùng vô hạn). Các loại tự động (homework_completed/gift_redeemed/gift_rejected_refund)
+/// luôn có reference non-null nên được index bảo vệ; manual (chưa dùng) bắt buộc reference ở tRPC.
 model StarTransaction {
   id         String      @id @default(uuid()) @db.Uuid
   facilityId Int         @map("facility_id")
@@ -565,7 +570,7 @@ model StarTransaction {
   reference  String?
   createdAt  DateTime    @default(now()) @map("created_at")
 
-  @@unique([type, reference])
+  @@index([type, reference])
   @@index([studentId, createdAt])
   @@index([facilityId])
   @@map("star_transaction")
@@ -779,6 +784,8 @@ model CoursePrice {
   createdById   String?   @map("created_by_id") @db.Uuid
   createdAt     DateTime  @default(now()) @map("created_at")
 
+  // Một giá hiệu lực duy nhất cho mỗi (cơ sở, khóa, ngày hiệu lực) → tránh giá không xác định.
+  @@unique([facilityId, courseId, effectiveFrom])
   @@index([facilityId])
   @@index([courseId, effectiveFrom])
   @@map("course_price")
@@ -908,7 +915,8 @@ model Opportunity {
   id          String           @id @default(uuid()) @db.Uuid
   facilityId  Int              @map("facility_id")
   contactId   String           @map("contact_id") @db.Uuid
-  contact     Contact          @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  // Restrict: xóa Contact KHÔNG được cuốn theo opportunity (giữ lịch sử hoa hồng/won-lost).
+  contact     Contact          @relation(fields: [contactId], references: [id], onDelete: Restrict)
   studentName String?          @map("student_name")
   program     Program?
   stage       OpportunityStage @default(O1_LEAD)
@@ -1159,8 +1167,9 @@ model SalaryRate {
   createdById    String?   @map("created_by_id") @db.Uuid
   createdAt      DateTime  @default(now()) @map("created_at")
 
+  // Một mức lương hiệu lực duy nhất cho mỗi (nhân sự, ngày hiệu lực) → payslip xác định.
+  @@unique([userId, effectiveFrom])
   @@index([facilityId])
-  @@index([userId, effectiveFrom])
   @@map("salary_rate")
 }
 
