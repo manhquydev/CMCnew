@@ -22,7 +22,7 @@
 |---|-------|--------|------|---------|
 | 01 | Critical security & stability | ✅ DONE (verified + review fixes) | HIGH | — |
 | 02 | Data integrity: logic bugs ✅ + schema ✅ (RLS deferred) | HIGH | — |
-| 03 | KPI system: Callio + manual override + audit | planned | HIGH | 01 |
+| 03 | KPI system: Callio + manual override + audit | ✅ DONE (27 tests, committed 2fe695c) | HIGH | 01 |
 | 04 | Teaching operational UI (6 nav items) | planned | NORMAL | 02 |
 | 05 | LMS student course tab + reward fixes | planned | NORMAL | 02 |
 | 06 | Backend↔UI feature completion | planned | NORMAL | 02 |
@@ -41,6 +41,12 @@
 1. **KPI router CHƯA tồn tại** (~24 test fail): kpiEvalStart/kpiAutoPrefill/... gọi trên `trpc.payroll` không có; bảng KpiScore/KpiEvaluation ĐÃ có (migration phase4/5). PAY-KPI-* stories "PASS" là stale → Phase 03 wire router.
 2. **Integration test KHÔNG hermetic** (~8 fail: badge/payroll-bulk/salary-grade/commission-autofeed): pass khi chạy LẺ, fail trong full suite do state tích lũy giữa file (share 1 DB, không rollback/cleanup per-file). Test-infra debt, không phải bug sản phẩm.
 3. crm-hooks lead-ingest: 1 fail do CRM_LEAD_TOKEN env trong full-suite context.
+
+**Phase 03 ✅ (commit 2fe695c)** — KPI workflow start→submit→confirm→approve (SoD), kpiAutoPrefill từ data thật, kpiOverride tree-authority+audit, kpiList/Get/SetAuto, syncCallMetrics, payslipCompute đọc override??auto. 27 KPI test xanh; full-suite 32→7 fail (140/147 pass). Code-reviewed (hard-gate); fix MED-1 (chặn 500 từ employee submit) + LOW-1 (div-zero). Test-isolation fixed (vitest serial).
+- Commission auto-feed (test-mandated, mirror commissionPreview design) giữ nguyên.
+- **Open product questions (review, behavior khớp design hiện có → chưa đổi):** (a) enforce budget cap tại pay-time hay chỉ surface? (b) retention default trước khi CRM feed? (c) kpiSetAuto có nên qua SoD? (d) cho phép kpiOverride trên sheet đã approved?
+
+**Remaining 7 pre-existing fails:** payroll-bulk-pay-byid (4, input-shape mismatch), salary-grade-change-audit (2, grade-audit chưa impl), crm-hooks lead-token (1).
 
 ## Acceptance (toàn chương trình)
 
