@@ -3,6 +3,8 @@
   "assessment.termList": ["giao_vien", "head_teacher", "quan_ly"],
   "assessment.termCreate": ["head_teacher", "quan_ly"],
   "assessment.termUpdate": ["head_teacher", "quan_ly"],
+  "assessment.termLock": ["head_teacher", "quan_ly"],
+  "assessment.termUnlock": ["head_teacher", "quan_ly"],
   "assessment.upsertQualitative": ["giao_vien", "head_teacher", "quan_ly"],
   "assessment.computeFinalGrade": ["giao_vien", "head_teacher", "quan_ly"],
   "afterSale.list": ["cskh", "quan_ly"],

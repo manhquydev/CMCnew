@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { trpc, notifyError } from '@cmc/ui';
+import { trpc, notifyError, Chatter } from '@cmc/ui';
 import {
   ActionIcon,
   Badge,
@@ -426,6 +426,7 @@ export function StudentDetailPanel({
             <Tabs.Tab value="grades">
               Điểm {detail.finalGrades.length > 0 && `(${detail.finalGrades.length})`}
             </Tabs.Tab>
+            <Tabs.Tab value="history">Lịch sử</Tabs.Tab>
           </Tabs.List>
 
           <Tabs.Panel value="info" pt="md">
@@ -450,6 +451,12 @@ export function StudentDetailPanel({
 
           <Tabs.Panel value="grades" pt="md">
             <GradesTab s={detail} />
+          </Tabs.Panel>
+
+          <Tabs.Panel value="history" pt="md">
+            {/* Chatter sidebar: Odoo-style timeline of all audit events + staff notes on this student.
+                entityType="student" is whitelisted in the audit router's NOTE_TARGETS gate. */}
+            <Chatter entityType="student" entityId={studentId} />
           </Tabs.Panel>
         </Tabs>
       )}

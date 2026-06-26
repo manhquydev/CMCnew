@@ -71,6 +71,12 @@ export interface FinalGradeInput {
   quant: QuantComponents;
   formula: QuantFormula;
   passMark?: number; // 0..10; default 5
+  /** Per-template blend weight override. When supplied (both columns non-null in
+   * GradingTemplate), these values take priority over programWeights(). When absent
+   * (undefined), programWeights(program) provides the canonical charter constants.
+   * Callers MUST pass undefined — not {1,0} — when no explicit override is stored,
+   * so that charter changes in programWeights() propagate automatically. */
+  weights?: ProgramWeights;
 }
 
 export interface FinalGradeResult {
@@ -82,9 +88,12 @@ export interface FinalGradeResult {
 
 /** Compose the FinalGrade for (student, program, period). Blends qualitative + quantitative by
  * program weight, renormalising over present parts. `complete` is false while a weighted part is
- * still missing — the caller can store a provisional finalScore but flag it as not final. */
+ * still missing — the caller can store a provisional finalScore but flag it as not final.
+ *
+ * When `input.weights` is supplied (read from GradingTemplate in the DB), those values take
+ * priority over the built-in programWeights() constants — enabling config-as-code overrides. */
 export function computeFinalGrade(input: FinalGradeInput): FinalGradeResult {
-  const w = programWeights(input.program);
+  const w = input.weights ?? programWeights(input.program);
   const quant = quantitativeScore(input.quant, input.formula);
   const qual = input.qualitativeScore ?? null;
 

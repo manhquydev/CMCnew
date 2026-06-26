@@ -13,7 +13,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconPlus } from '@tabler/icons-react';
+import { IconPlus, IconLock, IconLockOpen } from '@tabler/icons-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 // Explicit local shape to avoid deep AppRouter type inference.
@@ -25,6 +25,7 @@ type TermRow = {
   startDate: Date | string;
   endDate: Date | string;
   program?: string | null;
+  isLocked: boolean;
 };
 
 // Cast assessment sub-router to a minimal typed interface.
@@ -47,6 +48,8 @@ const assessmentApi = trpc.assessment as unknown as {
       endDate?: string;
     }) => Promise<TermRow>;
   };
+  termLock: { mutate: (i: { id: string }) => Promise<TermRow> };
+  termUnlock: { mutate: (i: { id: string }) => Promise<TermRow> };
 };
 
 const fmt = (d: Date | string) =>
@@ -241,6 +244,7 @@ export function TermsPanel({ facilityId }: { facilityId: number }) {
   const [loadErr, setLoadErr] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<TermRow | null>(null);
+  const [lockingId, setLockingId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -253,6 +257,24 @@ export function TermsPanel({ facilityId }: { facilityId: number }) {
         setLoading(false);
       });
   }, [facilityId]);
+
+  async function toggleLock(term: TermRow) {
+    setLockingId(term.id);
+    try {
+      if (term.isLocked) {
+        await assessmentApi.termUnlock.mutate({ id: term.id });
+        notifySuccess(`Đã mở khóa kỳ "${term.periodKey}"`);
+      } else {
+        await assessmentApi.termLock.mutate({ id: term.id });
+        notifySuccess(`Đã khóa kỳ "${term.periodKey}" — không thể tính lại điểm khi đang khóa`);
+      }
+      load();
+    } catch (e: unknown) {
+      notifyError(e, term.isLocked ? 'Lỗi mở khóa kỳ học' : 'Lỗi khóa kỳ học');
+    } finally {
+      setLockingId(null);
+    }
+  }
 
   useEffect(() => { load(); }, [load]);
 
@@ -294,6 +316,7 @@ export function TermsPanel({ facilityId }: { facilityId: number }) {
               <Table.Th style={TH_STYLE}>Tên</Table.Th>
               <Table.Th style={TH_STYLE}>Bắt đầu</Table.Th>
               <Table.Th style={TH_STYLE}>Kết thúc</Table.Th>
+              <Table.Th style={TH_STYLE}>Trạng thái</Table.Th>
               <Table.Th style={TH_STYLE} />
             </Table.Tr>
           </Table.Thead>
@@ -307,9 +330,33 @@ export function TermsPanel({ facilityId }: { facilityId: number }) {
                 <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(t.startDate)}</Table.Td>
                 <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(t.endDate)}</Table.Td>
                 <Table.Td>
-                  <Button size="compact-xs" variant="subtle" onClick={() => setEditing(t)}>
-                    Sửa
-                  </Button>
+                  {t.isLocked ? (
+                    <Badge size="xs" color="red" variant="dot">Đã khóa</Badge>
+                  ) : (
+                    <Badge size="xs" color="green" variant="dot">Mở</Badge>
+                  )}
+                </Table.Td>
+                <Table.Td>
+                  <Group gap={4} wrap="nowrap">
+                    <Button
+                      size="compact-xs"
+                      variant="subtle"
+                      onClick={() => setEditing(t)}
+                      disabled={t.isLocked}
+                    >
+                      Sửa
+                    </Button>
+                    <Button
+                      size="compact-xs"
+                      variant="subtle"
+                      color={t.isLocked ? 'green' : 'red'}
+                      leftSection={t.isLocked ? <IconLockOpen size={12} /> : <IconLock size={12} />}
+                      loading={lockingId === t.id}
+                      onClick={() => void toggleLock(t)}
+                    >
+                      {t.isLocked ? 'Mở khóa' : 'Khóa'}
+                    </Button>
+                  </Group>
                 </Table.Td>
               </Table.Tr>
             ))}

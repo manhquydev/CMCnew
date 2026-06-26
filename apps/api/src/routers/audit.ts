@@ -4,6 +4,7 @@ import { withRls, type Prisma } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { getTimeline, getFollowers, logEvent, addFollower } from '@cmc/audit';
 import { router, protectedProcedure } from '../trpc.js';
+import { emitStaffNotif } from '../lib/emit-staff-notif.js';
 
 // Một ghi chú chỉ được gắn vào record có Chatter + có cơ sở. facilityId LẤY TỪ chính
 // record (qua RLS) — không bao giờ tin client gửi lên, nếu không staff cơ sở B có thể
@@ -15,6 +16,8 @@ const NOTE_TARGETS: Record<
   receipt: (tx, id) => tx.receipt.findUnique({ where: { id }, select: { facilityId: true } }),
   opportunity: (tx, id) => tx.opportunity.findUnique({ where: { id }, select: { facilityId: true } }),
   class_batch: (tx, id) => tx.classBatch.findUnique({ where: { id }, select: { facilityId: true } }),
+  // Student chatter: staff can leave notes / view history on a student record (RLS-safe).
+  student: (tx, id) => tx.student.findUnique({ where: { id }, select: { facilityId: true } }),
 };
 
 // Chatter timeline (Odoo-style) — dùng chung cho mọi record.
@@ -62,8 +65,11 @@ export const auditRouter = router({
         body: z.string().min(1),
       }),
     )
-    .mutation(({ ctx, input }) =>
-      withRls(rlsContextOf(ctx.session), async (tx) => {
+    .mutation(async ({ ctx, input }) => {
+      // Fan-out: after commit, push SSE to followers (excluding the author who already sees
+      // the note via their own UI). emitStaffNotif persists rows inside tx and returns a push
+      // function to be called after withRls resolves so no ghost notifications on tx rollback.
+      const push = await withRls(rlsContextOf(ctx.session), async (tx) => {
         const resolve = NOTE_TARGETS[input.entityType];
         if (!resolve)
           throw new TRPCError({ code: 'BAD_REQUEST', message: `Không hỗ trợ ghi chú cho '${input.entityType}'` });
@@ -79,10 +85,29 @@ export const auditRouter = router({
           body: input.body,
           actorId: ctx.session.userId,
         });
+        // Auto-follow: the person posting is now a follower of this record.
         await addFollower(tx, input.entityType, input.entityId, ctx.session.userId);
-        return { ok: true };
-      }),
-    ),
+
+        // Resolve followers (excluding the author) and prepare SSE fan-out inside the tx.
+        const followers = await getFollowers(tx, input.entityType, input.entityId);
+        const recipientIds = followers
+          .map((f) => f.userId)
+          .filter((uid) => uid !== ctx.session.userId);
+
+        return emitStaffNotif(tx, {
+          recipientIds,
+          event: 'chatter_note',
+          title: 'Ghi chú mới',
+          body: input.body.length > 100 ? input.body.slice(0, 97) + '…' : input.body,
+          data: { entityType: input.entityType, entityId: input.entityId },
+          facilityId: entity.facilityId,
+        });
+      });
+
+      // Push SSE after tx committed — no phantom notifications on rollback.
+      push();
+      return { ok: true };
+    }),
 
   follow: protectedProcedure
     .input(z.object({ entityType: z.string().min(1), entityId: z.string().min(1) }))

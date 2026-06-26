@@ -22,6 +22,8 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     termList: ['giao_vien', 'head_teacher', 'quan_ly'],
     termCreate: ['head_teacher', 'quan_ly'],
     termUpdate: ['head_teacher', 'quan_ly'],
+    termLock: ['head_teacher', 'quan_ly'],
+    termUnlock: ['head_teacher', 'quan_ly'],
     upsertQualitative: ['giao_vien', 'head_teacher', 'quan_ly'],
     computeFinalGrade: ['giao_vien', 'head_teacher', 'quan_ly'],
   },
