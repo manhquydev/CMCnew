@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { trpc, notifyError, notifySuccess } from '@cmc/ui';
 import {
   Alert,
@@ -205,13 +205,14 @@ function RewardReviewCard() {
 export function RewardsPanel() {
   const [facilities, setFacilities] = useState<{ id: number; code: string; name: string }[]>([]);
 
-  // Load facilities once on mount
-  useState(() => {
+  // Load facilities once on mount. Must be useEffect (a side effect), not useState's lazy
+  // initializer — the initializer's return value is the state, and it double-fires under StrictMode.
+  useEffect(() => {
     trpc.facility.list
       .query()
       .then((fs) => setFacilities(fs.map((f) => ({ id: f.id, code: f.code, name: f.name }))))
       .catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
-  });
+  }, []);
 
   return (
     <Stack>

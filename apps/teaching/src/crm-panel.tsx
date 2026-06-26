@@ -68,10 +68,13 @@ export function CrmPanel() {
   const [detailTarget, setDetailTarget] = useState<Opp | null>(null);
 
   useEffect(() => {
-    trpc.facility.list.query().then((fs) => {
-      setFacilities(fs);
-      setFacilityId((cur) => cur ?? fs[0]?.id ?? null);
-    });
+    trpc.facility.list
+      .query()
+      .then((fs) => {
+        setFacilities(fs);
+        setFacilityId((cur) => cur ?? fs[0]?.id ?? null);
+      })
+      .catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
   }, []);
 
   const load = useCallback(() => {
