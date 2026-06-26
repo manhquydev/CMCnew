@@ -32,8 +32,8 @@ async function enqueue(dedup: string, mailbox: 'notify' | 'payroll' | 'hr' = 'no
       dedupKey: `${PREFIX}:${dedup}`,
       to: 'a@b.com',
       mailbox,
-      kind: 'password_reset',
-      data: { resetUrl: 'https://x/r?token=1', expiresMinutes: 30 },
+      kind: 'account_security_alert',
+      data: { action: 'test', at: '2026-06-26 00:00' },
     }),
   );
 }

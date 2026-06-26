@@ -77,11 +77,10 @@ describe('sendViaGraph', () => {
 });
 
 describe('templates', () => {
-  it('renders parent_welcome with subject + activation link', () => {
-    const r = renderTemplate('parent_welcome', { parentName: 'Anh A', activationUrl: 'https://x/y?token=abc', expiresHours: 24 });
-    expect(r.subject).toContain('Kích hoạt');
-    expect(r.html).toContain('https://x/y?token=abc');
-    expect(r.html).toContain('Anh A');
+  it('renders otp_login with the code in subject + body', () => {
+    const r = renderTemplate('otp_login', { code: '123456', expiresMinutes: 5 });
+    expect(r.subject).toContain('123456');
+    expect(r.html).toContain('123456');
   });
 
   it('escapes HTML in user-supplied fields', () => {

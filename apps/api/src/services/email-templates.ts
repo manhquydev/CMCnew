@@ -3,10 +3,7 @@
 // Vietnamese to match the product. Keep styling inline — many mail clients strip <style> blocks.
 
 export type EmailTemplateKind =
-  | 'parent_welcome'
-  | 'staff_welcome'
   | 'payslip_ready'
-  | 'password_reset'
   | 'account_security_alert'
   | 'parent_meeting'
   | 'otp_login';
@@ -62,10 +59,7 @@ export interface RenderedEmail {
 
 // ── Payload types per kind ────────────────────────────────────────────────────────────────────
 export interface TemplatePayloads {
-  parent_welcome: { parentName?: string; activationUrl: string; expiresHours: number };
-  staff_welcome: { displayName?: string; activationUrl: string; expiresHours: number };
   payslip_ready: { displayName?: string; period: string; viewUrl?: string };
-  password_reset: { name?: string; resetUrl: string; expiresMinutes: number };
   account_security_alert: { name?: string; action: string; at: string };
   parent_meeting: { title: string; scheduledAt: string; location?: string | null };
   otp_login: { code: string; expiresMinutes: number };
@@ -74,30 +68,6 @@ export interface TemplatePayloads {
 type Renderer<K extends EmailTemplateKind> = (data: TemplatePayloads[K]) => RenderedEmail;
 
 const renderers: { [K in EmailTemplateKind]: Renderer<K> } = {
-  parent_welcome: (d) => ({
-    subject: `Kích hoạt tài khoản phụ huynh ${BRAND}`,
-    html: layout({
-      title: 'Chào mừng đến với hệ thống học tập CMC',
-      preheader: 'Kích hoạt tài khoản phụ huynh của bạn',
-      bodyHtml:
-        p(`Kính gửi ${esc(d.parentName ?? 'Quý phụ huynh')},`) +
-        p('Tài khoản phụ huynh của bạn trên hệ thống LMS đã được tạo. Vui lòng kích hoạt và đặt mật khẩu để theo dõi việc học của con.') +
-        button('Kích hoạt tài khoản', d.activationUrl) +
-        p(`Liên kết có hiệu lực trong ${d.expiresHours} giờ. Nếu hết hạn, vui lòng liên hệ cơ sở để được cấp lại.`),
-    }),
-  }),
-  staff_welcome: (d) => ({
-    subject: `Kích hoạt tài khoản nhân sự ${BRAND}`,
-    html: layout({
-      title: 'Tài khoản nhân sự đã sẵn sàng',
-      preheader: 'Kích hoạt tài khoản và đặt mật khẩu',
-      bodyHtml:
-        p(`Xin chào ${esc(d.displayName ?? 'bạn')},`) +
-        p('Tài khoản của bạn trên hệ thống quản trị CMC đã được khởi tạo. Vui lòng kích hoạt và tự đặt mật khẩu.') +
-        button('Kích hoạt & đặt mật khẩu', d.activationUrl) +
-        p(`Liên kết có hiệu lực trong ${d.expiresHours} giờ.`),
-    }),
-  }),
   payslip_ready: (d) => ({
     subject: `Phiếu lương kỳ ${esc(d.period)} đã sẵn sàng`,
     html: layout({
@@ -108,18 +78,6 @@ const renderers: { [K in EmailTemplateKind]: Renderer<K> } = {
         p(`Phiếu lương kỳ <strong>${esc(d.period)}</strong> của bạn đã được chốt.`) +
         (d.viewUrl ? button('Xem phiếu lương', d.viewUrl) : '') +
         p('Đăng nhập hệ thống để xem chi tiết. Mọi thắc mắc vui lòng liên hệ bộ phận nhân sự/kế toán.'),
-    }),
-  }),
-  password_reset: (d) => ({
-    subject: `Đặt lại mật khẩu ${BRAND}`,
-    html: layout({
-      title: 'Yêu cầu đặt lại mật khẩu',
-      preheader: 'Liên kết đặt lại mật khẩu của bạn',
-      bodyHtml:
-        p(`Xin chào ${esc(d.name ?? 'bạn')},`) +
-        p('Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn. Nhấn nút bên dưới để tiếp tục.') +
-        button('Đặt lại mật khẩu', d.resetUrl) +
-        p(`Liên kết có hiệu lực trong ${d.expiresMinutes} phút. Nếu bạn không yêu cầu, hãy bỏ qua thư này — mật khẩu của bạn không thay đổi.`),
     }),
   }),
   account_security_alert: (d) => ({

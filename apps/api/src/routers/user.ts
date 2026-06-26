@@ -3,7 +3,6 @@ import { withRls, hashPassword, Role } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, superAdminProcedure, requireRole } from '../trpc.js';
-import { issueActivation } from '../services/account-activation.js';
 import { enqueueEmail } from '../services/email-outbox.js';
 
 const role = z.nativeEnum(Role);
@@ -80,17 +79,7 @@ export const userRouter = router({
           type: 'created',
           actorId: ctx.session.userId,
         });
-        // Onboarding: email the new staff member an activation link to set their own password.
-        // Same (super) tx — atomic with creation; idempotent via dedupKey.
-        await issueActivation(tx, {
-          kind: 'staff_account',
-          subjectType: 'staff',
-          subjectId: user.id,
-          email: user.email,
-          name: user.displayName,
-          dedupKey: `staff_welcome:${user.id}`,
-          mailbox: 'hr',
-        });
+        // Staff onboarding is via Microsoft SSO (no activation email / no password to deliver).
         return user;
       }),
     ),

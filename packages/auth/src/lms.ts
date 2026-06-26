@@ -85,7 +85,8 @@ export async function loginParent(
     tx.parentAccount.findFirst({ where: { OR: [{ email: emailOrPhone }, { phone: emailOrPhone }] } }),
   );
   if (!acc || !acc.isActive) return null;
-  if (!(await verifyPassword(password, acc.passwordHash))) return null;
+  // Passwordless (OTP-only) parents have no passwordHash → password login is not available to them.
+  if (!acc.passwordHash || !(await verifyPassword(password, acc.passwordHash))) return null;
   const resolved = await parentSession(acc.id);
   if (!resolved) return null;
   const token = await signLmsSession({ sub: acc.id, kind: 'parent', tokenVersion: acc.tokenVersion });
