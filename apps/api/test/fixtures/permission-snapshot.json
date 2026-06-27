@@ -101,6 +101,7 @@
   "schedule.addSlot": ["quan_ly", "head_teacher", "giam_doc_dao_tao"],
   "schedule.generateSessions": ["quan_ly", "head_teacher", "giam_doc_dao_tao"],
   "student.update": ["quan_ly", "sale"],
+  "student.resetLmsPassword": ["quan_ly", "giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "submission.listByExercise": ["giao_vien", "quan_ly"],
   "submission.layerForGrading": ["giao_vien", "quan_ly"],
   "user.list": ["super_admin", "giam_doc_kinh_doanh", "giam_doc_dao_tao"],

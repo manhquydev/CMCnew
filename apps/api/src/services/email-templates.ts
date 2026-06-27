@@ -6,7 +6,8 @@ export type EmailTemplateKind =
   | 'payslip_ready'
   | 'account_security_alert'
   | 'parent_meeting'
-  | 'otp_login';
+  | 'otp_login'
+  | 'lms_account_ready';
 
 const BRAND = 'CMC';
 
@@ -63,6 +64,14 @@ export interface TemplatePayloads {
   account_security_alert: { name?: string; action: string; at: string };
   parent_meeting: { title: string; scheduledAt: string; location?: string | null };
   otp_login: { code: string; expiresMinutes: number };
+  /** Sent to parent when a StudentAccount is provisioned at receipt.approve. */
+  lms_account_ready: {
+    parentName?: string;
+    studentName: string;
+    loginCode: string;
+    /** Plaintext temp password — rendered here, never stored. */
+    tempPassword: string;
+  };
 }
 
 type Renderer<K extends EmailTemplateKind> = (data: TemplatePayloads[K]) => RenderedEmail;
@@ -112,6 +121,26 @@ const renderers: { [K in EmailTemplateKind]: Renderer<K> } = {
         p('Mã đăng nhập một lần của bạn là:') +
         `<p style="margin:0 0 16px;font-size:32px;font-weight:700;letter-spacing:6px;color:#0b5cad">${esc(d.code)}</p>` +
         p(`Mã có hiệu lực trong ${d.expiresMinutes} phút và chỉ dùng một lần. Nếu bạn không yêu cầu đăng nhập, hãy bỏ qua thư này.`),
+    }),
+  }),
+
+  lms_account_ready: (d) => ({
+    subject: `Tài khoản LMS của ${esc(d.studentName)} đã sẵn sàng`,
+    html: layout({
+      title: 'Tài khoản LMS học sinh đã được tạo',
+      preheader: `Mã đăng nhập: ${d.loginCode}`,
+      bodyHtml:
+        p(`Kính gửi ${esc(d.parentName ?? 'Quý phụ huynh')},`) +
+        p(`Tài khoản LMS của con bạn <strong>${esc(d.studentName)}</strong> đã được tạo thành công.`) +
+        p('Thông tin đăng nhập:') +
+        `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border:1px solid #e6e8eb;border-radius:8px;overflow:hidden">
+<tr><td style="padding:12px 16px;background:#f8f9fb;font-size:13px;color:#555;font-weight:600;width:140px">Mã học sinh (ID)</td>
+<td style="padding:12px 16px;font-size:15px;font-weight:700;color:#0b5cad;letter-spacing:1px">${esc(d.loginCode)}</td></tr>
+<tr style="border-top:1px solid #e6e8eb"><td style="padding:12px 16px;background:#f8f9fb;font-size:13px;color:#555;font-weight:600">Mật khẩu tạm</td>
+<td style="padding:12px 16px;font-size:15px;font-weight:700;color:#333;letter-spacing:1px">${esc(d.tempPassword)}</td></tr>
+</table>` +
+        p('Con bạn có thể đổi mật khẩu sau khi đăng nhập lần đầu. Vui lòng bảo quản thông tin đăng nhập này.') +
+        p('Nếu bạn có câu hỏi, hãy liên hệ với nhà trường để được hỗ trợ.'),
     }),
   }),
 };

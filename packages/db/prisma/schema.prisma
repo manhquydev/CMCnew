@@ -973,6 +973,7 @@ model Receipt {
   /// New-student provisioning fields (F1). Only populated when this receipt creates a new student.
   parentPhone              String?       @map("parent_phone")   // dedupe key via ParentAccount.phone
   parentName               String?       @map("parent_name")    // display name for ParentAccount
+  parentEmail              String?       @map("parent_email")   // captured at intake; enables OTP login + lms_account_ready notification
   studentName              String?       @map("student_name")   // Student creation + multi-child disambiguation
   studentDob               DateTime?     @map("student_dob") @db.Date
   /// Optional: which class to enroll the student into at approve. Null = payment only, no class yet.

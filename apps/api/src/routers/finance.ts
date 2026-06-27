@@ -1,6 +1,7 @@
+import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { withRls, type Program } from '@cmc/db';
+import { withRls, hashPassword, type Program } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import {
@@ -16,6 +17,12 @@ import { nextReceiptCode } from '../services/receipt-code.js';
 import { classifyCancelRollback } from '../services/student-provisioning.js';
 import { router, requirePermission } from '../trpc.js';
 import { emitStaffNotif } from '../lib/emit-staff-notif.js';
+import { enqueueEmail } from '../services/email-outbox.js';
+
+/** Generate a random 12-char hex temp password. Never stored plaintext — caller bcrypt-hashes it. */
+function genTempPassword(): string {
+  return randomBytes(6).toString('hex');
+}
 
 /** Discount tiers configured for a facility, or the charter defaults when none are set. */
 async function tiersFor(
@@ -156,6 +163,8 @@ export const financeRouter = router({
         // New-student provisioning fields (F1).
         parentPhone: z.string().min(1).optional(),
         parentName: z.string().min(1).optional(),
+        // Optional: captured at intake; enables OTP login + lms_account_ready notification at approve.
+        parentEmail: z.string().email().optional(),
         studentName: z.string().min(1).optional(),
         studentDob: z.string().date().optional(),
         classBatchId: z.string().uuid().optional(),
@@ -214,6 +223,7 @@ export const financeRouter = router({
             // New-student provisioning fields — carried until approve, not acted on here.
             parentPhone: input.parentPhone ?? null,
             parentName: input.parentName ?? null,
+            parentEmail: input.parentEmail ?? null,
             studentName: input.studentName ?? null,
             studentDob: input.studentDob ? new Date(input.studentDob) : null,
             classBatchId: input.classBatchId ?? null,
@@ -265,7 +275,9 @@ export const financeRouter = router({
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const receipt = await tx.receipt.findUniqueOrThrow({
           where: { id: input.id },
-          include: { course: { select: { program: true } } },
+          include: {
+            course: { select: { program: true } },
+          },
         });
         if (receipt.status !== 'draft') {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Phiếu thu không ở trạng thái nháp' });
@@ -335,6 +347,8 @@ export const financeRouter = router({
               data: {
                 phone: receipt.parentPhone,
                 displayName: receipt.parentName ?? receipt.parentPhone,
+                // Capture email if provided — enables OTP passwordless login for the parent.
+                email: receipt.parentEmail ?? null,
                 isActive: true,
               },
             });
@@ -398,6 +412,27 @@ export const financeRouter = router({
               body: `Học sinh tạo tự động khi duyệt phiếu ${code} (SĐT PH: ${receipt.parentPhone})`,
               actorId: ctx.session.userId,
             });
+          }
+
+          // Propagate parentEmail to the ParentAccount when provided (idempotent: ignore if already set to same value).
+          // This enables OTP login even when the account was originally created phone-only.
+          if (receipt.parentEmail && parentAcc.email !== receipt.parentEmail) {
+            try {
+              await tx.parentAccount.update({
+                where: { id: parentAcc.id },
+                data: { email: receipt.parentEmail },
+              });
+            } catch {
+              // Unique violation: another account already owns that email — log and continue.
+              await logEvent(tx, {
+                facilityId: receipt.facilityId,
+                entityType: 'parent_account',
+                entityId: parentAcc.id,
+                type: 'note',
+                body: `parentEmail ${receipt.parentEmail} dari phiếu ${code} đã thuộc tài khoản khác — bỏ qua`,
+                actorId: ctx.session.userId,
+              });
+            }
           }
 
           // Ensure Guardian link (idempotent).
@@ -467,6 +502,62 @@ export const financeRouter = router({
             });
           }
         }
+        // ── LMS StudentAccount provisioning ────────────────────────────────────────
+        // Auto-create a StudentAccount only when this approve created a brand-new student.
+        // Idempotent: if an account already exists, skip and return no credential. A pre-existing
+        // or dedupe-matched student without an LMS account is provisioned on demand by staff via
+        // student.resetLmsPassword (create-or-reset), keeping this money path minimal.
+        // The tempPassword is returned plaintext exactly once (not stored); staff relay it to the parent.
+        let lmsAccount: { loginCode: string; tempPassword: string } | null = null;
+
+        const existingLmsAcc = await tx.studentAccount.findUnique({
+          where: { studentId: resolvedStudentId },
+          select: { id: true, loginCode: true },
+        });
+
+        if (!existingLmsAcc && wasNewStudent) {
+          const tempPassword = genTempPassword();
+          const passwordHash = await hashPassword(tempPassword);
+          // loginCode = studentCode — unique, stable, easy to relay (e.g. "HS-2026-0042").
+          const lmsRec = await tx.studentAccount.create({
+            data: {
+              studentId: resolvedStudentId,
+              loginCode: student.studentCode, // student fetched just above (lifecycle check)
+              passwordHash,
+              isActive: true,
+            },
+          });
+          lmsAccount = { loginCode: lmsRec.loginCode, tempPassword };
+          await logEvent(tx, {
+            facilityId: receipt.facilityId,
+            entityType: 'student',
+            entityId: resolvedStudentId,
+            type: 'created',
+            body: `Tài khoản LMS tạo tự động khi duyệt phiếu ${code} (mã: ${lmsRec.loginCode})`,
+            actorId: ctx.session.userId,
+          });
+
+          // Notify parent via email when parentEmail is available.
+          // enqueueEmail is atomic with this txn (no-op if Graph absent).
+          if (receipt.parentEmail && lmsAccount) {
+            const parentName = receipt.parentName ?? undefined;
+            await enqueueEmail(tx, {
+              facilityId: receipt.facilityId,
+              dedupKey: `lms_account_ready:${resolvedStudentId}`,
+              to: receipt.parentEmail,
+              mailbox: 'notify',
+              kind: 'lms_account_ready',
+              data: {
+                parentName,
+                studentName: student.fullName,
+                loginCode: lmsRec.loginCode,
+                tempPassword,
+              },
+            });
+          }
+        }
+        // ── End LMS provisioning ────────────────────────────────────────────────────
+
         // ── End student provisioning ────────────────────────────────────────────────
 
         // Freeze sales-commission attribution at approve (docs/specs/payroll-v2-commission-design.md).
@@ -496,11 +587,13 @@ export const financeRouter = router({
           entityType: 'receipt',
           entityId: approved.id,
           type: 'status_changed',
-          body: `Duyệt phiếu ${code} (${approved.netAmount.toLocaleString('vi-VN')}đ)${wasNewStudent ? ' — học sinh mới' : ''}`,
+          body: `Duyệt phiếu ${code} (${approved.netAmount.toLocaleString('vi-VN')}đ)${wasNewStudent ? ' — học sinh mới' : ''}${lmsAccount ? ' + tài khoản LMS' : ''}`,
           changes: [{ field: 'status', old: 'draft', new: 'approved' }],
           actorId: ctx.session.userId,
         });
-        return approved;
+        // lmsAccount is returned once so staff can relay the credential to the parent.
+        // tempPassword is NOT stored anywhere after this point.
+        return { ...approved, lmsAccount };
       }),
     ),
 

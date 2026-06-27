@@ -3,6 +3,7 @@ import { trpc, notifyError, Chatter } from '@cmc/ui';
 import {
   ActionIcon,
   Badge,
+  Button,
   Card,
   Group,
   Skeleton,
@@ -12,7 +13,7 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { IconArrowLeft } from '@tabler/icons-react';
+import { IconArrowLeft, IconRefresh } from '@tabler/icons-react';
 
 type DetailT = Awaited<ReturnType<typeof trpc.student.detail.query>>;
 
@@ -73,6 +74,67 @@ function fmtCurrency(n: number): string {
   return n.toLocaleString('vi-VN') + ' ₫';
 }
 
+// ─── LMS account section (inside InfoTab) ────────────────────────────────────
+
+function LmsAccountSection({ studentId }: { studentId: string }) {
+  const [result, setResult] = useState<{ loginCode: string; tempPassword: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState('');
+
+  function handleReset() {
+    if (!confirm('Đặt lại mật khẩu LMS sẽ đăng xuất học sinh ngay lập tức. Tiếp tục?')) return;
+    setLoading(true);
+    setErr('');
+    setResult(null);
+    trpc.student.resetLmsPassword
+      .mutate({ studentId })
+      .then((r) => {
+        setResult(r);
+        setLoading(false);
+      })
+      .catch((e: unknown) => {
+        setErr(e instanceof Error ? e.message : 'Lỗi đặt lại mật khẩu');
+        setLoading(false);
+        notifyError(e, 'Không đặt lại được mật khẩu LMS');
+      });
+  }
+
+  return (
+    <Stack gap="xs" mt="sm">
+      <Group>
+        <Text size="sm" fw={600}>Mật khẩu LMS</Text>
+        <Button
+          size="xs"
+          variant="light"
+          leftSection={<IconRefresh size={14} />}
+          loading={loading}
+          onClick={handleReset}
+        >
+          Đặt lại mật khẩu
+        </Button>
+      </Group>
+      {err && <Text c="red" size="xs">{err}</Text>}
+      {result && (
+        <Card withBorder p="xs" radius="sm" bg="yellow.0">
+          <Text size="xs" c="dimmed" mb={4}>
+            Mật khẩu mới (hiển thị một lần — lưu ngay):
+          </Text>
+          <Group gap="md">
+            <Stack gap={0}>
+              <Text size="xs" c="dimmed">Mã đăng nhập</Text>
+              <Text size="sm" fw={700} ff="monospace">{result.loginCode}</Text>
+            </Stack>
+            <Stack gap={0}>
+              <Text size="xs" c="dimmed">Mật khẩu tạm</Text>
+              <Text size="sm" fw={700} ff="monospace">{result.tempPassword}</Text>
+            </Stack>
+          </Group>
+        </Card>
+      )}
+    </Stack>
+  );
+}
+
 // ─── Tab: Thông tin học sinh ─────────────────────────────────────────────────
 
 function InfoTab({ s }: { s: DetailT }) {
@@ -112,6 +174,30 @@ function InfoTab({ s }: { s: DetailT }) {
           <Text size="sm">{fmtDate(s.createdAt)}</Text>
         </Group>
       </Stack>
+
+      {/* LMS account block — only shown when a StudentAccount exists */}
+      {s.account && (
+        <Card withBorder radius="md" p="md" mt="sm">
+          <Title order={6} mb="xs">Tài khoản LMS</Title>
+          <Stack gap="xs">
+            <Group>
+              <Text size="sm" fw={600} w={130}>Mã đăng nhập</Text>
+              <Text size="sm" ff="monospace">{s.account.loginCode}</Text>
+            </Group>
+            <Group>
+              <Text size="sm" fw={600} w={130}>Trạng thái</Text>
+              <Badge size="sm" variant="dot" color={s.account.isActive ? 'teal' : 'red'}>
+                {s.account.isActive ? 'Hoạt động' : 'Bị khoá'}
+              </Badge>
+            </Group>
+            <Group>
+              <Text size="sm" fw={600} w={130}>Tạo lúc</Text>
+              <Text size="sm">{fmtDate(s.account.createdAt)}</Text>
+            </Group>
+            <LmsAccountSection studentId={s.id} />
+          </Stack>
+        </Card>
+      )}
     </Card>
   );
 }
