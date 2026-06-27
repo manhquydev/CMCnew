@@ -5,6 +5,11 @@ import { withRls, Program, OpportunityStage, TestType, type RlsContext } from '@
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, publicProcedure, requirePermission, Role } from '../trpc.js';
+import { throttle } from '../rate-limit.js';
+
+// Public lead-ingest throttle: a generous per-IP cap (a real tuition centre never submits anywhere
+// near this in 15 min) that still stops scripted spam if the shared token leaks. Env-tunable.
+const LEAD_RATE_IP_LIMIT = Number(process.env.LEAD_RATE_IP_LIMIT ?? 100);
 
 /** Length-checked constant-time token comparison (timingSafeEqual throws on length mismatch). */
 function tokenMatches(provided: string, expected: string): boolean {
@@ -378,10 +383,13 @@ export const crmRouter = router({
         program: z.nativeEnum(Program).optional(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      // Per-IP throttle BEFORE the token check, so a leaked token (or token brute-forcing) cannot be
+      // used to flood the CRM with junk contacts/opportunities. Every call counts.
+      throttle(`lead:${ctx.ip}`, LEAD_RATE_IP_LIMIT);
       const expected = process.env.CRM_LEAD_TOKEN;
       // Constant-time compare so this public endpoint does not leak the token byte-by-byte via
-      // response timing. (Per-IP rate limiting is a tracked follow-up — see audit M6.)
+      // response timing.
       if (!expected || !tokenMatches(input.token, expected)) {
         throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Lead token không hợp lệ' });
       }

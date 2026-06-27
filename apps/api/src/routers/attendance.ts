@@ -37,11 +37,11 @@ export const attendanceRouter = router({
         const [session, enrollment] = await Promise.all([
           tx.classSession.findUniqueOrThrow({
             where: { id: input.classSessionId },
-            select: { classBatchId: true, facilityId: true },
+            select: { classBatchId: true, facilityId: true, status: true },
           }),
           tx.enrollment.findUniqueOrThrow({
             where: { id: input.enrollmentId },
-            select: { classBatchId: true },
+            select: { classBatchId: true, status: true },
           }),
         ]);
         if (enrollment.classBatchId !== session.classBatchId) {
@@ -49,6 +49,16 @@ export const attendanceRouter = router({
             code: 'BAD_REQUEST',
             message: 'Học sinh không thuộc lớp học của buổi học này',
           });
+        }
+        // A cancelled session has no real class — marking it would inflate/deflate the attendance rate
+        // that computeFinalGrade derives.
+        if (session.status === 'cancelled') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Buổi học đã hủy — không thể điểm danh' });
+        }
+        // A student who has left the class (withdrawn/transferred) must not receive new attendance marks.
+        // active / completed / reserved stay markable (final-session and trial attendance are valid).
+        if (enrollment.status === 'withdrawn' || enrollment.status === 'transferred') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Học sinh đã rời lớp — không thể điểm danh' });
         }
         const facilityId = session.facilityId;
         const now = new Date();
