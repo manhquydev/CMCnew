@@ -87,6 +87,28 @@ services:
       ADMIN_APP_ORIGIN: ${ADMIN_APP_ORIGIN:-http://localhost}
       CRM_LEAD_TOKEN:   ${CRM_LEAD_TOKEN:-}
       DISABLE_CRON:     ${DISABLE_CRON:-0}
+      # ── Staff SSO (Microsoft Entra, OIDC) ──────────────────────────────────────
+      # SSO stays OFF (login route returns 503 "SSO chưa được cấu hình") until ALL of:
+      # ENTRA_TENANT_ID + ENTRA_CLIENT_ID + ENTRA_CLIENT_SECRET + ERP_SSO_REDIRECT_URI +
+      # STAFF_EMAIL_DOMAIN are set. ERP_SSO_REDIRECT_URI must EXACTLY match the Redirect URI
+      # registered in Entra (e.g. http://localhost/api/auth/sso/callback for a local test, or
+      # https://erp.cmcvn.edu.vn/api/auth/sso/callback for prod). All default empty → SSO disabled.
+      ENTRA_TENANT_ID:      ${ENTRA_TENANT_ID:-}
+      ENTRA_CLIENT_ID:      ${ENTRA_CLIENT_ID:-}
+      ENTRA_CLIENT_SECRET:  ${ENTRA_CLIENT_SECRET:-}
+      ERP_SSO_REDIRECT_URI: ${ERP_SSO_REDIRECT_URI:-}
+      STAFF_EMAIL_DOMAIN:   ${STAFF_EMAIL_DOMAIN:-}
+      # When 'true' AND SSO is fully configured, non-super-admin password login is blocked (SSO only);
+      # the super_admin keeps email/password as break-glass. Leave unset for password login in all roles.
+      SSO_ENABLED:          ${SSO_ENABLED:-}
+      # ── Microsoft Graph outbound email (welcome / OTP / payslip) ───────────────
+      # No-op until ENTRA_* (reused as Graph creds) + all three sender mailboxes are set.
+      GRAPH_SENDER_NOTIFY:  ${GRAPH_SENDER_NOTIFY:-}
+      GRAPH_SENDER_PAYROLL: ${GRAPH_SENDER_PAYROLL:-}
+      GRAPH_SENDER_HR:      ${GRAPH_SENDER_HR:-}
+      # ── Callio call-metrics sync (optional; no-op if unset) ────────────────────
+      CALLIO_API_BASE:      ${CALLIO_API_BASE:-}
+      CALLIO_API_TOKEN:     ${CALLIO_API_TOKEN:-}
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:4000/health || exit 1']
       interval: 10s
