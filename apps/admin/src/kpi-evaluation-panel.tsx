@@ -53,8 +53,9 @@ const payrollApi = trpc.payroll as unknown as {
   kpiEvalStart: { mutate: (i: { userId: string; facilityId: number; periodKey: string; block: 'training' | 'sales' }) => Promise<unknown> };
   kpiAutoPrefill: { mutate: (i: { userId: string; facilityId: number; periodKey: string }) => Promise<unknown> };
   kpiEvalSubmit: { mutate: (i: { periodKey: string; scores: ScoreEntry[] }) => Promise<unknown> };
-  kpiEvalConfirm: { mutate: (i: { userId: string; periodKey: string; scores?: ScoreEntry[] }) => Promise<unknown> };
+  kpiEvalConfirm: { mutate: (i: { userId: string; periodKey: string }) => Promise<unknown> };
   kpiEvalApprove: { mutate: (i: { userId: string; periodKey: string }) => Promise<unknown> };
+  kpiOverride: { mutate: (i: { userId: string; periodKey: string; overrideScore: number; reason: string }) => Promise<unknown> };
   kpiEvalGet: { query: (i: { userId: string; periodKey: string }) => Promise<KpiEvalGetResult> };
 };
 
@@ -110,6 +111,10 @@ function KpiDetailCard({
   const [detail, setDetail] = useState<KpiEvalGetResult | null>(null);
   const [scores, setScores] = useState<ScoreEntry[]>([]);
   const [busy, setBusy] = useState(false);
+  // Audited score adjustment (kpiOverride): a manager/tree-authority sets a final score + mandatory
+  // reason. This is the ONLY in-app way to change a score after the draft stage; the change is logged.
+  const [ovScore, setOvScore] = useState(0);
+  const [ovReason, setOvReason] = useState('');
 
   const load = useCallback(() => {
     payrollApi.kpiEvalGet
@@ -180,6 +185,21 @@ function KpiDetailCard({
     } finally { setBusy(false); }
   }
 
+  async function doOverride() {
+    setBusy(true);
+    try {
+      await payrollApi.kpiOverride.mutate({
+        userId: row.userId, periodKey: row.periodKey, overrideScore: ovScore, reason: ovReason.trim(),
+      });
+      notifySuccess('Đã điều chỉnh điểm KPI (đã ghi log).');
+      setOvReason('');
+      load();
+      onRefresh();
+    } catch (e) {
+      notifyError(e, 'Điều chỉnh KPI thất bại');
+    } finally { setBusy(false); }
+  }
+
   const staffName = rosterMap.get(row.userId) ?? row.userId;
   const criteria = detail?.criteriaConfig ?? [];
 
@@ -244,6 +264,21 @@ function KpiDetailCard({
       )}
       {row.status === 'confirmed' && (
         <Button size="xs" color="orange" onClick={doApprove} loading={busy}>Duyệt</Button>
+      )}
+      {(row.status === 'submitted' || row.status === 'confirmed') && (
+        <Group align="flex-end" gap="xs" mt="sm">
+          <NumberInput
+            label="Điều chỉnh KPI (0–100)" min={0} max={100} w={150} size="xs"
+            value={ovScore} onChange={(v) => setOvScore(Number(v) || 0)}
+          />
+          <TextInput
+            label="Lý do (bắt buộc)" w={240} size="xs"
+            value={ovReason} onChange={(e) => setOvReason(e.currentTarget.value)}
+          />
+          <Button size="xs" variant="light" color="grape" onClick={doOverride} loading={busy} disabled={!ovReason.trim()}>
+            Áp dụng (ghi log)
+          </Button>
+        </Group>
       )}
     </Card>
   );

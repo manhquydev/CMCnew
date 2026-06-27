@@ -560,7 +560,9 @@ const ALL_SECTION_KEYS = new Set<string>([
   'overview', 'courses', 'students', 'org', 'guardians',
   'hr', 'kpi', 'compensation', 'finance', 'crm', 'cskh', 'rewards',
   'schedule', 'attendance', 'grading', 'assessment',
-  'classes', 'meetings', 'levelup', 'certificate', 'my-payslips',
+  // 'certificate' intentionally omitted: the feature is hidden from nav (shell.tsx visible:false),
+  // so #certificate is not a reachable hash route either. Re-add when the feature is re-enabled.
+  'classes', 'meetings', 'levelup', 'my-payslips',
 ]);
 
 function hashToSection(): SectionKey | undefined {
