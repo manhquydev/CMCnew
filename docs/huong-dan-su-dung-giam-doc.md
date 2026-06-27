@@ -3,11 +3,11 @@
 Tài liệu này dành cho **hai vai trò Giám Đốc** trong mô hình 3 trụ cột của trung tâm:
 
 - **Giám Đốc Kinh Doanh** (`giam_doc_kinh_doanh`) — phụ trách tuyển sinh, CRM, chăm sóc khách hàng, doanh thu.
-- **Giám Đốc Đào Tạo** (`giam_doc_dao_tao`) — phụ trách học vụ, lớp học, giáo viên, chứng chỉ.
+- **Giám Đốc Đào Tạo** (`giam_doc_dao_tao`) — phụ trách học vụ, lớp học, giáo viên.
 
 Viết theo kiểu cầm tay chỉ việc — không cần biết kỹ thuật. Mọi thao tác thực hiện trong **một ứng dụng web nhân viên duy nhất**; giao diện tự lọc theo vai trò của bạn, nên mỗi giám đốc chỉ nhìn thấy đúng phần việc của mình.
 
-> Mọi quyền trong tài liệu này lấy trực tiếp từ **bảng phân quyền của hệ thống**. Nếu bạn không nhìn thấy một mục menu hay một nút bấm, nghĩa là vai trò của bạn không có quyền đó — đây là thiết kế có chủ đích, không phải lỗi.
+> Mọi quyền trong tài liệu này lấy trực tiếp từ **bảng phân quyền của hệ thống**. Một số trang xem chung (như **Tổng quan**, **Lịch dạy**, **Lớp học**, **Khóa học**) hiện ra cho **mọi nhân sự** ở chế độ chỉ xem — thấy được trang không có nghĩa là bạn có quyền thao tác. Ngược lại, các **nút hành động** bên trong mới đi theo quyền của vai trò: nếu một nút không hiện, nghĩa là vai trò của bạn không có quyền đó — đây là thiết kế có chủ đích, không phải lỗi.
 
 ---
 
@@ -32,7 +32,7 @@ Cả hai giám đốc đăng nhập bằng **tài khoản CMC EDU qua Microsoft 
 |---------|-----------|-----------|
 | IT (super_admin) | `admin@cmcvn.edu.vn` | Tạo tài khoản Microsoft, cấu hình hệ thống, toàn quyền |
 | Giám Đốc Kinh Doanh | `nhungdt@cmcvn.edu.vn` | Kinh doanh, CRM, CSKH, thưởng, xem tài chính |
-| Giám Đốc Đào Tạo | `hongltn@cmcvn.edu.vn` | Học vụ, lớp học, chấm điểm, chứng chỉ |
+| Giám Đốc Đào Tạo | `hongltn@cmcvn.edu.vn` | Học vụ, lớp học, chấm điểm |
 
 ---
 
@@ -126,7 +126,9 @@ Xem chi tiết quy trình và quy tắc tách trách nhiệm ở **mục 6**.
 
 ## 4. Hướng dẫn cho GIÁM ĐỐC ĐÀO TẠO
 
-GĐ Đào Tạo nhìn thấy các mục: **Tổng quan**, **Cơ sở & Người dùng**, **Lịch dạy**, **Điểm danh**, **Chấm bài**, **Học bạ**, **Lớp học**, **Họp phụ huynh**, **Duyệt cấp độ**, **Chứng chỉ**, **Khóa học**, **Đánh giá KPI**, **Phiếu lương của tôi**.
+GĐ Đào Tạo nhìn thấy các mục: **Tổng quan**, **Cơ sở & Người dùng**, **Lịch dạy**, **Điểm danh**, **Chấm bài**, **Học bạ**, **Lớp học**, **Họp phụ huynh**, **Duyệt cấp độ**, **Khóa học**, **Đánh giá KPI**, **Phiếu lương của tôi**.
+
+> **Chứng chỉ:** tính năng này hiện **tạm ẩn — chưa sử dụng** (đã gỡ khỏi menu). Khi được bật lại, việc cấp/xem chứng chỉ sẽ thuộc GĐ Đào Tạo.
 
 ### 4.1. Tổng quan (Dashboard)
 
@@ -183,10 +185,10 @@ GĐ Đào Tạo quản lý toàn bộ vòng đời lớp:
 - Xem **danh sách đề xuất đang chờ** (listPending).
 - **Quyết định** duyệt/từ chối đề xuất nâng cấp độ (decide).
 
-### 4.10. Chứng chỉ
+### 4.10. Chứng chỉ — *(tạm ẩn — chưa sử dụng)*
 
-- Xem danh sách chứng chỉ (list).
-- **Cấp chứng chỉ** cho học sinh hoàn thành (issue).
+- Tính năng chứng chỉ hiện **chưa được dùng** và **đã ẩn khỏi menu**. Không có thao tác cấp/xem chứng chỉ ở thời điểm này.
+- Khi tính năng được bật lại, GĐ Đào Tạo sẽ là người cấp chứng chỉ cho học sinh hoàn thành.
 
 ### 4.11. Đánh giá KPI
 
@@ -227,7 +229,10 @@ Việc đưa một nhân viên mới vào hệ thống cần **hai bước**, do
    - **Email**: đúng địa chỉ `@cmcvn.edu.vn` mà IT vừa tạo.
    - **Tên hiển thị**.
    - **Vai trò**: chọn từ danh sách (đã tự lọc theo quyền của bạn — GĐ KD chỉ thấy sale/cskh/ctv_mkt; GĐ ĐT chỉ thấy giáo viên/trưởng bộ môn).
+   - **Vai trò chính**: chọn vai trò chính của nhân viên (nếu để trống, hệ thống mặc định lấy vai trò đầu tiên trong danh sách vai trò đã chọn).
    - **Cơ sở**: chọn cơ sở của nhân viên.
+
+> Form tạo người dùng **không có ô mật khẩu** — nhân viên đăng nhập bằng tài khoản Microsoft (SSO), không đặt mật khẩu trong ERP.
 4. **Lưu**. Hệ thống tạo tài khoản ERP và liên kết với tài khoản Microsoft; nhân viên đăng nhập lần đầu qua **Đăng nhập với Microsoft** (SSO).
 
 > Giám đốc **không** đặt/đổi vai trò, không bật/tắt hoạt động, không đổi cơ sở của tài khoản đã tồn tại — những thao tác này dành riêng cho IT (super_admin). Giám đốc cũng chỉ thấy nhân sự trong cơ sở của mình.
@@ -247,7 +252,7 @@ draft (nháp) → submitted (đã nộp) → confirmed (đã xác nhận) → ap
 | Bước | Trạng thái | Người thực hiện |
 |------|-----------|-----------------|
 | Chuẩn bị dữ liệu (khởi tạo phiếu, tự điền, đặt điểm tự động) | tạo `draft` | **HR / Kế Toán** |
-| Tự đánh giá & nộp | `submitted` | **Nhân viên** (tự nộp phiếu của mình) |
+| Nộp phiếu (sau khi hệ thống tính điểm) | `submitted` | **HR / Quản Lý** (nhân viên không có menu tự nộp riêng; được xem kết quả qua HR/quản lý) |
 | Xác nhận | `confirmed` | **Quản Lý hoặc Giám Đốc** |
 | Duyệt (bước cuối) | `approved` | **Giám Đốc** |
 
@@ -269,8 +274,9 @@ draft (nháp) → submitted (đã nộp) → confirmed (đã xác nhận) → ap
 
 ## 7. Lưu ý nhanh
 
-- Menu chỉ hiện đúng phần việc của bạn; thiếu nút = thiếu quyền (không phải lỗi).
+- Các trang xem chung (Tổng quan, Lịch dạy, Lớp học, Khóa học) hiện cho mọi nhân sự ở chế độ chỉ xem; chỉ **nút hành động** bên trong mới theo quyền — thiếu nút = thiếu quyền (không phải lỗi).
 - Giám đốc đăng nhập **bằng Microsoft (SSO)**, không bằng mật khẩu.
 - GĐ Kinh Doanh: kinh doanh + CRM + CSKH + thưởng + **xem** tài chính + KPI; **không** học vụ.
-- GĐ Đào Tạo: học vụ + lớp + chứng chỉ + KPI; **không** CRM/tài chính/thưởng.
+- GĐ Đào Tạo: học vụ + lớp + KPI; **không** CRM/tài chính/thưởng. (Chứng chỉ tạm ẩn — chưa sử dụng.)
 - KPI: người duyệt ≠ người xác nhận trên cùng phiếu.
+- **Đặt lại mật khẩu LMS cho học sinh** hiện do **Quản Lý cơ sở** thực hiện (trong mục **Học sinh**). Tuy hai giám đốc có quyền này về mặt hệ thống, mục **Học sinh** hiện chưa hiển thị trên menu của giám đốc, nên trên thực tế thao tác này do quản lý cơ sở làm.

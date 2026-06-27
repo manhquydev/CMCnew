@@ -53,10 +53,10 @@ Sale nhìn thấy các mục: **CRM**, **Học sinh**, **Phiếu lương của t
 - Sale được **ghi danh** học sinh vào lớp (enrollment.enroll).
 - Sale được **cập nhật thông tin học sinh** (student.update) — ví dụ chỉnh thông tin liên hệ.
 
-### 2.3. Đánh giá KPI (tự nộp)
+### 2.3. Đánh giá KPI
 
-- Sale **tự nộp phiếu KPI** của mình (kpiEvalSubmit) khi đến kỳ: nhập tự đánh giá rồi **Nộp**.
-- Việc xác nhận và duyệt phiếu do Quản Lý/Giám Đốc làm; Sale không xác nhận/duyệt.
+- Sale **không có menu KPI riêng** để tự chấm. Phiếu KPI do **HR/quản lý khởi tạo** và **hệ thống tự tính** điểm theo dữ liệu.
+- Sale được **xem** kết quả KPI của mình thông qua HR/quản lý; việc xác nhận và duyệt phiếu do Quản Lý/Giám Đốc làm. Sale không tự chấm/xác nhận/duyệt qua giao diện riêng.
 
 ### 2.4. Phiếu lương của tôi
 
@@ -67,15 +67,19 @@ Sale nhìn thấy các mục: **CRM**, **Học sinh**, **Phiếu lương của t
 - Không **chấm điểm test** đầu vào (việc của giáo viên).
 - Không tạo/duyệt **phiếu thu**, không xem bảng giá/voucher (mục Tài chính không hiện).
 - Không **tạo học sinh thủ công** — học sinh được tạo tự động khi Kế Toán/Quản Lý duyệt phiếu thu.
-- Không quản lý **phụ huynh**, không **lớp học/lịch dạy/điểm danh/chấm bài/học bạ/chứng chỉ**.
-- Không **xác nhận/duyệt KPI**, không tạo nhân sự.
+- Không quản lý **phụ huynh**, không **lớp học/lịch dạy/điểm danh/chấm bài/học bạ**.
+- Không **tự chấm/xác nhận/duyệt KPI** (không có menu KPI riêng), không tạo nhân sự.
 - Không **chăm sóc sau bán** (after-sale là của CSKH).
 
 ---
 
 ## 3. Hướng dẫn cho GIÁO VIÊN
 
-Giáo viên nhìn thấy các mục: **Lịch dạy**, **Điểm danh**, **Chấm bài**, **Học bạ**, **Lớp học**, **Họp phụ huynh**, **Duyệt cấp độ** (chỉ đề xuất), **Chứng chỉ** (xem), **Phiếu lương của tôi**.
+Giáo viên nhìn thấy các mục: **Lịch dạy**, **Điểm danh**, **Chấm bài**, **Học bạ**, **Lớp học**, **Họp phụ huynh**, **Phiếu lương của tôi**.
+
+> Giáo viên **không có menu "Duyệt cấp độ" riêng**. Việc **đề xuất nâng cấp độ** được làm **ngay trong mục Học bạ** (xem 3.7).
+>
+> **Chứng chỉ:** tính năng này hiện **tạm ẩn — chưa sử dụng** (đã gỡ khỏi menu).
 
 ### 3.1. Lịch dạy
 
@@ -107,20 +111,22 @@ Giáo viên nhìn thấy các mục: **Lịch dạy**, **Điểm danh**, **Chấ
 
 - **Đặt lịch họp** (setSchedule) và **đổi trạng thái** buổi họp (setStatus) cho lớp mình phụ trách.
 
-### 3.7. Duyệt cấp độ & Chứng chỉ
+### 3.7. Đề xuất nâng cấp độ
 
-- **Đề xuất** nâng cấp độ cho học sinh (propose).
-- Xem danh sách **chứng chỉ** (list).
+- **Đề xuất** nâng cấp độ cho học sinh (propose) — thao tác này nằm **ngay trong mục Học bạ**, không phải một menu "Duyệt cấp độ" riêng.
 
-> Giáo viên **chỉ đề xuất** cấp độ; **quyết định** duyệt nâng cấp và **cấp chứng chỉ** thuộc Trưởng Bộ Môn / GĐ Đào Tạo.
+> Giáo viên **chỉ đề xuất** cấp độ; **quyết định** duyệt nâng cấp thuộc Trưởng Bộ Môn / GĐ Đào Tạo.
+>
+> **Chứng chỉ:** tính năng cấp/xem chứng chỉ hiện **tạm ẩn — chưa sử dụng**.
 
-### 3.8. Huy hiệu (Badge)
+### 3.8. Huy hiệu (Badge) — *(chưa có giao diện)*
 
-- Xem danh sách huy hiệu và **trao huy hiệu** (grant) cho học sinh.
+- Về mặt hệ thống, giáo viên có quyền **trao huy hiệu** (grant) cho học sinh, nhưng **hiện chưa có màn hình** cho thao tác này, nên trên thực tế chưa dùng được.
 
-### 3.9. Đánh giá KPI (tự nộp)
+### 3.9. Đánh giá KPI
 
-- Giáo viên **tự nộp phiếu KPI** của mình (kpiEvalSubmit). Xác nhận/duyệt do Quản Lý/Giám Đốc làm.
+- Giáo viên **không có menu KPI riêng** để tự chấm. Phiếu KPI do **HR/quản lý khởi tạo** và **hệ thống tự tính** điểm.
+- Giáo viên được **xem** kết quả KPI của mình qua HR/quản lý; xác nhận/duyệt do Quản Lý/Giám Đốc làm.
 
 ### 3.10. Phiếu lương của tôi
 
@@ -130,9 +136,9 @@ Giáo viên nhìn thấy các mục: **Lịch dạy**, **Điểm danh**, **Chấ
 
 - **Không tạo lớp** — tạo/quản lý vòng đời lớp là của Trưởng Bộ Môn / Quản Lý / GĐ Đào Tạo.
 - Không tạo khung lịch/sinh buổi học (lịch dạy do Quản Lý/Trưởng Bộ Môn/GĐ ĐT thiết lập); giáo viên chỉ **xem** lịch của mình.
-- Không **tạo/sửa/khóa kỳ học**, không **quyết định** nâng cấp độ, không **cấp chứng chỉ**.
+- Không **tạo/sửa/khóa kỳ học**, không **quyết định** nâng cấp độ. (Chứng chỉ tạm ẩn — chưa dùng.)
 - Không có quyền **CRM** (trừ chấm test), **Tài chính**, **Chăm sóc khách hàng**, **Phụ huynh**, **Nhân sự/Lương**, **Đổi quà**.
-- Không **xác nhận/duyệt KPI**, không tạo nhân sự.
+- Không **tự chấm/xác nhận/duyệt KPI** (không có menu KPI riêng), không tạo nhân sự.
 - Không tạo học sinh (học sinh sinh tự động khi duyệt phiếu thu).
 
 ---
@@ -141,6 +147,6 @@ Giáo viên nhìn thấy các mục: **Lịch dạy**, **Điểm danh**, **Chấ
 
 - Đăng nhập **bằng Microsoft (SSO)**; không có mật khẩu riêng cho ứng dụng nhân viên.
 - Menu chỉ hiện đúng phần việc của bạn; thiếu nút = thiếu quyền.
-- **Sale**: CRM (cơ hội/liên hệ/test) + ghi danh + cập nhật học sinh + tự nộp KPI + xem lương. Không chấm test, không tài chính.
-- **Giáo viên**: điểm danh, chấm bài/bài tập, học bạ, chấm test, đề xuất cấp độ, họp PH, huy hiệu + tự nộp KPI + xem lương. **Không tạo lớp**, không cấp chứng chỉ, không quyết định cấp độ.
-- KPI của bạn: **tự nộp**; xác nhận và duyệt là của cấp trên.
+- **Sale**: CRM (cơ hội/liên hệ/test) + ghi danh + cập nhật học sinh + xem lương. Không chấm test, không tài chính, không có menu KPI riêng.
+- **Giáo viên**: điểm danh, chấm bài/bài tập, học bạ, chấm test, đề xuất cấp độ (trong Học bạ), họp PH + xem lương. **Không tạo lớp**, không quyết định cấp độ. (Chứng chỉ tạm ẩn; huy hiệu chưa có giao diện.)
+- KPI của bạn do **HR/quản lý khởi tạo** và **hệ thống tự tính**; bạn được **xem**, không tự chấm/xác nhận/duyệt qua giao diện riêng.
