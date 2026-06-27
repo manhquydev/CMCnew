@@ -1,14 +1,15 @@
 # ERP Rebuild — Roadmap F0..F4
 
-Status: IN PROGRESS — F0 Part A (backend RBAC registry) DONE & committed (17a2efc, nhánh feature/erp-unify-rbac-f0)
+Status: ✅ COMPLETE — F0..F4 đã build, verify đa vòng + edge case, committed trên nhánh feature/erp-unify-rbac-f0 (6 commit 17a2efc→3947daa). Verification cuối: api 210 pass/2 pre-existing email (thiếu GRAPH_* = R6 IT config), ui 6/6, admin+teaching build ✓. Chưa push/PR (chờ user).
 Branch nền: develop · Tạo: 2026-06-27
 
 ## Tiến độ
 - [x] F0 Part A — permission registry @cmc/auth + requirePermission, 107 procedure migrate, parity 6/6, review SHIP (commit 17a2efc).
 - [x] F1 — provisioning atomic @receipt.approve + rollback provenance; adversarial test tìm 2 BLOCKER (UI new-student unreachable, concurrency race) + 2 HIGH (sibling dedupe, facility filter) → đã fix & verify đa vòng (unit 12, int approve 6, edge 8 incl. concurrency, parity 6); commit c7198b1.
 - [x] F2 — Student Detail (6 tab) + edit thu hẹp fullName/dateOfBirth+audit + fix 2 bug lịch (date-filter + FK room/teacher); review tìm 2 blocker (empty re-run crash, dead lifecycle validator) → fixed + regression test; commit 49da18a.
-- [ ] F0 Part B — gộp frontend admin+teaching → 1 StaffShell, dedupe 4 panel, nav lọc role (ĐANG LÀM).
-- [ ] F3 (/design) / F4.
+- [x] F0 Part B — gộp frontend→apps/admin, port 9 panel teaching, nav lọc role + persona-landing; review tìm 4 drift blocker → fix bằng registry browser-safe (@cmc/auth/permissions) dùng chung can(), 8 test nav-consistency; commit 8d99f1c. **F0 DONE.**
+- [x] F3 — 6 primitive packages/ui (PageHeader/EmptyState/StatCard/StatusBadge/DataTable+utils) + redesign overview/students/crm; ui test 6/6, admin 8/8; commit 2428937. (Defer: MasterDetail/FilterBar/CRM kanban — follow-up.)
+- [x] F4 — chatter history sidebar (RecordEvent timeline + follower→SSE) + term lock + grading weights config-as-code; review tìm 1 BLOCKER (default weight 1.0/0.0 sai cho BRIGHT_IG/BLACK_HOLE trên seed mới — parity test giả) → fix bằng null-override (null→charter) + parity test thật đọc DB; commit 3947daa. (Defer: RecordActivity inbox.)
 Owner: manhquy
 
 ## Mục tiêu

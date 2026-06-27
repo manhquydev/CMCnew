@@ -44,6 +44,9 @@ importers:
 
   apps/admin:
     dependencies:
+      '@cmc/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@cmc/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -65,6 +68,9 @@ importers:
       '@tabler/icons-react':
         specifier: ^3.26.0
         version: 3.44.0(react@19.2.7)
+      dayjs:
+        specifier: ^1.11.13
+        version: 1.11.21
       react:
         specifier: ^19.0.0
         version: 19.2.7
@@ -87,6 +93,9 @@ importers:
       vite:
         specifier: ^6.0.5
         version: 6.4.3(@types/node@22.20.0)(jiti@2.7.0)(tsx@4.22.4)
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@22.20.0)
 
   apps/api:
     dependencies:
@@ -383,6 +392,9 @@ importers:
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@22.20.0)
 
 packages:
 
