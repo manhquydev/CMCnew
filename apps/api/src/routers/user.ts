@@ -122,8 +122,8 @@ export const userRouter = router({
       // 3. Write under elevated context so the super-admin-only INSERT policy passes.
       //    All scope constraints have been enforced above; SYSTEM_CTX is only safe here.
       const actorId = ctx.session.userId;
-      return withRls(SYSTEM_CTX, async (tx) => {
-        const user = await tx.appUser.create({
+      const user = await withRls(SYSTEM_CTX, async (tx) => {
+        const created = await tx.appUser.create({
           data: {
             email: input.email,
             displayName: input.displayName,
@@ -136,12 +136,16 @@ export const userRouter = router({
         });
         await logEvent(tx, {
           entityType: 'user',
-          entityId: user.id,
+          entityId: created.id,
           type: 'created',
           actorId,
         });
-        return user;
+        return created;
       });
+      // Welcome email (best-effort, post-commit). SSO onboarding: no password is sent — staff sign in
+      // with their Microsoft (CMC EDU) account. A mail-queue failure must never undo the create.
+      await emailWelcome(user.email, user.displayName, user.primaryRole);
+      return user;
     }),
 
   // setRoles / setActive / setFacilities remain super_admin-only for F0. Directors build
@@ -255,6 +259,47 @@ export const userRouter = router({
       return user;
     }),
 });
+
+// Human-readable Vietnamese role names for staff-facing email. Unknown roles fall back to the raw key.
+const ROLE_LABELS: Partial<Record<Role, string>> = {
+  [Role.super_admin]: 'Quản trị hệ thống',
+  [Role.quan_ly]: 'Quản lý cơ sở',
+  [Role.giam_doc_kinh_doanh]: 'Giám đốc Kinh doanh',
+  [Role.giam_doc_dao_tao]: 'Giám đốc Đào tạo',
+  [Role.head_teacher]: 'Trưởng bộ môn',
+  [Role.giao_vien]: 'Giáo viên',
+  [Role.ke_toan]: 'Kế toán',
+  [Role.hr]: 'Nhân sự',
+  [Role.sale]: 'Tư vấn tuyển sinh',
+  [Role.cskh]: 'Chăm sóc khách hàng',
+  [Role.ctv_mkt]: 'Cộng tác viên Marketing',
+  [Role.bgd]: 'Ban giám đốc',
+};
+
+// ERP login URL for the welcome email's CTA. Mirrors the SSO route's erpOrigin() default.
+function loginUrl(): string {
+  return process.env.ADMIN_APP_ORIGIN ?? 'http://localhost:5173';
+}
+
+// Post-commit, best-effort welcome email on user creation. SSO onboarding: NO password is sent —
+// staff log in with their Microsoft (CMC EDU) account. Own super-scoped tx + try/catch so a
+// mail-queue failure never rolls back the create. dedupKey is stable per user so a re-run won't
+// double-send.
+async function emailWelcome(email: string, displayName: string, primaryRole: Role): Promise<void> {
+  try {
+    await withRls(SYSTEM_CTX, (tx) =>
+      enqueueEmail(tx, {
+        dedupKey: `account_welcome:${email}`,
+        to: email,
+        mailbox: 'notify',
+        kind: 'account_welcome',
+        data: { displayName, loginUrl: loginUrl(), roleLabel: ROLE_LABELS[primaryRole] ?? primaryRole },
+      }),
+    );
+  } catch (e) {
+    console.error('welcome email enqueue failed', e);
+  }
+}
 
 // Post-commit, best-effort security-alert email on a sensitive account change. Runs in its OWN
 // super-scoped tx with a try/catch so a mail-queue failure never rolls back the deactivation /

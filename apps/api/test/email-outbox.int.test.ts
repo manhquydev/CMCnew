@@ -11,6 +11,23 @@ function fetchReturning(status: number, headers: Record<string, string> = {}) {
   return (async () => new Response(null, { status, headers })) as unknown as typeof fetch;
 }
 
+// Clear every var graphMailerFromEnv() reads so it returns null (Graph unconfigured) regardless of
+// the developer's real .env — which in this project may legitimately have GRAPH_SENDER_*/ENTRA_* set
+// for live email/SSO. Without this, the no-op assertion is env-dependent and fails on a configured box.
+function withoutGraphEnv<T>(fn: () => Promise<T>): Promise<T> {
+  const saved = { ...process.env };
+  for (const k of [
+    'GRAPH_TENANT_ID', 'ENTRA_TENANT_ID', 'GRAPH_CLIENT_ID', 'ENTRA_CLIENT_ID',
+    'GRAPH_CLIENT_SECRET', 'ENTRA_CLIENT_SECRET', 'GRAPH_CERT_PATH',
+    'GRAPH_SENDER_NOTIFY', 'GRAPH_SENDER_PAYROLL', 'GRAPH_SENDER_HR',
+  ]) {
+    delete process.env[k];
+  }
+  return fn().finally(() => {
+    process.env = saved;
+  });
+}
+
 // Set GRAPH_* so graphMailerFromEnv() is non-null inside the worker; sends are mocked via deps.
 function withGraphEnv<T>(fn: () => Promise<T>): Promise<T> {
   const saved = { ...process.env };
@@ -41,17 +58,22 @@ async function rows() {
   return withRls(SUPER, (tx) => tx.emailOutbox.findMany({ where: { dedupKey: { startsWith: PREFIX } } }));
 }
 
+// runEmailOutbox drains the outbox GLOBALLY (claims any queued row up to RATE_PER_RUN), so these
+// worker tests need a clean global outbox — otherwise rows other suites leave behind (welcome
+// emails from user.create, lms_account_ready from receipt.approve, etc.) crowd the 20-row batch and
+// push this test's target row out of it. Tests run serially (fileParallelism:false), so wiping the
+// whole table here is safe and is the only way to make the global drainer deterministic.
 beforeEach(async () => {
-  await withRls(SUPER, (tx) => tx.emailOutbox.deleteMany({ where: { dedupKey: { startsWith: PREFIX } } }));
+  await withRls(SUPER, (tx) => tx.emailOutbox.deleteMany({}));
 });
 afterAll(async () => {
-  await withRls(SUPER, (tx) => tx.emailOutbox.deleteMany({ where: { dedupKey: { startsWith: PREFIX } } }));
+  await withRls(SUPER, (tx) => tx.emailOutbox.deleteMany({}));
 });
 
 describe('email outbox', () => {
   it('no-op when Graph unconfigured: rows stay queued, no throw', async () => {
     await enqueue('noop');
-    const r = await runEmailOutbox(new Date()); // GRAPH_* not set here
+    const r = await withoutGraphEnv(() => runEmailOutbox(new Date())); // simulate Graph unconfigured
     expect(r.disabled).toBe(true);
     expect(r.sent).toBe(0);
     expect((await rows())[0]?.status).toBe('queued');

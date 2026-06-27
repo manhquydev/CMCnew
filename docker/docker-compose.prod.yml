@@ -81,6 +81,10 @@ services:
       # Allowed CORS origins (comma-separated). Must include all frontend origins.
       # In a single-nginx setup everything is same-origin, but set it anyway.
       CORS_ORIGINS:     ${CORS_ORIGINS:-http://localhost}
+      # Public ERP origin used in outbound email links (e.g. the staff welcome email "Mở hệ thống"
+      # button). Set to the real domain in prod, e.g. https://erp.cmcvn.edu.vn. Without this the API
+      # falls back to a localhost dev URL, so a production welcome email would link to localhost.
+      ADMIN_APP_ORIGIN: ${ADMIN_APP_ORIGIN:-http://localhost}
       CRM_LEAD_TOKEN:   ${CRM_LEAD_TOKEN:-}
       DISABLE_CRON:     ${DISABLE_CRON:-0}
     healthcheck:
