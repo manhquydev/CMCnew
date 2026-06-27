@@ -1,9 +1,17 @@
+import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls, Program, OpportunityStage, TestType, type RlsContext } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, publicProcedure, requirePermission, Role } from '../trpc.js';
+
+/** Length-checked constant-time token comparison (timingSafeEqual throws on length mismatch). */
+function tokenMatches(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 /**
  * Roles permitted to assign an opportunity to a user other than themselves.
@@ -366,7 +374,9 @@ export const crmRouter = router({
     )
     .mutation(async ({ input }) => {
       const expected = process.env.CRM_LEAD_TOKEN;
-      if (!expected || input.token !== expected) {
+      // Constant-time compare so this public endpoint does not leak the token byte-by-byte via
+      // response timing. (Per-IP rate limiting is a tracked follow-up — see audit M6.)
+      if (!expected || !tokenMatches(input.token, expected)) {
         throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Lead token không hợp lệ' });
       }
       const sys: RlsContext = { facilityIds: [input.facilityId], isSuperAdmin: false, principalKind: 'staff' };

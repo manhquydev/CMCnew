@@ -113,9 +113,12 @@ async function assembleSlipData(
   } else {
     const kpiRow = await tx.kpiScore.findUnique({
       where: { userId_periodKey: { userId: args.userId, periodKey: args.periodKey } },
-      select: { autoScore: true, overrideScore: true },
+      select: { autoScore: true, overrideScore: true, status: true },
     });
-    kpiScore = kpiRow ? (kpiRow.overrideScore ?? kpiRow.autoScore) : 0;
+    // Only an APPROVED KPI sheet feeds payroll — draft/submitted/confirmed scores are not final
+    // (decision 0011: điểm chỉ khoá và đổ vào lương khi đã phê duyệt). Anything else contributes 0,
+    // so HR cannot compute a payslip off an un-approved score.
+    kpiScore = kpiRow && kpiRow.status === 'approved' ? (kpiRow.overrideScore ?? kpiRow.autoScore) : 0;
   }
 
   // Determine variable pay: override takes precedence; then auto-feed for sales; then input.

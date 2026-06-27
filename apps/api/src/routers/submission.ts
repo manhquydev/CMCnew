@@ -138,12 +138,15 @@ export const submissionRouter = router({
           answerText: input.answerText ?? null,
           annotationLayer: (input.annotationLayer ?? undefined) as object | undefined,
         };
-        return tx.submission.upsert({
+        const saved = await tx.submission.upsert({
           where: { exerciseId_studentId: { exerciseId: input.exerciseId, studentId } },
           update: data,
           create: { facilityId: ex.facilityId, exerciseId: input.exerciseId, studentId, ...data },
           select: submissionSelect,
         });
+        // Redact like mine/forStudent: a student saving their answer must never receive an
+        // un-published grade's score/feedback in the response.
+        return { ...saved, grade: redactUnpublishedGrade(saved.grade) };
       }),
     ),
 

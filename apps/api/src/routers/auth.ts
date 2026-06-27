@@ -5,7 +5,6 @@ import { login, type RequestSession } from '@cmc/auth';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { COOKIE_NAME } from '../context.js';
 import { checkLoginLimit, clearLoginLimit, recordLoginFailure } from '../rate-limit.js';
-import { ssoConfigFromEnv } from '../lib/sso.js';
 
 function publicUser(s: RequestSession) {
   return {
@@ -28,10 +27,11 @@ export const authRouter = router({
         recordLoginFailure(ctx.ip, input.email);
         throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sai email hoặc mật khẩu' });
       }
-      // Password login is break-glass (super_admin only) when SSO is EXPLICITLY enabled via
-      // SSO_ENABLED=true AND the Entra config is fully present. Local dev leaves SSO_ENABLED
-      // unset → all roles may use password login regardless of which ENTRA_* vars are present.
-      if (process.env.SSO_ENABLED === 'true' && ssoConfigFromEnv() && !result.session.isSuperAdmin) {
+      // Fail-closed: only super_admin may ever use password login (break-glass). Every other staff
+      // member is SSO-only, regardless of whether the Entra env is wired — so a pre-config window or
+      // an env drift can never silently expose password login for staff. STAFF_PASSWORD_LOGIN=true is
+      // a deliberate local/dev escape hatch (seed accounts) and must stay unset in production.
+      if (!result.session.isSuperAdmin && process.env.STAFF_PASSWORD_LOGIN !== 'true') {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Nhân viên đăng nhập bằng tài khoản CMC EDU (SSO)' });
       }
       clearLoginLimit(ctx.ip, input.email);

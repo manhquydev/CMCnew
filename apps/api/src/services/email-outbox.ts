@@ -153,9 +153,12 @@ async function drainOutbox(
         deps,
       );
       await withRls(SYSTEM_CTX, async (tx) => {
+        // Scrub the rendered body once delivered: some templates (lms_account_ready, otp_login) render
+        // a plaintext one-time secret into bodyHtml. The subject + templateKind + audit log preserve
+        // traceability; the credential must not linger in the outbox after it has been sent.
         await tx.emailOutbox.update({
           where: { id: row.id },
-          data: { status: 'sent', sentAt: now, lastError: null },
+          data: { status: 'sent', sentAt: now, lastError: null, bodyHtml: '' },
         });
         await logEvent(tx, {
           facilityId: row.facilityId,
@@ -190,7 +193,7 @@ async function drainOutbox(
         await tx.emailOutbox.update({
           where: { id: row.id },
           data: terminal
-            ? { status: 'failed', attempts, lastError: message }
+            ? { status: 'failed', attempts, lastError: message, bodyHtml: '' } // scrub any rendered secret on terminal fail
             : { status: 'queued', attempts, lastError: message, scheduledFor: new Date(now.getTime() + backoffMs(attempts)) },
         });
         if (terminal) {

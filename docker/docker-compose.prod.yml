@@ -101,6 +101,9 @@ services:
       # When 'true' AND SSO is fully configured, non-super-admin password login is blocked (SSO only);
       # the super_admin keeps email/password as break-glass. Leave unset for password login in all roles.
       SSO_ENABLED:          ${SSO_ENABLED:-}
+      # Fail-closed by default: only super_admin may password-login; all other staff are SSO-only.
+      # Set STAFF_PASSWORD_LOGIN=true ONLY for a local/seed environment that needs staff password login.
+      STAFF_PASSWORD_LOGIN: ${STAFF_PASSWORD_LOGIN:-}
       # ── Microsoft Graph outbound email (welcome / OTP / payslip) ───────────────
       # No-op until ENTRA_* (reused as Graph creds) + all three sender mailboxes are set.
       GRAPH_SENDER_NOTIFY:  ${GRAPH_SENDER_NOTIFY:-}
