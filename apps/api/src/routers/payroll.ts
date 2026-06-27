@@ -644,8 +644,11 @@ export const payrollRouter = router({
         }
 
         // Recompute the slip using the same inputs as the original compute, but with
-        // variablePayOverride forcing variablePay to amount (sales auto-feed is skipped).
-        // kpiScore is re-resolved from KpiScore record so the latest override/auto score applies.
+        // variablePayOverride forcing variablePay to the new amount (sales auto-feed is skipped).
+        // kpiScoreInput is taken from the persisted slip — NOT re-resolved from the KpiScore
+        // record — because the original payslipCompute may have used an inline kpiScore input
+        // without writing a KpiScore row. Re-resolving would silently return 0 in that case,
+        // wiping the KPI bonus even though only variablePay is being changed.
         const oldVariablePay = slip.variablePay;
         const computed = await assembleSlipData(tx, {
           userId: input.userId,
@@ -653,7 +656,7 @@ export const payrollRouter = router({
           periodKey: input.periodKey,
           standardDays: slip.standardDays,
           workdays: slip.workdays,
-          // kpiScoreInput left undefined → re-resolved from KpiScore record (consistent with payslipCompute).
+          kpiScoreInput: slip.kpiScore, // preserve frozen KPI from the original compute
           insuranceDeduction: slip.insuranceDeduction,
           dependentsInput: slip.dependents,
           variablePayInput: 0,       // unused when variablePayOverride is set

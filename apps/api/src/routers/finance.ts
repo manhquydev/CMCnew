@@ -428,6 +428,20 @@ export const financeRouter = router({
 
         // Create enrollment if a class batch was specified (idempotent: skip on duplicate).
         if (receipt.classBatchId) {
+          // Guard: the batch's course must match the receipt's course.
+          // Enrolling a student into an unrelated batch corrupts attendance records and
+          // mis-attributes commission to the wrong course.
+          const batchForCourseCheck = await tx.classBatch.findUniqueOrThrow({
+            where: { id: receipt.classBatchId },
+            select: { courseId: true },
+          });
+          if (batchForCourseCheck.courseId !== receipt.courseId) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Lớp học không thuộc khóa học trong phiếu thu (batch.courseId ≠ receipt.courseId)',
+            });
+          }
+
           const existing = await tx.enrollment.findFirst({
             where: { classBatchId: receipt.classBatchId, studentId: resolvedStudentId, archivedAt: null },
             select: { id: true },

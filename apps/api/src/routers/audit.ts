@@ -18,6 +18,9 @@ const NOTE_TARGETS: Record<
   class_batch: (tx, id) => tx.classBatch.findUnique({ where: { id }, select: { facilityId: true } }),
   // Student chatter: staff can leave notes / view history on a student record (RLS-safe).
   student: (tx, id) => tx.student.findUnique({ where: { id }, select: { facilityId: true } }),
+  // CSKH after-sale cases: CSKH staff post notes / track resolution history on a case.
+  // facilityId is resolved from the case record so cross-facility access is blocked by RLS.
+  after_sale_case: (tx, id) => tx.afterSaleCase.findUnique({ where: { id }, select: { facilityId: true } }),
 };
 
 // Chatter timeline (Odoo-style) — dùng chung cho mọi record.
