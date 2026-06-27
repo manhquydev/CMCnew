@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { TRPCError } from '@trpc/server';
 import { withRls, hashPassword, Role } from '@cmc/db';
-import { rlsContextOf } from '@cmc/auth';
+import { rlsContextOf, assignableRoles } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, superAdminProcedure, requirePermission } from '../trpc.js';
 import { enqueueEmail } from '../services/email-outbox.js';
@@ -17,10 +18,14 @@ const userSelect = {
   facilities: { select: { facilityId: true } },
 } as const;
 
-// User accounts span facilities → managed by super_admin only (matches `list`).
-// Audit events carry facilityId: null (a user is not a single-facility record).
+// Elevated RLS context for writes that must bypass app_user's super-admin-only INSERT policy.
+// Used for director-delegated user creation after all app-layer scope checks have passed.
+const SYSTEM_CTX = { facilityIds: [] as number[], isSuperAdmin: true };
+
 export const userRouter = router({
-  list: superAdminProcedure.query(({ ctx }) =>
+  // Directors see only co-facility staff (app_user_facility_roster RLS policy filters
+  // automatically when isSuperAdmin=false). super_admin sees everyone.
+  list: requirePermission('user', 'list').query(({ ctx }) =>
     withRls(rlsContextOf(ctx.session), (tx) =>
       tx.appUser.findMany({ orderBy: { createdAt: 'asc' }, select: userSelect }),
     ),
@@ -44,7 +49,14 @@ export const userRouter = router({
       ),
     ),
 
-  create: superAdminProcedure
+  // Delegated user.create: super_admin may create any user; directors may create users whose
+  // roles fall within their grant set AND whose facilities are a subset of their own facilities.
+  //
+  // The insert runs under an elevated RLS context (SYSTEM_CTX) because app_user INSERT has
+  // WITH CHECK (app_is_super_admin()) — a director session would be rejected at the DB layer.
+  // The app-layer checks above (role scope + facility subset) are the load-bearing constraint;
+  // SYSTEM_CTX is the bypass that makes the DB write succeed after those checks pass.
+  create: requirePermission('user', 'create')
     .input(
       z
         .object({
@@ -60,8 +72,40 @@ export const userRouter = router({
           path: ['primaryRole'],
         }),
     )
-    .mutation(({ ctx, input }) =>
-      withRls(rlsContextOf(ctx.session), async (tx) => {
+    .mutation(async ({ ctx, input }) => {
+      const allowed = assignableRoles(ctx.session);
+
+      // 1. Role scope: every requested role must be within this caller's grant set.
+      const badRoles = input.roles.filter((r) => !allowed.has(r));
+      if (badRoles.length) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: `Bạn không có quyền cấp vai trò: ${badRoles.join(', ')}`,
+        });
+      }
+
+      // 2. Facility scope: directors may only place users in their own facilities.
+      if (!ctx.session.isSuperAdmin) {
+        const own = new Set(ctx.session.facilityIds);
+        const outside = input.facilityIds.filter((f) => !own.has(f));
+        if (outside.length) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: `Ngoài phạm vi cơ sở của bạn: ${outside.join(', ')}`,
+          });
+        }
+        if (input.facilityIds.length === 0) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Phải chọn ít nhất một cơ sở',
+          });
+        }
+      }
+
+      // 3. Write under elevated context so the super-admin-only INSERT policy passes.
+      //    All scope constraints have been enforced above; SYSTEM_CTX is only safe here.
+      const actorId = ctx.session.userId;
+      return withRls(SYSTEM_CTX, async (tx) => {
         const user = await tx.appUser.create({
           data: {
             email: input.email,
@@ -77,13 +121,14 @@ export const userRouter = router({
           entityType: 'user',
           entityId: user.id,
           type: 'created',
-          actorId: ctx.session.userId,
+          actorId,
         });
-        // Staff onboarding is via Microsoft SSO (no activation email / no password to deliver).
         return user;
-      }),
-    ),
+      });
+    }),
 
+  // setRoles / setActive / setFacilities remain super_admin-only for F0. Directors build
+  // their team via create; role reassignment and deactivation stay with IT (super_admin).
   setRoles: superAdminProcedure
     .input(
       z
@@ -197,7 +242,6 @@ export const userRouter = router({
 // Post-commit, best-effort security-alert email on a sensitive account change. Runs in its OWN
 // super-scoped tx with a try/catch so a mail-queue failure never rolls back the deactivation /
 // role change. Not idempotent by design (dedupKey carries a timestamp): every change should alert.
-const SYSTEM_CTX = { facilityIds: [] as number[], isSuperAdmin: true };
 async function emailSecurityAlert(userId: string, email: string, action: string): Promise<void> {
   try {
     await withRls(SYSTEM_CTX, (tx) =>

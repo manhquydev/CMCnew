@@ -36,10 +36,11 @@ export const NAV_GATES: Record<SectionKey, NavGate> = {
   // my-payslips: payroll.myPayslips is protectedProcedure; every staff member owns their payslips
   'my-payslips':  { kind: 'open' },
 
-  // ── Super-admin only ─────────────────────────────────────────────────────
-  // org: primary query is user.list (superAdminProcedure); user-mgmt mutations are all
-  //      super_admin. Facility read is open, but that half of the panel alone is not useful.
-  org:            { kind: 'superAdmin' },
+  // ── Super-admin + directors ───────────────────────────────────────────────
+  // org: user.create is the primary work action — super_admin has full roster + all mutations;
+  //      directors see only their facility's staff (RLS on user.list) and create within their
+  //      role-scope. Remaining mutations (setRoles/setActive/setFacilities) reject directors.
+  org:            { kind: 'permission', module: 'user', action: 'create' },
   // compensation: compensation.list/create are superAdminProcedure
   compensation:   { kind: 'superAdmin' },
 

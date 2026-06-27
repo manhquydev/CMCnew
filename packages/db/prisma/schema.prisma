@@ -23,6 +23,8 @@ enum Role {
   cskh
   ctv_mkt
   bgd
+  giam_doc_kinh_doanh  // Business Director — delegates sale/cskh/ctv_mkt team creation
+  giam_doc_dao_tao     // Education Director — delegates giao_vien/head_teacher team creation
 }
 
 /// The 3 CMC programs. Global (not facility-scoped).

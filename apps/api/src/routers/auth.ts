@@ -28,9 +28,10 @@ export const authRouter = router({
         recordLoginFailure(ctx.ip, input.email);
         throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sai email hoặc mật khẩu' });
       }
-      // Once SSO is live, password login is break-glass only (super_admin). Until the tenant secret
-      // is configured (ssoConfigFromEnv() === null) password login stays open so the system is usable.
-      if (ssoConfigFromEnv() && !result.session.isSuperAdmin) {
+      // Password login is break-glass (super_admin only) when SSO is EXPLICITLY enabled via
+      // SSO_ENABLED=true AND the Entra config is fully present. Local dev leaves SSO_ENABLED
+      // unset → all roles may use password login regardless of which ENTRA_* vars are present.
+      if (process.env.SSO_ENABLED === 'true' && ssoConfigFromEnv() && !result.session.isSuperAdmin) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Nhân viên đăng nhập bằng tài khoản CMC EDU (SSO)' });
       }
       clearLoginLimit(ctx.ip, input.email);
