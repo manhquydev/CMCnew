@@ -46,6 +46,16 @@ Nguồn: 10-agent audit (`plans/reports/qa-260627-2109-...md`) + code-review + s
 - Phase B có artifact sẵn dùng (config/script/runbook/checklist) để bạn deploy qua SSH.
 - 0 regression; 324+ test xanh; code-review PASS.
 
+## Cập nhật tiến độ (2026-06-27 tối)
+- ĐÃ XONG Phase A: A2, A4, A5, A9 (commit 6b2a862) · A1, A7 (2eeabe0) · A6, A3, A8-mitigation (59df909).
+- Quyết định owner: chứng chỉ TẮT (ẩn nav) · passMark server-controlled · KPI confirm read-only (sửa qua kpiOverride có log).
+
+### Follow-up còn lại (cần round sau)
+- **A8-config**: passMark cấu hình per-course do admin đặt (thêm field Course.passMark + migration + ô trong form khóa học + computeFinalGrade đọc từ đó). Hiện tạm hardcode 5/program.
+- **KPI nhân-sự-chỉ-xem** (vision owner): hiện `kpiEvalSubmit` cho nhân viên TỰ chấm điểm mình. Theo ý owner "nhân sự chỉ xem, không sửa thông số" → đổi luồng: hệ thống auto (kpiAutoPrefill) + quản lý điều chỉnh (kpiOverride có log); bỏ/khóa self-submit. Là thay đổi luồng + UI self-KPI → cần plan riêng + xác nhận.
+- **A10** SSO nonce (low, PKCE+state đã đủ) · **A8 cũ** passMark admin-config.
+- Phase B hạ tầng: theo `docs/prod-deploy-security-runbook.md` (cần SSH/cert của owner).
+
 ## Out of scope (round này)
 - Low UX/cosmetic không ảnh hưởng bảo mật (dead-end button director, audit body typo).
 - Tính năng mới.
