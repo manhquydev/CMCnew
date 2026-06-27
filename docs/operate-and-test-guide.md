@@ -162,7 +162,10 @@ Password: ChangeMe123!
    - Nhập: Mã học sinh (nếu đã có) hoặc email phụ huynh
    - Nhập: Số tiền, ghi chú
    - **Trạng thái**: `Nháp` → Nộp → Quản Lý xác nhận → **Kế Toán duyệt**
-   - **Khi duyệt phiếu**: Hệ thống **tự động tạo tài khoản học sinh** (nếu chưa có)
+   - **Khi duyệt phiếu**: Hệ thống **tự động tạo học sinh + tài khoản LMS** (nếu là học sinh mới):
+     - **Mã đăng nhập LMS** = mã học sinh (vd `HS-2026-0042`); **mật khẩu tạm hiện 1 lần** ngay sau khi duyệt — nhân viên ghi lại để đưa phụ huynh.
+     - Nếu nhập **email phụ huynh** ở phiếu: hệ thống còn gửi email thông tin tài khoản (khi email đã cấu hình).
+     - Xem/đặt lại tài khoản LMS bất cứ lúc nào ở **Chi tiết học sinh → Tài khoản LMS → Đặt lại mật khẩu** (cũng tạo tài khoản cho học sinh cũ chưa có).
    
    > ⚠️ **Quan trọng**: Học sinh **KHÔNG được tạo thủ công**. Chỉ được tạo khi duyệt phiếu thu.
 
