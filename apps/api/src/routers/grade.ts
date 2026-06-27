@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
@@ -38,6 +39,14 @@ export const gradeRouter = router({
           where: { id: input.submissionId },
           include: { exercise: { select: { maxScore: true } } },
         });
+        // Score must not exceed the exercise maximum — an over-max score inflates the
+        // normalised final grade (score/maxScore ratio used by computeFinalGrade).
+        if (input.score > sub.exercise.maxScore) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `Điểm (${input.score}) vượt quá điểm tối đa của bài tập (${sub.exercise.maxScore})`,
+          });
+        }
         const grade = await tx.grade.upsert({
           where: { submissionId: input.submissionId },
           update: {

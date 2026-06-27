@@ -30,6 +30,20 @@ const submissionSelect = {
   grade: { select: gradeSelect },
 } as const;
 
+// Privacy invariant: students and parents must not see score/feedback until
+// the teacher explicitly publishes the grade. The UI already hides them but
+// server-side enforcement is the authoritative guard.
+type GradeRow = { id: string; score: number; maxScore: number; feedback: string | null; isPublished: boolean };
+type RedactedGradeRow = { id: string; score: number | null; maxScore: number; feedback: string | null; isPublished: boolean };
+
+function redactUnpublishedGrade(grade: GradeRow | null): RedactedGradeRow | null {
+  if (!grade) return null;
+  if (!grade.isPublished) {
+    return { id: grade.id, score: null, maxScore: grade.maxScore, feedback: null, isPublished: false };
+  }
+  return grade;
+}
+
 export const submissionRouter = router({
   // Staff: all submissions for an exercise (to grade). RLS scopes to facility.
   listByExercise: requirePermission('submission', 'listByExercise')
@@ -48,33 +62,38 @@ export const submissionRouter = router({
     ),
 
   // Student: my submissions (RLS = own student_id only).
+  // Grade fields are redacted server-side when isPublished=false — the UI filter alone is
+  // not sufficient because a determined client can read raw tRPC responses.
   mine: studentProcedure.query(({ ctx }) =>
-    withRls(lmsRlsContextOf(ctx.lms), (tx) =>
-      tx.submission.findMany({
+    withRls(lmsRlsContextOf(ctx.lms), async (tx) => {
+      const rows = await tx.submission.findMany({
         where: { archivedAt: null },
         select: {
           ...submissionSelect,
           exercise: { select: { title: true, maxScore: true, starReward: true } },
         },
-      }),
-    ),
+      });
+      return rows.map((s) => ({ ...s, grade: redactUnpublishedGrade(s.grade) }));
+    }),
   ),
 
   // Parent/student: submissions of a given student. RLS rejects any studentId the
   // principal does not own, so passing a foreign id simply returns nothing.
+  // Grade fields are redacted server-side when isPublished=false (same invariant as mine).
   forStudent: lmsProcedure
     .input(z.object({ studentId: z.string().uuid() }))
     .query(({ ctx, input }) =>
-      withRls(lmsRlsContextOf(ctx.lms), (tx) =>
-        tx.submission.findMany({
+      withRls(lmsRlsContextOf(ctx.lms), async (tx) => {
+        const rows = await tx.submission.findMany({
           where: { studentId: input.studentId, archivedAt: null },
           select: {
             ...submissionSelect,
             exercise: { select: { title: true, maxScore: true } },
           },
           orderBy: { createdAt: 'desc' },
-        }),
-      ),
+        });
+        return rows.map((s) => ({ ...s, grade: redactUnpublishedGrade(s.grade) }));
+      }),
     ),
 
   // Staff: both annotation layers for grading a submission — the student's marks (rendered
@@ -109,6 +128,12 @@ export const submissionRouter = router({
         const studentId = ctx.lms.studentIds[0];
         if (!studentId) throw new TRPCError({ code: 'FORBIDDEN' });
         const ex = await tx.exercise.findUniqueOrThrow({ where: { id: input.exerciseId } });
+        // Students may only save drafts for published exercises. Unpublished exercises
+        // are staff-only previews; accepting submissions would leak the fact the exercise
+        // exists and could later corrupt grade calculations if the exercise changes.
+        if (ex.status !== 'published') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Bài tập chưa được công bố' });
+        }
         const data = {
           answerText: input.answerText ?? null,
           annotationLayer: (input.annotationLayer ?? undefined) as object | undefined,
@@ -151,11 +176,21 @@ export const submissionRouter = router({
         if (!studentId) throw new TRPCError({ code: 'FORBIDDEN' });
         // Must have a draft to submit; guard so a missing row is a clean NOT_FOUND (not a P2025 500)
         // and a re-submit of an already submitted/graded row is rejected (never silently resets a grade).
-        const current = await tx.submission.findUnique({
-          where: { exerciseId_studentId: { exerciseId: input.exerciseId, studentId } },
-          select: { status: true },
-        });
+        // Also confirm the exercise is still published — it could have been retracted after the draft was saved.
+        const [current, ex] = await Promise.all([
+          tx.submission.findUnique({
+            where: { exerciseId_studentId: { exerciseId: input.exerciseId, studentId } },
+            select: { status: true },
+          }),
+          tx.exercise.findUniqueOrThrow({
+            where: { id: input.exerciseId },
+            select: { status: true },
+          }),
+        ]);
         if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: 'Chưa có bài để nộp' });
+        if (ex.status !== 'published') {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Bài tập chưa được công bố' });
+        }
         if (current.status !== 'draft') {
           throw new TRPCError({ code: 'CONFLICT', message: 'Bài đã nộp hoặc đã chấm' });
         }

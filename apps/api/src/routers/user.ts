@@ -31,6 +31,23 @@ export const userRouter = router({
     ),
   ),
 
+  // Assignee picker for the CSKH assign workflow. Returns active staff whose primary role is
+  // cskh or quan_ly — the only roles eligible to own an after-sale case — within the caller's
+  // facility. RLS (app_user_facility_roster) enforces the facility boundary automatically;
+  // the roles filter here prevents directors from appearing in the dropdown as case owners.
+  listAssignableForAfterSale: requirePermission('user', 'listAssignableForAfterSale').query(({ ctx }) =>
+    withRls(rlsContextOf(ctx.session), (tx) =>
+      tx.appUser.findMany({
+        where: {
+          isActive: true,
+          roles: { hasSome: [Role.cskh, Role.quan_ly] },
+        },
+        orderBy: { displayName: 'asc' },
+        select: { id: true, displayName: true },
+      }),
+    ),
+  ),
+
   // Teacher picker for scheduling. RLS (app_user_facility_roster) scopes this to staff
   // sharing a facility with the caller — a quan_ly cannot enumerate teachers elsewhere.
   listTeachers: requirePermission('user', 'listTeachers')

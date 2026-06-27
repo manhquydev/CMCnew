@@ -22,6 +22,13 @@ import { router, requirePermission, protectedProcedure, Role } from '../trpc.js'
 import { canOverrideKpi } from '../lib/kpi-authz.js';
 import { callioConfigFromEnv, fetchPeriodCdrs, aggregateValidCalls } from '../lib/callio-client.js';
 
+/**
+ * Receipt statuses that count as "collected revenue" for commission and KPI purposes.
+ * Both commissionForSale and kpiAutoPrefill must use the same set — a mismatch
+ * would cause KPI doanh_so to understate the revenue that already earned commission.
+ */
+const COMMISSION_RECEIPT_STATUSES = ['approved', 'sent', 'reconciled'] as const;
+
 /** Last calendar day of a YYYY-MM period (UTC), used to resolve the effective salary rate. */
 function periodEnd(periodKey: string): Date {
   const parts = periodKey.split('-');
@@ -128,7 +135,7 @@ async function assembleSlipData(
       where: {
         soldById: args.userId,
         facilityId: args.facilityId,
-        status: { in: ['approved', 'sent', 'reconciled'] },
+        status: { in: [...COMMISSION_RECEIPT_STATUSES] },
         approvedAt: { gte: pStart, lt: pEnd },
       },
       _sum: { netAmount: true },
@@ -976,7 +983,7 @@ export const payrollRouter = router({
             where: {
               soldById: input.userId,
               facilityId: input.facilityId,
-              status: 'approved',
+              status: { in: [...COMMISSION_RECEIPT_STATUSES] },
               approvedAt: { gte: start, lt: end },
             },
             _sum: { netAmount: true },

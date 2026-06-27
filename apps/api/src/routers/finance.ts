@@ -565,12 +565,42 @@ export const financeRouter = router({
         // opportunity that reached O5_ENROLLED counts as NEW (covers first-time AND win-back via a
         // fresh funnel); otherwise RENEWAL if the student has any prior collected receipt, else NEW.
         const opp = receipt.opportunityId
-          ? await tx.opportunity.findUnique({ where: { id: receipt.opportunityId }, select: { ownerId: true, stage: true } })
+          ? await tx.opportunity.findUnique({
+              where: { id: receipt.opportunityId },
+              select: { ownerId: true, stage: true, studentName: true },
+            })
           : null;
+
+        // Attribution guard: only credit commission from the linked opportunity when it actually
+        // belongs to this receipt's student. The opportunity's studentName (when set) is matched
+        // against the student's name; on MISMATCH we DROP the commission credit (and stage-based
+        // kind) and audit it — a name typo must never block revenue collection, only prevent
+        // mis-attributing the sale to the wrong consultant. A null opp.studentName can't be
+        // validated, so it is trusted (legacy/loose link).
+        let attributedOpp = opp;
+        if (opp?.studentName) {
+          const student = await tx.student.findUnique({
+            where: { id: resolvedStudentId },
+            select: { fullName: true },
+          });
+          const oppName = opp.studentName.trim().toLowerCase();
+          const receiptStudentName = (student?.fullName ?? receipt.studentName ?? '').trim().toLowerCase();
+          if (!receiptStudentName || oppName !== receiptStudentName) {
+            attributedOpp = null; // unrelated opportunity → no commission credit
+            await logEvent(tx, {
+              facilityId: receipt.facilityId,
+              entityType: 'receipt',
+              entityId: receipt.id,
+              type: 'updated',
+              body: `Bỏ quy kết hoa hồng khi duyệt ${code}: cơ hội "${opp.studentName}" không khớp học sinh "${student?.fullName ?? receipt.studentName ?? '—'}"`,
+              actorId: ctx.session.userId,
+            });
+          }
+        }
         const priorCollected = await tx.receipt.count({
           where: { studentId: resolvedStudentId, id: { not: receipt.id }, status: { in: ['approved', 'sent', 'reconciled'] } },
         });
-        const kind = opp?.stage === 'O5_ENROLLED' ? 'new' : priorCollected > 0 ? 'renewal' : 'new';
+        const kind = attributedOpp?.stage === 'O5_ENROLLED' ? 'new' : priorCollected > 0 ? 'renewal' : 'new';
 
         // status, code, approvedById, approvedAt were already stamped by the conditional claim above.
         // Only stamp fields that depend on provisioning results.
@@ -578,7 +608,7 @@ export const financeRouter = router({
           where: { id: receipt.id },
           data: {
             studentId: resolvedStudentId, // stamp resolved student (noop if was already set)
-            soldById: opp?.ownerId ?? null,
+            soldById: attributedOpp?.ownerId ?? null,
             kind,
           },
         });

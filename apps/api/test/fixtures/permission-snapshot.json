@@ -106,6 +106,7 @@
   "submission.layerForGrading": ["giao_vien", "quan_ly"],
   "user.list": ["super_admin", "giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "user.listTeachers": ["quan_ly", "giam_doc_dao_tao"],
+  "user.listAssignableForAfterSale": ["cskh", "giam_doc_kinh_doanh", "quan_ly"],
   "user.create": ["super_admin", "giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "user.setRoles": ["super_admin"],
   "user.setFacilities": ["super_admin"],

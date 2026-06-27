@@ -3,7 +3,13 @@ import { TRPCError } from '@trpc/server';
 import { withRls, Program, OpportunityStage, TestType, type RlsContext } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, publicProcedure, requirePermission } from '../trpc.js';
+import { router, publicProcedure, requirePermission, Role } from '../trpc.js';
+
+/**
+ * Roles permitted to assign an opportunity to a user other than themselves.
+ * A non-manager (sale/cskh/ctv_mkt) creating an opportunity may only credit ownerId = self.
+ */
+const CRM_MANAGER_ROLES: Role[] = [Role.quan_ly, Role.giam_doc_kinh_doanh, Role.bgd, Role.super_admin];
 
 const STAGE_ORDER: OpportunityStage[] = [
   OpportunityStage.O1_LEAD,
@@ -111,6 +117,19 @@ export const crmRouter = router({
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const contact = await tx.contact.findUniqueOrThrow({ where: { id: input.contactId } });
+
+        // A non-manager (sale/cskh/ctv_mkt) may only credit themselves as the opportunity owner.
+        // Managers (quan_ly, giam_doc_kinh_doanh, bgd, super_admin) may credit any user.
+        const callerIsManager =
+          ctx.session.isSuperAdmin || ctx.session.roles.some((r) => CRM_MANAGER_ROLES.includes(r as Role));
+        const resolvedOwnerId = input.ownerId ?? ctx.session.userId;
+        if (!callerIsManager && resolvedOwnerId !== ctx.session.userId) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Chỉ quản lý mới có thể gán cơ hội cho người khác',
+          });
+        }
+
         const opp = await tx.opportunity.create({
           data: {
             facilityId: contact.facilityId,
@@ -118,7 +137,7 @@ export const crmRouter = router({
             studentName: input.studentName,
             program: input.program,
             // Credit the consultant who owns this opportunity — defaults to the creator (a sale).
-            ownerId: input.ownerId ?? ctx.session.userId,
+            ownerId: resolvedOwnerId,
           },
         });
         await logEvent(tx, {

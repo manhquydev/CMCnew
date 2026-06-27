@@ -93,16 +93,12 @@ export function CskhPanel() {
       .then(setStudents)
       .catch((e) => notifyError(e, 'Không tải được danh sách học sinh'));
 
-    // Load staff for assign dropdown
-    trpc.user.list
+    // Load staff eligible to be assigned after-sale cases (cskh/quan_ly in this facility).
+    // Uses listAssignableForAfterSale so cskh/quan_ly callers are not blocked by the
+    // super-admin/director gate on user.list.
+    trpc.user.listAssignableForAfterSale
       .query()
-      .then((users) =>
-        setStaffUsers(
-          users
-            .filter((u) => u.isActive)
-            .map((u) => ({ id: u.id, displayName: u.displayName })),
-        ),
-      )
+      .then(setStaffUsers)
       .catch((e) => notifyError(e, 'Không tải được danh sách nhân sự'));
   }, []);
 

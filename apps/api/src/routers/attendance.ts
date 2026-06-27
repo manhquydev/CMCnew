@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TRPCError } from '@trpc/server';
 import { withRls, AttendanceStatus } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
@@ -17,7 +18,8 @@ export const attendanceRouter = router({
   mark: requirePermission('attendance', 'mark')
     .input(
       z.object({
-        facilityId: z.number().int().positive(),
+        // facilityId kept for API backward-compat but ignored — derived server-side from the session.
+        facilityId: z.number().int().positive().optional(),
         classSessionId: z.string().uuid(),
         enrollmentId: z.string().uuid(),
         status: z.nativeEnum(AttendanceStatus),
@@ -27,6 +29,28 @@ export const attendanceRouter = router({
     )
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
+        // Validate that the enrollment and session belong to the same class batch.
+        // A mismatched (enrollment, session) pair silently corrupts attendance rates
+        // used by computeFinalGrade — reject it before any write.
+        // facilityId is derived from the session record, not from the client, to prevent
+        // a caller from injecting a foreign facilityId and writing cross-tenant rows.
+        const [session, enrollment] = await Promise.all([
+          tx.classSession.findUniqueOrThrow({
+            where: { id: input.classSessionId },
+            select: { classBatchId: true, facilityId: true },
+          }),
+          tx.enrollment.findUniqueOrThrow({
+            where: { id: input.enrollmentId },
+            select: { classBatchId: true },
+          }),
+        ]);
+        if (enrollment.classBatchId !== session.classBatchId) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Học sinh không thuộc lớp học của buổi học này',
+          });
+        }
+        const facilityId = session.facilityId;
         const now = new Date();
         const attendance = await tx.attendance.upsert({
           where: {
@@ -43,7 +67,7 @@ export const attendanceRouter = router({
             markedAt: now,
           },
           create: {
-            facilityId: input.facilityId,
+            facilityId,
             classSessionId: input.classSessionId,
             enrollmentId: input.enrollmentId,
             status: input.status,
@@ -54,7 +78,7 @@ export const attendanceRouter = router({
           },
         });
         await logEvent(tx, {
-          facilityId: input.facilityId,
+          facilityId,
           entityType: 'class_session',
           entityId: input.classSessionId,
           type: 'updated',

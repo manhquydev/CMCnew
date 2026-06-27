@@ -210,6 +210,10 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   user: {
     list: ['super_admin', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     listTeachers: ['quan_ly', 'giam_doc_dao_tao'],
+    // Narrowly-scoped picker for the CSKH assign dropdown: returns only active cskh/quan_ly
+    // staff within the caller's facility. Gated to roles that can also call afterSale.assign
+    // so the dropdown never appears for roles that cannot perform the assignment.
+    listAssignableForAfterSale: ['cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
     create: ['super_admin', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     setRoles: ['super_admin'],
     setFacilities: ['super_admin'],

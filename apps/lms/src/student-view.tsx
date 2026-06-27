@@ -117,6 +117,10 @@ function ExerciseModal({
   useEffect(() => {
     if (!opened) return;
     setAnswer(submission?.answerText ?? '');
+    // Always clear both annotation layers first so a PDF annotation from a previously-opened
+    // exercise never carries over to a text-only exercise (or a different PDF exercise).
+    setAnnotation(null);
+    setTeacherLayer(null);
     setMsg('');
     setErr('');
     if (exercise.basePdfRef) {
