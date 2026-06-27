@@ -115,6 +115,8 @@ services:
     restart: 'no'
 
   # ── One-off: seed super-admin (idempotent) ──────────────────────────────────
+  # Runs in bootstrap mode: seeds ONLY HQ facility + IT-head super_admin.
+  # All other accounts are created via the UI by the IT head.
   api-seed:
     build:
       context: ..
@@ -125,6 +127,7 @@ services:
       DIRECT_URL:              postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-cmc}?schema=public
       SEED_SUPERADMIN_EMAIL:    ${SEED_SUPERADMIN_EMAIL:?SEED_SUPERADMIN_EMAIL is required for seeding}
       SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:?SEED_SUPERADMIN_PASSWORD is required for seeding}
+      SEED_MODE:               bootstrap
     depends_on:
       postgres:
         condition: service_healthy

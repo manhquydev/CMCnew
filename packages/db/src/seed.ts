@@ -6,14 +6,46 @@ const prisma = new PrismaClient({
   datasources: { db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL } },
 });
 
-async function main(): Promise<void> {
-  const email = process.env.SEED_SUPERADMIN_EMAIL ?? 'admin@cmc.local';
-  const password = process.env.SEED_SUPERADMIN_PASSWORD ?? 'ChangeMe!123';
+// ── Bootstrap seed ─────────────────────────────────────────────────────────
+// When SEED_MODE=bootstrap: seeds ONLY one Facility (HQ) + one super_admin
+// (the IT head). No staff, no demo students/parents. Idempotent.
+// Used by the prod docker-compose api-seed service for a clean first-account
+// system that the product owner then populates via the UI.
+async function seedBootstrap(email: string, password: string): Promise<void> {
+  const hq = await prisma.facility.upsert({
+    where: { code: 'HQ' },
+    update: {},
+    create: { code: 'HQ', name: 'CMC Trụ sở chính' },
+  });
+  console.log(`✓ Facility: ${hq.code} (#${hq.id})`);
 
-  if (process.env.NODE_ENV === 'production' && password === 'ChangeMe!123') {
-    throw new Error('SEED_SUPERADMIN_PASSWORD phải được đổi trong production');
+  const existing = await prisma.appUser.findUnique({ where: { email } });
+  if (!existing) {
+    await prisma.appUser.create({
+      data: {
+        email,
+        displayName: 'IT Head (Super Admin)',
+        passwordHash: await hashPassword(password),
+        roles: [Role.super_admin],
+        primaryRole: Role.super_admin,
+        facilities: { create: { facilityId: hq.id } },
+      },
+    });
+    console.log(`✓ Seeded super_admin (IT head) <${email}>`);
+  } else {
+    console.log(`• super_admin <${email}> already exists — skipped`);
   }
+  console.log('');
+  console.log('Bootstrap complete. Log in as the IT head to create other accounts.');
+  console.log(`  Email:    ${email}`);
+  console.log(`  Password: (SEED_SUPERADMIN_PASSWORD)`);
+}
 
+// ── Full demo seed ─────────────────────────────────────────────────────────
+// Default behavior when SEED_MODE is unset. Keeps all dev demo accounts so
+// local development stays fully seeded. Do NOT change this without updating
+// local dev documentation.
+async function seedFull(email: string, password: string): Promise<void> {
   const hq = await prisma.facility.upsert({
     where: { code: 'HQ' },
     update: {},
@@ -147,6 +179,24 @@ async function main(): Promise<void> {
   console.log('LMS Login credentials:');
   console.log(`  Student  — loginCode: TEST-001     password: (= SEED_SUPERADMIN_PASSWORD)`);
   console.log(`  Parent   — email: parent@cmc.local password: (= SEED_SUPERADMIN_PASSWORD)`);
+}
+
+async function main(): Promise<void> {
+  const email = process.env.SEED_SUPERADMIN_EMAIL ?? 'admin@cmc.local';
+  const password = process.env.SEED_SUPERADMIN_PASSWORD ?? 'ChangeMe!123';
+
+  if (process.env.NODE_ENV === 'production' && password === 'ChangeMe!123') {
+    throw new Error('SEED_SUPERADMIN_PASSWORD phải được đổi trong production');
+  }
+
+  const mode = process.env.SEED_MODE ?? 'full';
+  console.log(`Seed mode: ${mode}`);
+
+  if (mode === 'bootstrap') {
+    await seedBootstrap(email, password);
+  } else {
+    await seedFull(email, password);
+  }
 }
 
 main()
