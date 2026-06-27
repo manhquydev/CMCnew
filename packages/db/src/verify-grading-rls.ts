@@ -12,8 +12,8 @@ const SUPER = { facilityIds: [], isSuperAdmin: true };
 
 async function main(): Promise<void> {
   const [A, B] = await withRls(SUPER, async (tx) => {
-    const a = await tx.student.findUniqueOrThrow({ where: { studentCode: 'HS-RLS-A' }, select: { id: true } });
-    const b = await tx.student.findUniqueOrThrow({ where: { studentCode: 'HS-RLS-B' }, select: { id: true } });
+    const a = await tx.student.findUniqueOrThrow({ where: { facilityId_studentCode: { facilityId: 1, studentCode: 'HS-RLS-A' } }, select: { id: true } });
+    const b = await tx.student.findUniqueOrThrow({ where: { facilityId_studentCode: { facilityId: 1, studentCode: 'HS-RLS-B' } }, select: { id: true } });
     for (const s of [a, b]) {
       await tx.finalGrade.upsert({
         where: { studentId_program_periodKey: { studentId: s.id, program: 'UCREA', periodKey: '2026-06' } },

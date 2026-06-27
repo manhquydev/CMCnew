@@ -34,7 +34,7 @@ async function main(): Promise<void> {
   ];
   for (const s of students) {
     await prisma.student.upsert({
-      where: { studentCode: s.studentCode },
+      where: { facilityId_studentCode: { facilityId: hq.id, studentCode: s.studentCode } },
       update: {},
       create: { facilityId: hq.id, lifecycle: 'admitted', ...s },
     });

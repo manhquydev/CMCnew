@@ -49,7 +49,7 @@ async function ensureStudent(
   program: Program,
 ) {
   return prisma.student.upsert({
-    where: { studentCode },
+    where: { facilityId_studentCode: { facilityId, studentCode } },
     update: {},
     create: { facilityId, studentCode, fullName, program, lifecycle: 'active' },
   });
@@ -85,7 +85,7 @@ async function seedGradedClass(opts: {
 }) {
   const course = await prisma.course.findUniqueOrThrow({ where: { code: opts.courseCode } });
   const batch = await prisma.classBatch.upsert({
-    where: { code: opts.batchCode },
+    where: { facilityId_code: { facilityId: opts.facilityId, code: opts.batchCode } },
     update: {},
     create: {
       facilityId: opts.facilityId,
@@ -220,7 +220,7 @@ async function seedClassmate(opts: {
   stars: number;
 }) {
   const student = await ensureStudent(opts.facilityId, opts.studentCode, opts.fullName, opts.program);
-  const batch = await prisma.classBatch.findUniqueOrThrow({ where: { code: opts.batchCode } });
+  const batch = await prisma.classBatch.findUniqueOrThrow({ where: { facilityId_code: { facilityId: opts.facilityId, code: opts.batchCode } } });
   await prisma.enrollment.upsert({
     where: { classBatchId_studentId: { classBatchId: batch.id, studentId: student.id } },
     update: {},

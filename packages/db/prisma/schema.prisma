@@ -154,7 +154,7 @@ model Course {
 model Student {
   id          String           @id @default(uuid()) @db.Uuid
   facilityId  Int              @map("facility_id")
-  studentCode String           @unique @map("student_code")
+  studentCode String           @map("student_code")
   fullName    String           @map("full_name")
   dateOfBirth DateTime?        @map("date_of_birth") @db.Date
   program     Program
@@ -181,16 +181,20 @@ model Student {
   afterSaleCases  AfterSaleCase[]
   certificates    Certificate[]
 
+  // studentCode is unique per facility — derived from receipt counter (HS-YYYY-NNNN ← PT-YYYY-NNNN),
+  // so two facilities will produce the same code independently. Same pattern as ClassBatch + Receipt.
+  @@unique([facilityId, studentCode])
   @@index([facilityId])
   @@index([createdByReceiptId])
   @@map("student")
 }
 
 /// Lớp/khóa cụ thể — facility-scoped. Mã B-YYYY-NNNN (sinh nguyên tử).
+/// code is unique per facility, not globally — two facilities can both have B-2026-0001.
 model ClassBatch {
   id         String         @id @default(uuid()) @db.Uuid
   facilityId Int            @map("facility_id")
-  code       String         @unique
+  code       String
   courseId   String         @map("course_id") @db.Uuid
   course     Course         @relation(fields: [courseId], references: [id])
   name       String
@@ -207,6 +211,7 @@ model ClassBatch {
   parentMeetings ParentMeeting[]
   receipts   Receipt[] @relation("ReceiptBatch")
 
+  @@unique([facilityId, code]) // codes are unique per facility; counters are keyed (facilityId, year)
   @@index([facilityId])
   @@map("class_batch")
 }
@@ -932,10 +937,11 @@ model Voucher {
 /// cấp tại approve. draft→approved→sent→reconciled (+cancelled). Voucher consume tại approve.
 /// Student provisioning (F1): studentId is nullable for the NEW-student path. If parentPhone+studentName
 /// are present and studentId is null, receipt.approve creates/dedupes the Student atomically.
+/// code is unique per facility, not globally — two facilities can both have PT-2026-0001.
 model Receipt {
   id                       String        @id @default(uuid()) @db.Uuid
   facilityId               Int           @map("facility_id")
-  code                     String?       @unique
+  code                     String?
   /// Nullable: null until receipt.approve resolves or creates the student (new-student provisioning).
   /// Set immediately when the receipt is for an existing student (renewal/explicit-link path).
   studentId                String?       @map("student_id") @db.Uuid
@@ -983,6 +989,7 @@ model Receipt {
   studentsCreated          Student[]     @relation("StudentProvenance")
   enrollmentsCreated       Enrollment[]  @relation("EnrollmentProvenance")
 
+  @@unique([facilityId, code]) // codes are unique per facility; counters are keyed (facilityId, year)
   @@index([facilityId])
   @@index([studentId])
   @@index([soldById, status])

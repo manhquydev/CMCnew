@@ -114,7 +114,7 @@ async function seedFull(email: string, password: string): Promise<void> {
 
   // 1. Student record
   const seedStudent = await prisma.student.upsert({
-    where: { studentCode: 'TEST-001' },
+    where: { facilityId_studentCode: { facilityId: hq.id, studentCode: 'TEST-001' } },
     create: {
       facilityId: hq.id,
       studentCode: 'TEST-001',
