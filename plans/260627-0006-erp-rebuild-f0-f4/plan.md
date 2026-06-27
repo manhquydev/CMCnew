@@ -1,6 +1,6 @@
 # ERP Rebuild — Roadmap F0..F4
 
-Status: ✅ COMPLETE — F0..F4 đã build, verify đa vòng + edge case, committed trên nhánh feature/erp-unify-rbac-f0 (6 commit 17a2efc→3947daa). Verification cuối: api 210 pass/2 pre-existing email (thiếu GRAPH_* = R6 IT config), ui 6/6, admin+teaching build ✓. Chưa push/PR (chờ user).
+Status: ✅ COMPLETE + E2E REAL-RUN VERIFIED — F0..F4 build, verify đa vòng + edge case, committed (8 commit 17a2efc→aacda0e). Integration api 210 pass/2 pre-existing email (R6 GRAPH_*), ui 6/6, admin+teaching build ✓. **E2E Playwright 19/19** (boot 4 app thật → login → nav lọc role → onboard HS-mới). Phát hiện chạy thật: thiếu COOKIE_SECURE=false → login hỏng trên HTTP local (đã fix .env + .env.example). Chưa push/PR (chờ user).
 Branch nền: develop · Tạo: 2026-06-27
 
 ## Tiến độ

@@ -26,9 +26,10 @@ Verify "tính thực tế": app có **thực sự boot + đăng nhập + render*
 - E2E: thêm `apps/e2e/tests/unified-staff-shell.spec.ts` (F0B nav gộp + F1 form HS-mới reachable); fix selector 5 spec; rewrite lms-smoke cho OTP/student.
 - Seed dev DB (idempotent): super_admin + giao_vien/ke_toan/hr/sale/cskh/ctv_mkt.
 
-## Trạng thái
+## Trạng thái — ✅ XANH
 - curl auth.login: ✅ 200, cookie non-Secure, super_admin.
-- Playwright: re-run sau fix (kết quả ghi ở cuối khi xong).
+- Playwright: **19/19 PASS** sau các fix (admin login→dashboard, admin HR roster, teaching nav, lms student+OTP, unified staff shell nav + onboard HS-mới). Commit `aacda0e`.
+- Đã verify THỰC TẾ trong browser: boot 4 app → login break-glass → nav lọc role → mở form HS-mới (SĐT phụ huynh + Tạo phiếu nháp reachable).
 
 ## Còn mở
 - R6: IT cấp `ENTRA_CLIENT_SECRET` + `GRAPH_*` để bật SSO/email thật (E2E hiện dùng break-glass password).
