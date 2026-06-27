@@ -1,6 +1,14 @@
 # Prod Deployment — CMCnew (erp + hoc .cmcvn.edu.vn)
 
-Status: IN PROGRESS · Lane: high-risk · Branch: develop · Started 2026-06-28
+Status: DEPLOYED + VERIFIED (Jenkins bring-up + user to-dos remain) · Lane: high-risk · Branch: develop · 2026-06-28
+
+## Result (verified live)
+- https://erp.cmcvn.edu.vn → 200 (admin) · https://hoc.cmcvn.edu.vn → 200 (lms), both via Cloudflare.
+- Break-glass login (admin@cmcvn.edu.vn) → 200 + Secure cmc.session; wrong password → 401.
+- SSO init → 302 to login.microsoftonline.com (correct tenant + prod redirect_uri); not 503.
+- Seeded: admin (super_admin), nhungdt (giam_doc_kinh_doanh), hongltn (giam_doc_dao_tao, SSO-only).
+- Stack: 7 containers healthy. ufw on (22/80/443). Daily DB backup cron (14-day retention).
+- Origin cert: self-signed (Cloudflare "Full" accepts it). cmc_app password rotated. COOKIE_SECURE=true.
 
 ## Target
 - VPS 152.42.167.189 (Ubuntu 24.04, 2 vCPU / 7.8 GB / 154 GB, Docker 29 + Compose v5, ports 80/443 free).
