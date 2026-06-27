@@ -1101,6 +1101,12 @@ export const payrollRouter = router({
           where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
         });
         if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
+        // An APPROVED sheet's score is locked and already feeds payroll (decision 0011 + H3). Allowing
+        // an override here would change a finalized score without re-running confirm→approve, bypassing
+        // separation of duties. Require an explicit reopen first.
+        if (row.status === 'approved') {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu KPI đã phê duyệt — cần mở lại trước khi chỉnh điểm' });
+        }
 
         const updated = await tx.kpiScore.update({
           where: { id: row.id },

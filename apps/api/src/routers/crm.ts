@@ -172,6 +172,12 @@ export const crmRouter = router({
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const before = await tx.opportunity.findUniqueOrThrow({ where: { id: input.id } });
+        // A WON deal (O5_ENROLLED + closedAt) has frozen commission attribution and a linked
+        // receipt/enrollment. Regressing it to an earlier stage would clear closedAt and silently
+        // desync the won/lost split from the receipt — mirror the markLost guard and refuse.
+        if (before.stage === 'O5_ENROLLED' && before.closedAt && input.stage !== 'O5_ENROLLED') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Không thể lùi bước cơ hội đã thắng (đã nhập học)' });
+        }
         const opp = await tx.opportunity.update({
           where: { id: input.id },
           data: {
