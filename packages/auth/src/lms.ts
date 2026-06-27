@@ -1,4 +1,4 @@
-import { prisma, withRls, verifyPassword, type RlsContext } from '@cmc/db';
+import { withRls, verifyPassword, type RlsContext } from '@cmc/db';
 import { signLmsSession, verifyLmsToken } from './jwt.js';
 
 /** Fully-resolved LMS identity (parent or student) for the current request. */
@@ -81,11 +81,13 @@ export async function loginParent(
   emailOrPhone: string,
   password: string,
 ): Promise<{ token: string; session: LmsSession } | null> {
+  const id = emailOrPhone.trim();
   const acc = await withRls(SYSTEM_RLS, (tx) =>
-    tx.parentAccount.findFirst({ where: { OR: [{ email: emailOrPhone }, { phone: emailOrPhone }] } }),
+    tx.parentAccount.findFirst({ where: { OR: [{ email: id.toLowerCase() }, { phone: id }] } }),
   );
   if (!acc || !acc.isActive) return null;
-  if (!(await verifyPassword(password, acc.passwordHash))) return null;
+  // Passwordless (OTP-only) parents have no passwordHash → password login is not available to them.
+  if (!acc.passwordHash || !(await verifyPassword(password, acc.passwordHash))) return null;
   const resolved = await parentSession(acc.id);
   if (!resolved) return null;
   const token = await signLmsSession({ sub: acc.id, kind: 'parent', tokenVersion: acc.tokenVersion });
@@ -102,6 +104,19 @@ export async function loginStudent(
   const resolved = await studentSession(acc.id);
   if (!resolved) return null;
   const token = await signLmsSession({ sub: acc.id, kind: 'student', tokenVersion: acc.tokenVersion });
+  return { token, session: strip(resolved) };
+}
+
+/**
+ * Mint a parent session by accountId WITHOUT a password — used by passwordless flows (Email OTP).
+ * The caller is responsible for having authenticated the parent (e.g. a verified OTP).
+ */
+export async function mintParentSession(
+  accountId: string,
+): Promise<{ token: string; session: LmsSession } | null> {
+  const resolved = await parentSession(accountId);
+  if (!resolved) return null;
+  const token = await signLmsSession({ sub: accountId, kind: 'parent', tokenVersion: resolved._tokenVersion });
   return { token, session: strip(resolved) };
 }
 

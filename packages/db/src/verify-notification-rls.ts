@@ -13,13 +13,13 @@ async function main(): Promise<void> {
   // Two students in the SAME facility (#1) → the exact case the old facility-only policy leaked.
   const [studentA, studentB] = await withRls(SUPER, async (tx) => {
     const a = await tx.student.upsert({
-      where: { studentCode: 'HS-RLS-A' },
+      where: { facilityId_studentCode: { facilityId: 1, studentCode: 'HS-RLS-A' } },
       update: {},
       create: { facilityId: 1, studentCode: 'HS-RLS-A', fullName: 'RLS Test A', program: 'UCREA' },
       select: { id: true },
     });
     const b = await tx.student.upsert({
-      where: { studentCode: 'HS-RLS-B' },
+      where: { facilityId_studentCode: { facilityId: 1, studentCode: 'HS-RLS-B' } },
       update: {},
       create: { facilityId: 1, studentCode: 'HS-RLS-B', fullName: 'RLS Test B', program: 'UCREA' },
       select: { id: true },

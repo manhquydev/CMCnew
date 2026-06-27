@@ -12,10 +12,9 @@ Nền tảng **ERP + LMS thống nhất** cho Creative Maieutic Center — trung
 ## 2. Phạm vi
 
 ### Trong phạm vi (v1 = parity sạch)
-- **3 app** dùng chung 1 backend + 1 DB:
+- **2 app** dùng chung 1 backend + 1 DB:
   - **LMS** — học sinh + phụ huynh
-  - **Teaching/ERP** — giáo viên, kế toán, HR, sale, CSKH, CTV marketing
-  - **Admin** — super_admin, BGĐ (ban giám đốc)
+  - **Staff (apps/admin)** — app nhân viên hợp nhất, nav lọc theo role: giáo viên, kế toán, HR, sale, CSKH, CTV marketing, quản lý, super_admin, BGĐ. _(Trước đây tách thành Teaching/ERP + Admin; apps/teaching đã retire, gộp vào apps/admin.)_
 - Toàn bộ module nghiệp vụ của hệ cũ (xem §5).
 - Multi-facility (đa cơ sở) + RLS.
 - Seam nhận lead từ website ngoài vào CRM.
@@ -62,15 +61,15 @@ Nền tảng **ERP + LMS thống nhất** cho Creative Maieutic Center — trung
 - **Lương:** PIT 7 bậc; giảm trừ bản thân 11M/năm, người phụ thuộc 4.4M/năm; BHXH 10.5%; **input phải "finalize" trước khi tính payslip**.
 - **Họp phụ huynh:** UCREA mỗi 5 tháng; Bright I.G & Black Hole mỗi 3 tháng; auto-gen idempotent.
 - **Sao thưởng:** earn theo bài hoàn thành; redeem nguyên tử chống double-spend (advisory lock + `stock > 0`); bài giáo viên chấm (ảnh/PDF) chỉ cộng sao khi có điểm.
-- **Điểm danh streak:** chuẩn timezone ICT (UTC+7).
+- **Điểm danh:** present/absent/late + cờ excused đã có. **Streak chưa build** (kế hoạch sau; khi làm: chuẩn timezone ICT UTC+7, chỉ tính present).
 - **North star:** MAES (Monthly Active Engaged Students) — mục tiêu 65%.
 
 ## 5. Master list module (parity)
 
 ### ① LMS (học sinh + phụ huynh)
-Bài tập & nộp bài (text / annotate ảnh / annotate PDF nhiều trang) · Điểm & học bạ (Grade, FinalGrade, QualitativeAssessment) · Điểm danh + streak · Sao thưởng (ledger) + Quà + Huy hiệu + Leaderboard · Thông báo (16 loại, **realtime**) · Chat CSKH (FAQ + Gemini) · Lịch họp phụ huynh · Chứng chỉ · Level progress.
+Bài tập & nộp bài (text / annotate ảnh / annotate PDF nhiều trang) · Điểm & học bạ (Grade, FinalGrade, QualitativeAssessment) · Điểm danh (streak chưa build) · Sao thưởng (ledger) + Quà + Huy hiệu + Leaderboard · Thông báo (16 loại, **realtime**) · Chat CSKH (FAQ + Gemini) · Lịch họp phụ huynh · Chứng chỉ · Level progress.
 
-### ② Teaching/ERP
+### ② Teaching/ERP (staff surface — nay delivered bởi app nhân viên hợp nhất `apps/admin`)
 - **Giáo vụ:** Lớp/khóa (mã B-YYYY-NNNN nguyên tử), Enrollment + student lifecycle, Phòng, Lịch tuần → sinh buổi học, Timetable, gán giáo viên/phòng.
 - **Chấm điểm:** Mark attendance, Test appointment + grading (entrance/periodic), Homework grading, Learning profile.
 - **CRM:** Contact, Opportunity O1–O5, Stage transition (audit), Lead ingest.

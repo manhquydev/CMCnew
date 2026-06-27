@@ -1,12 +1,41 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls, ClassStatus } from '@cmc/db';
+import type { Prisma } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent, logStatusChange, addFollower } from '@cmc/audit';
-import { router, protectedProcedure, requireRole, Role } from '../trpc.js';
+import { router, protectedProcedure, requirePermission } from '../trpc.js';
 import { nextBatchCode } from '../services/batch-code.js';
+import { emitStaffNotif } from '../lib/emit-staff-notif.js';
 
 const ENTITY = 'class_batch';
+const TERMINAL_STATUSES: ClassStatus[] = ['closed', 'cancelled'];
+
+/** Soft-cancel future scheduled parent meetings for a class batch. Returns cancelled count. */
+async function cancelFutureParentMeetings(
+  tx: Prisma.TransactionClient,
+  classBatchId: string,
+  now: Date,
+): Promise<number> {
+  const result = await tx.parentMeeting.updateMany({
+    where: { classBatchId, status: 'scheduled', archivedAt: null, scheduledAt: { gte: now } },
+    data: { status: 'cancelled' },
+  });
+  return result.count;
+}
+
+/** Restore future soft-cancelled parent meetings when a class is reopened. Returns restored count. */
+async function restoreFutureParentMeetings(
+  tx: Prisma.TransactionClient,
+  classBatchId: string,
+  now: Date,
+): Promise<number> {
+  const result = await tx.parentMeeting.updateMany({
+    where: { classBatchId, status: 'cancelled', archivedAt: null, scheduledAt: { gte: now } },
+    data: { status: 'scheduled' },
+  });
+  return result.count;
+}
 
 export const classBatchRouter = router({
   list: protectedProcedure.query(({ ctx }) =>
@@ -28,7 +57,7 @@ export const classBatchRouter = router({
     ),
   ),
 
-  create: requireRole(Role.quan_ly)
+  create: requirePermission('classBatch', 'create')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -69,7 +98,7 @@ export const classBatchRouter = router({
       }),
     ),
 
-  setStatus: requireRole(Role.quan_ly)
+  setStatus: requirePermission('classBatch', 'setStatus')
     .input(z.object({ id: z.string().uuid(), status: z.nativeEnum(ClassStatus) }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -85,12 +114,29 @@ export const classBatchRouter = router({
           before.status,
           batch.status,
         );
+        // Soft-cancel future parent meetings when transitioning into a terminal state.
+        const nowTerminal = TERMINAL_STATUSES.includes(input.status);
+        const wasTerminal = TERMINAL_STATUSES.includes(before.status as ClassStatus);
+        if (nowTerminal && !wasTerminal) {
+          const now = new Date(new Date().toISOString().slice(0, 10));
+          const count = await cancelFutureParentMeetings(tx, batch.id, now);
+          if (count > 0) {
+            await logEvent(tx, {
+              facilityId: batch.facilityId,
+              entityType: ENTITY,
+              entityId: batch.id,
+              type: 'note',
+              body: `Hủy mềm ${count} lịch họp PH tương lai (lớp ${input.status})`,
+              actorId: ctx.session.userId,
+            });
+          }
+        }
         return batch;
       }),
     ),
 
   // Hủy lớp linh hoạt: từ bất kỳ trạng thái, BẮT BUỘC lý do; buổi học tương lai → cancelled.
-  cancel: requireRole(Role.quan_ly)
+  cancel: requirePermission('classBatch', 'cancel')
     .input(z.object({ id: z.string().uuid(), reason: z.string().min(1) }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -108,6 +154,8 @@ export const classBatchRouter = router({
           where: { classBatchId: batch.id, status: { not: 'cancelled' }, sessionDate: { gte: today } },
           data: { status: 'cancelled' },
         });
+        // Cascade: lịch họp PH tương lai → cancelled.
+        const cancelledMeetings = await cancelFutureParentMeetings(tx, batch.id, today);
         await logStatusChange(
           tx,
           { facilityId: batch.facilityId, entityType: ENTITY, entityId: batch.id, actorId: ctx.session.userId },
@@ -115,20 +163,39 @@ export const classBatchRouter = router({
           before.status,
           'cancelled',
         );
+        const meetingNote = cancelledMeetings > 0 ? `; hủy mềm ${cancelledMeetings} lịch họp PH tương lai` : '';
         await logEvent(tx, {
           facilityId: batch.facilityId,
           entityType: ENTITY,
           entityId: batch.id,
           type: 'note',
-          body: `Lý do hủy: ${input.reason} (huỷ ${cancelled.count} buổi chưa diễn ra)`,
+          body: `Lý do hủy: ${input.reason} (huỷ ${cancelled.count} buổi chưa diễn ra${meetingNote})`,
           actorId: ctx.session.userId,
         });
-        return { batch, cancelledSessions: cancelled.count };
-      }),
+        // Notify quan_ly of this facility that the class was cancelled.
+        const managers = await tx.userFacility.findMany({
+          where: { facilityId: batch.facilityId },
+          select: { userId: true, user: { select: { roles: true } } },
+        });
+        const managerIds = managers
+          .filter((uf) => uf.user.roles.includes('quan_ly'))
+          .map((uf) => uf.userId);
+        // emitStaffNotif persists rows inside the tx and returns a push fn.
+        // Push is called outside withRls so SSE fires only after the tx commits.
+        const pushNotifs = await emitStaffNotif(tx, {
+          recipientIds: managerIds,
+          event: 'class_cancelled',
+          title: 'Lớp học đã bị hủy',
+          body: `Lớp ${batch.code} — ${batch.name} đã bị hủy. Lý do: ${input.reason}`,
+          data: { classBatchId: batch.id, code: batch.code },
+          facilityId: batch.facilityId,
+        });
+        return { batch, cancelledSessions: cancelled.count, cancelledMeetings, pushNotifs };
+      }).then(({ pushNotifs, ...result }) => { pushNotifs(); return result; }),
     ),
 
   // Mở lại lớp đã hủy.
-  reopen: requireRole(Role.quan_ly)
+  reopen: requirePermission('classBatch', 'reopen')
     .input(z.object({ id: z.string().uuid(), toStatus: z.nativeEnum(ClassStatus), reason: z.string().min(1) }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -158,6 +225,34 @@ export const classBatchRouter = router({
           body: `Mở lại lớp: ${input.reason}`,
           actorId: ctx.session.userId,
         });
+        const now = new Date(new Date().toISOString().slice(0, 10));
+        // Mirror cancel(): restore future sessions that the cancellation soft-cancelled so the
+        // teacher's schedule isn't blank after reopen. Future cancelled → planned.
+        const restoredSessions = await tx.classSession.updateMany({
+          where: { classBatchId: batch.id, status: 'cancelled', sessionDate: { gte: now } },
+          data: { status: 'planned' },
+        });
+        if (restoredSessions.count > 0) {
+          await logEvent(tx, {
+            facilityId: batch.facilityId,
+            entityType: ENTITY,
+            entityId: batch.id,
+            type: 'note',
+            body: `Khôi phục ${restoredSessions.count} buổi học tương lai (mở lại lớp)`,
+            actorId: ctx.session.userId,
+          });
+        }
+        const restoredMeetings = await restoreFutureParentMeetings(tx, batch.id, now);
+        if (restoredMeetings > 0) {
+          await logEvent(tx, {
+            facilityId: batch.facilityId,
+            entityType: ENTITY,
+            entityId: batch.id,
+            type: 'note',
+            body: `Khôi phục ${restoredMeetings} lịch họp PH tương lai (mở lại lớp)`,
+            actorId: ctx.session.userId,
+          });
+        }
         return batch;
       }),
     ),

@@ -4,7 +4,8 @@ import { withRls, SUPER, uniq } from './helpers.js';
 // Invariant (charter, every phase): RLS isolates tenants AND LMS principals.
 // - facility staff: see only their facility (positive + negative control), can't WRITE across.
 // - parent/student principals: see only their own student(s), not facility siblings.
-// Student stands in as a representative facility+principal table (37/37 carry the policy).
+// Student stands in as the representative behavioral proof; rls-coverage.int.test.ts proves by
+// schema introspection that every facility-scoped table (39/39) actually carries the policy.
 describe('RLS isolation — facility + principal (tenancy invariant)', () => {
   const A = 1; // HQ
   const B = 2; // CS2

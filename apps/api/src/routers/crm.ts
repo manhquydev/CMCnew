@@ -3,10 +3,13 @@ import { TRPCError } from '@trpc/server';
 import { withRls, Program, OpportunityStage, TestType, type RlsContext } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, publicProcedure, requireRole, Role } from '../trpc.js';
+import { router, publicProcedure, requirePermission, Role } from '../trpc.js';
 
-const CRM_ROLES = [Role.sale, Role.cskh, Role.quan_ly] as const;
-const TEST_GRADE_ROLES = [Role.giao_vien, Role.head_teacher, Role.quan_ly] as const;
+/**
+ * Roles permitted to assign an opportunity to a user other than themselves.
+ * A non-manager (sale/cskh/ctv_mkt) creating an opportunity may only credit ownerId = self.
+ */
+const CRM_MANAGER_ROLES: Role[] = [Role.quan_ly, Role.giam_doc_kinh_doanh, Role.bgd, Role.super_admin];
 
 const STAGE_ORDER: OpportunityStage[] = [
   OpportunityStage.O1_LEAD,
@@ -50,7 +53,7 @@ async function upsertContact(
 }
 
 export const crmRouter = router({
-  contactList: requireRole(...CRM_ROLES)
+  contactList: requirePermission('crm', 'contactList')
     .input(z.object({ facilityId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -62,7 +65,7 @@ export const crmRouter = router({
       ),
     ),
 
-  contactCreate: requireRole(...CRM_ROLES)
+  contactCreate: requirePermission('crm', 'contactCreate')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -89,7 +92,7 @@ export const crmRouter = router({
     ),
 
   // Opportunities (with their contact) for a facility's pipeline board.
-  opportunityList: requireRole(...CRM_ROLES)
+  opportunityList: requirePermission('crm', 'opportunityList')
     .input(z.object({ facilityId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -102,7 +105,7 @@ export const crmRouter = router({
       ),
     ),
 
-  opportunityCreate: requireRole(...CRM_ROLES)
+  opportunityCreate: requirePermission('crm', 'opportunityCreate')
     .input(
       z.object({
         contactId: z.string().uuid(),
@@ -114,6 +117,19 @@ export const crmRouter = router({
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const contact = await tx.contact.findUniqueOrThrow({ where: { id: input.contactId } });
+
+        // A non-manager (sale/cskh/ctv_mkt) may only credit themselves as the opportunity owner.
+        // Managers (quan_ly, giam_doc_kinh_doanh, bgd, super_admin) may credit any user.
+        const callerIsManager =
+          ctx.session.isSuperAdmin || ctx.session.roles.some((r) => CRM_MANAGER_ROLES.includes(r as Role));
+        const resolvedOwnerId = input.ownerId ?? ctx.session.userId;
+        if (!callerIsManager && resolvedOwnerId !== ctx.session.userId) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'Chỉ quản lý mới có thể gán cơ hội cho người khác',
+          });
+        }
+
         const opp = await tx.opportunity.create({
           data: {
             facilityId: contact.facilityId,
@@ -121,7 +137,7 @@ export const crmRouter = router({
             studentName: input.studentName,
             program: input.program,
             // Credit the consultant who owns this opportunity — defaults to the creator (a sale).
-            ownerId: input.ownerId ?? ctx.session.userId,
+            ownerId: resolvedOwnerId,
           },
         });
         await logEvent(tx, {
@@ -137,7 +153,7 @@ export const crmRouter = router({
     ),
 
   // Manual stage move (forward or back). Reaching O5 closes the opportunity (won).
-  opportunityTransition: requireRole(...CRM_ROLES)
+  opportunityTransition: requirePermission('crm', 'opportunityTransition')
     .input(
       z.object({
         id: z.string().uuid(),
@@ -169,11 +185,16 @@ export const crmRouter = router({
       }),
     ),
 
-  opportunityMarkLost: requireRole(...CRM_ROLES)
+  opportunityMarkLost: requirePermission('crm', 'opportunityMarkLost')
     .input(z.object({ id: z.string().uuid(), reason: z.string().min(1) }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const before = await tx.opportunity.findUniqueOrThrow({ where: { id: input.id } });
+        // A WON deal (O5_ENROLLED + closedAt, lostReason null) has frozen commission attribution;
+        // marking it lost would corrupt the won/lost split without reversing the receipt.
+        if (before.stage === 'O5_ENROLLED' && before.closedAt) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Không thể đánh dấu mất cơ hội đã thắng' });
+        }
         if (before.closedAt && before.lostReason) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cơ hội đã đóng (mất)' });
         }
@@ -195,10 +216,14 @@ export const crmRouter = router({
     ),
 
   // Re-open a closed (lost) opportunity back into the pipeline.
-  opportunityReopen: requireRole(...CRM_ROLES)
+  opportunityReopen: requirePermission('crm', 'opportunityReopen')
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
+        const current = await tx.opportunity.findUniqueOrThrow({ where: { id: input.id } });
+        if (current.closedAt === null) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cơ hội chưa đóng, không cần mở lại' });
+        }
         const opp = await tx.opportunity.update({
           where: { id: input.id },
           data: { closedAt: null, lostReason: null },
@@ -216,7 +241,7 @@ export const crmRouter = router({
     ),
 
   // ── Test appointments (S3) — entrance test auto-advances its opportunity ─────
-  testList: requireRole(...CRM_ROLES)
+  testList: requirePermission('crm', 'testList')
     .input(z.object({ facilityId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -229,7 +254,7 @@ export const crmRouter = router({
     ),
 
   // Schedule a test. An entrance test linked to an opportunity auto-advances it to O3.
-  testCreate: requireRole(...CRM_ROLES)
+  testCreate: requirePermission('crm', 'testCreate')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -281,7 +306,7 @@ export const crmRouter = router({
     ),
 
   // Record a result. An entrance test graded → opportunity auto-advances to O4.
-  testGrade: requireRole(...TEST_GRADE_ROLES)
+  testGrade: requirePermission('crm', 'testGrade')
     .input(z.object({ id: z.string().uuid(), score: z.number(), result: z.string().optional() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {

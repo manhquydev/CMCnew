@@ -1,18 +1,15 @@
 import { z } from 'zod';
-import { TRPCError } from '@trpc/server';
 import { withRls, hashPassword, GuardianRelation } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, requireRole, Role } from '../trpc.js';
+import { router, requirePermission } from '../trpc.js';
 
 // Parent/student accounts are SYSTEM-WIDE identities (no facility_id) — facilities are linked
 // branches, not silos (docs/specs/facility-model-decision.md). Leadership (bgd/quan_ly, super)
 // manages them at the system level; RLS now allows any staff to read these identity rows, while
 // linking a guardian to a student still respects that student's facility (operational scoping).
-const LEAD_ROLES = [Role.bgd, Role.quan_ly] as const;
-
 export const guardianRouter = router({
-  parentList: requireRole(...LEAD_ROLES).query(({ ctx }) =>
+  parentList: requirePermission('guardian', 'parentList').query(({ ctx }) =>
     withRls(rlsContextOf(ctx.session), (tx) =>
       tx.parentAccount.findMany({
         orderBy: { createdAt: 'desc' },
@@ -22,34 +19,39 @@ export const guardianRouter = router({
     ),
   ),
 
-  parentCreate: requireRole(...LEAD_ROLES)
+  parentCreate: requirePermission('guardian', 'parentCreate')
     .input(
       z
         .object({
           displayName: z.string().min(1),
           email: z.string().email().optional(),
           phone: z.string().min(6).optional(),
-          password: z.string().min(6),
+          // Optional: parents log in passwordless via Email OTP. A password may still be set for
+          // legacy/phone-only accounts that cannot receive an OTP email.
+          password: z.string().min(6).optional(),
         })
         .refine((v) => v.email || v.phone, { message: 'Cần email hoặc số điện thoại' }),
     )
-    .mutation(({ ctx, input }) =>
-      withRls(rlsContextOf(ctx.session), async (tx) => {
-        const parent = await tx.parentAccount.create({
+    .mutation(async ({ ctx, input }) => {
+      const passwordHash = input.password ? await hashPassword(input.password) : null;
+      // Normalize email so OTP login (which looks up by lower-cased email) always matches, and so the
+      // unique constraint is effectively case-insensitive.
+      const email = input.email?.trim().toLowerCase();
+      return withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.parentAccount.create({
           data: {
             displayName: input.displayName,
-            email: input.email,
+            email,
             phone: input.phone,
-            passwordHash: await hashPassword(input.password),
+            passwordHash,
           },
           select: { id: true, email: true, phone: true, displayName: true },
-        });
-        return parent;
-      }),
-    ),
+        }),
+      );
+    }),
 
   // Guardians of a student, with the parent's identity.
-  listForStudent: requireRole(...LEAD_ROLES)
+  listForStudent: requirePermission('guardian', 'listForStudent')
     .input(z.object({ studentId: z.string().uuid() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -61,7 +63,7 @@ export const guardianRouter = router({
     ),
 
   // Link a parent to a student (facility inherited from the student). Idempotent on the unique.
-  link: requireRole(...LEAD_ROLES)
+  link: requirePermission('guardian', 'link')
     .input(
       z.object({
         parentAccountId: z.string().uuid(),
@@ -94,7 +96,7 @@ export const guardianRouter = router({
       }),
     ),
 
-  unlink: requireRole(...LEAD_ROLES)
+  unlink: requirePermission('guardian', 'unlink')
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {

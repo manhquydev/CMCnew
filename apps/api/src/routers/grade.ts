@@ -1,9 +1,10 @@
 import { z } from 'zod';
+import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { earnEntry, evaluateBadges } from '@cmc/domain-rewards';
-import { router, requireRole, Role } from '../trpc.js';
+import { router, requirePermission } from '../trpc.js';
 import { emitNotification } from '../events.js';
 import { annotationDataSchema } from '../annotation.js';
 
@@ -22,7 +23,7 @@ const gradeSelect = {
 
 export const gradeRouter = router({
   // Teacher grades a submission (creates/updates the grade, marks submission graded).
-  grade: requireRole(Role.giao_vien, Role.quan_ly)
+  grade: requirePermission('grade', 'grade')
     .input(
       z.object({
         submissionId: z.string().uuid(),
@@ -38,6 +39,14 @@ export const gradeRouter = router({
           where: { id: input.submissionId },
           include: { exercise: { select: { maxScore: true } } },
         });
+        // Score must not exceed the exercise maximum — an over-max score inflates the
+        // normalised final grade (score/maxScore ratio used by computeFinalGrade).
+        if (input.score > sub.exercise.maxScore) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `Điểm (${input.score}) vượt quá điểm tối đa của bài tập (${sub.exercise.maxScore})`,
+          });
+        }
         const grade = await tx.grade.upsert({
           where: { submissionId: input.submissionId },
           update: {
@@ -74,7 +83,7 @@ export const gradeRouter = router({
     ),
 
   // Publish the grade → student/parent can see it + earn stars (idempotent) + notify.
-  publish: requireRole(Role.giao_vien, Role.quan_ly)
+  publish: requirePermission('grade', 'publish')
     .input(z.object({ submissionId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await withRls(rlsContextOf(ctx.session), async (tx) => {

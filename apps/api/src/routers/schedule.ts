@@ -4,7 +4,7 @@ import { withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { enumerateSessions, detectConflicts, type SessionLike } from '@cmc/domain-academic';
-import { router, protectedProcedure, requireRole, Role } from '../trpc.js';
+import { router, protectedProcedure, requirePermission } from '../trpc.js';
 
 const dateKey = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -20,7 +20,7 @@ export const scheduleRouter = router({
       ),
     ),
 
-  addSlot: requireRole(Role.quan_ly)
+  addSlot: requirePermission('schedule', 'addSlot')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -30,6 +30,9 @@ export const scheduleRouter = router({
         endTime: z.string().regex(/^\d{2}:\d{2}$/),
         roomId: z.string().uuid().optional(),
         teacherId: z.string().uuid().optional(),
+      }).refine((v) => v.startTime < v.endTime, {
+        message: 'Giờ bắt đầu phải trước giờ kết thúc',
+        path: ['endTime'],
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -58,8 +61,58 @@ export const scheduleRouter = router({
       ),
     ),
 
+  // Lịch giảng dạy đa lớp — cross-class agenda cho giáo viên và quản lý.
+  // giao_vien defaults to own sessions; quan_ly / head_teacher / super may view all facility or filter by teacherId.
+  mySessions: protectedProcedure
+    .input(
+      z.object({
+        facilityId: z.number().int().positive(),
+        from: z.string().date(),
+        to: z.string().date(),
+        teacherId: z.string().uuid().optional(),
+      }),
+    )
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const { session } = ctx;
+        const isManager =
+          session.isSuperAdmin ||
+          session.roles.some((r) => ['quan_ly', 'head_teacher'].includes(r));
+        // Managers may pass an explicit teacherId or omit to see all; giao_vien always own only.
+        const teacherFilter = isManager ? input.teacherId : session.userId;
+
+        const sessions = await tx.classSession.findMany({
+          where: {
+            facilityId: input.facilityId,
+            sessionDate: {
+              gte: new Date(input.from),
+              lte: new Date(input.to),
+            },
+            ...(teacherFilter ? { teacherId: teacherFilter } : {}),
+          },
+          include: { batch: { select: { id: true, code: true, name: true } } },
+          orderBy: [{ sessionDate: 'asc' }, { startTime: 'asc' }],
+        });
+
+        // Resolve room names via a secondary query (ClassSession.roomId FK added in migration
+        // 20260627010000; Prisma include would work but a batched secondary query avoids
+        // pulling full Room rows for each session when only the name is needed).
+        const roomIds = [...new Set(sessions.map((s) => s.roomId).filter(Boolean))] as string[];
+        const rooms =
+          roomIds.length > 0
+            ? await tx.room.findMany({ where: { id: { in: roomIds } }, select: { id: true, name: true } })
+            : [];
+        const roomMap = new Map(rooms.map((r) => [r.id, r.name]));
+
+        return sessions.map((s) => ({
+          ...s,
+          roomName: s.roomId ? (roomMap.get(s.roomId) ?? null) : null,
+        }));
+      }),
+    ),
+
   // Sinh buổi học từ khung lịch — idempotent + chặn cứng trùng phòng/giáo viên.
-  generateSessions: requireRole(Role.quan_ly)
+  generateSessions: requirePermission('schedule', 'generateSessions')
     .input(
       z.object({
         classBatchId: z.string().uuid(),
@@ -96,9 +149,23 @@ export const scheduleRouter = router({
         const existingKeys = new Set(existing.map((s) => `${dateKey(s.sessionDate)}|${s.startTime}`));
         const fresh = candidates.filter((c) => !existingKeys.has(`${c.sessionDate}|${c.startTime}`));
 
-        // Trùng lịch (room/teacher) so với mọi buổi chưa hủy trong cùng cơ sở.
+        // Không có buổi mới (re-run idempotent) → không có gì để kiểm tra/tạo.
+        // Phải return sớm trước reduce bên dưới vì reduce không có initial value sẽ ném trên mảng rỗng.
+        if (fresh.length === 0) {
+          return { created: 0, skipped: candidates.length };
+        }
+
+        // Trùng lịch (room/teacher) so với buổi chưa hủy trong cùng cơ sở, giới hạn trong
+        // cửa sổ ngày của các buổi mới — tránh nạp toàn bộ lịch sử cơ sở (Bug A fix).
+        const candidateDates = fresh.map((c) => new Date(c.sessionDate));
+        const windowMin = candidateDates.reduce((a, b) => (a < b ? a : b));
+        const windowMax = candidateDates.reduce((a, b) => (a > b ? a : b));
         const facilitySessions = await tx.classSession.findMany({
-          where: { facilityId: batch.facilityId, status: { not: 'cancelled' } },
+          where: {
+            facilityId: batch.facilityId,
+            status: { not: 'cancelled' },
+            sessionDate: { gte: windowMin, lte: windowMax },
+          },
           select: { sessionDate: true, startTime: true, endTime: true, roomId: true, teacherId: true },
         });
         const conflicts = detectConflicts(
@@ -121,20 +188,19 @@ export const scheduleRouter = router({
           });
         }
 
-        for (const c of fresh) {
-          await tx.classSession.create({
-            data: {
-              facilityId: batch.facilityId,
-              classBatchId: input.classBatchId,
-              sessionDate: new Date(c.sessionDate),
-              startTime: c.startTime,
-              endTime: c.endTime,
-              roomId: c.roomId ?? null,
-              teacherId: c.teacherId ?? null,
-              status: 'planned',
-            },
-          });
-        }
+        await tx.classSession.createMany({
+          data: fresh.map((c) => ({
+            facilityId: batch.facilityId,
+            classBatchId: input.classBatchId,
+            sessionDate: new Date(c.sessionDate),
+            startTime: c.startTime,
+            endTime: c.endTime,
+            roomId: c.roomId ?? null,
+            teacherId: c.teacherId ?? null,
+            status: 'planned',
+          })),
+          skipDuplicates: true,
+        });
         await logEvent(tx, {
           facilityId: batch.facilityId,
           entityType: 'class_batch',

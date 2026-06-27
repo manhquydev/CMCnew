@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import { trpc } from '@cmc/ui';
-import { Alert, Badge, Button, Card, Group, JsonInput, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import React, { useCallback, useEffect, useState } from 'react';
+import { trpc, notifyError, notifySuccess } from '@cmc/ui';
+import { Badge, Button, Card, Group, JsonInput, Stack, Table, Text, TextInput } from '@mantine/core';
 
 // Minimal shape the list view needs — avoids inferring the deep params JSON type (TS2589).
 type Policy = { id: string; effectiveFrom: string | Date; note: string | null; createdAt: string | Date; params: unknown };
@@ -21,10 +21,12 @@ export function CompensationConfigPanel() {
   const [effectiveFrom, setEffectiveFrom] = useState(todayISO());
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   const loadList = useCallback(() => {
-    compensationApi.list.query().then(setPolicies).catch(() => setPolicies([]));
+    compensationApi.list
+      .query()
+      .then(setPolicies)
+      .catch((e) => notifyError(e, 'Không tải được danh sách chính sách'));
   }, []);
   useEffect(loadList, [loadList]);
 
@@ -42,61 +44,65 @@ export function CompensationConfigPanel() {
   }, []);
 
   async function loadDefaults() {
-    setMsg(null);
     try {
       const d = await compensationApi.defaults.query();
       setParamsText(JSON.stringify(d, null, 2));
-      setMsg({ kind: 'ok', text: 'Đã nạp tham số mặc định (PA2 + Đào tạo). Sửa rồi tạo phiên bản mới.' });
+      notifySuccess('Đã nạp tham số mặc định (PA2 + Đào tạo). Sửa rồi tạo phiên bản mới.');
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Không tải được tham số mặc định');
     }
   }
 
   async function createVersion() {
-    setMsg(null);
     let params: unknown;
     try {
       params = JSON.parse(paramsText);
     } catch {
-      return setMsg({ kind: 'err', text: 'JSON không hợp lệ — kiểm tra lại.' });
+      notifyError('JSON không hợp lệ — kiểm tra lại.', 'Lỗi định dạng');
+      return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
-      return setMsg({ kind: 'err', text: 'Ngày hiệu lực phải dạng YYYY-MM-DD.' });
+      notifyError('Ngày hiệu lực phải dạng YYYY-MM-DD.', 'Lỗi ngày');
+      return;
     }
     setBusy(true);
     try {
       // Server re-validates params against the Zod schema; an invalid shape throws here.
       await compensationApi.create.mutate({ effectiveFrom, params: params as never, note: note || undefined });
-      setMsg({ kind: 'ok', text: `Đã tạo chính sách hiệu lực từ ${effectiveFrom} (áp dụng kỳ sau, không đổi lương đã chốt).` });
+      notifySuccess(`Đã tạo chính sách hiệu lực từ ${effectiveFrom} (áp dụng kỳ sau, không đổi lương đã chốt).`);
       setNote('');
       loadList();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi (tham số không hợp lệ?): ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Tạo chính sách thất bại (tham số không hợp lệ?)');
     } finally {
       setBusy(false);
     }
   }
 
+  const TH_STYLE: React.CSSProperties = {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    color: 'var(--cmc-text-muted)',
+    fontWeight: 600,
+  };
+
   return (
     <Stack>
-      <Alert color="blue" variant="light">
-        Cơ cấu thu nhập (bậc %, hoa hồng, KPI, vượt giờ, thuế). Mỗi lần lưu tạo <b>một phiên bản có ngày
-        hiệu lực</b>; phiếu lương khi tính dùng bản hiệu lực tại kỳ đó. Sửa ở đây <b>chỉ áp dụng về sau</b> —
-        lương các kỳ đã chốt không đổi. Chỉ super_admin truy cập.
-      </Alert>
+      <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)', backgroundColor: 'var(--cmc-info-bg)' }}>
+        <Text size="sm" style={{ color: 'var(--cmc-info-text)' }}>
+          Cơ cấu thu nhập (bậc %, hoa hồng, KPI, vượt giờ, thuế). Mỗi lần lưu tạo <b>một phiên bản có ngày
+          hiệu lực</b>; phiếu lương khi tính dùng bản hiệu lực tại kỳ đó. Sửa ở đây <b>chỉ áp dụng về sau</b> —
+          lương các kỳ đã chốt không đổi. Chỉ super_admin truy cập.
+        </Text>
+      </Card>
 
-      {msg && (
-        <Alert color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)}>
-          {msg.text}
-        </Alert>
-      )}
-
-      <Card withBorder>
-        <Title order={6} mb="sm">Tạo phiên bản chính sách mới</Title>
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} style={{ color: 'var(--cmc-text)' }} mb="md">Tạo phiên bản chính sách mới</Text>
         <Group grow mb="sm" align="flex-end">
           <TextInput label="Hiệu lực từ" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.currentTarget.value)} placeholder="YYYY-MM-DD" />
           <TextInput label="Ghi chú" value={note} onChange={(e) => setNote(e.currentTarget.value)} placeholder="vd: điều chỉnh hoa hồng Q3" />
-          <Button variant="default" onClick={loadDefaults}>Nạp mặc định</Button>
+          <Button variant="subtle" onClick={loadDefaults}>Nạp mặc định</Button>
         </Group>
         <JsonInput
           label="Tham số (JSON)"
@@ -109,20 +115,22 @@ export function CompensationConfigPanel() {
           validationError="JSON không hợp lệ"
           styles={{ input: { fontFamily: 'monospace', fontSize: 12 } }}
         />
-        <Group justify="flex-end" mt="sm">
-          <Button onClick={createVersion} loading={busy}>Tạo phiên bản</Button>
+        <Group justify="flex-end" mt="md">
+          <Button variant="filled" radius={9999} onClick={createVersion} loading={busy}>Tạo phiên bản</Button>
         </Group>
       </Card>
 
-      <Card withBorder>
-        <Title order={6} mb="sm">Các phiên bản đã ban hành</Title>
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} style={{ color: 'var(--cmc-text)' }} mb="md">Các phiên bản đã ban hành</Text>
         {policies.length === 0 ? (
           <Text c="dimmed" size="sm">Chưa có phiên bản nào — hệ thống đang dùng tham số mặc định (PA2 + Đào tạo).</Text>
         ) : (
-          <Table>
+          <Table striped highlightOnHover withTableBorder={false}>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Hiệu lực từ</Table.Th><Table.Th>Ghi chú</Table.Th><Table.Th>Tạo lúc</Table.Th>
+                <Table.Th style={TH_STYLE}>Hiệu lực từ</Table.Th>
+                <Table.Th style={TH_STYLE}>Ghi chú</Table.Th>
+                <Table.Th style={TH_STYLE}>Tạo lúc</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -130,12 +138,12 @@ export function CompensationConfigPanel() {
                 <Table.Tr key={p.id}>
                   <Table.Td>
                     <Group gap="xs">
-                      {new Date(p.effectiveFrom).toLocaleDateString('vi-VN')}
-                      {i === 0 && <Badge size="xs" color="teal">mới nhất</Badge>}
+                      <Text size="sm">{new Date(p.effectiveFrom).toLocaleDateString('vi-VN')}</Text>
+                      {i === 0 && <Badge size="xs" color="teal" variant="light" radius="xl">mới nhất</Badge>}
                     </Group>
                   </Table.Td>
-                  <Table.Td>{p.note ?? ''}</Table.Td>
-                  <Table.Td>{new Date(p.createdAt).toLocaleString('vi-VN')}</Table.Td>
+                  <Table.Td><Text size="sm">{p.note ?? ''}</Text></Table.Td>
+                  <Table.Td><Text size="sm" style={{ color: 'var(--cmc-text-muted)' }}>{new Date(p.createdAt).toLocaleString('vi-VN')}</Text></Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>

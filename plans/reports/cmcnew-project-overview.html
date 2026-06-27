@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CMCnew — Tổng quan dự án ERP+LMS</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #f1f4f9;
+      color: #1e1f26;
+      line-height: 1.75;
+      font-size: 15px;
+    }
+
+    .container {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 5rem;
+    }
+
+    header {
+      text-align: center;
+      padding: 3rem 1rem 2.5rem;
+    }
+    header .logo-badge {
+      display: inline-block;
+      background: #4f46e5;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      padding: 0.3rem 0.9rem;
+      border-radius: 99px;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+    header h1 {
+      font-size: 2.4rem;
+      font-weight: 800;
+      color: #111827;
+      letter-spacing: -0.5px;
+    }
+    header .subtitle {
+      margin-top: 0.6rem;
+      color: #6b7280;
+      font-size: 1rem;
+    }
+
+    .card {
+      background: #ffffff;
+      border-radius: 14px;
+      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.07), 0 4px 16px rgba(0, 0, 0, 0.04);
+      padding: 2rem 2.25rem;
+      margin-bottom: 2rem;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+      margin-bottom: 1.4rem;
+      padding-bottom: 1rem;
+      border-bottom: 2px solid #f3f4f6;
+    }
+
+    .sec-num {
+      background: #4f46e5;
+      color: #fff;
+      font-weight: 800;
+      font-size: 0.85rem;
+      width: 2.1rem;
+      height: 2.1rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .card-header h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #111827;
+    }
+
+    p { margin-bottom: 1rem; }
+    p:last-child { margin-bottom: 0; }
+    strong { color: #111827; }
+    em { color: #4f46e5; font-style: normal; font-weight: 600; }
+    code {
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      padding: 0.1em 0.4em;
+      font-size: 0.88em;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      color: #be185d;
+    }
+
+    /* Diagram wrapper */
+    .diagram-box {
+      background: #f8f9fc;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 1.5rem 1rem;
+      margin: 1.25rem 0;
+      overflow-x: auto;
+      text-align: center;
+    }
+    .diagram-caption {
+      font-size: 0.875rem;
+      color: #374151;
+      margin-top: 0.75rem;
+      padding: 0.6rem 1rem;
+      background: #eef2ff;
+      border-left: 3px solid #4f46e5;
+      border-radius: 0 8px 8px 0;
+      line-height: 1.6;
+    }
+
+    /* Tables */
+    .tbl-wrap { overflow-x: auto; margin-top: 0.5rem; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    th {
+      background: #4f46e5;
+      color: #fff;
+      padding: 0.65rem 1rem;
+      text-align: left;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    th:first-child { border-radius: 8px 0 0 0; }
+    th:last-child  { border-radius: 0 8px 0 0; }
+    td {
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid #f3f4f6;
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:nth-child(even) td { background: #fafafa; }
+
+    /* Badges */
+    .badge {
+      display: inline-block;
+      padding: 0.18rem 0.55rem;
+      border-radius: 99px;
+      font-size: 0.77rem;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      white-space: nowrap;
+    }
+    .b-purple { background: #ede9fe; color: #5b21b6; }
+    .b-blue   { background: #dbeafe; color: #1d4ed8; }
+    .b-green  { background: #d1fae5; color: #065f46; }
+    .b-yellow { background: #fef3c7; color: #92400e; }
+    .b-red    { background: #fee2e2; color: #991b1b; }
+    .b-gray   { background: #f3f4f6; color: #374151; }
+
+    /* Workflow grid */
+    .flow-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+    }
+    .flow-item h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #4f46e5;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px dashed #c7d2fe;
+    }
+
+    /* Status list */
+    .status-list { list-style: none; margin-top: 0.5rem; }
+    .status-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.8rem;
+      padding: 0.65rem 0;
+      border-bottom: 1px solid #f3f4f6;
+      font-size: 0.92rem;
+    }
+    .status-list li:last-child { border-bottom: none; }
+    .sdot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 5px;
+    }
+    .sdot-done    { background: #10b981; }
+    .sdot-warn    { background: #f59e0b; }
+    .sdot-pending { background: #9ca3af; }
+
+    /* Module table tag */
+    .type-tag {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .t-spa    { background: #ede9fe; color: #5b21b6; }
+    .t-server { background: #fef3c7; color: #92400e; }
+    .t-pkg    { background: #dbeafe; color: #1d4ed8; }
+    .t-test   { background: #f3f4f6; color: #374151; }
+
+    /* Section divider heading */
+    .flow-section-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #4f46e5;
+      margin: 1.75rem 0 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .flow-section-title::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 1.1em;
+      background: #4f46e5;
+      border-radius: 2px;
+    }
+
+    footer {
+      text-align: center;
+      padding: 2rem 0;
+      color: #9ca3af;
+      font-size: 0.82rem;
+    }
+
+    @media (max-width: 660px) {
+      header h1 { font-size: 1.7rem; }
+      .card { padding: 1.4rem 1.2rem; }
+      .flow-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'default' });
+  </script>
+
+  <div class="container">
+
+    <header>
+      <div class="logo-badge">ERP + LMS</div>
+      <h1>CMCnew</h1>
+      <p class="subtitle">Tổng quan hệ thống quản trị trung tâm giáo dục &nbsp;·&nbsp; Cập nhật 26/06/2026</p>
+    </header>
+
+    <!-- ═══════════════════════════════════ SECTION 1 ═══ -->
+    <div class="card">
+      <div class="card-header">
+        <div class="sec-num">1</div>
+        <h2>Dự án là gì?</h2>
+      </div>
+      <p>
+        <strong>CMCnew</strong> là nền tảng quản trị toàn diện được xây dựng riêng cho các trung tâm giáo dục (tiếng Anh, năng khiếu, v.v.).
+        Hệ thống gồm hai phần chính hoạt động song song:
+      </p>
+      <p>
+        <em>ERP (quản trị nội bộ)</em> — giúp đội ngũ vận hành trung tâm từ đầu đến cuối: tiếp nhận học sinh mới qua CRM, xếp lịch học, điểm danh, giao bài tập, chấm điểm, thu học phí, tính lương và đánh giá hiệu quả làm việc (KPI) của từng nhân viên.
+      </p>
+      <p>
+        <em>LMS (cổng học viên)</em> — dành riêng cho học sinh và phụ huynh: xem bài tập được giao, nộp bài trực tuyến, tra cứu điểm số, tích lũy sao thưởng đổi quà, và theo dõi lịch họp phụ huynh định kỳ.
+      </p>
+      <p>
+        Toàn bộ dữ liệu của mỗi cơ sở (chi nhánh) được tách biệt hoàn toàn — nhân viên cơ sở A không nhìn thấy dữ liệu cơ sở B. Hệ thống được xây dựng dưới dạng <em>monorepo</em> (một kho mã nguồn duy nhất) với ba giao diện web riêng biệt, một máy chủ API trung tâm và cơ sở dữ liệu PostgreSQL, tất cả chạy trong Docker.
+      </p>
+    </div>
+
+    <!-- ═══════════════════════════════════ SECTION 2 ═══ -->
+    <div class="card">
+      <div class="card-header">
+        <div class="sec-num">2</div>
+        <h2>Kiến trúc tổng thể</h2>
+      </div>
+      <p>
+        Ba giao diện web (Admin, Teaching, LMS) gửi yêu cầu lên một <strong>Nginx</strong> duy nhất đóng vai trò "bộ định tuyến cổng". Nginx chuyển tiếp các yêu cầu đến <strong>API Server</strong> — nơi xử lý toàn bộ nghiệp vụ. API Server lưu dữ liệu vào <strong>PostgreSQL</strong> và dùng <strong>Redis</strong> để quản lý phiên đăng nhập cùng thông báo thời gian thực.
+      </p>
+
+      <div class="diagram-box">
+        <div class="mermaid">
+flowchart LR
+    subgraph Browsers["Trình duyệt người dùng"]
+        ADM["Admin SPA\nQuản trị / HR / Tài chính"]
+        TCH["Teaching SPA\nGiáo viên / Quản lý"]
+        LMS["LMS SPA\nHọc sinh / Phụ huynh"]
+    end
+    subgraph DockerNet["Máy chủ Docker"]
+        NGX["Nginx\nCổng 80 — Định tuyến"]
+        API["API Server\nHono + tRPC\nCổng 4000"]
+        PG[("PostgreSQL 16\nDữ liệu chính")]
+        RD[("Redis 7\nPhiên + SSE")]
+    end
+    ADM -- "/" --> NGX
+    TCH -- "/teaching/" --> NGX
+    LMS -- "/lms/" --> NGX
+    NGX -- "/api/" --> API
+    API --> PG
+    API --> RD
+        </div>
+      </div>
+      <div class="diagram-caption">
+        Nginx giống như "người gác cổng" — nhận yêu cầu từ trình duyệt và chuyển đúng chỗ. API Server là trái tim xử lý mọi nghiệp vụ. SSE (Server-Sent Events) là kênh gửi thông báo tức thời đến màn hình nhân viên mà không cần tải lại trang.
+      </div>
+
+      <p style="margin-top:1.25rem;">
+        Bên trong monorepo còn có các <strong>gói dùng chung (packages)</strong>: <code>@cmc/ui</code> chứa toàn bộ component giao diện dùng lại cho cả 3 SPA; <code>@cmc/db</code> là nguồn sự thật duy nhất của cơ sở dữ liệu (schema Prisma); <code>@cmc/auth</code> quản lý phiên đăng nhập; <code>@cmc/audit</code> ghi lịch sử thay đổi; và các gói <code>domain-*</code> chứa thuật toán nghiệp vụ thuần túy (không phụ thuộc database).
+      </p>
+
+      <div class="diagram-box">
+        <div class="mermaid">
+flowchart TB
+    subgraph Apps["Ứng dụng (apps/)"]
+        A1["admin SPA"]
+        A2["teaching SPA"]
+        A3["lms SPA"]
+        A4["api Server"]
+        A5["e2e Tests"]
+    end
+    subgraph Pkgs["Gói dùng chung (packages/)"]
+        P1["@cmc/ui\nComponent React"]
+        P2["@cmc/db\nPrisma + Schema"]
+        P3["@cmc/auth\nJWT Sessions"]
+        P4["@cmc/audit\nLịch sử thay đổi"]
+        P5["domain-*\nThuật toán nghiệp vụ"]
+    end
+    A1 --> P1
+    A2 --> P1
+    A3 --> P1
+    P1 --> A4
+    A4 --> P2
+    A4 --> P3
+    A4 --> P4
+    A4 --> P5
+    P3 --> P2
+    P4 --> P2
+        </div>
+      </div>
+      <div class="diagram-caption">
+        Các mũi tên thể hiện sự phụ thuộc: ba SPA đều dùng chung <code>@cmc/ui</code>; API Server là nơi kết nối tất cả gói lại. Các gói <code>domain-*</code> chứa công thức tính điểm, tính lương, xếp lịch — hoàn toàn độc lập, không cần kết nối cơ sở dữ liệu.
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SECTION 3 ═══ -->
+    <div class="card">
+      <div class="card-header">
+        <div class="sec-num">3</div>
+        <h2>Các vai trò người dùng</h2>
+      </div>
+      <p>
+        Mỗi tài khoản nhân viên mang một hoặc nhiều vai trò. Hệ thống dùng vai trò để kiểm soát chính xác ai được làm gì — ví dụ chỉ Kế toán mới duyệt phiếu thu, chỉ BGD mới phê duyệt KPI cuối cùng. Học sinh và Phụ huynh dùng hệ thống đăng nhập riêng (LMS), hoàn toàn tách khỏi nhân viên.
+      </p>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Vai trò</th>
+              <th>Tên hệ thống</th>
+              <th>Ứng dụng</th>
+              <th>Quyền và nhiệm vụ chính</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Super Admin</strong></td>
+              <td><code>super_admin</code></td>
+              <td><span class="badge b-purple">Admin</span></td>
+              <td>Toàn quyền; quản lý cơ sở, cài chính sách lương công ty, kích hoạt cron jobs hệ thống</td>
+            </tr>
+            <tr>
+              <td><strong>Quản lý</strong></td>
+              <td><code>quan_ly</code></td>
+              <td><span class="badge b-purple">Admin</span> <span class="badge b-blue">Teaching</span></td>
+              <td>Tạo lớp, xếp lịch, ghi danh học sinh, duyệt phiếu thu, xét duyệt lên cấp, phê duyệt KPI</td>
+            </tr>
+            <tr>
+              <td><strong>Trưởng giáo viên</strong></td>
+              <td><code>head_teacher</code></td>
+              <td><span class="badge b-blue">Teaching</span></td>
+              <td>Xem lịch toàn bộ giáo viên, phê duyệt lên cấp học sinh, quản lý họp phụ huynh, tạo kỳ đánh giá</td>
+            </tr>
+            <tr>
+              <td><strong>Giáo viên</strong></td>
+              <td><code>giao_vien</code></td>
+              <td><span class="badge b-blue">Teaching</span></td>
+              <td>Điểm danh, tạo và chấm bài tập, đánh giá định tính học sinh, đề xuất lên cấp</td>
+            </tr>
+            <tr>
+              <td><strong>Kế toán</strong></td>
+              <td><code>ke_toan</code></td>
+              <td><span class="badge b-purple">Admin</span></td>
+              <td>Quản lý bảng giá, voucher giảm giá, duyệt và đối soát phiếu thu học phí; tham gia tính lương</td>
+            </tr>
+            <tr>
+              <td><strong>HR</strong></td>
+              <td><code>hr</code></td>
+              <td><span class="badge b-purple">Admin</span></td>
+              <td>Hồ sơ nhân sự, mức lương, mở kỳ KPI, tính và chi lương toàn bộ nhân viên, đồng bộ Callio</td>
+            </tr>
+            <tr>
+              <td><strong>Sale / Tư vấn</strong></td>
+              <td><code>sale</code></td>
+              <td><span class="badge b-purple">Admin</span> <span class="badge b-blue">Teaching</span></td>
+              <td>Tạo và theo dõi cơ hội CRM, ghi danh học sinh; hoa hồng tự động tính từ phiếu thu được duyệt</td>
+            </tr>
+            <tr>
+              <td><strong>CSKH</strong></td>
+              <td><code>cskh</code></td>
+              <td><span class="badge b-purple">Admin</span></td>
+              <td>Chăm sóc sau bán hàng, tạo và xử lý các ca hỗ trợ / khiếu nại của phụ huynh</td>
+            </tr>
+            <tr>
+              <td><strong>BGD (Ban giám đốc)</strong></td>
+              <td><code>bgd</code></td>
+              <td><span class="badge b-purple">Admin</span></td>
+              <td>Phê duyệt KPI bước cuối cùng, xem dashboard tổng hợp doanh thu và pipeline</td>
+            </tr>
+            <tr>
+              <td><strong>CTV Marketing</strong></td>
+              <td><code>ctv_mkt</code></td>
+              <td><span class="badge b-gray">Admin</span></td>
+              <td>Vai trò tồn tại trong hệ thống; chưa có quyền riêng được phân trong các router</td>
+            </tr>
+            <tr>
+              <td><strong>Phụ huynh</strong></td>
+              <td><em>parent (LMS)</em></td>
+              <td><span class="badge b-green">LMS</span></td>
+              <td>Xem điểm, bài tập con em, lịch họp phụ huynh; đăng nhập riêng, không liên quan nhân viên</td>
+            </tr>
+            <tr>
+              <td><strong>Học sinh</strong></td>
+              <td><em>student (LMS)</em></td>
+              <td><span class="badge b-green">LMS</span></td>
+              <td>Nộp bài, xem điểm số, xem xếp hạng lớp, đổi sao lấy quà; đăng nhập bằng mã riêng</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SECTION 4 ═══ -->
+    <div class="card">
+      <div class="card-header">
+        <div class="sec-num">4</div>
+        <h2>Mô hình dữ liệu — Các nhóm thực thể chính</h2>
+      </div>
+      <p>
+        Dữ liệu được tổ chức thành 5 nhóm nghiệp vụ. Mỗi ô là một "bảng" trong cơ sở dữ liệu; mũi tên cho thấy bảng này liên kết với bảng kia như thế nào. Tất cả đều gắn với một <strong>Cơ sở (Facility)</strong> — giống như mỗi chi nhánh có "ngăn riêng" trong cơ sở dữ liệu.
+      </p>
+
+      <div class="diagram-box">
+        <div class="mermaid">
+flowchart TB
+    FAC["Facility\nCơ sở / Chi nhánh"]
+
+    subgraph Academic["Học vụ"]
+        COU["Course\nMôn học"]
+        CLS["ClassBatch\nLớp học"]
+        SES["ClassSession\nBuổi học"]
+        ENR["Enrollment\nGhi danh"]
+        ATT["Attendance\nĐiểm danh"]
+    end
+
+    subgraph LMSDomain["LMS"]
+        EXR["Exercise\nBài tập"]
+        SUB["Submission\nBài nộp"]
+        GRD["Grade\nĐiểm số"]
+        STX["StarTransaction\nSao thưởng"]
+    end
+
+    subgraph Finance["Tài chính & CRM"]
+        CON["Contact\nKhách hàng"]
+        OPP["Opportunity\nCơ hội"]
+        RCP["Receipt\nPhiếu thu"]
+    end
+
+    subgraph Payroll["Nhân sự & Lương"]
+        EMP["EmploymentProfile\nHồ sơ nhân viên"]
+        KPI["KpiScore\nKPI"]
+        PSL["Payslip\nPhiếu lương"]
+    end
+
+    STU["Student\nHọc sinh"]
+    USR["AppUser\nNhân viên"]
+
+    FAC --> STU
+    FAC --> USR
+    FAC --> CLS
+    COU --> CLS
+    CLS --> SES
+    CLS --> ENR
+    STU --> ENR
+    SES --> ATT
+    ENR --> ATT
+    CLS --> EXR
+    EXR --> SUB
+    STU --> SUB
+    SUB --> GRD
+    GRD --> STX
+    FAC --> CON
+    CON --> OPP
+    STU --> RCP
+    USR --> EMP
+    USR --> KPI
+    USR --> PSL
+        </div>
+      </div>
+      <div class="diagram-caption">
+        <strong>Ghi danh (Enrollment)</strong> là cầu nối trung tâm: học sinh + lớp học gặp nhau ở đây, tạo ra điểm danh và cho phép làm bài tập. Khi giáo viên chấm bài và công bố điểm, hệ thống tự cộng sao thưởng vào tài khoản học sinh.
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SECTION 5 ═══ -->
+    <div class="card">
+      <div class="card-header">
+        <div class="sec-num">5</div>
+        <h2>Các luồng nghiệp vụ chính</h2>
+      </div>
+      <p>Dưới đây là 4 luồng nghiệp vụ cốt lõi của hệ thống. Mỗi luồng được minh họa bằng sơ đồ và giải thích từng bước bằng ngôn ngữ đời thường.</p>
+
+      <!-- Flow 1 -->
+      <div class="flow-section-title">Luồng 1 — Tiếp thị → CRM → Ghi danh → Thu học phí</div>
+      <div class="diagram-box">
+        <div class="mermaid">
+flowchart TD
+    F1A["Khách hàng liên hệ\nqua website hoặc trực tiếp"]
+    F1B["Sale tạo hồ sơ liên hệ và cơ hội trong CRM\nTrạng thái: Mới"]
+    F1C["Xếp lịch kiểm tra đầu vào\nHệ thống ghi O3 - Đã xếp lịch"]
+    F1D["Giáo viên chấm bài kiểm tra\nHệ thống ghi O4 - Đã kiểm tra"]
+    F1E["Quản lý ghi danh học sinh vào lớp phù hợp\nHọc sinh chuyển sang trạng thái Đang học"]
+    F1F["Kế toán tạo phiếu thu học phí\nÁp dụng giảm giá nhiều năm và voucher"]
+    F1G["Kế toán xác nhận thanh toán\nPhiếu thu chuyển sang Đã duyệt"]
+    F1H["Hoa hồng của Sale được ghi nhận tự động\nDùng khi tính lương tháng"]
+    F1A --> F1B --> F1C --> F1D --> F1E --> F1F --> F1G --> F1H
+        </div>
+      </div>
+      <div class="diagram-caption">
+        Sale theo dõi trạng thái từng khách (O1 → O5) trong CRM. Khi phiếu thu được kế toán duyệt, hoa hồng tự động được ghi nhận — HR không cần nhập thủ công khi tính lương.
+      </div>
+
+      <!-- Flow 2 -->
+      <div class="flow-section-title">Luồng 2 — Lịch học → Buổi học → Điểm danh</div>
+      <div class="diagram-box">
+        <div class="mermaid">
+flowchart TD
+    F2A["Quản lý tạo lớp học\nvà liên kết với môn học"]
+    F2B["Thêm khung giờ học hàng tuần\nThứ mấy, giờ nào, phòng nào, giáo viên nào"]
+    F2C["Hệ thống sinh tự động toàn bộ buổi học\nCho cả học kỳ dựa trên khung giờ"]
+    F2D["Giáo viên mở buổi học trên ứng dụng Teaching"]
+    F2E["Điểm danh từng học sinh trong lớp\nCó mặt / Vắng mặt / Muộn / Xin phép"]
+    F2F["Dữ liệu điểm danh\ndùng cho tính điểm tổng kết và báo cáo"]
+    F2A --> F2B --> F2C --> F2D --> F2E --> F2F
+        </div>
+      </div>
+      <div class="diagram-caption">
+        Quản lý chỉ cần thiết lập lịch một lần; hệ thống tự sinh ra tất cả các buổi học cho cả học kỳ, tự động bỏ qua ngày lễ hoặc xung đột phòng học. Giáo viên vào ứng dụng Teaching và điểm danh nhanh chóng ngay trên điện thoại.
+      </div>
+
+      <!-- Flow 3 -->
+      <div class="flow-section-title">Luồng 3 — Bài tập → Nộp bài → Chấm điểm → Sao thưởng</div>
+      <div class="diagram-box">
+        <div class="mermaid">
+flowchart TD
+    F3A["Giáo viên tạo bài tập\nCó thể đính kèm file PDF"]
+    F3B["Đăng bài lên LMS\nHọc sinh nhận thông báo"]
+    F3C["Học sinh nộp bài\nViết câu trả lời hoặc phê chú trực tiếp trên PDF"]
+    F3D["Giáo viên chấm điểm\nViết nhận xét và ghi điểm từng bài"]
+    F3E["Công bố điểm\nHọc sinh và phụ huynh xem được ngay"]
+    F3F["Hệ thống cộng Sao thưởng\nvào tài khoản học sinh tự động"]
+    F3G["Học sinh đổi Sao lấy quà\ntừ danh mục quà của trung tâm"]
+    F3A --> F3B --> F3C --> F3D --> F3E --> F3F --> F3G
+        </div>
+      </div>
+      <div class="diagram-caption">
+        LMS tích hợp cơ chế <em>gamification</em> (trò chơi hóa học tập): học sinh nộp bài và đạt điểm tốt sẽ nhận sao, tích sao để đổi quà. Phụ huynh xem điểm số theo thời gian thực ngay trên điện thoại — không cần liên hệ giáo viên.
+      </div>
+
+      <!-- Flow 4 -->
+      <div class="flow-section-title">Luồng 4 — Đánh giá KPI → Tính lương → Chi lương</div>
+      <div class="diagram-box">
+        <div class="mermaid">
+flowchart TD
+    F4A["HR mở kỳ đánh giá KPI\ncho nhân viên và kỳ lương cụ thể"]
+    F4B["Hệ thống tự lấy dữ liệu thực tế\nTỷ lệ chấm bài, điểm danh, số cuộc gọi Callio"]
+    F4C["Nhân viên tự chấm và nộp bảng đánh giá KPI"]
+    F4D["Quản lý xem xét và xác nhận điểm\nCó thể điều chỉnh với lý do"]
+    F4E["BGD phê duyệt cuối cùng\nKhóa điểm KPI"]
+    F4F["HR tính phiếu lương\nLương cứng + thưởng KPI + hoa hồng - thuế TNCN"]
+    F4G["Chốt và thanh toán\nCó thể xử lý hàng loạt toàn bộ nhân viên"]
+    F4A --> F4B --> F4C --> F4D --> F4E --> F4F --> F4G
+        </div>
+      </div>
+      <div class="diagram-caption">
+        Quy trình KPI gồm 4 bước phê duyệt: tự chấm → quản lý xác nhận → BGD phê duyệt → HR chốt. Phiếu lương sau khi chốt <strong>không thể sửa lại</strong> — đảm bảo tính minh bạch và chính xác. Thuế thu nhập cá nhân được tính tự động theo 7 bậc thuế.
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SECTION 6 ═══ -->
+    <div class="card">
+      <div class="card-header">
+        <div class="sec-num">6</div>
+        <h2>Bản đồ module — App / Package → Chức năng</h2>
+      </div>
+      <p>Dưới đây là toàn bộ các module trong monorepo và chức năng của từng module.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Tên module</th>
+              <th>Loại</th>
+              <th>Chức năng chính</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>@cmc/admin</code></td>
+              <td><span class="type-tag t-spa">SPA</span></td>
+              <td>Giao diện quản trị tổng thể: nhân sự, tài chính, CRM, lương, KPI, chính sách bồi thường, dashboard BGD</td>
+            </tr>
+            <tr>
+              <td><code>@cmc/teaching</code></td>
+              <td><span class="type-tag t-spa">SPA</span></td>
+              <td>Giao diện nhân viên: xem lịch dạy, điểm danh, chấm bài, đánh giá học sinh, xem phiếu lương cá nhân</td>
+            </tr>
+            <tr>
+              <td><code>@cmc/lms</code></td>
+              <td><span class="type-tag t-spa">SPA</span></td>
+              <td>Cổng học viên: xem và nộp bài tập, xem điểm, sao thưởng, xếp hạng lớp, lịch họp phụ huynh</td>
+            </tr>
+            <tr>
+              <td><code>@cmc/api</code></td>
+              <td><span class="type-tag t-server">Server</span></td>
+              <td>33 nhóm tRPC router, SSE thông báo nhân viên, upload/serve file PDF, cron jobs định kỳ (nhắc họp phụ huynh, sinh lịch)</td>
+            </tr>
+            <tr>
+              <td><code>@cmc/db</code></td>
+              <td><span class="type-tag t-pkg">Package</span></td>
+              <td>Schema Prisma (nguồn sự thật duy nhất), 20 file migration, script seed dữ liệu mẫu, client Prisma xuất ra cho toàn bộ dự án</td>
+            </tr>
+            <tr>
+              <td><code>@cmc/auth</code></td>
+              <td><span class="type-tag t-pkg">Package</span></td>
+              <td>Quản lý phiên JWT nhân viên (HttpOnly cookie) và phiên LMS (học sinh / phụ huynh) hoàn toàn tách biệt</td>
+            </tr>
+            <tr>
+              <td><code>@cmc/audit</code></td>
+              <td><span class="type-tag t-pkg">Package</span></td>
+              <td>Ghi lịch sử thay đổi dữ liệu (ai thay đổi gì, khi nào, giá trị cũ và mới); hiển thị dạng timeline trên mọi bản ghi</td>
+            </tr>
+            <tr>
+              <td><code>@cmc/ui</code></td>
+              <td><span class="type-tag t-pkg">Package</span></td>
+              <td>Component React dùng chung: layout AppShell, sidebar, form đăng nhập, trung tâm thông báo SSE, xem PDF, bảng xếp hạng, form validator</td>
+            </tr>
+            <tr>
+              <td><code>@cmc/domain-academic</code></td>
+              <td><span class="type-tag t-pkg">Package</span></td>
+              <td>Thuật toán kiểm tra xung đột lịch học, sinh lịch họp phụ huynh định kỳ — không phụ thuộc cơ sở dữ liệu</td>
+            </tr>
+            <tr>
+              <td><code>@cmc/domain-finance</code></td>
+              <td><span class="type-tag t-pkg">Package</span></td>
+              <td>Công thức tính học phí, áp dụng giảm giá theo số năm đóng trước, tính giảm giá voucher</td>
+            </tr>
+            <tr>
+              <td><code>@cmc/domain-grading</code></td>
+              <td><span class="type-tag t-pkg">Package</span></td>
+              <td>Công thức tính điểm tổng kết: trọng số bài tập, thi cuối kỳ, điểm danh, đánh giá định tính</td>
+            </tr>
+            <tr>
+              <td><code>@cmc/domain-payroll</code></td>
+              <td><span class="type-tag t-pkg">Package</span></td>
+              <td>Công thức tính phiếu lương: lương cứng theo ngày công, thưởng KPI, hoa hồng sale, khấu trừ bảo hiểm, thuế TNCN 7 bậc</td>
+            </tr>
+            <tr>
+              <td><code>@cmc/domain-rewards</code></td>
+              <td><span class="type-tag t-pkg">Package</span></td>
+              <td>Quy tắc trao sao thưởng sau khi chấm điểm bài tập, điều kiện mở khóa huy hiệu</td>
+            </tr>
+            <tr>
+              <td><code>@cmc/e2e</code></td>
+              <td><span class="type-tag t-test">Test</span></td>
+              <td>Bộ kiểm thử end-to-end (Playwright) mô phỏng người dùng thật chạy qua toàn bộ luồng nghiệp vụ</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ SECTION 7 ═══ -->
+    <div class="card">
+      <div class="card-header">
+        <div class="sec-num">7</div>
+        <h2>Tình trạng hoàn thiện (tính đến 26/06/2026)</h2>
+      </div>
+      <p>
+        Hệ thống đã hoàn thành toàn bộ 7 giai đoạn phát triển backend và frontend. Bộ kiểm thử unit/integration đạt <strong>162/162 test cases xanh</strong>. Còn lại là hạ tầng CI/CD, E2E và triển khai production.
+      </p>
+      <ul class="status-list">
+        <li>
+          <span class="sdot sdot-done"></span>
+          <div><strong>Phase 01 — Nền tảng</strong>: Monorepo pnpm + Turborepo, Docker Compose, schema DB cơ bản, xác thực JWT, tRPC router khung.</div>
+        </li>
+        <li>
+          <span class="sdot sdot-done"></span>
+          <div><strong>Phase 02 — Học vụ + LMS</strong>: Ghi danh, lịch học, điểm danh, bài tập, nộp bài, chấm điểm, sao thưởng, huy hiệu, bảng xếp hạng, cổng học sinh/phụ huynh.</div>
+        </li>
+        <li>
+          <span class="sdot sdot-done"></span>
+          <div><strong>Phase 03 — KPI + Đánh giá</strong>: Workflow KPI 4 bước (tự chấm → xác nhận → phê duyệt → khóa), đồng bộ Callio, đánh giá định tính, lên cấp học sinh.</div>
+        </li>
+        <li>
+          <span class="sdot sdot-done"></span>
+          <div><strong>Phase 04 — Tài chính + CRM</strong>: Pipeline CRM 5 giai đoạn, phiếu thu học phí, voucher giảm giá, bảng giá theo thời gian hiệu lực, hoa hồng Sale.</div>
+        </li>
+        <li>
+          <span class="sdot sdot-done"></span>
+          <div><strong>Phase 05 — CSKH + Họp phụ huynh</strong>: Quản lý ca hỗ trợ sau bán hàng, tạo lịch họp phụ huynh định kỳ tự động (cron), nhắc nhở trước 1 ngày.</div>
+        </li>
+        <li>
+          <span class="sdot sdot-done"></span>
+          <div><strong>Phase 06 — Bảo mật + Audit</strong>: Row-Level Security PostgreSQL (phân tách dữ liệu theo cơ sở), audit trail toàn hệ thống, SSE thông báo nhân viên thời gian thực, kiểm soát quyền theo vai trò tại mọi tầng.</div>
+        </li>
+        <li>
+          <span class="sdot sdot-done"></span>
+          <div><strong>Phase 07 — Toàn vẹn dữ liệu</strong>: Ràng buộc DB (khóa ngoại, unique, restrict delete), guard mutation chống ghi đè, academic terms cho kỳ đánh giá.</div>
+        </li>
+        <li>
+          <span class="sdot sdot-warn"></span>
+          <div><strong>Đang chờ — CI/CD</strong>: GitHub Actions bị chặn do billing; Jenkins được lên kế hoạch nhưng chưa xây dựng. Hiện tại chỉ verify local trước khi merge.</div>
+        </li>
+        <li>
+          <span class="sdot sdot-pending"></span>
+          <div><strong>Chưa hoàn thành — E2E Tests</strong>: Bộ test Playwright (<code>@cmc/e2e</code>) đã viết khung nhưng chưa chạy đầy đủ trên môi trường staging thực tế.</div>
+        </li>
+        <li>
+          <span class="sdot sdot-pending"></span>
+          <div><strong>Chưa hoàn thành — Triển khai Production</strong>: Docker Compose và Dockerfile đã sẵn sàng; chưa được triển khai lên máy chủ thật. Migration cũng chưa được áp dụng vào DB production.</div>
+        </li>
+        <li>
+          <span class="sdot sdot-warn"></span>
+          <div><strong>Câu hỏi mở — Thiết kế hoa hồng</strong>: Hai phương án PA1 và PA2 trong tài liệu <code>payroll-v2-commission-design.md</code> chưa được chốt; cần xác nhận với nghiệp vụ trước khi áp dụng thực tế.</div>
+        </li>
+        <li>
+          <span class="sdot sdot-warn"></span>
+          <div><strong>Câu hỏi mở — FK không ràng buộc</strong>: Các trường <code>teacherId</code>, <code>roomId</code> trong lịch học và <code>EmploymentProfile.userId</code> là UUID "mềm" không có ràng buộc khóa ngoại ở DB — cần đánh giá rủi ro toàn vẹn dữ liệu.</div>
+        </li>
+      </ul>
+      <div style="margin-top:1.25rem;padding:0.75rem 1rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:0.9rem;">
+        <strong style="color:#15803d;">Tóm tắt:</strong> Backend API (33 router, 100+ procedure), ba SPA giao diện, toàn bộ schema DB (20 migration) và bảo mật RLS đã hoàn chỉnh. Bước tiếp theo là dựng CI/CD, chạy E2E trên staging và triển khai production thực tế.
+      </div>
+    </div>
+
+    <footer>
+      CMCnew ERP+LMS &nbsp;·&nbsp; Tài liệu nội bộ, tạo tự động &nbsp;·&nbsp; 26/06/2026
+    </footer>
+
+  </div>
+</body>
+</html>

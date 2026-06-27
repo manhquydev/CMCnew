@@ -35,13 +35,13 @@ export async function staffSession(over: Partial<RequestSession> = {}): Promise<
 /** tRPC caller for a staff session (super-admin by default). */
 export async function staffCaller(over: Partial<RequestSession> = {}) {
   const session = await staffSession(over);
-  const ctx: ApiContext = { c: {} as never, session, lms: null };
+  const ctx: ApiContext = { c: {} as never, session, lms: null, ip: 'test' };
   return appRouter.createCaller(ctx);
 }
 
 /** tRPC caller for an LMS (parent/student) principal. */
 export function lmsCaller(lms: LmsSession) {
-  const ctx: ApiContext = { c: {} as never, session: null, lms };
+  const ctx: ApiContext = { c: {} as never, session: null, lms, ip: 'test' };
   return appRouter.createCaller(ctx);
 }
 

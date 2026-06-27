@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { withRls, ExerciseType } from '@cmc/db';
 import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, protectedProcedure, lmsProcedure, requireRole, Role } from '../trpc.js';
+import { router, protectedProcedure, lmsProcedure, requirePermission } from '../trpc.js';
 
 const ENTITY = 'exercise';
 
@@ -30,7 +30,7 @@ export const exerciseRouter = router({
     ),
   ),
 
-  create: requireRole(Role.giao_vien, Role.quan_ly)
+  create: requirePermission('exercise', 'create')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -71,7 +71,7 @@ export const exerciseRouter = router({
       }),
     ),
 
-  publish: requireRole(Role.giao_vien, Role.quan_ly)
+  publish: requirePermission('exercise', 'publish')
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {

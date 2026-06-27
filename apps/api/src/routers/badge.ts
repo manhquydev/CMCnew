@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
 import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, requireRole, lmsProcedure, Role } from '../trpc.js';
+import { router, requirePermission, lmsProcedure } from '../trpc.js';
 import { emitNotification } from '../events.js';
 
 // Supported unlock criteria — kept in lockstep with @cmc/domain-rewards parseCriteria.
@@ -32,7 +32,7 @@ export const badgeRouter = router({
     ),
 
   // Staff catalog (admin). Includes archived so the manager can see the full set.
-  list: requireRole(Role.quan_ly, Role.head_teacher, Role.giao_vien)
+  list: requirePermission('badge', 'list')
     .input(z.object({ facilityId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -53,7 +53,7 @@ export const badgeRouter = router({
       ),
     ),
 
-  create: requireRole(Role.quan_ly)
+  create: requirePermission('badge', 'create')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -89,7 +89,7 @@ export const badgeRouter = router({
       }),
     ),
 
-  archive: requireRole(Role.quan_ly)
+  archive: requirePermission('badge', 'archive')
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -103,7 +103,7 @@ export const badgeRouter = router({
 
   // Teacher manually grants a badge (source=manual) — bypasses criteria. Idempotent on the unique;
   // a re-grant of an owned badge is a no-op (no duplicate row, no second notification).
-  grant: requireRole(Role.giao_vien, Role.head_teacher, Role.quan_ly)
+  grant: requirePermission('badge', 'grant')
     .input(z.object({ studentId: z.string().uuid(), badgeId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await withRls(rlsContextOf(ctx.session), async (tx) => {

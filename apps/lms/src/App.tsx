@@ -1,13 +1,13 @@
 import { LmsLoginGate, useLmsSession } from '@cmc/ui';
-import { StudentView } from './student-view';
-import { ParentView } from './parent-view';
+import { StudentShell } from './student-shell';
+import { ParentShell } from './parent-shell';
 
 function Router() {
   const { principal } = useLmsSession();
   return principal.kind === 'student' ? (
-    <StudentView principal={principal} />
+    <StudentShell principal={principal} />
   ) : (
-    <ParentView principal={principal} />
+    <ParentShell principal={principal} />
   );
 }
 

@@ -15,6 +15,32 @@ export const facilityRouter = router({
     ),
   ),
 
+  // Only super_admin may update facility metadata (code, name, address, isActive).
+  update: superAdminProcedure
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        code: z.string().min(1).optional(),
+        name: z.string().min(1).optional(),
+        address: z.string().optional(),
+        isActive: z.boolean().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const { id, ...data } = input;
+        const facility = await tx.facility.update({ where: { id }, data });
+        await logEvent(tx, {
+          facilityId: facility.id,
+          entityType: 'facility',
+          entityId: String(facility.id),
+          type: 'updated',
+          actorId: ctx.session.userId,
+        });
+        return facility;
+      }),
+    ),
+
   // A facility is the tenancy boundary itself → only super_admin may create one.
   create: superAdminProcedure
     .input(

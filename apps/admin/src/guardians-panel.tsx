@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import { trpc } from '@cmc/ui';
+import React, { useCallback, useEffect, useState } from 'react';
+import { trpc, notifyError, notifySuccess } from '@cmc/ui';
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -12,7 +11,6 @@ import {
   Table,
   Text,
   TextInput,
-  Title,
 } from '@mantine/core';
 
 type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
@@ -38,13 +36,18 @@ export function GuardiansPanel() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   const loadParents = useCallback(() => {
-    trpc.guardian.parentList.query().then(setParents).catch(() => setParents([]));
+    trpc.guardian.parentList
+      .query()
+      .then(setParents)
+      .catch((e) => notifyError(e, 'Không tải được danh sách phụ huynh'));
   }, []);
   useEffect(() => {
-    trpc.student.list.query().then(setStudents).catch(() => setStudents([]));
+    trpc.student.list
+      .query()
+      .then(setStudents)
+      .catch((e) => notifyError(e, 'Không tải được danh sách học sinh'));
     loadParents();
   }, [loadParents]);
 
@@ -53,17 +56,19 @@ export function GuardiansPanel() {
       setGuardians([]);
       return;
     }
-    trpc.guardian.listForStudent.query({ studentId }).then(setGuardians).catch(() => setGuardians([]));
+    trpc.guardian.listForStudent
+      .query({ studentId })
+      .then(setGuardians)
+      .catch((e) => notifyError(e, 'Không tải được phụ huynh của học sinh'));
   }, [studentId]);
   useEffect(loadGuardians, [loadGuardians]);
 
   async function createParent() {
     if (!name.trim() || !password.trim() || (!email.trim() && !phone.trim())) {
-      setMsg({ kind: 'err', text: 'Nhập tên, mật khẩu và email hoặc SĐT.' });
+      notifyError(new Error('Nhập tên, mật khẩu và email hoặc SĐT.'), 'Thông tin chưa đủ');
       return;
     }
     setBusy(true);
-    setMsg(null);
     try {
       const p = await trpc.guardian.parentCreate.mutate({
         displayName: name.trim(),
@@ -71,7 +76,7 @@ export function GuardiansPanel() {
         phone: phone.trim() || undefined,
         password: password.trim(),
       });
-      setMsg({ kind: 'ok', text: `Đã tạo phụ huynh ${p.displayName}.` });
+      notifySuccess(`Đã tạo phụ huynh ${p.displayName}`);
       setName('');
       setEmail('');
       setPhone('');
@@ -79,7 +84,7 @@ export function GuardiansPanel() {
       loadParents();
       setParentId(p.id);
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Tạo phụ huynh thất bại');
     } finally {
       setBusy(false);
     }
@@ -87,7 +92,7 @@ export function GuardiansPanel() {
 
   async function link() {
     if (!studentId || !parentId) {
-      setMsg({ kind: 'err', text: 'Chọn học sinh và phụ huynh.' });
+      notifyError(new Error('Chọn học sinh và phụ huynh.'), 'Liên kết thất bại');
       return;
     }
     try {
@@ -96,21 +101,30 @@ export function GuardiansPanel() {
         studentId,
         relation: relation as 'father' | 'mother' | 'guardian',
       });
-      setMsg({ kind: 'ok', text: 'Đã liên kết.' });
+      notifySuccess('Đã liên kết phụ huynh với học sinh');
       loadGuardians();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Liên kết thất bại');
     }
   }
 
   async function unlink(id: string) {
     try {
       await trpc.guardian.unlink.mutate({ id });
+      notifySuccess('Đã gỡ liên kết');
       loadGuardians();
     } catch (e) {
-      setMsg({ kind: 'err', text: 'Lỗi: ' + (e instanceof Error ? e.message : '') });
+      notifyError(e, 'Gỡ liên kết thất bại');
     }
   }
+
+  const TH_STYLE: React.CSSProperties = {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    color: 'var(--cmc-text-muted)',
+    fontWeight: 600,
+  };
 
   return (
     <Stack>
@@ -124,41 +138,35 @@ export function GuardiansPanel() {
         onChange={setStudentId}
       />
 
-      {msg && (
-        <Alert color={msg.kind === 'ok' ? 'green' : 'red'} withCloseButton onClose={() => setMsg(null)}>
-          {msg.text}
-        </Alert>
-      )}
-
       {studentId && (
-        <Card withBorder>
-          <Title order={6} mb="sm">
+        <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+          <Text fw={600} style={{ color: 'var(--cmc-text)' }} mb="md">
             Phụ huynh của học sinh
-          </Title>
+          </Text>
           {guardians.length === 0 ? (
             <Text c="dimmed" size="sm">
               Chưa liên kết phụ huynh nào.
             </Text>
           ) : (
-            <Table>
+            <Table striped highlightOnHover withTableBorder={false}>
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>Phụ huynh</Table.Th>
-                  <Table.Th>Liên hệ</Table.Th>
-                  <Table.Th>Quan hệ</Table.Th>
-                  <Table.Th />
+                  <Table.Th style={TH_STYLE}>Phụ huynh</Table.Th>
+                  <Table.Th style={TH_STYLE}>Liên hệ</Table.Th>
+                  <Table.Th style={TH_STYLE}>Quan hệ</Table.Th>
+                  <Table.Th style={{ ...TH_STYLE, width: 80 }} />
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
                 {guardians.map((g) => (
                   <Table.Tr key={g.id}>
-                    <Table.Td>{g.parent.displayName}</Table.Td>
-                    <Table.Td>{g.parent.email ?? g.parent.phone ?? '—'}</Table.Td>
+                    <Table.Td><Text size="sm">{g.parent.displayName}</Text></Table.Td>
+                    <Table.Td><Text size="sm" style={{ color: 'var(--cmc-text-muted)' }}>{g.parent.email ?? g.parent.phone ?? '—'}</Text></Table.Td>
                     <Table.Td>
-                      <Badge variant="light">{RELATION_LABEL[g.relation] ?? g.relation}</Badge>
+                      <Badge variant="light" radius="xl" size="sm">{RELATION_LABEL[g.relation] ?? g.relation}</Badge>
                     </Table.Td>
                     <Table.Td>
-                      <Button size="compact-xs" variant="light" color="red" onClick={() => unlink(g.id)}>
+                      <Button size="compact-xs" variant="subtle" color="red" onClick={() => unlink(g.id)}>
                         Gỡ
                       </Button>
                     </Table.Td>
@@ -178,15 +186,15 @@ export function GuardiansPanel() {
               onChange={setParentId}
             />
             <Select label="Quan hệ" w={150} data={RELATIONS} value={relation} onChange={(v) => v && setRelation(v)} allowDeselect={false} />
-            <Button onClick={link}>Liên kết</Button>
+            <Button variant="filled" radius={9999} onClick={link}>Liên kết</Button>
           </Group>
         </Card>
       )}
 
-      <Card withBorder>
-        <Title order={6} mb="sm">
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} style={{ color: 'var(--cmc-text)' }} mb="md">
           Tạo tài khoản phụ huynh mới
-        </Title>
+        </Text>
         <Group grow align="flex-end">
           <TextInput label="Họ tên" value={name} onChange={(e) => setName(e.currentTarget.value)} />
           <TextInput label="Email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
@@ -196,7 +204,7 @@ export function GuardiansPanel() {
           <PasswordInput label="Mật khẩu" value={password} onChange={(e) => setPassword(e.currentTarget.value)} />
         </Group>
         <Group mt="md">
-          <Button onClick={createParent} loading={busy}>
+          <Button variant="filled" radius={9999} onClick={createParent} loading={busy}>
             Tạo phụ huynh
           </Button>
         </Group>

@@ -1,31 +1,163 @@
-/* CMCnew design tokens — single source for color/spacing/type across all 3 apps. */
-:root {
-  --cmc-brand: #0066cc;
-  --cmc-brand-ink: #004a96;
-  --cmc-bg: #f6f8fb;
-  --cmc-surface: #ffffff;
-  --cmc-border: #e3e8ef;
-  --cmc-text: #1a2330;
-  --cmc-text-muted: #5b6776;
-  --cmc-danger: #d92d20;
-  --cmc-ok: #15803d;
+/* CMCnew Design Tokens — Apple-inspired minimalism adapted for ERP density.
+   Single source of truth for color, spacing, type, and elevation across all 3 apps.
+   Import via: import '@cmc/ui/tokens.css' */
 
-  --cmc-radius: 10px;
-  --cmc-space-1: 4px;
-  --cmc-space-2: 8px;
-  --cmc-space-3: 16px;
-  --cmc-space-4: 24px;
-  --cmc-space-5: 32px;
-  --cmc-shadow: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.06);
-  --cmc-font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+:root {
+  /* ─── Brand / Interactive ─────────────────────────────────────────────────
+     Single interactive color, Apple-style. One blue, one hover shade.       */
+  --cmc-brand:        #0071E3;   /* primary CTA, links, active states         */
+  --cmc-brand-hover:  #0055C6;   /* hover / pressed state                     */
+  --cmc-brand-muted:  #E8F1FC;   /* tinted backgrounds, selected row fill     */
+  --cmc-brand-ink:    #003D99;   /* text on brand-muted bg (contrast ≥ 4.5:1) */
+
+  /* ─── Neutral Scale ──────────────────────────────────────────────────────  */
+  --cmc-text:         #1D1D1F;   /* headings, primary body — Apple near-black  */
+  --cmc-text-2:       #3C3C43;   /* secondary body, labels                     */
+  --cmc-text-muted:   #6E6E73;   /* captions, meta info                        */
+  --cmc-text-faint:   #AEAEB2;   /* placeholder, disabled text                 */
+
+  /* ─── Surfaces ───────────────────────────────────────────────────────────  */
+  --cmc-bg:           #F5F5F7;   /* page background — Apple light grey         */
+  --cmc-surface:      #FFFFFF;   /* cards, panels, modals                      */
+  --cmc-surface-2:    #F9F9FB;   /* alternating table rows, nested sections    */
+  --cmc-surface-dark: #1D1D1F;   /* dark header sections (hero/nav)            */
+
+  /* ─── Borders ────────────────────────────────────────────────────────────  */
+  --cmc-border:       #D2D2D7;   /* default dividers, input borders            */
+  --cmc-border-focus: #0071E3;   /* focused input border                       */
+  --cmc-border-faint: #E8E8ED;   /* subtle separators inside cards             */
+
+  /* ─── Semantic / Status ──────────────────────────────────────────────────
+     All statuses include icon + color so they're not color-only (WCAG).      */
+  --cmc-ok:           #34C759;   /* success green — Apple iOS style            */
+  --cmc-ok-bg:        #F0FBF3;   /* success tint background                    */
+  --cmc-ok-text:      #1A6B34;   /* success text (contrast ≥ 4.5:1 on white)  */
+  --cmc-warn:         #FF9F0A;   /* warning amber — Apple iOS style            */
+  --cmc-warn-bg:      #FFF8EC;   /* warning tint background                    */
+  --cmc-warn-text:    #7A4A00;   /* warning text                               */
+  --cmc-danger:       #FF3B30;   /* error red — Apple iOS style                */
+  --cmc-danger-bg:    #FFF0EF;   /* error tint background                      */
+  --cmc-danger-text:  #C0160D;   /* error text                                 */
+  --cmc-info:         #0071E3;   /* info = brand blue (intentional — single-color Apple system) */
+  --cmc-info-bg:      #E8F1FC;   /* info tint background                       */
+  --cmc-info-text:    #003D99;   /* info text                                  */
+
+  /* Badge / status dot colors (for kanban, table chips) */
+  --cmc-status-active:   #34C759;
+  --cmc-status-pending:  #FF9F0A;
+  --cmc-status-inactive: #AEAEB2;
+  --cmc-status-rejected: #FF3B30;
+  --cmc-status-draft:    #6E6E73;
+
+  /* ─── Typography ─────────────────────────────────────────────────────────
+     -apple-system renders SF Pro on Apple devices; falls back to system-ui.
+     Add Inter as optional web font override via theme.ts if needed.          */
+  --cmc-font:         -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui,
+                      'Helvetica Neue', Arial, sans-serif;
+  --cmc-font-mono:    'SF Mono', 'Cascadia Code', 'Fira Code', 'Courier New', monospace;
+
+  /* Type scale — ERP density (smaller than Apple marketing but clean) */
+  --cmc-text-xs:      11px;   /* labels, footnotes                             */
+  --cmc-text-sm:      13px;   /* table cells, captions, metadata               */
+  --cmc-text-base:    15px;   /* default body (1px smaller than Apple for ERP) */
+  --cmc-text-md:      17px;   /* form labels, list items                       */
+  --cmc-text-lg:      20px;   /* card titles, section headings                 */
+  --cmc-text-xl:      24px;   /* page titles                                   */
+  --cmc-text-2xl:     28px;   /* dashboard headers                             */
+  --cmc-text-3xl:     34px;   /* hero numbers / KPI values                     */
+
+  --cmc-weight-regular:  400;
+  --cmc-weight-medium:   500;
+  --cmc-weight-semibold: 600;
+  --cmc-weight-bold:     700;
+
+  --cmc-leading-tight:   1.25;  /* headings                                    */
+  --cmc-leading-snug:    1.4;   /* table cells, badges                         */
+  --cmc-leading-normal:  1.6;   /* body text                                   */
+
+  /* ─── Spacing — 8px base grid ────────────────────────────────────────────
+     Tighter density tokens (1-3) for ERP tables; looser (5-8) for sections.  */
+  --cmc-space-1:    4px;    /* icon-label gap, badge padding                   */
+  --cmc-space-2:    8px;    /* button inner padding, compact row padding       */
+  --cmc-space-3:   12px;    /* table cell padding, input padding               */
+  --cmc-space-4:   16px;    /* standard gap, card header padding               */
+  --cmc-space-5:   24px;    /* card padding, section gaps                      */
+  --cmc-space-6:   32px;    /* large card padding, modal body padding          */
+  --cmc-space-7:   48px;    /* section spacing (compact)                       */
+  --cmc-space-8:   64px;    /* section spacing (standard)                      */
+  --cmc-space-9:   96px;    /* page-level separation                           */
+
+  /* ─── Border Radius ──────────────────────────────────────────────────────  */
+  --cmc-radius-xs:    4px;    /* compact badges, code chips                    */
+  --cmc-radius-sm:    8px;    /* small tags, compact cards                     */
+  --cmc-radius:      10px;    /* inputs, table cells, secondary buttons        */
+  --cmc-radius-md:   14px;    /* standard cards, panels, form sections         */
+  --cmc-radius-lg:   18px;    /* feature cards, modals                         */
+  --cmc-radius-xl:   24px;    /* large modal containers                        */
+  --cmc-radius-pill: 9999px;  /* primary CTA buttons, pill badges              */
+
+  /* ─── Elevation / Shadow ─────────────────────────────────────────────────
+     Apple flat aesthetic: no heavy shadows on cards. Reserve depth for modals. */
+  --cmc-shadow-none: none;
+  --cmc-shadow-xs:   0 1px 2px rgba(29, 29, 31, 0.06);             /* subtle lift  */
+  --cmc-shadow-sm:   0 1px 4px rgba(29, 29, 31, 0.08),
+                     0 2px 8px rgba(29, 29, 31, 0.04);             /* default card */
+  --cmc-shadow-md:   0 4px 16px rgba(29, 29, 31, 0.10),
+                     0 1px 4px  rgba(29, 29, 31, 0.06);             /* hover card   */
+  --cmc-shadow-lg:   0 8px 32px rgba(29, 29, 31, 0.12),
+                     0 2px 8px  rgba(29, 29, 31, 0.06);             /* dropdowns    */
+  --cmc-shadow-xl:   0 20px 60px rgba(29, 29, 31, 0.18),
+                     0 4px 16px  rgba(29, 29, 31, 0.08);            /* modals       */
+
+  /* ─── Layout ─────────────────────────────────────────────────────────────  */
+  --cmc-sidebar-w:        240px;   /* collapsed variants via media query       */
+  --cmc-sidebar-w-mini:    60px;
+  --cmc-topbar-h:          56px;
+  --cmc-content-max:     1280px;   /* max-width for main content area          */
+  --cmc-form-max:         640px;   /* max-width for single-column forms        */
+
+  /* ─── Z-index scale ──────────────────────────────────────────────────────  */
+  --cmc-z-base:       0;
+  --cmc-z-raised:    10;
+  --cmc-z-sticky:    40;      /* sticky headers, sidebar                       */
+  --cmc-z-overlay:  200;      /* dropdowns, popovers                           */
+  --cmc-z-modal:    400;      /* modals, drawers                               */
+  --cmc-z-toast:    600;      /* notifications                                 */
+
+  /* ─── Transition ─────────────────────────────────────────────────────────  */
+  --cmc-ease:          cubic-bezier(0.25, 0.1, 0.25, 1.0);
+  --cmc-ease-out:      cubic-bezier(0, 0, 0.2, 1);
+  --cmc-transition-fast:   100ms var(--cmc-ease);
+  --cmc-transition:        200ms var(--cmc-ease-out);
+  --cmc-transition-slow:   300ms var(--cmc-ease-out);
 }
 
-* {
+/* ─── Base Reset ──────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
+
 body {
   margin: 0;
   font-family: var(--cmc-font);
+  font-size: var(--cmc-text-base);
+  line-height: var(--cmc-leading-normal);
   background: var(--cmc-bg);
   color: var(--cmc-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Respect reduced motion preference (animation rule §7) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

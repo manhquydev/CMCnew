@@ -20,5 +20,5 @@
 - "GUC leak khi connection pooling": **không đúng** — `set_config(...,true)` là transaction-local, Postgres reset cuối tx; Prisma giữ 1 connection cho interactive transaction. Live QA đã xác minh cô lập đúng.
 - `app_facility_ids()` trả NULL → deny: đây là **default-deny an toàn theo thiết kế**, không phải lỗi.
 
-## Phase 1 polish
-- RLS WITH CHECK bị vi phạm (vd tạo record ở facility ngoài quyền) hiện ra INTERNAL_SERVER_ERROR — nên map sang FORBIDDEN ở tầng tRPC cho UX rõ ràng. Bảo mật đã đúng (bị từ chối), chỉ là mã lỗi.
+## ✅ Phase 1 polish (done)
+- RLS WITH CHECK bị vi phạm (vd tạo record ở facility ngoài quyền) hiện ra INTERNAL_SERVER_ERROR — đã map sang FORBIDDEN qua `mapRlsErrors` middleware trong `apps/api/src/trpc.ts` (SQLSTATE 42501 → `FORBIDDEN`). Bảo mật đúng, mã lỗi đúng.

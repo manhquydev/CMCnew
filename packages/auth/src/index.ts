@@ -6,11 +6,13 @@ export type { SessionClaims } from './jwt.js';
 export {
   loginParent,
   loginStudent,
+  mintParentSession,
   resolveLmsSession,
   lmsRlsContextOf,
   type LmsSession,
 } from './lms.js';
 export { Role } from '@cmc/db';
+export { PERMISSIONS, can, DIRECTOR_ROLE_GRANTS, assignableRoles } from './permissions.js';
 
 /** Fully-resolved identity for the current request. */
 export interface RequestSession {
@@ -58,6 +60,27 @@ export async function login(
   if (!user || !user.isActive) return null;
   if (!(await verifyPassword(password, user.passwordHash))) return null;
 
+  const claims: SessionClaims = {
+    sub: user.id,
+    roles: user.roles,
+    primaryRole: user.primaryRole,
+    tokenVersion: user.tokenVersion,
+  };
+  return { token: await signSession(claims), session: toSession(user) };
+}
+
+/**
+ * Mint a staff session by email WITHOUT a password — used after an external IdP (Microsoft SSO) has
+ * already authenticated the user. Returns null if no active AppUser matches (admin must pre-provision;
+ * SSO never auto-creates accounts). The caller is responsible for trusting the email's origin.
+ */
+export async function mintStaffSession(
+  email: string,
+): Promise<{ token: string; session: RequestSession } | null> {
+  const user = await withRls(SYSTEM_RLS, (tx) =>
+    tx.appUser.findUnique({ where: { email }, include: { facilities: true } }),
+  );
+  if (!user || !user.isActive) return null;
   const claims: SessionClaims = {
     sub: user.id,
     roles: user.roles,

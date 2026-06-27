@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { TRPCError } from '@trpc/server';
 import { withRls, Program } from '@cmc/db';
 import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
@@ -7,8 +8,9 @@ import {
   qualitativeScore,
   type Program as GradingProgram,
   type QuantFormula,
+  type ProgramWeights,
 } from '@cmc/domain-grading';
-import { router, requireRole, lmsProcedure, Role } from '../trpc.js';
+import { router, requirePermission, lmsProcedure } from '../trpc.js';
 
 const criteriaSchema = z.record(z.string(), z.number());
 const DEFAULT_FORMULA: QuantFormula = { homework: 0.5, test: 0.3, attendance: 0.2 };
@@ -18,7 +20,7 @@ export const assessmentRouter = router({
   // Pillars + quant formula a teacher needs to fill a qualitative assessment / read a final grade.
   // Pillars come from the program's GradingTemplate (seed), not the client — keeps the form
   // aligned with the configured rubric. Falls back to an empty pillar list + default formula.
-  template: requireRole(Role.giao_vien, Role.head_teacher, Role.quan_ly)
+  template: requirePermission('assessment', 'template')
     .input(z.object({ program: z.nativeEnum(Program), level: z.string().optional() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -34,8 +36,87 @@ export const assessmentRouter = router({
       }),
     ),
 
+  // ── Academic terms (date-bounded grading periods) ──────────────────────────────
+  termList: requirePermission('assessment', 'termList')
+    .input(z.object({ facilityId: z.number().int().positive() }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.academicTerm.findMany({
+          where: { facilityId: input.facilityId },
+          orderBy: { startDate: 'desc' },
+        }),
+      ),
+    ),
+
+  termCreate: requirePermission('assessment', 'termCreate')
+    .input(
+      z.object({
+        facilityId: z.number().int().positive(),
+        periodKey: z.string().min(1),
+        name: z.string().min(1),
+        startDate: z.string().date(),
+        endDate: z.string().date(),
+        program: z.nativeEnum(Program).optional(),
+      }).refine((v) => v.startDate <= v.endDate, { message: 'Ngày bắt đầu phải trước ngày kết thúc', path: ['endDate'] }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.academicTerm.create({
+          data: {
+            facilityId: input.facilityId,
+            periodKey: input.periodKey,
+            name: input.name,
+            startDate: new Date(input.startDate),
+            endDate: new Date(input.endDate),
+            program: input.program,
+          },
+        }),
+      ),
+    ),
+
+  termUpdate: requirePermission('assessment', 'termUpdate')
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string().min(1).optional(),
+        startDate: z.string().date().optional(),
+        endDate: z.string().date().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.academicTerm.update({
+          where: { id: input.id },
+          data: {
+            name: input.name ?? undefined,
+            startDate: input.startDate ? new Date(input.startDate) : undefined,
+            endDate: input.endDate ? new Date(input.endDate) : undefined,
+          },
+        }),
+      ),
+    ),
+
+  // Lock a term: blocks any further FinalGrade upserts for this periodKey.
+  // Only quan_ly / head_teacher may lock (same gate as termCreate/termUpdate).
+  termLock: requirePermission('assessment', 'termLock')
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.academicTerm.update({ where: { id: input.id }, data: { isLocked: true } }),
+      ),
+    ),
+
+  // Unlock a term: re-opens it for grade mutations. Same role gate as lock.
+  termUnlock: requirePermission('assessment', 'termUnlock')
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.academicTerm.update({ where: { id: input.id }, data: { isLocked: false } }),
+      ),
+    ),
+
   // Teacher / head-teacher records a qualitative assessment for a (student, period). 1 per key.
-  upsertQualitative: requireRole(Role.giao_vien, Role.head_teacher, Role.quan_ly)
+  upsertQualitative: requirePermission('assessment', 'upsertQualitative')
     .input(
       z.object({
         studentId: z.string().uuid(),
@@ -81,7 +162,7 @@ export const assessmentRouter = router({
 
   // Compute + store the FinalGrade for (student, program, period). Idempotent (upsert by key).
   // Numbers come from @cmc/domain-grading; this only gathers the inputs.
-  computeFinalGrade: requireRole(Role.giao_vien, Role.head_teacher, Role.quan_ly)
+  computeFinalGrade: requirePermission('assessment', 'computeFinalGrade')
     .input(
       z.object({
         studentId: z.string().uuid(),
@@ -98,9 +179,31 @@ export const assessmentRouter = router({
           select: { facilityId: true },
         });
 
+        // Resolve the term's date window for this period (decision 2026-06-26): a final grade
+        // aggregates only work done WITHIN the term. No term configured for this periodKey →
+        // fall back to all-time aggregation (backward-compatible).
+        const term = await tx.academicTerm.findUnique({
+          where: { facilityId_periodKey: { facilityId: student.facilityId, periodKey: input.periodKey } },
+          select: { startDate: true, endDate: true, isLocked: true },
+        });
+
+        // A locked term is closed for grading — block any further FinalGrade mutations.
+        if (term?.isLocked) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: `Kỳ "${input.periodKey}" đã bị khóa. Mở khóa kỳ trước khi tính lại điểm.`,
+          });
+        }
+
+        const inTerm = term ? { gte: term.startDate, lte: term.endDate } : undefined;
+
         // Published grades, split homework vs test, each normalised to 0..10.
         const grades = await tx.grade.findMany({
-          where: { isPublished: true, submission: { studentId: input.studentId, archivedAt: null } },
+          where: {
+            isPublished: true,
+            submission: { studentId: input.studentId, archivedAt: null },
+            ...(inTerm ? { gradedAt: inTerm } : {}),
+          },
           select: { score: true, maxScore: true, submission: { select: { exercise: { select: { type: true } } } } },
         });
         const hw = grades.filter((g) => g.submission.exercise.type === 'homework');
@@ -112,7 +215,10 @@ export const assessmentRouter = router({
 
         // Attendance: present|late count as attended (absent = 0). 0..1.
         const att = await tx.attendance.findMany({
-          where: { enrollment: { studentId: input.studentId } },
+          where: {
+            enrollment: { studentId: input.studentId },
+            ...(inTerm ? { session: { sessionDate: inTerm } } : {}),
+          },
           select: { status: true },
         });
         const attendanceRate = att.length
@@ -126,12 +232,22 @@ export const assessmentRouter = router({
         });
         const qScore = qa ? qualitativeScore(qa.criteria as Record<string, number>) : null;
 
-        // Quant blend weights from the program template (fallback to a sane default).
+        // Quant blend weights and qualitative/quantitative blend from the program template.
+        // Override semantics: DB weights are used ONLY when BOTH columns are non-null (an
+        // explicit per-template override). NULL (the default) → falls back to the canonical
+        // programWeights() constants in @cmc/domain-grading, which encode the charter blends.
+        // This guarantees parity by construction: a fresh template without explicit weights
+        // always produces the charter result regardless of DB column defaults.
         const tpl = await tx.gradingTemplate.findFirst({
           where: { facilityId: student.facilityId, program: input.program, level: input.level ?? null },
-          select: { formula: true },
+          select: { formula: true, qualitativeWeight: true, quantitativeWeight: true },
         });
         const formula = (tpl?.formula as QuantFormula | undefined) ?? DEFAULT_FORMULA;
+        // Pass DB weights only when both are explicitly set (non-null); else undefined → programWeights().
+        const dbWeights: ProgramWeights | undefined =
+          tpl?.qualitativeWeight != null && tpl?.quantitativeWeight != null
+            ? { qualitative: tpl.qualitativeWeight, quantitative: tpl.quantitativeWeight }
+            : undefined;
 
         const result = computeFinalGrade({
           program: input.program as GradingProgram,
@@ -139,6 +255,7 @@ export const assessmentRouter = router({
           quant: { homeworkAvg, testScore, attendanceRate },
           formula,
           passMark: input.passMark,
+          weights: dbWeights, // DB weights override hardcoded constants when a template exists
         });
 
         const fields = {

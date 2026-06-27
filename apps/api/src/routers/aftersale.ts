@@ -1,13 +1,12 @@
 import { z } from 'zod';
+import { TRPCError } from '@trpc/server';
 import { withRls, CaseStatus, CasePriority, StudentLifecycle } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, requireRole, Role } from '../trpc.js';
-
-const CSKH_ROLES = [Role.cskh, Role.quan_ly] as const;
+import { router, requirePermission } from '../trpc.js';
 
 export const afterSaleRouter = router({
-  list: requireRole(...CSKH_ROLES)
+  list: requirePermission('afterSale', 'list')
     .input(z.object({ facilityId: z.number().int().positive(), status: z.nativeEnum(CaseStatus).optional() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -19,7 +18,7 @@ export const afterSaleRouter = router({
       ),
     ),
 
-  create: requireRole(...CSKH_ROLES)
+  create: requirePermission('afterSale', 'create')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -58,7 +57,7 @@ export const afterSaleRouter = router({
     ),
 
   // Move a case along its lifecycle (open→in_progress→resolved→closed; can reopen). Audited.
-  transition: requireRole(...CSKH_ROLES)
+  transition: requirePermission('afterSale', 'transition')
     .input(z.object({ id: z.string().uuid(), status: z.nativeEnum(CaseStatus) }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -84,10 +83,19 @@ export const afterSaleRouter = router({
       }),
     ),
 
-  assign: requireRole(...CSKH_ROLES)
+  assign: requirePermission('afterSale', 'assign')
     .input(z.object({ id: z.string().uuid(), assignedToId: z.string().uuid().nullable() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
+        const existing = await tx.afterSaleCase.findUniqueOrThrow({ where: { id: input.id } });
+        if (input.assignedToId !== null) {
+          const member = await tx.userFacility.findFirst({
+            where: { userId: input.assignedToId, facilityId: existing.facilityId },
+          });
+          if (!member) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Người được giao không thuộc cơ sở này' });
+          }
+        }
         const kase = await tx.afterSaleCase.update({
           where: { id: input.id },
           data: { assignedToId: input.assignedToId },
@@ -106,7 +114,7 @@ export const afterSaleRouter = router({
 
   // A case can change a student's lifecycle (e.g. on_hold / withdrawn). quan_ly only; audited
   // on both the case and the student so the timeline links the decision to the case.
-  setStudentLifecycle: requireRole(Role.quan_ly)
+  setStudentLifecycle: requirePermission('afterSale', 'setStudentLifecycle')
     .input(
       z.object({
         studentId: z.string().uuid(),

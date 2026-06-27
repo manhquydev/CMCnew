@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Card, Group, Stack, Text, Textarea, Timeline } from '@mantine/core';
+import { Alert, Badge, Button, Card, Group, Text, Textarea, Timeline } from '@mantine/core';
 import { trpc } from './client.js';
 
 // Explicit shape (deriving via the tRPC client blows TS's instantiation depth).
@@ -25,25 +25,33 @@ function fmt(d: string | Date): string {
   return new Date(d).toLocaleString('vi-VN');
 }
 
+/** Best-effort human message from a tRPC/network error, with a friendly fallback. */
+function msgOf(e: unknown, fallback: string): string {
+  const m = e instanceof Error ? e.message : '';
+  return m.trim() ? m : fallback;
+}
+
 /** Reusable Odoo-style chatter: auto change-log + manual notes on any record. */
 export function Chatter({
   entityType,
   entityId,
-  facilityId,
 }: {
   entityType: string;
   entityId: string;
-  facilityId?: number | null;
 }) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     trpc.audit.timeline
       .query({ entityType, entityId })
-      .then((r) => setEvents(r as TimelineEvent[]))
-      .catch(() => {});
+      .then((r) => {
+        setEvents(r as TimelineEvent[]);
+        setError(null);
+      })
+      .catch((e: unknown) => setError(msgOf(e, 'Không tải được nhật ký.')));
   }, [entityType, entityId]);
 
   useEffect(load, [load]);
@@ -51,10 +59,14 @@ export function Chatter({
   async function post() {
     if (!body.trim()) return;
     setBusy(true);
+    setError(null);
     try {
-      await trpc.audit.postNote.mutate({ entityType, entityId, facilityId: facilityId ?? undefined, body });
+      await trpc.audit.postNote.mutate({ entityType, entityId, body });
       setBody('');
       load();
+    } catch (e: unknown) {
+      // Surface 401/permission/network failures instead of silently dropping the note.
+      setError(msgOf(e, 'Gửi ghi chú thất bại. Thử lại.'));
     } finally {
       setBusy(false);
     }
@@ -78,6 +90,11 @@ export function Chatter({
           Gửi
         </Button>
       </Group>
+      {error && (
+        <Alert color="red" variant="light" mb="md" withCloseButton onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
       {events.length === 0 ? (
         <Text c="dimmed" size="sm">
           Chưa có hoạt động.

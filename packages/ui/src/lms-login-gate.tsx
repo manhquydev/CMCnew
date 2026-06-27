@@ -1,9 +1,8 @@
 import { createContext, useContext, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import {
-  AppShell,
+  Anchor,
   Button,
   Center,
-  Group,
   Loader,
   Paper,
   PasswordInput,
@@ -29,35 +28,87 @@ export function useLmsSession() {
 
 /**
  * Login gate for the LMS (parents + students). Two sign-in modes:
- *  - Phụ huynh: email/SĐT + mật khẩu  → lmsAuth.loginParent
+ *  - Phụ huynh: email OTP hai bước → lmsAuth.otpRequest / otpVerify
  *  - Học sinh:  mã đăng nhập + mật khẩu → lmsAuth.loginStudent
  * Renders `children` once a principal is resolved; provides it via useLmsSession().
  */
 export function LmsLoginGate({ children }: { children: ReactNode }) {
   const [principal, setPrincipal] = useState<Principal | undefined>(undefined);
   const [mode, setMode] = useState<'parent' | 'student'>('parent');
+
+  // ── Phụ huynh OTP ──────────────────────────────────────────────────────────
+  const [otpStep, setOtpStep] = useState<'request' | 'verify'>('request');
+  const [parentEmail, setParentEmail] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [devHint, setDevHint] = useState(''); // mã hiển thị trong dev
+  const [otpError, setOtpError] = useState('');
+
+  // ── Học sinh ───────────────────────────────────────────────────────────────
   const [idField, setIdField] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [studentError, setStudentError] = useState('');
+
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     trpc.lmsAuth.me.query().then(setPrincipal).catch(() => setPrincipal(null));
   }, []);
 
-  async function onSubmit(e: FormEvent) {
+  // Đặt lại trạng thái OTP khi chuyển tab
+  function handleModeChange(v: string) {
+    setMode(v as 'parent' | 'student');
+    setOtpStep('request');
+    setParentEmail('');
+    setOtpCode('');
+    setDevHint('');
+    setOtpError('');
+    setIdField('');
+    setStudentError('');
+  }
+
+  // Bước 1: gửi OTP về email phụ huynh
+  async function onOtpRequest(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
-    setError('');
+    setOtpError('');
     try {
-      if (mode === 'parent') {
-        await trpc.lmsAuth.loginParent.mutate({ emailOrPhone: idField, password });
-      } else {
-        await trpc.lmsAuth.loginStudent.mutate({ loginCode: idField, password });
+      const res = await trpc.lmsAuth.otpRequest.mutate({ email: parentEmail });
+      // Trong môi trường dev, backend trả về mã để tiện kiểm thử
+      if (res.devCode) {
+        setOtpCode(res.devCode);
+        setDevHint(res.devCode);
       }
+      setOtpStep('verify');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Bước 2: xác nhận mã OTP
+  async function onOtpVerify(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setOtpError('');
+    try {
+      await trpc.lmsAuth.otpVerify.mutate({ email: parentEmail, code: otpCode });
       setPrincipal(await trpc.lmsAuth.me.query());
     } catch {
-      setError('Đăng nhập thất bại — kiểm tra lại thông tin.');
+      setOtpError('Mã không đúng hoặc đã hết hạn.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Đăng nhập học sinh (giữ nguyên)
+  async function onStudentSubmit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setStudentError('');
+    try {
+      await trpc.lmsAuth.loginStudent.mutate({ loginCode: idField, password });
+      setPrincipal(await trpc.lmsAuth.me.query());
+    } catch {
+      setStudentError('Đăng nhập thất bại — kiểm tra lại thông tin.');
     } finally {
       setBusy(false);
     }
@@ -87,66 +138,111 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
             fullWidth
             mb="md"
             value={mode}
-            onChange={(v) => {
-              setMode(v as 'parent' | 'student');
-              setIdField('');
-              setError('');
-            }}
+            onChange={handleModeChange}
             data={[
               { value: 'parent', label: 'Phụ huynh' },
               { value: 'student', label: 'Học sinh' },
             ]}
           />
-          <form onSubmit={onSubmit}>
-            <Stack>
-              <TextInput
-                label={mode === 'parent' ? 'Email hoặc số điện thoại' : 'Mã đăng nhập'}
-                value={idField}
-                onChange={(e) => setIdField(e.currentTarget.value)}
-                required
-              />
-              <PasswordInput
-                label="Mật khẩu"
-                value={password}
-                onChange={(e) => setPassword(e.currentTarget.value)}
-                required
-              />
-              {error && (
-                <Text c="red" size="sm">
-                  {error}
+
+          {/* ── Phụ huynh: OTP hai bước ── */}
+          {mode === 'parent' && otpStep === 'request' && (
+            <form onSubmit={onOtpRequest}>
+              <Stack>
+                <TextInput
+                  label="Email phụ huynh"
+                  type="email"
+                  value={parentEmail}
+                  onChange={(e) => setParentEmail(e.currentTarget.value)}
+                  required
+                />
+                <Button type="submit" loading={busy} fullWidth>
+                  Gửi mã đăng nhập
+                </Button>
+              </Stack>
+            </form>
+          )}
+
+          {/* ── Phụ huynh: nhập mã OTP ── */}
+          {mode === 'parent' && otpStep === 'verify' && (
+            <form onSubmit={onOtpVerify}>
+              <Stack>
+                <Text size="sm" c="dimmed">
+                  Mã đã gửi đến: <strong>{parentEmail}</strong>
                 </Text>
-              )}
-              <Button type="submit" loading={busy} fullWidth>
-                Đăng nhập
-              </Button>
-            </Stack>
-          </form>
+                {devHint && (
+                  <Text size="xs" c="orange">
+                    Mã (dev): {devHint}
+                  </Text>
+                )}
+                <TextInput
+                  label="Mã đăng nhập"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.currentTarget.value)}
+                  maxLength={6}
+                  required
+                />
+                {otpError && (
+                  <Text c="red" size="sm">
+                    {otpError}
+                  </Text>
+                )}
+                <Button type="submit" loading={busy} fullWidth>
+                  Xác nhận
+                </Button>
+                <Anchor
+                  component="button"
+                  type="button"
+                  size="sm"
+                  ta="center"
+                  onClick={() => {
+                    setOtpStep('request');
+                    setOtpCode('');
+                    setDevHint('');
+                    setOtpError('');
+                  }}
+                >
+                  Đổi email
+                </Anchor>
+              </Stack>
+            </form>
+          )}
+
+          {/* ── Học sinh: mã + mật khẩu (không thay đổi) ── */}
+          {mode === 'student' && (
+            <form onSubmit={onStudentSubmit}>
+              <Stack>
+                <TextInput
+                  label="Mã đăng nhập"
+                  value={idField}
+                  onChange={(e) => setIdField(e.currentTarget.value)}
+                  required
+                />
+                <PasswordInput
+                  label="Mật khẩu"
+                  value={password}
+                  onChange={(e) => setPassword(e.currentTarget.value)}
+                  required
+                />
+                {studentError && (
+                  <Text c="red" size="sm">
+                    {studentError}
+                  </Text>
+                )}
+                <Button type="submit" loading={busy} fullWidth>
+                  Đăng nhập
+                </Button>
+              </Stack>
+            </form>
+          )}
         </Paper>
       </Center>
     );
   }
 
-  const roleLabel = principal.kind === 'parent' ? 'Phụ huynh' : 'Học sinh';
   return (
     <LmsCtx.Provider value={{ principal, logout }}>
-      <AppShell header={{ height: 56 }} padding="md">
-        <AppShell.Header>
-          <Group h="100%" px="md" justify="space-between">
-            <Text fw={700} c="cmc.7">
-              CMC · Học tập
-            </Text>
-            <Group gap="sm">
-              <Text size="sm" c="dimmed">
-                {principal.displayName} · {roleLabel}
-              </Text>
-              <Button variant="default" size="xs" onClick={logout}>
-                Đăng xuất
-              </Button>
-            </Group>
-          </Group>
-        </AppShell.Header>
-        <AppShell.Main>{children}</AppShell.Main>
-      </AppShell>
+      {children}
     </LmsCtx.Provider>
   );
 }

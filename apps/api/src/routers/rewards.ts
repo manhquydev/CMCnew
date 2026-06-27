@@ -4,7 +4,7 @@ import { withRls, Program } from '@cmc/db';
 import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { starBalance, checkRedeem, redeemEntry, refundEntry } from '@cmc/domain-rewards';
-import { router, lmsProcedure, studentProcedure, requireRole, Role } from '../trpc.js';
+import { router, lmsProcedure, studentProcedure, requirePermission } from '../trpc.js';
 
 export const rewardsRouter = router({
   // Gift catalog of the principal's facility (RLS = facility scope; principal-agnostic).
@@ -14,7 +14,7 @@ export const rewardsRouter = router({
     ),
   ),
 
-  giftCreate: requireRole(Role.quan_ly)
+  giftCreate: requirePermission('rewards', 'giftCreate')
     .input(
       z.object({
         facilityId: z.number().int().positive(),
@@ -108,7 +108,7 @@ export const rewardsRouter = router({
     ),
 
   // Staff approves/rejects a pending redemption. Reject → refund stars + restore stock.
-  review: requireRole(Role.quan_ly)
+  review: requirePermission('rewards', 'review')
     .input(
       z.object({
         id: z.string().uuid(),

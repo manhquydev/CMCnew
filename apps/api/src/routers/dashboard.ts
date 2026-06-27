@@ -1,11 +1,11 @@
 import { withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
-import { router, requireRole, Role } from '../trpc.js';
+import { router, requirePermission } from '../trpc.js';
 
 // Read-only executive summary (BGĐ). Every figure is RLS-scoped to the caller's facilities,
 // so a facility manager sees only their own numbers; super_admin/BGĐ see all assigned.
 export const dashboardRouter = router({
-  summary: requireRole(Role.bgd, Role.quan_ly).query(({ ctx }) =>
+  summary: requirePermission('dashboard', 'summary').query(({ ctx }) =>
     withRls(rlsContextOf(ctx.session), async (tx) => {
       const [revenue, studentsActive, classesOpen, oppOpen, oppByStage, oppWon] = await Promise.all([
         tx.receipt.aggregate({

@@ -1,0 +1,41 @@
+# Exclude files that must not enter the Docker build context.
+# Without this file, COPY . . would include host node_modules (wrong OS/arch),
+# .git history, local env files, and build artefacts — all of which would
+# invalidate layer caches and bloat intermediate images.
+
+# Dependencies — always rebuilt inside the container
+node_modules
+**/node_modules
+
+# Build artefacts
+**/dist
+**/.turbo
+**/.cache
+
+# Local environment files — secrets must come from the container environment
+.env
+.env.*
+!.env.production.example
+
+# Git and editor
+.git
+.gitignore
+.gitattributes
+.editorconfig
+.vscode
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# CI / harness / docs that are not needed for builds
+.github
+.claude
+plans
+docs
+scripts
+
+# Test outputs
+coverage
+**/*.test-results

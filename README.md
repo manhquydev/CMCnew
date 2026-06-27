@@ -32,10 +32,11 @@ pnpm --filter @cmc/db generate
 pnpm --filter @cmc/db migrate    # schema + RLS (tạo role cmc_app)
 pnpm --filter @cmc/db seed       # super_admin + 2 facility demo
 
-# chạy backend + 3 app (mỗi lệnh 1 terminal, hoặc `pnpm dev` chạy tất cả qua turbo)
+# chạy backend + 2 app (mỗi lệnh 1 terminal, hoặc `pnpm dev` chạy tất cả qua turbo)
+# Topology: 1 API + app nhân viên hợp nhất (admin) + app LMS. apps/teaching đã retire,
+# gộp toàn bộ panel giáo vụ vào apps/admin (staff shell lọc theo role).
 pnpm --filter @cmc/api start     # http://localhost:4000
-pnpm --filter @cmc/admin dev     # http://localhost:5173
-pnpm --filter @cmc/teaching dev  # http://localhost:5174
+pnpm --filter @cmc/admin dev     # http://localhost:5173  (app nhân viên hợp nhất: ERP + giáo vụ)
 pnpm --filter @cmc/lms dev       # http://localhost:5175
 ```
 
