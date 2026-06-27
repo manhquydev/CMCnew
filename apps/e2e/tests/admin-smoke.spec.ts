@@ -18,7 +18,7 @@ test.describe('admin smoke', () => {
     await page.goto('/');
     await page.getByLabel('Email').fill(EMAIL);
     await page.getByLabel('Mật khẩu').fill(PASSWORD);
-    await page.getByRole('button', { name: 'Đăng nhập' }).click();
+    await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
 
     // After successful login the sidebar nav appears (AppShell layout).
     // "Tổng quan" is the first nav item in the sidebar.
@@ -29,7 +29,7 @@ test.describe('admin smoke', () => {
     await page.goto('/');
     await page.getByLabel('Email').fill(EMAIL);
     await page.getByLabel('Mật khẩu').fill('wrong-password-xyz');
-    await page.getByRole('button', { name: 'Đăng nhập' }).click();
+    await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
 
     await expect(page.getByText(/đăng nhập thất bại/i)).toBeVisible({ timeout: 8_000 });
   });
@@ -40,7 +40,7 @@ test.describe('admin smoke', () => {
     await page.goto('/');
     await page.getByLabel('Email').fill(EMAIL);
     await page.getByLabel('Mật khẩu').fill(PASSWORD);
-    await page.getByRole('button', { name: 'Đăng nhập' }).click();
+    await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
     await expect(page.locator('nav').getByText('Tổng quan')).toBeVisible({ timeout: 10_000 });
 
     // Navigate to Khóa học via sidebar nav (NavLink renders as a button in the nav).

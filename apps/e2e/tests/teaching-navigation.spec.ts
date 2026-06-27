@@ -9,7 +9,7 @@ async function login(page: import('@playwright/test').Page) {
   await page.goto('/');
   await page.getByLabel('Email').fill(EMAIL);
   await page.getByLabel('Mật khẩu').fill(PASSWORD);
-  await page.getByRole('button', { name: 'Đăng nhập' }).click();
+  await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
   // Wait until sidebar is ready
   await expect(page.locator('nav').getByText('Lịch dạy')).toBeVisible({ timeout: 10_000 });
 }
@@ -21,8 +21,8 @@ test.describe('teaching navigation', () => {
     const nav = page.locator('nav');
     await expect(nav.getByText('GIẢNG DẠY')).toBeVisible();
     await expect(nav.getByText('QUẢN LÝ LỚP')).toBeVisible();
-    await expect(nav.getByText('GIAO TIẾP')).toBeVisible();
     await expect(nav.getByText('KINH DOANH')).toBeVisible();
+    await expect(nav.getByText('NHÂN SỰ')).toBeVisible();
   });
 
   test('clicking Chấm bài NavLink updates header section title', async ({ page }) => {

@@ -1,53 +1,53 @@
 import { test, expect } from '@playwright/test';
 
-// LMS has two login modes: parent (email/phone) and student (login code).
-// Default test account is a parent; set TEST_LMS_MODE=student to switch.
-const MODE = (process.env.TEST_LMS_MODE ?? 'parent') as 'parent' | 'student';
-const ID_FIELD = process.env.TEST_LMS_ID ?? 'ph@cmc.local';
-const PASSWORD = process.env.TEST_LMS_PASSWORD ?? 'Parent!123';
-
-// Label of the id field changes per mode:
-//   parent  → "Email hoặc số điện thoại"
-//   student → "Mã đăng nhập"
-const ID_LABEL = MODE === 'parent' ? 'Email hoặc số điện thoại' : 'Mã đăng nhập';
-// SegmentedControl option label:
-const MODE_LABEL = MODE === 'parent' ? 'Phụ huynh' : 'Học sinh';
+// LMS auth (post SSO/OTP redirection):
+//   - Student: login code + password (unchanged) — used for the happy/error smoke.
+//   - Parent:  passwordless Email OTP (two steps) — smoke covers step 1 (request code).
+// Seed: student loginCode TEST-001, password = SEED_SUPERADMIN_PASSWORD (default ChangeMe!123).
+const STUDENT_CODE = process.env.TEST_LMS_STUDENT_CODE ?? 'TEST-001';
+const STUDENT_PASSWORD = process.env.TEST_LMS_STUDENT_PASSWORD ?? 'ChangeMe!123';
+const PARENT_EMAIL = process.env.TEST_LMS_PARENT_EMAIL ?? 'parent@cmc.local';
 
 test.use({ baseURL: 'http://localhost:5175' });
 
 test.describe('lms smoke', () => {
   test('login gate is visible on first load', async ({ page }) => {
     await page.goto('/');
-    // LmsLoginGate renders the SegmentedControl before the form fields.
     await expect(page.getByText('CMC · Học tập')).toBeVisible({ timeout: 10_000 });
-    // Mantine SegmentedControl hides the radio <input>; assert the option labels instead.
     await expect(page.getByText('Phụ huynh', { exact: true })).toBeVisible();
     await expect(page.getByText('Học sinh', { exact: true })).toBeVisible();
   });
 
-  test('login → app shell renders', async ({ page }) => {
+  test('student login (code + password) → app shell renders', async ({ page }) => {
     await page.goto('/');
-    // Ensure the correct mode segment is selected.
-    await page.getByText(MODE_LABEL, { exact: true }).click();
-    await page.getByLabel(ID_LABEL).fill(ID_FIELD);
-    await page.getByLabel('Mật khẩu').fill(PASSWORD);
+    await page.getByText('Học sinh', { exact: true }).click();
+    await page.getByLabel('Mã đăng nhập').fill(STUDENT_CODE);
+    await page.getByLabel('Mật khẩu').fill(STUDENT_PASSWORD);
     await page.getByRole('button', { name: 'Đăng nhập' }).click();
 
-    // After login, AppShell header appears with the LMS title.
-    await expect(page.getByText('CMC · Học tập')).toBeVisible({ timeout: 10_000 });
-    // The login form should be gone (no more submit button).
-    await expect(page.getByRole('button', { name: 'Đăng nhập' })).not.toBeVisible();
-    // Logout button visible in header.
+    // After login the submit button is gone and a logout control appears.
+    await expect(page.getByRole('button', { name: 'Đăng nhập' })).not.toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: 'Đăng xuất' })).toBeVisible({ timeout: 8_000 });
   });
 
-  test('wrong password shows error', async ({ page }) => {
+  test('student wrong password shows error', async ({ page }) => {
     await page.goto('/');
-    await page.getByText(MODE_LABEL, { exact: true }).click();
-    await page.getByLabel(ID_LABEL).fill(ID_FIELD);
+    await page.getByText('Học sinh', { exact: true }).click();
+    await page.getByLabel('Mã đăng nhập').fill(STUDENT_CODE);
     await page.getByLabel('Mật khẩu').fill('wrong-password-xyz');
     await page.getByRole('button', { name: 'Đăng nhập' }).click();
 
     await expect(page.getByText(/đăng nhập thất bại/i)).toBeVisible({ timeout: 8_000 });
+  });
+
+  test('parent OTP request (step 1) advances to code entry', async ({ page }) => {
+    await page.goto('/');
+    await page.getByText('Phụ huynh', { exact: true }).click();
+    await page.getByLabel('Email phụ huynh').fill(PARENT_EMAIL);
+    await page.getByRole('button', { name: 'Gửi mã đăng nhập' }).click();
+
+    // Step 2 view: the code-entry field + "sent to" confirmation appear.
+    await expect(page.getByText(/Mã đã gửi đến/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByLabel('Mã đăng nhập')).toBeVisible();
   });
 });

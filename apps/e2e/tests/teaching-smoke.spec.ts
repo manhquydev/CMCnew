@@ -17,7 +17,7 @@ test.describe('teaching smoke', () => {
     await page.goto('/');
     await page.getByLabel('Email').fill(EMAIL);
     await page.getByLabel('Mật khẩu').fill(PASSWORD);
-    await page.getByRole('button', { name: 'Đăng nhập' }).click();
+    await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
 
     // After login, the sidebar nav appears. "Lịch dạy" is the first nav item.
     await expect(page.locator('nav').getByText('Lịch dạy')).toBeVisible({ timeout: 10_000 });
@@ -30,7 +30,7 @@ test.describe('teaching smoke', () => {
     await page.goto('/');
     await page.getByLabel('Email').fill(EMAIL);
     await page.getByLabel('Mật khẩu').fill('wrong-password-xyz');
-    await page.getByRole('button', { name: 'Đăng nhập' }).click();
+    await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
 
     await expect(page.getByText(/đăng nhập thất bại/i)).toBeVisible({ timeout: 8_000 });
   });

@@ -9,7 +9,7 @@ async function login(page: import('@playwright/test').Page) {
   await page.goto('/');
   await page.getByLabel('Email').fill(EMAIL);
   await page.getByLabel('Mật khẩu').fill(PASSWORD);
-  await page.getByRole('button', { name: 'Đăng nhập' }).click();
+  await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
   await expect(page.locator('nav').getByText('Tổng quan')).toBeVisible({ timeout: 10_000 });
 }
 
