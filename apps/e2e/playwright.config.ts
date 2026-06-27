@@ -27,12 +27,6 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      command: 'pnpm --filter @cmc/teaching dev',
-      url: 'http://localhost:5174',
-      reuseExistingServer: !process.env.CI,
-      timeout: 60_000,
-    },
-    {
       command: 'pnpm --filter @cmc/lms dev',
       url: 'http://localhost:5175',
       reuseExistingServer: !process.env.CI,
