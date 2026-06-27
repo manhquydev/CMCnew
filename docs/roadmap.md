@@ -10,7 +10,7 @@ Mục tiêu: bộ khung an toàn để mọi phase sau bám vào.
 - `packages/db`: Postgres + Prisma + migration đầu (facility, user, role, user_facility) + **RLS policy mẫu**.
 - `packages/auth`: session/JWT/`tokenVersion`/RBAC + **RLS context per-request**.
 - **Seed `super_admin` idempotent từ env** (sửa lỗi P3 hệ cũ).
-- `apps/api` (Hono+tRPC) skeleton + 3 app shell (lms/teaching/admin) + `packages/ui` design tokens.
+- `apps/api` (Hono+tRPC) skeleton + app shell (lms + staff; teaching shell sau này gộp vào admin) + `packages/ui` design tokens.
 - **Done-evidence:** đăng nhập super_admin trên DB trống; test chứng minh RLS cô lập 2 facility; CI xanh.
 
 ## Phase 1 — Identity & Lõi giáo vụ
@@ -47,11 +47,11 @@ Mục tiêu: xương sống học thuật + giá trị LMS đầu tiên.
 - **Payroll deferrals M4/M5/M9/M10/M11 nêu rõ là quyết định mở** (không âm thầm bỏ).
 - **Done-evidence:** tính → duyệt → đánh dấu đã trả payslip; non-HR không thấy số lương.
 - **CV5 HR UI (✅ done 2026-06-25):** Tab "Nhân sự & Lương" trong admin (hr/ke_toan/super_admin); SalaryRateCard có ô quota tháng; CommissionCard gọi `commissionForSale`, hiển thị breakdown attainment/rate/HH, nút "Đưa vào variablePay". _Harness: CV5-hr-ui · Int-test: PAY-FINALIZE, PAY-MYSLIPS, FIN-COMMISSION · E2E: admin-smoke (login gate)._
-- **Bell notification (✅ done 2026-06-26):** Staff bell wired in admin+teaching AppShell (useStaffNotif hook, SSE + tRPC staffNotif router, Popover dropdown). Teaching shell fully wired (AppShell NavLink sidebar replacing Tabs). Docker full stack prod-ready (4 Dockerfiles + nginx + docker-compose.prod.yml). HR panel staff table + payslip drawer via payroll.roster. Class list pagination 20/page. _Harness: BELL-NOTIF, HR-PANEL-UI, TEACH-SHELL, DOCKER-PROD, TEACH-PAGINATE._
+- **Bell notification (✅ done 2026-06-26):** Staff bell wired in the unified admin staff shell (useStaffNotif hook, SSE + tRPC staffNotif router, Popover dropdown). Grouped NavLink sidebar (AppShell) and class-list pagination (20/page) now live in `apps/admin` after the teaching app was retired and consolidated into the unified staff shell. Docker full stack prod-ready (nginx + docker-compose.prod.yml). HR panel staff table + payslip drawer via payroll.roster. _Harness: BELL-NOTIF, HR-PANEL-UI, TEACH-SHELL, DOCKER-PROD, TEACH-PAGINATE._
 
 ## Phase 5 — After-sale, Guardian, Exec & hoàn thiện
 
-- After-sale case + student lifecycle. _(✅ done-by-evidence 2026-06-25 — AfterSaleCase CRUD + transition open→in_progress→resolved→closed + assign + setStudentLifecycle; khóa bằng aftersale-student-lifecycle.int.test.ts 3 tests. Harness: AFS-LIFECYCLE · E2E: teaching-smoke.)_
+- After-sale case + student lifecycle. _(✅ done-by-evidence 2026-06-25 — AfterSaleCase CRUD + transition open→in_progress→resolved→closed + assign + setStudentLifecycle; khóa bằng aftersale-student-lifecycle.int.test.ts 3 tests. Harness: AFS-LIFECYCLE · E2E: admin-smoke (login gate).)_
 - **Guardian link backend + UI** (sửa lỗ A3 hệ cũ). _(✅ done-by-evidence 2026-06-24 — backend+admin+LMS portal đã build; bất biến A3 khóa bằng int-test 11 surface, PH thấy đúng+đủ con, chặn con người khác/xuyên facility. Defer: SSE + student-self isolation. Harness: SEC-GUARDIAN · E2E: lms-smoke.)_
 - Dashboard BGĐ/MAES. _(⬜ chưa làm — cần định nghĩa công thức MAES trước)_
 - Cron họp phụ huynh (cadence) _(✅ done — T13 auto-cadence. Harness: ACA-CADENCE, ACA-REMIND, ACA-TBD, ACA-CLOSE, ACA-REOPEN, ACA-WARN.)_, ~~Chứng chỉ auto-gen~~ _(bỏ auto — chỉ cấp tay; LMS = nền làm bài tập, decision 0008)_, ~~Chat CSKH~~ _(đã bỏ — operator decision, DEBT.md)_.
@@ -78,9 +78,9 @@ RLS + atomic + finalize là checklist bắt buộc ở mọi phase chạm tenant
 | Domain | Harness IDs | E2E coverage |
 |---|---|---|
 | Security/RLS | SEC-RLS-COV, SEC-RLS-TEN, SEC-GUARD, SEC-AUD-FOL, SEC-AUD-NOTE | admin-smoke, lms-smoke |
-| Parent meetings | ACA-CADENCE, ACA-REMIND, ACA-TBD, ACA-CLOSE, ACA-REOPEN, ACA-WARN | teaching-smoke |
+| Parent meetings | ACA-CADENCE, ACA-REMIND, ACA-TBD, ACA-CLOSE, ACA-REOPEN, ACA-WARN | admin-smoke (login gate) |
 | Finance | FIN-VOUCHER, FIN-VOW-WIN, FIN-RECEIPT, FIN-COMM | admin-smoke |
 | Payroll | PAY-FINAL, PAY-MYSLIP, CV5-hr-ui | admin-smoke |
 | LMS/Rewards | LMS-BADGE, LMS-ASSESS, LMS-LEVEL, LMS-NO-CERT, LMS-STAR, LMS-REWARD | lms-smoke |
-| CRM/After-sale | AFS-LIFECYCLE, CRM-HOOKS, CRM-BATCH | teaching-smoke |
-| UI/Infra | BELL-NOTIF, HR-PANEL-UI, TEACH-SHELL, DOCKER-PROD, TEACH-PAGINATE | admin-smoke, teaching-smoke |
+| CRM/After-sale | AFS-LIFECYCLE, CRM-HOOKS, CRM-BATCH | unified-staff-shell, admin-smoke |
+| UI/Infra | BELL-NOTIF, HR-PANEL-UI, TEACH-SHELL, DOCKER-PROD, TEACH-PAGINATE | admin-smoke, admin-hr-panel, unified-staff-shell |

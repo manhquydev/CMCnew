@@ -42,11 +42,11 @@ This file maps product behavior to proof.
 | LMS-REWARD | Reward review refund (rewards invariant) | no | yes | no | no | implemented | `apps/api/test/reward-review-refund.int.test.ts` |
 | CRM-HOOKS | CRM auto-hooks + lead-ingest token | no | yes | no | no | implemented | `apps/api/test/crm-hooks.int.test.ts` |
 | CRM-BATCH | Batch code atomicity (concurrent generation) | no | yes | no | no | implemented | `apps/api/test/batch-code-atomicity.int.test.ts` |
-| BELL-NOTIF | Bell icon shows unread badge from SSE; dropdown lists notifications and marks all read | no | no | planned — teaching-navigation.spec.ts + admin-hr-panel.spec.ts | no | implemented | `apps/teaching/src/shell.tsx`, `apps/admin/src/shell.tsx`, `packages/ui/src/use-staff-notif.ts` |
+| BELL-NOTIF | Bell icon shows unread badge from polling; dropdown lists notifications and marks all read (unified admin staff shell) | no | no | no — not covered by current E2E specs | no | implemented | `apps/admin/src/shell.tsx`, `packages/ui/src/use-staff-notif.ts` |
 | HR-PANEL-UI | Admin HR tab renders staff roster table; clicking a row opens payslip drawer with bulk-pay | no | no | planned — admin-hr-panel.spec.ts | no | implemented | `apps/admin/src/payroll-panel.tsx` (StaffTable + StaffDetailDrawer) |
-| TEACH-SHELL | Teaching app shows grouped NavLink sidebar (GIẢNG DẠY / QUẢN LÝ LỚP / GIAO TIẾP / KINH DOANH / NHÂN SỰ); active item highlighted | no | no | planned — teaching-navigation.spec.ts | no | implemented | `apps/teaching/src/shell.tsx`, `apps/teaching/src/App.tsx` |
+| TEACH-SHELL | Grouped NavLink sidebar in the unified admin staff shell (back-office + teaching-origin modules under one role-filtered nav). _apps/teaching retired; consolidated into apps/admin._ | no | no | yes — `apps/e2e/tests/unified-staff-shell.spec.ts` | no | changed | `apps/admin/src/shell.tsx` |
 | DOCKER-PROD | Each app builds as a self-contained Docker image; nginx reverse proxies /api to api container and serves SPA bundles | no | no | no — infra only | no | implemented | `apps/*/Dockerfile`, `docker/docker-compose.prod.yml`, `docker/nginx.conf` |
-| TEACH-PAGINATE | Teaching class list shows at most 20 rows per page; search input resets to page 1; Pagination component navigates pages | no | no | planned — teaching-navigation.spec.ts | no | implemented | `apps/teaching/src/App.tsx` (Workspace: classPage, setClassPage, Pagination) |
+| TEACH-PAGINATE | Class list shows at most 20 rows per page; search input resets to page 1; Pagination navigates pages. _apps/teaching retired; ported into admin class workspace._ | no | no | no — not covered by current E2E specs | no | changed | `apps/admin/src/class-workspace.tsx` (PAGE_SIZE=20, classPage, setClassPage, Pagination) |
 
 ## Evidence Rules
 

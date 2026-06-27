@@ -1,0 +1,33 @@
+# Verify: Auth/RBAC/RLS + API Contracts findings (adversarial)
+
+Date: 2026-06-27 | Branch: develop | Mode: READ-ONLY
+Targets verified: `01-auth-rbac-rls.md`, `02-api-contracts.md` (report dir `20260627-103314-10-agent-code-review/`)
+Plus the explicit headline claims in the task brief.
+
+## Verdict table
+
+| # | Finding (source) | Verdict | Evidence (file:line) | Severity (re-rated) | Fix if REAL |
+|---|---|---|---|---|---|
+| 1 | staff_notification RLS facility-only, not recipient-aware (01) | REAL | `migrations/20260626001219_rls_staff_notification/migration.sql:11-19` USING = `app_is_super_admin() OR (kind=staff AND facility_id = ANY(app_facility_ids()))`; routes filter `recipientId` `staff-notif.ts:17,30,41,53` | Low (was Medium) — defense-in-depth only; every route already filters `recipientId = ctx.session.userId`. No current leak. Mirrors payslip/kpi facility pattern. | Add a staff-user-id GUC + `recipient_id = app_user_id()` to the policy with super/system carve-out. Hardening, not urgent. |
+| 2 | OTP dev fallback exposes login codes outside production (01) | REAL | `services/login-otp.ts:48,54-58` returns `devCode` when `graphMailerFromEnv()===null && NODE_ENV!=='production'`; surfaced at `routers/lms-auth.ts:72-73` | Low (was Medium) — prod is hard-gated by `NODE_ENV!=='production'`; only bites a reachable non-prod env with real parent rows AND Graph unconfigured. | Gate behind explicit opt-in env (`ALLOW_DEV_OTP_RESPONSE=true`) instead of NODE_ENV. |
+| 3 | Student detail over-broad for any authenticated staff (02, "High") | INTENTIONAL | `routers/student.ts:21` `detail: protectedProcedure`; explicit comment `student.ts:18-20` ("same gate as student.list … any authenticated staff can view"); RLS facility-scoped; `passwordHash` excluded `student.ts:89-96` | Low/Info (was High) — deliberate, documented; facility-scoped via RLS. Residual is a product-RBAC question (loginCode + guardian PII visible to all staff roles), not a vuln. | Optional: split sensitive sub-shapes (loginCode/receipts/guardian phone) behind `requirePermission` if product wants role narrowing. Needs product decision (see Q). |
+| 4 | RLS-hidden reads surface unstable 500-like errors (02) | REAL | `trpc.ts:16-22,26-36` `mapRlsErrors` only maps SQLSTATE `42501` (write denials), NOT Prisma `P2025`; `student.ts:25` `detail` uses `findUniqueOrThrow` → cross-facility id throws P2025 → generic INTERNAL_SERVER_ERROR. Also **refutes** the in-code comment `student.ts:19` claiming it "returns NOT_FOUND". | Low-Med (was Medium) — wrong client contract + 500 vs NOT_FOUND distinguishes existence cross-facility. `resetLmsPassword` already does it right (`student.ts:149-155` findUnique+NOT_FOUND). | In `detail`, use `findUnique` + explicit `TRPCError({code:'NOT_FOUND'})`, or add P2025→NOT_FOUND mapping to the middleware. |
+| 5 | Public CRM lead ingest token-only and unthrottled (02) | REAL | `routers/crm.ts:335` `leadIngest: publicProcedure`; single shared `process.env.CRM_LEAD_TOKEN` `crm.ts:349-351`; no `throttle(...)` call (cf. `lms-auth.ts:70-71`); inputs min-only, no max len `crm.ts:340-345` | Medium (confirmed) — leaked/guessed token → lead spam into any `facilityId`; unbounded strings → storage/log abuse. Token gate is the only control. | Add IP/token throttle, max string lengths, and bind token to facility/source. |
+
+### Extra headline claims from task brief (beyond the two files)
+
+| # | Claim | Verdict | Evidence | Severity | Fix if REAL |
+|---|---|---|---|---|---|
+| 6 | Submission APIs return unpublished grade fields | REAL | `routers/submission.ts:13-19` `gradeSelect` = `{score,maxScore,feedback,isPublished}` with **no isPublished filter**, embedded via `submissionSelect.grade` `:30` and returned to students by `mine` `:51-60` and `forStudent` `:65-78`. (Note `myLayer:139-140` *does* gate the annotation layer by isPublished — the scalar grade is the gap.) | Medium — a student/parent reads `score` + `feedback` before the teacher publishes. New finding (not in the two reports). | In student-facing `mine`/`forStudent`, either filter `grade: { where: { isPublished: true } }` or null out score/feedback when `!isPublished`. |
+| 7 | Students can submit to unpublished exercises by direct ID | REAL | `submission.ts:111` `save` does `exercise.findUniqueOrThrow` with no status check; exercise RLS `migrations/20260623100000_principal_aware_rls/migration.sql:113-121` admits enrolled students to ANY status (published filter lives only in `exercise.ts:27` query WHERE). Then `submit:146-166` only needs a draft row. | Low — limited to exercises in the student's own enrolled classes; impact is submitting to a not-yet-published homework. | In `save`/`submit`, assert `exercise.status === 'published'` before upsert/submit. |
+| 8 | Payroll RLS secrecy (facility-only) | INTENTIONAL (FALSE as exploit) | payslip/kpi RLS facility-only `migrations/20260623184505_phase4_payroll/migration.sql:97-99`, `..._kpi_score/migration.sql:31-33`; but reads gated by `requirePermission('payroll',…)` and self-service `myPayslips:697-702` takes userId from session only (IDOR-safe, drafts hidden) | Info — HR/BGD legitimately need facility-wide payslips; row-owner RLS would break HR. No staff-self leak via route layer. | None required; permission gate is the control. |
+| 9 | Admin hash deep-links render hidden panels | REAL | `apps/admin/src/App.tsx:556-559` `hashToSection` accepts any key in `ALL_SECTION_KEYS` regardless of role; `:597+` `renderContent` switches on it with **no nav/role guard** (navGroups role-filtering at `:594` only affects the menu) | Low — frontend chrome only; every panel's tRPC calls are server-gated by `requirePermission`, so data returns FORBIDDEN. Cosmetic/defense-in-depth. | Guard `renderContent` (or `activeSection`) against the role-derived allowed-section set; fall back to default. |
+
+## Notes
+- mapRlsErrors correctness confirmed: it intentionally only catches write-path 42501; reads "just return no rows" — true for findMany, but `findUniqueOrThrow` converts the empty read into P2025, which is the gap behind #4.
+- Positive controls in both reports verified accurate (errorFormatter strips stack `trpc.ts:7-10`; OTP no-enumeration `login-otp.ts:36`; user router hash exclusion; LMS scope from guardian/student rows).
+
+## Unresolved questions
+- (#3) Which staff roles should see guardian phone/email, receipts, and LMS loginCode in student.detail? Product/RBAC call.
+- (#5) Should CRM_LEAD_TOKEN be global or per-facility/source?
+- (#6) Is exposing unpublished score+feedback to students a deliberate "instant grade" UX, or a leak? Confirm intent.

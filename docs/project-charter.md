@@ -12,10 +12,9 @@ Nền tảng **ERP + LMS thống nhất** cho Creative Maieutic Center — trung
 ## 2. Phạm vi
 
 ### Trong phạm vi (v1 = parity sạch)
-- **3 app** dùng chung 1 backend + 1 DB:
+- **2 app** dùng chung 1 backend + 1 DB:
   - **LMS** — học sinh + phụ huynh
-  - **Teaching/ERP** — giáo viên, kế toán, HR, sale, CSKH, CTV marketing
-  - **Admin** — super_admin, BGĐ (ban giám đốc)
+  - **Staff (apps/admin)** — app nhân viên hợp nhất, nav lọc theo role: giáo viên, kế toán, HR, sale, CSKH, CTV marketing, quản lý, super_admin, BGĐ. _(Trước đây tách thành Teaching/ERP + Admin; apps/teaching đã retire, gộp vào apps/admin.)_
 - Toàn bộ module nghiệp vụ của hệ cũ (xem §5).
 - Multi-facility (đa cơ sở) + RLS.
 - Seam nhận lead từ website ngoài vào CRM.
@@ -70,7 +69,7 @@ Nền tảng **ERP + LMS thống nhất** cho Creative Maieutic Center — trung
 ### ① LMS (học sinh + phụ huynh)
 Bài tập & nộp bài (text / annotate ảnh / annotate PDF nhiều trang) · Điểm & học bạ (Grade, FinalGrade, QualitativeAssessment) · Điểm danh (streak chưa build) · Sao thưởng (ledger) + Quà + Huy hiệu + Leaderboard · Thông báo (16 loại, **realtime**) · Chat CSKH (FAQ + Gemini) · Lịch họp phụ huynh · Chứng chỉ · Level progress.
 
-### ② Teaching/ERP
+### ② Teaching/ERP (staff surface — nay delivered bởi app nhân viên hợp nhất `apps/admin`)
 - **Giáo vụ:** Lớp/khóa (mã B-YYYY-NNNN nguyên tử), Enrollment + student lifecycle, Phòng, Lịch tuần → sinh buổi học, Timetable, gán giáo viên/phòng.
 - **Chấm điểm:** Mark attendance, Test appointment + grading (entrance/periodic), Homework grading, Learning profile.
 - **CRM:** Contact, Opportunity O1–O5, Stage transition (audit), Lead ingest.
