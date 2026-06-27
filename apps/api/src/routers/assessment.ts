@@ -181,7 +181,7 @@ export const assessmentRouter = router({
         program: z.nativeEnum(Program),
         periodKey: z.string().min(1),
         level: z.string().optional(),
-        passMark: z.number().min(0).max(10).optional(),
+        // passMark is NOT accepted from the client — see PASS_MARK below.
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -261,12 +261,16 @@ export const assessmentRouter = router({
             ? { qualitative: tpl.qualitativeWeight, quantitative: tpl.quantitativeWeight }
             : undefined;
 
+        // Pass mark is SERVER-controlled, never grader-supplied — otherwise a grader could pass a
+        // whole class by sending passMark=0. Per-program defaults for now; making it admin-configurable
+        // per course is a tracked follow-up (plan 260627-2229 phase A8-config).
+        const PASS_MARK: Record<string, number> = { UCREA: 5, BRIGHT_IG: 5, BLACK_HOLE: 5 };
         const result = computeFinalGrade({
           program: input.program as GradingProgram,
           qualitativeScore: qScore,
           quant: { homeworkAvg, testScore, attendanceRate },
           formula,
-          passMark: input.passMark,
+          passMark: PASS_MARK[input.program] ?? 5,
           weights: dbWeights, // DB weights override hardcoded constants when a template exists
         });
 

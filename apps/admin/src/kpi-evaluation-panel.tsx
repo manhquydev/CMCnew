@@ -159,7 +159,9 @@ function KpiDetailCard({
   async function doConfirm() {
     setBusy(true);
     try {
-      await payrollApi.kpiEvalConfirm.mutate({ userId: row.userId, periodKey: row.periodKey, scores });
+      // Confirm = đồng ý y nguyên điểm; KHÔNG gửi scores (server bỏ qua). Muốn sửa điểm thì dùng
+      // chức năng "Điều chỉnh KPI" (kpiOverride) — có ghi log minh bạch.
+      await payrollApi.kpiEvalConfirm.mutate({ userId: row.userId, periodKey: row.periodKey });
       notifySuccess('Đã xác nhận phiếu KPI.');
       onRefresh();
     } catch (e) {
@@ -214,7 +216,7 @@ function KpiDetailCard({
                       max={100}
                       value={scores.find((s) => s.key === c.key)?.score ?? 0}
                       onChange={(v) => setScore(c.key, Number(v) || 0)}
-                      disabled={row.status === 'approved'}
+                      disabled={row.status !== 'draft'}
                       w={90}
                     />
                   </Table.Td>
