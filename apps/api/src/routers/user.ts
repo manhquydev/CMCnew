@@ -127,7 +127,10 @@ export const userRouter = router({
       const user = await withRls(SYSTEM_CTX, async (tx) => {
         const created = await tx.appUser.create({
           data: {
-            email: input.email,
+            // Normalize to lowercase: SSO returns the Microsoft email lowercased, and the callback
+            // matches AppUser by exact email. A mixed-case address here would never match → login
+            // would fail with "not_provisioned" even though the M365 account is correct.
+            email: input.email.trim().toLowerCase(),
             displayName: input.displayName,
             // SSO-only account: store a hash of a high-entropy random secret that is never returned
             // or transmitted, so password login is impossible for staff (NOT NULL column satisfied).
