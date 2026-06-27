@@ -25,7 +25,8 @@ test.describe('CRM opportunity create', () => {
     await page.getByLabel('Số điện thoại').fill(phone);
     await page.getByRole('button', { name: 'Tạo cơ hội (O1)' }).click();
 
-    // Success toast + the new opportunity surfaces in the pipeline table.
-    await expect(page.getByText(name)).toBeVisible({ timeout: 8_000 });
+    // Success toast confirms the write (the pipeline table paginates, so assert the toast which
+    // carries the contact name — reliable regardless of how many opportunities already exist).
+    await expect(page.getByText(`Đã tạo cơ hội cho ${name}`)).toBeVisible({ timeout: 8_000 });
   });
 });

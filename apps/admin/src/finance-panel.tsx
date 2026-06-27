@@ -419,6 +419,9 @@ function ReceiptsCard({
   const [cancelTarget, setCancelTarget] = useState<Receipt | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [detailTarget, setDetailTarget] = useState<Receipt | null>(null);
+  // LMS credential surfaced once when approving a NEW-student receipt, so staff can relay it to the
+  // parent (backend returns it plaintext exactly once; it is also emailed). Shown in a dismissible modal.
+  const [cred, setCred] = useState<{ loginCode: string; tempPassword: string } | null>(null);
 
   const studentName = (id: string | null) => id ? (students.find((s) => s.id === id)?.fullName ?? id.slice(0, 8)) : '—';
   const courseName = (id: string) => courses.find((c) => c.id === id)?.code ?? id.slice(0, 8);
@@ -455,6 +458,7 @@ function ReceiptsCard({
     try {
       const r = await trpc.finance.receiptApprove.mutate({ id });
       notifySuccess(`Đã duyệt phiếu ${r.code}`);
+      if (r.lmsAccount) setCred(r.lmsAccount);
       loadReceipts();
     } catch (e) {
       notifyError(e, 'Duyệt phiếu thu thất bại');
@@ -499,6 +503,18 @@ function ReceiptsCard({
       <Title order={6} mb="sm">
         Phiếu thu
       </Title>
+
+      <Modal opened={!!cred} onClose={() => setCred(null)} title="Tài khoản LMS học sinh" centered>
+        {cred && (
+          <Stack gap="xs">
+            <Text size="sm">Đã tạo tài khoản LMS cho học sinh. Gửi thông tin này cho phụ huynh:</Text>
+            <Text>Mã đăng nhập: <b data-testid="lms-login-code">{cred.loginCode}</b></Text>
+            <Text>Mật khẩu tạm: <b>{cred.tempPassword}</b></Text>
+            <Text size="xs" c="dimmed">Mật khẩu chỉ hiển thị một lần; phụ huynh đổi sau khi đăng nhập.</Text>
+            <Button onClick={() => setCred(null)} mt="sm">Đã ghi nhận</Button>
+          </Stack>
+        )}
+      </Modal>
 
       <Group align="flex-end" mb="sm">
         <Select
