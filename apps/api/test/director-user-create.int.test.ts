@@ -97,7 +97,6 @@ describe('Business Director user.create', () => {
       caller.user.create({
         email: `${uniq('teacher')}@cmc.test`,
         displayName: 'Teacher Test',
-        password: 'TestPass!123',
         roles: [Role.giao_vien],
         primaryRole: Role.giao_vien,
         facilityIds: [facilityA],
@@ -117,7 +116,6 @@ describe('Business Director user.create', () => {
       caller.user.create({
         email: `${uniq('outscope')}@cmc.test`,
         displayName: 'Out of Scope',
-        password: 'TestPass!123',
         roles: [Role.sale],
         primaryRole: Role.sale,
         facilityIds: [facilityB], // B is outside the caller's facilities
@@ -137,7 +135,6 @@ describe('Business Director user.create', () => {
       caller.user.create({
         email: `${uniq('nofac')}@cmc.test`,
         displayName: 'No Facility',
-        password: 'TestPass!123',
         roles: [Role.sale],
         primaryRole: Role.sale,
         facilityIds: [],
@@ -180,7 +177,6 @@ describe('Education Director user.create', () => {
       caller.user.create({
         email: `${uniq('sale2')}@cmc.test`,
         displayName: 'Sale Test',
-        password: 'TestPass!123',
         roles: [Role.sale],
         primaryRole: Role.sale,
         facilityIds: [facilityA],
@@ -200,7 +196,6 @@ describe('Education Director user.create', () => {
       caller.user.create({
         email: `${uniq('htfac')}@cmc.test`,
         displayName: 'HT Foreign',
-        password: 'TestPass!123',
         roles: [Role.head_teacher],
         primaryRole: Role.head_teacher,
         facilityIds: [facilityB],

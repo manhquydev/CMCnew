@@ -137,11 +137,9 @@ describe('director KPI authority', () => {
 describe('user.create welcome email (SSO onboarding, no password)', () => {
   it('enqueues an account_welcome email that does not contain the password', async () => {
     const su = await staffCaller();
-    const password = 'WelcomeSecret!9';
     const created = await su.user.create({
       email: `${uniq('welcome-staff')}@cmc.test`,
       displayName: 'Welcome Staff',
-      password,
       roles: [Role.giam_doc_kinh_doanh],
       primaryRole: Role.giam_doc_kinh_doanh,
       facilityIds: [FACILITY_1],
@@ -154,7 +152,7 @@ describe('user.create welcome email (SSO onboarding, no password)', () => {
     expect(row!.templateKind).toBe('account_welcome');
     expect(row!.toAddress).toBe(created.email);
     expect(row!.bodyHtml).toContain('CMC EDU'); // SSO instruction
-    expect(row!.bodyHtml).not.toContain(password); // never email the password
+    expect(row!.bodyHtml).not.toContain('Mật khẩu'); // SSO onboarding: no password is ever emailed
 
     // cleanup
     await withRls(SUPER, async (tx) => {

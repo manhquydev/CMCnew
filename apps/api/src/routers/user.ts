@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls, hashPassword, Role } from '@cmc/db';
@@ -77,9 +78,10 @@ export const userRouter = router({
     .input(
       z
         .object({
+          // No password input: staff authenticate exclusively via Microsoft SSO. The only account
+          // with a usable break-glass password is the bootstrap super_admin (seeded, not created here).
           email: z.string().email(),
           displayName: z.string().min(1),
-          password: z.string().min(8),
           roles: z.array(role).min(1),
           primaryRole: role,
           facilityIds: z.array(z.number().int().positive()),
@@ -127,7 +129,9 @@ export const userRouter = router({
           data: {
             email: input.email,
             displayName: input.displayName,
-            passwordHash: await hashPassword(input.password),
+            // SSO-only account: store a hash of a high-entropy random secret that is never returned
+            // or transmitted, so password login is impossible for staff (NOT NULL column satisfied).
+            passwordHash: await hashPassword(randomBytes(32).toString('base64url')),
             roles: input.roles,
             primaryRole: input.primaryRole,
             facilities: { create: input.facilityIds.map((facilityId) => ({ facilityId })) },

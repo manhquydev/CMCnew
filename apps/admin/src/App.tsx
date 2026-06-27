@@ -20,7 +20,6 @@ import {
   Group,
   Modal,
   MultiSelect,
-  PasswordInput,
   Select,
   Stack,
   Switch,
@@ -286,10 +285,9 @@ function UserCreateModal({
   const [facilityIds, setFacilityIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const form = useForm({
-    initialValues: { email: '', displayName: '', password: '' },
+    initialValues: { email: '', displayName: '' },
     validate: {
       email: email('Email không hợp lệ'),
-      password: minLength(8, 'Mật khẩu tối thiểu 8 ký tự'),
       displayName: required('Nhập tên hiển thị'),
     },
   });
@@ -306,7 +304,6 @@ function UserCreateModal({
       await trpc.user.create.mutate({
         email: values.email,
         displayName: values.displayName,
-        password: values.password,
         roles: roles as User['roles'],
         primaryRole: (primaryRole ?? roles[0]) as User['primaryRole'],
         facilityIds: facilityIds.map(Number),
@@ -329,12 +326,16 @@ function UserCreateModal({
     <Modal opened={opened} onClose={close} title="Tạo người dùng" radius="xl" centered>
       <form onSubmit={form.onSubmit(create)}>
         <Stack>
-          <TextInput label="Email" withAsterisk {...form.getInputProps('email')} />
-          <TextInput label="Tên hiển thị" withAsterisk {...form.getInputProps('displayName')} />
-          <PasswordInput
-            label="Mật khẩu" description="Tối thiểu 8 ký tự" withAsterisk
-            {...form.getInputProps('password')}
+          <Text size="xs" c="dimmed">
+            Nhân sự đăng nhập bằng tài khoản CMC EDU (SSO Microsoft) — không cần đặt mật khẩu.
+            Hệ thống gửi thư mời tới email bên dưới sau khi tạo.
+          </Text>
+          <TextInput
+            label="Email" withAsterisk
+            description="Email công ty (CMC EDU) — dùng để đăng nhập SSO và nhận thư mời tài khoản"
+            {...form.getInputProps('email')}
           />
+          <TextInput label="Tên hiển thị" withAsterisk {...form.getInputProps('displayName')} />
           <MultiSelect
             label="Vai trò" data={roleOptions}
             value={roles}
