@@ -111,15 +111,17 @@ describe('nav-permissions consistency', () => {
     }
   });
 
-  it('D4: org is superAdmin-gated — no staff role sees it via can()', () => {
+  it('D4: org is gated by user.create — only super_admin + directors; quan_ly/bgd/hr/giao_vien excluded', () => {
     const gate = NAV_GATES.org;
-    // The gate kind must be superAdmin, not a permission entry
-    expect(gate.kind).toBe('superAdmin');
-    // Explicitly verify the formerly-granted roles (quan_ly, bgd, hr) are excluded
-    for (const role of ['quan_ly', 'bgd', 'hr'] as StaffRole[]) {
-      // superAdmin gate means visible = isSuperAdmin only; role membership is irrelevant
-      // We verify the gate kind rather than can() because superAdmin skips the registry
-      expect(gate.kind, `role=${role} should not reach org via a permission gate`).toBe('superAdmin');
+    expect(gate.kind).toBe('permission');
+    if (gate.kind === 'permission') {
+      // Formerly-granted / non-eligible staff roles must NOT reach org via the registry.
+      for (const role of ['quan_ly', 'bgd', 'hr', 'giao_vien'] as StaffRole[]) {
+        expect(can([role], false, gate.module, gate.action), `role=${role} should not see org`).toBe(false);
+      }
+      // Directors can create users within their scope → they (and super_admin via bypass) see org.
+      expect(can(['giam_doc_kinh_doanh'], false, gate.module, gate.action)).toBe(true);
+      expect(can(['giam_doc_dao_tao'], false, gate.module, gate.action)).toBe(true);
     }
   });
 
@@ -140,7 +142,7 @@ describe('nav-permissions consistency', () => {
 
     // Every declared-open section should be in our known list — fail if something new is open
     // without deliberate intent. Update this list when a new open section is added.
-    const expectedOpen: SectionKey[] = ['schedule', 'classes', 'overview', 'courses', 'my-payslips'];
+    const expectedOpen: SectionKey[] = ['schedule', 'classes', 'courses', 'my-payslips'];
     expect(openSections.sort()).toEqual(expectedOpen.sort());
   });
 });

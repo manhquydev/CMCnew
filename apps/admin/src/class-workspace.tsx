@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { trpc, Chatter, notifyError, useSession } from '@cmc/ui';
+import { can } from '@cmc/auth/permissions';
 import {
   Badge,
   Button,
@@ -779,6 +780,10 @@ function RoomsManager({
 export function Workspace({ navAction }: { navAction: NavAction | null }) {
   const { me } = useSession();
   const canManageClass = me.isSuperAdmin || me.roles.includes('quan_ly');
+  // The teacher roster is only used by the (manager-gated) schedule editor; user.listTeachers is
+  // permission-gated, so only fetch it for roles that may read it — otherwise non-managers (e.g.
+  // giáo viên viewing their classes) hit "Không tải được danh sách giáo viên" FORBIDDEN.
+  const canListTeachers = can(me.roles, me.isSuperAdmin, 'user', 'listTeachers');
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facilityId, setFacilityId] = useState<number | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -812,12 +817,12 @@ export function Workspace({ navAction }: { navAction: NavAction | null }) {
 
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   useEffect(() => {
-    if (!facilityId) return;
+    if (!facilityId || !canListTeachers) return;
     trpc.user.listTeachers
       .query({ facilityId })
       .then(setTeachers)
       .catch((e) => { setTeachers([]); notifyError(e, 'Không tải được danh sách giáo viên'); });
-  }, [facilityId]);
+  }, [facilityId, canListTeachers]);
 
   // Apply navAction when it changes
   useEffect(() => {
