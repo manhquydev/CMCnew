@@ -71,12 +71,27 @@ describe('KPI override + audit + payslip wiring (decision 0011)', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
-  it('payslipCompute uses the final (override) KPI score, not manual input', async () => {
+  it('payslipCompute ignores an un-approved KPI, then uses the override once approved', async () => {
     const su = await staffCaller();
+    // Decision 0011: only an APPROVED KPI sheet feeds payroll. The sheet here is still draft (override
+    // applied but not approved) → its score must NOT flow into salary.
+    const draftSlip = await su.payroll.payslipCompute({
+      userId: saleId, facilityId: FACILITY, periodKey: PERIOD,
+      standardDays: 22, workdays: 22, insuranceDeduction: 0,
+    });
+    expect(draftSlip.kpiScore).toBe(0);
+
+    // Approve the sheet carrying the override → the final (override) score now feeds payroll.
+    await withRls(SUPER, (tx) =>
+      tx.kpiScore.update({
+        where: { userId_periodKey: { userId: saleId, periodKey: PERIOD } },
+        data: { status: 'approved' },
+      }),
+    );
     const slip = await su.payroll.payslipCompute({
       userId: saleId, facilityId: FACILITY, periodKey: PERIOD,
       standardDays: 22, workdays: 22, insuranceDeduction: 0,
-      // No kpiScore passed → must use the override (85).
+      // No kpiScore passed → must use the approved override (85).
     });
     expect(slip.kpiScore).toBe(85);
     // Sales band: 85 → grade B (70–90) → ratio 0.8 → bonus = 1,000,000 × 0.8 = 800,000.

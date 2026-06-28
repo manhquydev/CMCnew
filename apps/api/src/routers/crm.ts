@@ -1,9 +1,22 @@
+import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls, Program, OpportunityStage, TestType, type RlsContext } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, publicProcedure, requirePermission, Role } from '../trpc.js';
+import { throttle } from '../rate-limit.js';
+
+// Public lead-ingest throttle: a generous per-IP cap (a real tuition centre never submits anywhere
+// near this in 15 min) that still stops scripted spam if the shared token leaks. Env-tunable.
+const LEAD_RATE_IP_LIMIT = Number(process.env.LEAD_RATE_IP_LIMIT ?? 100);
+
+/** Length-checked constant-time token comparison (timingSafeEqual throws on length mismatch). */
+function tokenMatches(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 /**
  * Roles permitted to assign an opportunity to a user other than themselves.
@@ -164,6 +177,12 @@ export const crmRouter = router({
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const before = await tx.opportunity.findUniqueOrThrow({ where: { id: input.id } });
+        // A WON deal (O5_ENROLLED + closedAt) has frozen commission attribution and a linked
+        // receipt/enrollment. Regressing it to an earlier stage would clear closedAt and silently
+        // desync the won/lost split from the receipt — mirror the markLost guard and refuse.
+        if (before.stage === 'O5_ENROLLED' && before.closedAt && input.stage !== 'O5_ENROLLED') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Không thể lùi bước cơ hội đã thắng (đã nhập học)' });
+        }
         const opp = await tx.opportunity.update({
           where: { id: input.id },
           data: {
@@ -364,9 +383,14 @@ export const crmRouter = router({
         program: z.nativeEnum(Program).optional(),
       }),
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      // Per-IP throttle BEFORE the token check, so a leaked token (or token brute-forcing) cannot be
+      // used to flood the CRM with junk contacts/opportunities. Every call counts.
+      throttle(`lead:${ctx.ip}`, LEAD_RATE_IP_LIMIT);
       const expected = process.env.CRM_LEAD_TOKEN;
-      if (!expected || input.token !== expected) {
+      // Constant-time compare so this public endpoint does not leak the token byte-by-byte via
+      // response timing.
+      if (!expected || !tokenMatches(input.token, expected)) {
         throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Lead token không hợp lệ' });
       }
       const sys: RlsContext = { facilityIds: [input.facilityId], isSuperAdmin: false, principalKind: 'staff' };

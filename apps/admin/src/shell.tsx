@@ -376,7 +376,9 @@ export function buildNavGroups({
         { key: 'classes' as const, label: 'Lớp học', icon: <IconDoor {...I()} />, visible: visible('classes') },
         { key: 'meetings' as const, label: 'Họp PH', icon: <IconUsers {...I()} />, visible: visible('meetings') },
         { key: 'levelup' as const, label: 'Duyệt cấp độ', icon: <IconArrowUp {...I()} />, visible: visible('levelup') },
-        { key: 'certificate' as const, label: 'Chứng chỉ', icon: <IconCertificate {...I()} />, visible: visible('certificate') },
+        // Tính năng chứng chỉ tạm tắt (chưa dùng) — đặt visible:false để ẩn khỏi nav; router/panel
+        // vẫn còn nguyên, bật lại bằng visible('certificate') khi cần.
+        { key: 'certificate' as const, label: 'Chứng chỉ', icon: <IconCertificate {...I()} />, visible: false },
       ],
     },
     {

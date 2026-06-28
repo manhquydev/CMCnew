@@ -1,0 +1,15 @@
+# Jenkins Configuration-as-Code (loaded via CASC_JENKINS_CONFIG). Keeps controller config
+# reproducible. The one-time initial-admin unlock + GitHub credential are still done in the UI.
+jenkins:
+  systemMessage: "CMCnew CI/CD — single-node. Pipeline: develop/main → build → test → deploy (compose) → migrate → smoke."
+  numExecutors: 1
+  scmCheckoutRetryCount: 2
+
+unclassified:
+  location:
+    # Set to the externally-reachable URL once a ci vhost / tunnel exists.
+    url: "http://127.0.0.1:8080/"
+
+# The pipeline job is created in the UI (or a seed job) pointing at this repo's Jenkinsfile,
+# using a GitHub credential (deploy token) added once under Manage Credentials. Triggers:
+# GitHub webhook → /github-webhook/  (preferred) or SCM poll  H/5 * * * *  (fallback).

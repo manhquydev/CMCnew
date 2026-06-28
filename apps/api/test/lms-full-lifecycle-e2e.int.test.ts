@@ -153,7 +153,7 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
     expect(approved.lmsAccount).not.toBeNull();
 
     const { loginCode, tempPassword } = approved.lmsAccount!;
-    expect(loginCode).toMatch(/^HS-/);
+    expect(loginCode).toMatch(/^HQ-HS-/); // facility-prefixed for global uniqueness
     expect(tempPassword).toHaveLength(12);
 
     const studentId = approved.studentId!;

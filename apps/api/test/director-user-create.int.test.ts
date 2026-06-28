@@ -97,7 +97,6 @@ describe('Business Director user.create', () => {
       caller.user.create({
         email: `${uniq('teacher')}@cmc.test`,
         displayName: 'Teacher Test',
-        password: 'TestPass!123',
         roles: [Role.giao_vien],
         primaryRole: Role.giao_vien,
         facilityIds: [facilityA],
@@ -117,7 +116,6 @@ describe('Business Director user.create', () => {
       caller.user.create({
         email: `${uniq('outscope')}@cmc.test`,
         displayName: 'Out of Scope',
-        password: 'TestPass!123',
         roles: [Role.sale],
         primaryRole: Role.sale,
         facilityIds: [facilityB], // B is outside the caller's facilities
@@ -137,7 +135,6 @@ describe('Business Director user.create', () => {
       caller.user.create({
         email: `${uniq('nofac')}@cmc.test`,
         displayName: 'No Facility',
-        password: 'TestPass!123',
         roles: [Role.sale],
         primaryRole: Role.sale,
         facilityIds: [],
@@ -180,7 +177,6 @@ describe('Education Director user.create', () => {
       caller.user.create({
         email: `${uniq('sale2')}@cmc.test`,
         displayName: 'Sale Test',
-        password: 'TestPass!123',
         roles: [Role.sale],
         primaryRole: Role.sale,
         facilityIds: [facilityA],
@@ -200,7 +196,6 @@ describe('Education Director user.create', () => {
       caller.user.create({
         email: `${uniq('htfac')}@cmc.test`,
         displayName: 'HT Foreign',
-        password: 'TestPass!123',
         roles: [Role.head_teacher],
         primaryRole: Role.head_teacher,
         facilityIds: [facilityB],
@@ -241,12 +236,12 @@ describe('super_admin user.create', () => {
 
 // ── SSO_ENABLED gate (unit-level check via env) ──────────────────────────────
 
-describe('SSO_ENABLED login gate', () => {
-  it('SSO_ENABLED unset → password login allowed for any role (no 403 check at env level)', () => {
-    // The gate in auth.ts is: process.env.SSO_ENABLED === 'true' && ssoConfigFromEnv() && !isSuperAdmin.
-    // When SSO_ENABLED is unset (typical local dev) the first condition is false → gate never triggers.
-    // We verify the env condition directly (no HTTP layer needed).
-    const ssoEnabled = process.env.SSO_ENABLED;
-    expect(ssoEnabled).not.toBe('true'); // test environment must not have SSO enabled
+describe('staff password-login gate (fail-closed)', () => {
+  it('STAFF_PASSWORD_LOGIN is not enabled in the test env → staff are SSO-only', () => {
+    // auth.ts now fails closed: any non-super_admin is blocked from password login unless
+    // STAFF_PASSWORD_LOGIN === 'true' (a deliberate local/seed escape hatch), independent of whether
+    // the Entra SSO env is wired. The integration env must not enable it, so only super_admin keeps
+    // break-glass password login.
+    expect(process.env.STAFF_PASSWORD_LOGIN).not.toBe('true');
   });
 });

@@ -22,9 +22,17 @@ const fakeToken = async () => 'token-123';
 describe('graphMailerFromEnv', () => {
   it('returns null when required vars are unset (no-op path)', () => {
     const saved = { ...process.env };
-    delete process.env.GRAPH_TENANT_ID;
-    delete process.env.GRAPH_CLIENT_ID;
-    delete process.env.GRAPH_CERT_PATH;
+    // graphMailerFromEnv reads GRAPH_* WITH ENTRA_* fallbacks + the sender mailboxes. Clear every
+    // source (incl. the ENTRA_* aliases) so this no-op assertion is deterministic on a box whose real
+    // .env configures live email — otherwise the fallback keeps the config non-null (and the test
+    // would proceed to use a real client secret).
+    for (const k of [
+      'GRAPH_TENANT_ID', 'ENTRA_TENANT_ID', 'GRAPH_CLIENT_ID', 'ENTRA_CLIENT_ID',
+      'GRAPH_CLIENT_SECRET', 'ENTRA_CLIENT_SECRET', 'GRAPH_CERT_PATH',
+      'GRAPH_SENDER_NOTIFY', 'GRAPH_SENDER_PAYROLL', 'GRAPH_SENDER_HR',
+    ]) {
+      delete process.env[k];
+    }
     expect(graphMailerFromEnv()).toBeNull();
     Object.assign(process.env, saved);
   });

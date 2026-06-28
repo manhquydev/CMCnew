@@ -10,7 +10,6 @@ import {
   Group,
   Modal,
   NumberInput,
-  Select,
   Stack,
   Table,
   Text,

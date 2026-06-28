@@ -84,16 +84,28 @@ export const assessmentRouter = router({
       }),
     )
     .mutation(({ ctx, input }) =>
-      withRls(rlsContextOf(ctx.session), (tx) =>
-        tx.academicTerm.update({
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        // Validate the EFFECTIVE window after a partial update: termCreate refines start<=end, but
+        // termUpdate could otherwise PATCH a single bound to produce an inverted window, which would
+        // silently zero out every grade/attendance date-range query keyed on the term.
+        const term = await tx.academicTerm.findUniqueOrThrow({
+          where: { id: input.id },
+          select: { startDate: true, endDate: true },
+        });
+        const start = input.startDate ? new Date(input.startDate) : term.startDate;
+        const end = input.endDate ? new Date(input.endDate) : term.endDate;
+        if (start > end) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Ngày bắt đầu phải trước ngày kết thúc' });
+        }
+        return tx.academicTerm.update({
           where: { id: input.id },
           data: {
             name: input.name ?? undefined,
             startDate: input.startDate ? new Date(input.startDate) : undefined,
             endDate: input.endDate ? new Date(input.endDate) : undefined,
           },
-        }),
-      ),
+        });
+      }),
     ),
 
   // Lock a term: blocks any further FinalGrade upserts for this periodKey.
@@ -169,7 +181,7 @@ export const assessmentRouter = router({
         program: z.nativeEnum(Program),
         periodKey: z.string().min(1),
         level: z.string().optional(),
-        passMark: z.number().min(0).max(10).optional(),
+        // passMark is NOT accepted from the client — see PASS_MARK below.
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -249,12 +261,16 @@ export const assessmentRouter = router({
             ? { qualitative: tpl.qualitativeWeight, quantitative: tpl.quantitativeWeight }
             : undefined;
 
+        // Pass mark is SERVER-controlled, never grader-supplied — otherwise a grader could pass a
+        // whole class by sending passMark=0. Per-program defaults for now; making it admin-configurable
+        // per course is a tracked follow-up (plan 260627-2229 phase A8-config).
+        const PASS_MARK: Record<string, number> = { UCREA: 5, BRIGHT_IG: 5, BLACK_HOLE: 5 };
         const result = computeFinalGrade({
           program: input.program as GradingProgram,
           qualitativeScore: qScore,
           quant: { homeworkAvg, testScore, attendanceRate },
           formula,
-          passMark: input.passMark,
+          passMark: PASS_MARK[input.program] ?? 5,
           weights: dbWeights, // DB weights override hardcoded constants when a template exists
         });
 

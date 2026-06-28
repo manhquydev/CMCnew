@@ -37,9 +37,27 @@ export const scheduleRouter = router({
     )
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
-        const slot = await tx.scheduleSlot.create({ data: { ...input } });
+        // Derive facilityId from the class batch (server-authoritative), never from the client input:
+        // RLS scopes this lookup to the caller's facilities, so a batch in another facility throws —
+        // closing the hole where a caller could pass their own facilityId with a foreign classBatchId
+        // and create an orphan slot (input.facilityId is intentionally ignored).
+        const batch = await tx.classBatch.findUniqueOrThrow({
+          where: { id: input.classBatchId },
+          select: { facilityId: true },
+        });
+        const slot = await tx.scheduleSlot.create({
+          data: {
+            facilityId: batch.facilityId,
+            classBatchId: input.classBatchId,
+            dayOfWeek: input.dayOfWeek,
+            startTime: input.startTime,
+            endTime: input.endTime,
+            roomId: input.roomId,
+            teacherId: input.teacherId,
+          },
+        });
         await logEvent(tx, {
-          facilityId: input.facilityId,
+          facilityId: batch.facilityId,
           entityType: 'class_batch',
           entityId: input.classBatchId,
           type: 'updated',

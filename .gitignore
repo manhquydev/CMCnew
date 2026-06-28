@@ -39,3 +39,6 @@ scripts/bin/harness-cli
 scripts/bin/harness-cli.exe
 .env.local-docker
 .gitnexus
+
+# Root-level QA/debug screenshots (throwaway)
+/*.png

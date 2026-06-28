@@ -164,11 +164,16 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     listByStaff: ['hr', 'ke_toan'],
     payslipBulkPay: ['hr', 'ke_toan'],
     payslipReopen: ['hr', 'ke_toan'],
+    // KPI authority in the 3-heads org: the two directors are the executive board. They confirm and
+    // approve KPI (legacy 'bgd' is not seeded in prod bootstrap, so without this nobody could approve),
+    // and can load the KPI panel (kpiList/kpiEvalGet). Separation of duties still holds — kpiEvalApprove
+    // blocks the person who confirmed, so a director cannot both confirm and approve the same sheet.
+    // Data prep (start/autoPrefill/setAuto) stays with hr/ke_toan.
     kpiEvalStart: ['hr', 'ke_toan'],
-    kpiEvalConfirm: ['quan_ly', 'bgd'],
-    kpiEvalApprove: ['bgd'],
-    kpiEvalGet: ['hr', 'ke_toan'],
-    kpiList: ['hr', 'ke_toan'],
+    kpiEvalConfirm: ['quan_ly', 'bgd', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    kpiEvalApprove: ['bgd', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    kpiEvalGet: ['hr', 'ke_toan', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    kpiList: ['hr', 'ke_toan', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     kpiAutoPrefill: ['hr', 'ke_toan'],
     kpiSetAuto: ['hr', 'ke_toan'],
     syncCallMetrics: ['hr', 'ke_toan'],

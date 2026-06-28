@@ -254,7 +254,11 @@ app.get('/auth/sso/login', async (c) => {
   setCookie(c, SSO_TX_COOKIE, JSON.stringify(tx), {
     httpOnly: true,
     sameSite: 'Lax',
-    path: '/auth/sso',
+    // Path '/' (not '/auth/sso') so the cookie comes back on the callback even when the app is
+    // served behind an nginx prefix: the browser sees /api/auth/sso/callback, which would not match
+    // a '/auth/sso' cookie path → the tx cookie would be dropped and the state check would fail with
+    // "Phiên đăng nhập hết hạn". It's httpOnly + short-lived (10 min) and only carries PKCE/CSRF state.
+    path: '/',
     maxAge: 600, // 10 min to complete the round-trip
     secure: cookieSecure(),
   });
@@ -270,7 +274,7 @@ app.get('/auth/sso/callback', async (c) => {
   const code = c.req.query('code');
   const state = c.req.query('state');
   const raw = getCookie(c, SSO_TX_COOKIE);
-  deleteCookie(c, SSO_TX_COOKIE, { path: '/auth/sso' });
+  deleteCookie(c, SSO_TX_COOKIE, { path: '/' });
   if (!code || !state || !raw) return fail('state');
 
   let tx: { state: string; verifier: string };

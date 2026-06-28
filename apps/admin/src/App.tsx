@@ -1,5 +1,5 @@
 import '@mantine/dates/styles.css';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   LoginGate,
   trpc,
@@ -11,6 +11,7 @@ import {
   minLength,
   combine,
 } from '@cmc/ui';
+import { assignableRoles } from '@cmc/auth/permissions';
 import { useForm } from '@mantine/form';
 import {
   Badge,
@@ -19,7 +20,6 @@ import {
   Group,
   Modal,
   MultiSelect,
-  PasswordInput,
   Select,
   Stack,
   Switch,
@@ -60,11 +60,6 @@ type User = Awaited<ReturnType<typeof trpc.user.list.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
 type Program = 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE';
 type Session = ReturnType<typeof useSession>['me'];
-
-const ROLES = [
-  'super_admin', 'quan_ly', 'head_teacher', 'giao_vien',
-  'ke_toan', 'hr', 'sale', 'cskh', 'ctv_mkt', 'bgd',
-] as const;
 
 // ─── Table header style ────────────────────────────────────────────────────────
 
@@ -277,21 +272,22 @@ function UserCreateModal({
   close,
   facilities,
   reload,
+  roleOptions,
 }: {
   opened: boolean;
   close: () => void;
   facilities: Facility[];
   reload: () => void;
+  roleOptions: string[];
 }) {
   const [roles, setRoles] = useState<string[]>([]);
   const [primaryRole, setPrimaryRole] = useState<string | null>(null);
   const [facilityIds, setFacilityIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const form = useForm({
-    initialValues: { email: '', displayName: '', password: '' },
+    initialValues: { email: '', displayName: '' },
     validate: {
       email: email('Email không hợp lệ'),
-      password: minLength(8, 'Mật khẩu tối thiểu 8 ký tự'),
       displayName: required('Nhập tên hiển thị'),
     },
   });
@@ -308,7 +304,6 @@ function UserCreateModal({
       await trpc.user.create.mutate({
         email: values.email,
         displayName: values.displayName,
-        password: values.password,
         roles: roles as User['roles'],
         primaryRole: (primaryRole ?? roles[0]) as User['primaryRole'],
         facilityIds: facilityIds.map(Number),
@@ -331,14 +326,18 @@ function UserCreateModal({
     <Modal opened={opened} onClose={close} title="Tạo người dùng" radius="xl" centered>
       <form onSubmit={form.onSubmit(create)}>
         <Stack>
-          <TextInput label="Email" withAsterisk {...form.getInputProps('email')} />
-          <TextInput label="Tên hiển thị" withAsterisk {...form.getInputProps('displayName')} />
-          <PasswordInput
-            label="Mật khẩu" description="Tối thiểu 8 ký tự" withAsterisk
-            {...form.getInputProps('password')}
+          <Text size="xs" c="dimmed">
+            Nhân sự đăng nhập bằng tài khoản CMC EDU (SSO Microsoft) — không cần đặt mật khẩu.
+            Hệ thống gửi thư mời tới email bên dưới sau khi tạo.
+          </Text>
+          <TextInput
+            label="Email" withAsterisk
+            description="Email công ty (CMC EDU) — dùng để đăng nhập SSO và nhận thư mời tài khoản"
+            {...form.getInputProps('email')}
           />
+          <TextInput label="Tên hiển thị" withAsterisk {...form.getInputProps('displayName')} />
           <MultiSelect
-            label="Vai trò" data={ROLES as unknown as string[]}
+            label="Vai trò" data={roleOptions}
             value={roles}
             onChange={(v) => { setRoles(v); if (primaryRole && !v.includes(primaryRole)) setPrimaryRole(null); }}
           />
@@ -362,11 +361,13 @@ function UserEditModal({
   close,
   facilities,
   reload,
+  roleOptions,
 }: {
   user: User | null;
   close: () => void;
   facilities: Facility[];
   reload: () => void;
+  roleOptions: string[];
 }) {
   const [roles, setRoles] = useState<string[]>([]);
   const [primaryRole, setPrimaryRole] = useState<string | null>(null);
@@ -402,7 +403,7 @@ function UserEditModal({
       <Stack>
         <Text size="sm" c="dimmed">{user.email}</Text>
         <MultiSelect
-          label="Vai trò" data={ROLES as unknown as string[]}
+          label="Vai trò" data={roleOptions}
           value={roles}
           onChange={(v) => { setRoles(v); if (primaryRole && !v.includes(primaryRole)) setPrimaryRole(null); }}
         />
@@ -452,8 +453,17 @@ function UserEditModal({
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 function Users({ users, facilities, reload }: { users: User[]; facilities: Facility[]; reload: () => void }) {
+  const { me } = useSession();
   const [createOpen, { open, close }] = useDisclosure(false);
   const [editing, setEditing] = useState<User | null>(null);
+
+  // Role choices come from the registry-driven assignableRoles(session): super_admin sees every role
+  // (incl. the two director roles); a director sees only their grant set. Keeps the dropdown in sync
+  // with what user.create will actually accept — no hardcoded role list to drift.
+  const roleOptions = useMemo(
+    () => [...assignableRoles({ isSuperAdmin: me.isSuperAdmin, roles: me.roles as string[] })].sort(),
+    [me.isSuperAdmin, me.roles],
+  );
 
   return (
     <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
@@ -492,8 +502,8 @@ function Users({ users, facilities, reload }: { users: User[]; facilities: Facil
           ))}
         </Table.Tbody>
       </Table>
-      <UserCreateModal opened={createOpen} close={close} facilities={facilities} reload={reload} />
-      <UserEditModal user={editing} close={() => setEditing(null)} facilities={facilities} reload={reload} />
+      <UserCreateModal opened={createOpen} close={close} facilities={facilities} reload={reload} roleOptions={roleOptions} />
+      <UserEditModal user={editing} close={() => setEditing(null)} facilities={facilities} reload={reload} roleOptions={roleOptions} />
     </Card>
   );
 }
@@ -550,7 +560,9 @@ const ALL_SECTION_KEYS = new Set<string>([
   'overview', 'courses', 'students', 'org', 'guardians',
   'hr', 'kpi', 'compensation', 'finance', 'crm', 'cskh', 'rewards',
   'schedule', 'attendance', 'grading', 'assessment',
-  'classes', 'meetings', 'levelup', 'certificate', 'my-payslips',
+  // 'certificate' intentionally omitted: the feature is hidden from nav (shell.tsx visible:false),
+  // so #certificate is not a reachable hash route either. Re-add when the feature is re-enabled.
+  'classes', 'meetings', 'levelup', 'my-payslips',
 ]);
 
 function hashToSection(): SectionKey | undefined {

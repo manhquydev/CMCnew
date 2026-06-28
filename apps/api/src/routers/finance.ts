@@ -518,11 +518,20 @@ export const financeRouter = router({
         if (!existingLmsAcc && wasNewStudent) {
           const tempPassword = genTempPassword();
           const passwordHash = await hashPassword(tempPassword);
-          // loginCode = studentCode — unique, stable, easy to relay (e.g. "HS-2026-0042").
+          // loginCode must be GLOBALLY unique (student_account.login_code is a global @unique), but
+          // studentCode is only facility-scoped (receipt codes are allocated per-facility), so two
+          // facilities can both mint "HS-2026-0001". Prefix with the facility code (itself globally
+          // unique) → e.g. "HQ-HS-2026-0042" — so a second facility's student never collides and rolls
+          // back the whole receipt.approve (the money path).
+          const facility = await tx.facility.findUniqueOrThrow({
+            where: { id: receipt.facilityId },
+            select: { code: true },
+          });
+          const loginCode = `${facility.code}-${student.studentCode}`;
           const lmsRec = await tx.studentAccount.create({
             data: {
               studentId: resolvedStudentId,
-              loginCode: student.studentCode, // student fetched just above (lifecycle check)
+              loginCode,
               passwordHash,
               isActive: true,
             },

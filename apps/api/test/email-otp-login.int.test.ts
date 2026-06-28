@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, afterAll, beforeAll } from 'vitest';
 import { TRPCError } from '@trpc/server';
 import { createHash } from 'node:crypto';
 import { appRouter } from '../src/routers/index.js';
@@ -21,6 +21,17 @@ const email = `${tag}@example.edu.vn`;
 const emailHash = createHash('sha256').update(email.toLowerCase()).digest('hex');
 let parentId: string | null = null;
 
+// This suite relies on the OTP dev fallback (devCode returned when Graph is unconfigured). On a box
+// whose real .env configures email (GRAPH_SENDER_*), the service would attempt a real send and omit
+// devCode. Clear the sender vars for the suite so the dev-fallback path is exercised deterministically.
+let savedEnv: NodeJS.ProcessEnv;
+beforeAll(() => {
+  savedEnv = { ...process.env };
+  for (const k of ['GRAPH_SENDER_NOTIFY', 'GRAPH_SENDER_PAYROLL', 'GRAPH_SENDER_HR']) {
+    delete process.env[k];
+  }
+});
+
 afterAll(async () => {
   await withRls(SUPER, async (tx) => {
     await tx.loginOtp.deleteMany({ where: { emailHash } });
@@ -30,6 +41,7 @@ afterAll(async () => {
       await tx.parentAccount.deleteMany({ where: { id: parentId } });
     }
   });
+  process.env = savedEnv;
 });
 
 describe('parent Email OTP login', () => {

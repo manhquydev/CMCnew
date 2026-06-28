@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { PrismaClient, Role } from '@prisma/client';
 import { hashPassword } from './password.js';
 
@@ -35,6 +36,33 @@ async function seedBootstrap(email: string, password: string): Promise<void> {
   } else {
     console.log(`• super_admin <${email}> already exists — skipped`);
   }
+
+  // ── Executive board ("Ba trụ cột"): the two directors of the 3-heads org. ──────────
+  // Seeded in prod so the org is operational on day one without UI account creation.
+  // Staff (incl. directors) authenticate via Microsoft Entra SSO only — no password is
+  // set; the hash is random + unusable so password login is impossible for these accounts.
+  const DIRECTORS: Array<{ email: string; name: string; role: Role }> = [
+    { email: 'nhungdt@cmcvn.edu.vn', name: 'Giám đốc Kinh doanh', role: Role.giam_doc_kinh_doanh },
+    { email: 'hongltn@cmcvn.edu.vn', name: 'Giám đốc Đào tạo', role: Role.giam_doc_dao_tao },
+  ];
+  for (const d of DIRECTORS) {
+    if (await prisma.appUser.findUnique({ where: { email: d.email } })) {
+      console.log(`• ${d.role} <${d.email}> already exists — skipped`);
+      continue;
+    }
+    await prisma.appUser.create({
+      data: {
+        email: d.email,
+        displayName: d.name,
+        passwordHash: await hashPassword(randomBytes(32).toString('base64url')),
+        roles: [d.role],
+        primaryRole: d.role,
+        facilities: { create: { facilityId: hq.id } },
+      },
+    });
+    console.log(`✓ Seeded ${d.role} <${d.email}> (SSO-only)`);
+  }
+
   console.log('');
   console.log('Bootstrap complete. Log in as the IT head to create other accounts.');
   console.log(`  Email:    ${email}`);

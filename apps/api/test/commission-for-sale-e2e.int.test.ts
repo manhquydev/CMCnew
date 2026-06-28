@@ -157,10 +157,23 @@ describe('commission-for-sale: E2E attribution & computation', () => {
       if (receipt.id) {
         await tx.receipt.deleteMany({ where: { id: receipt.id } });
       }
+      // Delete only the contacts THIS suite created (resolved from its own opportunities), NOT every
+      // contact at the facility. A broad facility-wide delete is fragile: it accumulates leftover on
+      // any failure and FK-conflicts with any other facility-1 contact present on the shared dev DB
+      // (e.g. one left by an E2E flow), which would fail this teardown.
+      const oppContacts = created.opportunityIds.length
+        ? await tx.opportunity.findMany({
+            where: { id: { in: created.opportunityIds } },
+            select: { contactId: true },
+          })
+        : [];
       if (created.opportunityIds.length > 0) {
         await tx.opportunity.deleteMany({ where: { id: { in: created.opportunityIds } } });
       }
-      await tx.contact.deleteMany({ where: { facilityId: FACILITY } });
+      const contactIds = [...new Set(oppContacts.map((o) => o.contactId))];
+      if (contactIds.length > 0) {
+        await tx.contact.deleteMany({ where: { id: { in: contactIds } } });
+      }
       if (created.studentIds.length > 0) {
         await tx.student.deleteMany({ where: { id: { in: created.studentIds } } });
       }

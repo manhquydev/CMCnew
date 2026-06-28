@@ -113,9 +113,12 @@ async function assembleSlipData(
   } else {
     const kpiRow = await tx.kpiScore.findUnique({
       where: { userId_periodKey: { userId: args.userId, periodKey: args.periodKey } },
-      select: { autoScore: true, overrideScore: true },
+      select: { autoScore: true, overrideScore: true, status: true },
     });
-    kpiScore = kpiRow ? (kpiRow.overrideScore ?? kpiRow.autoScore) : 0;
+    // Only an APPROVED KPI sheet feeds payroll — draft/submitted/confirmed scores are not final
+    // (decision 0011: điểm chỉ khoá và đổ vào lương khi đã phê duyệt). Anything else contributes 0,
+    // so HR cannot compute a payslip off an un-approved score.
+    kpiScore = kpiRow && kpiRow.status === 'approved' ? (kpiRow.overrideScore ?? kpiRow.autoScore) : 0;
   }
 
   // Determine variable pay: override takes precedence; then auto-feed for sales; then input.
@@ -1098,6 +1101,12 @@ export const payrollRouter = router({
           where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
         });
         if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
+        // An APPROVED sheet's score is locked and already feeds payroll (decision 0011 + H3). Allowing
+        // an override here would change a finalized score without re-running confirm→approve, bypassing
+        // separation of duties. Require an explicit reopen first.
+        if (row.status === 'approved') {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu KPI đã phê duyệt — cần mở lại trước khi chỉnh điểm' });
+        }
 
         const updated = await tx.kpiScore.update({
           where: { id: row.id },

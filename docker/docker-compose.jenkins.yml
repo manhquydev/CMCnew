@@ -1,0 +1,37 @@
+# Jenkins controller (single-node CI/CD) for CMCnew, on the same VPS as the app.
+# Build + run:
+#   docker compose -f docker/docker-compose.jenkins.yml up -d --build
+#   # then unlock once with the initial admin password:
+#   docker exec cmcnew-jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+#
+# Reachable on 127.0.0.1:8080 only — expose it through the app nginx (a ci.cmcvn.edu.vn
+# vhost) or an SSH tunnel rather than binding 0.0.0.0, since it holds deploy rights.
+name: cmcnew-jenkins
+
+services:
+  jenkins:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.jenkins
+    container_name: cmcnew-jenkins
+    user: root                       # needs the host docker socket; group-mapping on Debian is brittle
+    ports:
+      - '127.0.0.1:8080:8080'
+    environment:
+      JAVA_OPTS: '-Djenkins.install.runSetupWizard=true -Xmx3g'
+      CASC_JENKINS_CONFIG: /var/jenkins_home/casc.yaml
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./jenkins-casc.yaml:/var/jenkins_home/casc.yaml:ro
+      # The app's prod secrets, read-only — the deploy stage references this path.
+      - /root/cmcnew/.env.production:/secrets/.env.production:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 3g
+    restart: unless-stopped
+
+volumes:
+  jenkins_home:

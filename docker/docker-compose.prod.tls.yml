@@ -1,0 +1,176 @@
+# CMCnew — PRODUCTION SERVER compose (two domains + TLS).
+# Authoritative file for the live VPS (erp.cmcvn.edu.vn + hoc.cmcvn.edu.vn).
+# The sibling docker-compose.prod.yml stays the single-origin HTTP file for local prod-like runs.
+#
+# Deploy (from repo root on the server):
+#   cp .env.production.example .env.production && edit it   (or use scripts/gen-prod-env.sh)
+#   # 1. one-time TLS cert (port 80 free):
+#   bash scripts/prod-tls-bootstrap.sh
+#   # 2. db up → migrate → seed (super_admin + 2 directors) → all services:
+#   docker compose -f docker/docker-compose.prod.tls.yml --env-file .env.production up -d postgres
+#   docker compose -f docker/docker-compose.prod.tls.yml --env-file .env.production --profile migrate run --rm api-migrate
+#   docker compose -f docker/docker-compose.prod.tls.yml --env-file .env.production --profile seed    run --rm api-seed
+#   docker compose -f docker/docker-compose.prod.tls.yml --env-file .env.production up -d
+
+name: cmcnew-prod
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER:     ${DB_USER:-cmc}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB:       ${DB_NAME:-cmc}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-cmc} -d ${DB_NAME:-cmc}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV:         production
+      API_PORT:         4000
+      DATABASE_URL:     postgresql://cmc_app:${DB_APP_PASSWORD:?DB_APP_PASSWORD is required}@postgres:5432/${DB_NAME:-cmc}?schema=public
+      DIRECT_URL:       postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-cmc}?schema=public
+      REDIS_URL:        redis://redis:6379
+      JWT_SECRET:       ${JWT_SECRET:?JWT_SECRET is required}
+      AUTH_COOKIE_NAME: cmc.session
+      # Behind real TLS → leave COOKIE_SECURE=true (default) so the session cookie is HTTPS-only.
+      COOKIE_SECURE:    ${COOKIE_SECURE:-true}
+      CORS_ORIGINS:     ${CORS_ORIGINS:?CORS_ORIGINS is required (https://erp...,https://hoc...)}
+      ADMIN_APP_ORIGIN: ${ADMIN_APP_ORIGIN:?ADMIN_APP_ORIGIN is required (https://erp.cmcvn.edu.vn)}
+      CRM_LEAD_TOKEN:   ${CRM_LEAD_TOKEN:-}
+      DISABLE_CRON:     ${DISABLE_CRON:-0}
+      ENTRA_TENANT_ID:      ${ENTRA_TENANT_ID:-}
+      ENTRA_CLIENT_ID:      ${ENTRA_CLIENT_ID:-}
+      ENTRA_CLIENT_SECRET:  ${ENTRA_CLIENT_SECRET:-}
+      ERP_SSO_REDIRECT_URI: ${ERP_SSO_REDIRECT_URI:-}
+      STAFF_EMAIL_DOMAIN:   ${STAFF_EMAIL_DOMAIN:-}
+      SSO_ENABLED:          ${SSO_ENABLED:-}
+      # Fail-closed: only super_admin may password-login; all other staff are SSO-only.
+      STAFF_PASSWORD_LOGIN: ${STAFF_PASSWORD_LOGIN:-}
+      GRAPH_SENDER_NOTIFY:  ${GRAPH_SENDER_NOTIFY:-}
+      GRAPH_SENDER_PAYROLL: ${GRAPH_SENDER_PAYROLL:-}
+      GRAPH_SENDER_HR:      ${GRAPH_SENDER_HR:-}
+      GRAPH_CLIENT_SECRET:  ${GRAPH_CLIENT_SECRET:-}
+      CALLIO_API_BASE:      ${CALLIO_API_BASE:-}
+      CALLIO_API_TOKEN:     ${CALLIO_API_TOKEN:-}
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:4000/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api-migrate:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV:     production
+      DATABASE_URL: postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-cmc}?schema=public
+      DIRECT_URL:   postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-cmc}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ['pnpm', '--filter', '@cmc/db', 'migrate']
+    profiles: ['migrate']
+    restart: 'no'
+
+  api-seed:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV:                 production
+      DATABASE_URL:             postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-cmc}?schema=public
+      DIRECT_URL:               postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-cmc}?schema=public
+      SEED_SUPERADMIN_EMAIL:    ${SEED_SUPERADMIN_EMAIL:?SEED_SUPERADMIN_EMAIL is required}
+      SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:?SEED_SUPERADMIN_PASSWORD is required}
+      SEED_MODE:                bootstrap
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ['pnpm', '--filter', '@cmc/db', 'seed']
+    profiles: ['seed']
+    restart: 'no'
+
+  # Admin SPA — served at the root of erp.cmcvn.edu.vn.
+  admin:
+    build:
+      context: ..
+      dockerfile: apps/admin/Dockerfile
+      args:
+        VITE_API_URL: /api
+    restart: unless-stopped
+
+  # LMS SPA — served at the ROOT of hoc.cmcvn.edu.vn (base path /, not /lms/).
+  lms:
+    build:
+      context: ..
+      dockerfile: apps/lms/Dockerfile
+      args:
+        VITE_API_URL:  /api
+        VITE_BASE_URL: /
+    restart: unless-stopped
+
+  # Nginx reverse proxy — terminates TLS for both domains.
+  nginx:
+    image: nginx:alpine
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx-prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot_www:/var/www/certbot:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      admin:
+        condition: service_started
+      lms:
+        condition: service_started
+    restart: unless-stopped
+
+  # Certbot — renews the SAN cert every 12h (webroot challenge, no downtime) and
+  # reloads nginx. Initial cert is obtained out-of-band by scripts/prod-tls-bootstrap.sh.
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: /bin/sh
+    command: ['-c', 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done']
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  letsencrypt:
+  certbot_www:

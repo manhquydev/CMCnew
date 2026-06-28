@@ -81,8 +81,38 @@ services:
       # Allowed CORS origins (comma-separated). Must include all frontend origins.
       # In a single-nginx setup everything is same-origin, but set it anyway.
       CORS_ORIGINS:     ${CORS_ORIGINS:-http://localhost}
+      # Public ERP origin used in outbound email links (e.g. the staff welcome email "Mở hệ thống"
+      # button). Set to the real domain in prod, e.g. https://erp.cmcvn.edu.vn. Without this the API
+      # falls back to a localhost dev URL, so a production welcome email would link to localhost.
+      ADMIN_APP_ORIGIN: ${ADMIN_APP_ORIGIN:-http://localhost}
       CRM_LEAD_TOKEN:   ${CRM_LEAD_TOKEN:-}
       DISABLE_CRON:     ${DISABLE_CRON:-0}
+      # ── Staff SSO (Microsoft Entra, OIDC) ──────────────────────────────────────
+      # SSO stays OFF (login route returns 503 "SSO chưa được cấu hình") until ALL of:
+      # ENTRA_TENANT_ID + ENTRA_CLIENT_ID + ENTRA_CLIENT_SECRET + ERP_SSO_REDIRECT_URI +
+      # STAFF_EMAIL_DOMAIN are set. ERP_SSO_REDIRECT_URI must EXACTLY match the Redirect URI
+      # registered in Entra (e.g. http://localhost/api/auth/sso/callback for a local test, or
+      # https://erp.cmcvn.edu.vn/api/auth/sso/callback for prod). All default empty → SSO disabled.
+      ENTRA_TENANT_ID:      ${ENTRA_TENANT_ID:-}
+      ENTRA_CLIENT_ID:      ${ENTRA_CLIENT_ID:-}
+      ENTRA_CLIENT_SECRET:  ${ENTRA_CLIENT_SECRET:-}
+      ERP_SSO_REDIRECT_URI: ${ERP_SSO_REDIRECT_URI:-}
+      STAFF_EMAIL_DOMAIN:   ${STAFF_EMAIL_DOMAIN:-}
+      # SSO availability is gated purely by the presence of the ENTRA_* config above (the /auth/sso
+      # routes 503 until it is set). SSO_ENABLED no longer gates password login — that is now
+      # STAFF_PASSWORD_LOGIN below (kept here only for backward compatibility / external tooling).
+      SSO_ENABLED:          ${SSO_ENABLED:-}
+      # Fail-closed by default: only super_admin may password-login; all other staff are SSO-only.
+      # Set STAFF_PASSWORD_LOGIN=true ONLY for a local/seed environment that needs staff password login.
+      STAFF_PASSWORD_LOGIN: ${STAFF_PASSWORD_LOGIN:-}
+      # ── Microsoft Graph outbound email (welcome / OTP / payslip) ───────────────
+      # No-op until ENTRA_* (reused as Graph creds) + all three sender mailboxes are set.
+      GRAPH_SENDER_NOTIFY:  ${GRAPH_SENDER_NOTIFY:-}
+      GRAPH_SENDER_PAYROLL: ${GRAPH_SENDER_PAYROLL:-}
+      GRAPH_SENDER_HR:      ${GRAPH_SENDER_HR:-}
+      # ── Callio call-metrics sync (optional; no-op if unset) ────────────────────
+      CALLIO_API_BASE:      ${CALLIO_API_BASE:-}
+      CALLIO_API_TOKEN:     ${CALLIO_API_TOKEN:-}
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:4000/health || exit 1']
       interval: 10s

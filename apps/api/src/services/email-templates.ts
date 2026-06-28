@@ -7,7 +7,8 @@ export type EmailTemplateKind =
   | 'account_security_alert'
   | 'parent_meeting'
   | 'otp_login'
-  | 'lms_account_ready';
+  | 'lms_account_ready'
+  | 'account_welcome';
 
 const BRAND = 'CMC';
 
@@ -71,6 +72,13 @@ export interface TemplatePayloads {
     loginCode: string;
     /** Plaintext temp password — rendered here, never stored. */
     tempPassword: string;
+  };
+  /** Sent to a staff member when their AppUser is created. SSO onboarding: no password is sent —
+   *  staff sign in with their Microsoft (CMC EDU) account. roleLabel is a human-readable role name. */
+  account_welcome: {
+    displayName?: string;
+    loginUrl: string;
+    roleLabel?: string;
   };
 }
 
@@ -141,6 +149,28 @@ const renderers: { [K in EmailTemplateKind]: Renderer<K> } = {
 </table>` +
         p('Con bạn có thể đổi mật khẩu sau khi đăng nhập lần đầu. Vui lòng bảo quản thông tin đăng nhập này.') +
         p('Nếu bạn có câu hỏi, hãy liên hệ với nhà trường để được hỗ trợ.'),
+    }),
+  }),
+
+  account_welcome: (d) => ({
+    subject: `Chào mừng bạn đến với hệ thống ${BRAND}`,
+    html: layout({
+      title: 'Tài khoản nhân viên đã được tạo',
+      preheader: 'Đăng nhập bằng tài khoản CMC EDU (Microsoft)',
+      bodyHtml:
+        p(`Xin chào ${esc(d.displayName ?? 'bạn')},`) +
+        p(
+          `Tài khoản của bạn trên hệ thống ${BRAND} đã được tạo${
+            d.roleLabel ? ` với vai trò <strong>${esc(d.roleLabel)}</strong>` : ''
+          }.`,
+        ) +
+        p(
+          'Đăng nhập bằng <strong>tài khoản CMC EDU (Microsoft)</strong> của bạn — chọn ' +
+            '"Đăng nhập bằng tài khoản CMC EDU". Hệ thống không gửi mật khẩu riêng; bạn dùng đúng ' +
+            'mật khẩu Microsoft đã được cấp.',
+        ) +
+        button('Mở hệ thống', d.loginUrl) +
+        p('Nếu bạn chưa nhận được tài khoản Microsoft, vui lòng liên hệ bộ phận IT.'),
     }),
   }),
 };
