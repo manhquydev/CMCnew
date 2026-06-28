@@ -10,9 +10,31 @@ export type EmailTemplateKind =
   | 'lms_account_ready'
   | 'account_welcome';
 
-const BRAND = 'CMC';
+/**
+ * Brand identity for outbound email — the REAL CMC EDU public info (mirrors the LMS login footer).
+ * Hardcoded because it is stable public marketing data; the logo is the live LMS-served asset so it
+ * loads in mail clients that show remote images (alt text covers clients that block them).
+ */
+const BRAND = {
+  name: 'CMC EDU',
+  fullName: 'Học viện phát triển Tư duy & Năng lực số CMC',
+  tagline: 'Tò mò là khởi nguồn của trí tuệ',
+  logoUrl: 'https://hoc.cmcvn.edu.vn/brand/cmc-logo.jpg',
+  hotline: '0856 636 398',
+  email: 'contact@cmcvn.edu.vn',
+  website: 'cmcvn.edu.vn',
+  websiteUrl: 'https://cmcvn.edu.vn',
+  address: 'Khu đô thị Tây Nam Linh Đàm, Hoàng Mai, Hà Nội',
+  facebook: 'https://www.facebook.com/share/14fVk5g2DiT/',
+  zalo: 'https://zaloapp.com/qr/p/1boqvt2eg3ndl',
+  lmsUrl: 'https://hoc.cmcvn.edu.vn',
+};
 
-/** Shared shell: header + body + footer. `preheader` is the inbox preview snippet. */
+/**
+ * Shared shell — the fixed structure every system email shares:
+ *   [preheader] → [logo header] → [title + body] → [footer: brand · contact · do-not-reply]
+ * Inline styles only (mail clients strip <style>). Table layout for Outlook.
+ */
 function layout(opts: { title: string; preheader?: string; bodyHtml: string }): string {
   return `<!doctype html><html lang="vi"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -21,13 +43,25 @@ ${opts.preheader ? `<span style="display:none;max-height:0;overflow:hidden">${es
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:24px 0">
 <tr><td align="center">
 <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e6e8eb">
-<tr><td style="background:#0b5cad;padding:20px 28px;color:#fff;font-size:18px;font-weight:600">${BRAND}</td></tr>
+<tr><td align="center" style="padding:22px 28px;background:#ffffff;border-bottom:3px solid #0b5cad">
+<img src="${BRAND.logoUrl}" alt="${esc(BRAND.name)}" height="42" style="height:42px;width:auto;border:0;display:inline-block">
+</td></tr>
 <tr><td style="padding:28px">
 <h1 style="margin:0 0 16px;font-size:20px;color:#0b1f33">${esc(opts.title)}</h1>
 ${opts.bodyHtml}
 </td></tr>
-<tr><td style="padding:18px 28px;background:#fafbfc;color:#8a94a6;font-size:12px;border-top:1px solid #e6e8eb">
-Email tự động từ hệ thống ${BRAND}. Vui lòng không trả lời thư này.
+<tr><td style="padding:22px 28px;background:#fafbfc;color:#8a94a6;font-size:12px;line-height:1.65;border-top:1px solid #e6e8eb">
+<strong style="color:#5b6573;font-size:13px">${esc(BRAND.fullName)}</strong><br>
+<span style="color:#9aa3b0">${esc(BRAND.tagline)}</span>
+<div style="margin:10px 0 0">
+Hotline: <a href="tel:${BRAND.hotline.replace(/\s/g, '')}" style="color:#0b5cad;text-decoration:none">${esc(BRAND.hotline)}</a>
+&nbsp;·&nbsp; Email: <a href="mailto:${BRAND.email}" style="color:#0b5cad;text-decoration:none">${esc(BRAND.email)}</a>
+&nbsp;·&nbsp; <a href="${BRAND.websiteUrl}" style="color:#0b5cad;text-decoration:none">${esc(BRAND.website)}</a><br>
+${esc(BRAND.address)}<br>
+<a href="${BRAND.facebook}" style="color:#0b5cad;text-decoration:none">Facebook</a>
+&nbsp;·&nbsp; <a href="${BRAND.zalo}" style="color:#0b5cad;text-decoration:none">Zalo</a>
+</div>
+<div style="margin:12px 0 0;color:#aab2bd">Email tự động từ hệ thống ${esc(BRAND.name)}. Vui lòng không trả lời thư này.</div>
 </td></tr>
 </table></td></tr></table></body></html>`;
 }
@@ -98,7 +132,7 @@ const renderers: { [K in EmailTemplateKind]: Renderer<K> } = {
     }),
   }),
   account_security_alert: (d) => ({
-    subject: `Cảnh báo bảo mật tài khoản ${BRAND}`,
+    subject: `Cảnh báo bảo mật tài khoản ${BRAND.name}`,
     html: layout({
       title: 'Thông báo thay đổi bảo mật',
       preheader: 'Có thay đổi trên tài khoản của bạn',
@@ -120,10 +154,12 @@ const renderers: { [K in EmailTemplateKind]: Renderer<K> } = {
     }),
   }),
   otp_login: (d) => ({
-    subject: `Mã đăng nhập LMS: ${esc(d.code)}`,
+    // Keep the one-time code OUT of the subject — it would otherwise show in the inbox list and the
+    // device notification preview (a security anti-pattern). The code lives only in the body.
+    subject: `Mã đăng nhập LMS ${BRAND.name}`,
     html: layout({
       title: 'Mã đăng nhập một lần (OTP)',
-      preheader: `Mã đăng nhập của bạn: ${d.code}`,
+      preheader: 'Mã đăng nhập một lần để vào cổng học tập CMC EDU',
       bodyHtml:
         p('Kính gửi Quý phụ huynh,') +
         p('Mã đăng nhập một lần của bạn là:') +
@@ -147,20 +183,21 @@ const renderers: { [K in EmailTemplateKind]: Renderer<K> } = {
 <tr style="border-top:1px solid #e6e8eb"><td style="padding:12px 16px;background:#f8f9fb;font-size:13px;color:#555;font-weight:600">Mật khẩu tạm</td>
 <td style="padding:12px 16px;font-size:15px;font-weight:700;color:#333;letter-spacing:1px">${esc(d.tempPassword)}</td></tr>
 </table>` +
+        button('Đăng nhập LMS', BRAND.lmsUrl) +
         p('Con bạn có thể đổi mật khẩu sau khi đăng nhập lần đầu. Vui lòng bảo quản thông tin đăng nhập này.') +
         p('Nếu bạn có câu hỏi, hãy liên hệ với nhà trường để được hỗ trợ.'),
     }),
   }),
 
   account_welcome: (d) => ({
-    subject: `Chào mừng bạn đến với hệ thống ${BRAND}`,
+    subject: `Chào mừng bạn đến với hệ thống ${BRAND.name}`,
     html: layout({
       title: 'Tài khoản nhân viên đã được tạo',
       preheader: 'Đăng nhập bằng tài khoản CMC EDU (Microsoft)',
       bodyHtml:
         p(`Xin chào ${esc(d.displayName ?? 'bạn')},`) +
         p(
-          `Tài khoản của bạn trên hệ thống ${BRAND} đã được tạo${
+          `Tài khoản của bạn trên hệ thống ${BRAND.name} đã được tạo${
             d.roleLabel ? ` với vai trò <strong>${esc(d.roleLabel)}</strong>` : ''
           }.`,
         ) +
