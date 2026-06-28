@@ -23,6 +23,16 @@ const RATE_PER_RUN = 20; // < Exchange 30/min cap
 const MAX_ATTEMPTS = 5;
 const LEASE_MS = 5 * 60 * 1000; // a 'sending' row older than this is considered stuck → reclaimed
 
+// Only these templates render a plaintext one-time secret (OTP / temp password) into bodyHtml, so
+// only these get their body scrubbed once terminal. Non-secret templates keep their body so a
+// terminally-failed row can still be re-sent (requeued) with its content intact — without this,
+// retrying a failed email delivered a BLANK message.
+const SECRET_KINDS = new Set<EmailTemplateKind>(['otp_login', 'lms_account_ready']);
+/** Returns the bodyHtml patch for a terminal row: '' for secret templates, untouched otherwise. */
+function scrubPatch(templateKind: string): { bodyHtml: string } | Record<string, never> {
+  return SECRET_KINDS.has(templateKind as EmailTemplateKind) ? { bodyHtml: '' } : {};
+}
+
 export interface EnqueueInput<K extends EmailTemplateKind> {
   facilityId?: number | null;
   /** Stable idempotency key, e.g. `payslip_ready:<payslipId>`. Re-enqueue with same key is a no-op. */
@@ -153,12 +163,12 @@ async function drainOutbox(
         deps,
       );
       await withRls(SYSTEM_CTX, async (tx) => {
-        // Scrub the rendered body once delivered: some templates (lms_account_ready, otp_login) render
-        // a plaintext one-time secret into bodyHtml. The subject + templateKind + audit log preserve
-        // traceability; the credential must not linger in the outbox after it has been sent.
+        // Scrub the rendered body once delivered ONLY for secret-bearing templates (their plaintext
+        // one-time secret must not linger in the outbox). Non-secret templates keep their body for
+        // auditability + the ability to re-send. Subject + templateKind + audit log preserve traceability.
         await tx.emailOutbox.update({
           where: { id: row.id },
-          data: { status: 'sent', sentAt: now, lastError: null, bodyHtml: '' },
+          data: { status: 'sent', sentAt: now, lastError: null, ...scrubPatch(row.templateKind) },
         });
         await logEvent(tx, {
           facilityId: row.facilityId,
@@ -193,7 +203,7 @@ async function drainOutbox(
         await tx.emailOutbox.update({
           where: { id: row.id },
           data: terminal
-            ? { status: 'failed', attempts, lastError: message, bodyHtml: '' } // scrub any rendered secret on terminal fail
+            ? { status: 'failed', attempts, lastError: message, ...scrubPatch(row.templateKind) } // scrub secret-bearing bodies only; keep others so a failed row stays re-sendable
             : { status: 'queued', attempts, lastError: message, scheduledFor: new Date(now.getTime() + backoffMs(attempts)) },
         });
         if (terminal) {

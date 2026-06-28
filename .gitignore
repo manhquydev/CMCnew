@@ -42,3 +42,6 @@ scripts/bin/harness-cli.exe
 
 # Root-level QA/debug screenshots (throwaway)
 /*.png
+
+# Email template preview output (dev QA)
+apps/api/email-previews/
