@@ -374,6 +374,9 @@ export function buildNavGroups({
       groupLabel: 'Lớp học',
       items: [
         { key: 'classes' as const, label: 'Lớp học', icon: <IconDoor {...I()} />, visible: visible('classes') },
+        // Course catalogue is a shared read-only reference that belongs next to classes, not under
+        // "Quản trị" — otherwise a teacher sees a lone "Khóa học" under an Admin header.
+        { key: 'courses' as const, label: 'Khóa học', icon: <IconBook {...I()} />, visible: visible('courses') },
         { key: 'meetings' as const, label: 'Họp PH', icon: <IconUsers {...I()} />, visible: visible('meetings') },
         { key: 'levelup' as const, label: 'Duyệt cấp độ', icon: <IconArrowUp {...I()} />, visible: visible('levelup') },
         // Tính năng chứng chỉ tạm tắt (chưa dùng) — đặt visible:false để ẩn khỏi nav; router/panel
@@ -415,7 +418,6 @@ export function buildNavGroups({
       groupLabel: 'Quản trị',
       items: [
         { key: 'overview' as const, label: 'Tổng quan', icon: <IconLayoutDashboard {...I()} />, visible: visible('overview') },
-        { key: 'courses' as const, label: 'Khóa học', icon: <IconBook {...I()} />, visible: visible('courses') },
         { key: 'org' as const, label: 'Cơ sở & Users', icon: <IconBuilding {...I()} />, visible: visible('org') },
       ],
     },

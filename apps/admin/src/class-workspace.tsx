@@ -152,6 +152,8 @@ function ScheduleTab({
   rooms: Room[];
   teachers: Teacher[];
 }) {
+  const { me } = useSession();
+  const canAddSlot = can(me.roles, me.isSuperAdmin, 'schedule', 'addSlot');
   const [slots, setSlots] = useState<Awaited<ReturnType<typeof trpc.schedule.listSlots.query>>>([]);
   const [day, setDay] = useState<string | null>('1');
   const [start, setStart] = useState('18:00');
@@ -214,31 +216,35 @@ function ScheduleTab({
     <Stack>
       <Card withBorder>
         <Text fw={600} mb="xs">Khung lịch tuần</Text>
-        <Group align="flex-end">
-          <Select
-            label="Thứ" w={110}
-            data={DOW.map((l, i) => ({ value: String(i), label: l }))}
-            value={day} onChange={setDay}
-          />
-          <TextInput label="Bắt đầu" w={90} value={start} onChange={(e) => setStart(e.currentTarget.value)} />
-          <TextInput label="Kết thúc" w={90} value={end} onChange={(e) => setEnd(e.currentTarget.value)} />
-          <Select
-            label="Phòng" w={150} clearable
-            placeholder={rooms.length ? 'Chọn phòng' : 'Chưa có phòng'}
-            data={rooms.map((r) => ({ value: r.id, label: `${r.code} — ${r.name}` }))}
-            value={roomId} onChange={setRoomId}
-          />
-          <Select
-            label="Giáo viên" w={170} clearable searchable
-            placeholder={teachers.length ? 'Chọn GV' : 'Chưa có GV'}
-            data={teachers.map((t) => ({ value: t.id, label: t.displayName }))}
-            value={teacherId} onChange={setTeacherId}
-          />
-          <Button onClick={addSlot}>Thêm khung</Button>
-        </Group>
-        <Text size="xs" c="dimmed" mt={6}>
-          Gán phòng/giáo viên để hệ thống chặn cứng trùng phòng và trùng giáo viên khi sinh lịch.
-        </Text>
+        {canAddSlot && (
+          <>
+            <Group align="flex-end">
+              <Select
+                label="Thứ" w={110}
+                data={DOW.map((l, i) => ({ value: String(i), label: l }))}
+                value={day} onChange={setDay}
+              />
+              <TextInput label="Bắt đầu" w={90} value={start} onChange={(e) => setStart(e.currentTarget.value)} />
+              <TextInput label="Kết thúc" w={90} value={end} onChange={(e) => setEnd(e.currentTarget.value)} />
+              <Select
+                label="Phòng" w={150} clearable
+                placeholder={rooms.length ? 'Chọn phòng' : 'Chưa có phòng'}
+                data={rooms.map((r) => ({ value: r.id, label: `${r.code} — ${r.name}` }))}
+                value={roomId} onChange={setRoomId}
+              />
+              <Select
+                label="Giáo viên" w={170} clearable searchable
+                placeholder={teachers.length ? 'Chọn GV' : 'Chưa có GV'}
+                data={teachers.map((t) => ({ value: t.id, label: t.displayName }))}
+                value={teacherId} onChange={setTeacherId}
+              />
+              <Button onClick={addSlot}>Thêm khung</Button>
+            </Group>
+            <Text size="xs" c="dimmed" mt={6}>
+              Gán phòng/giáo viên để hệ thống chặn cứng trùng phòng và trùng giáo viên khi sinh lịch.
+            </Text>
+          </>
+        )}
         {loadingSlots ? (
           <Loader size="sm" mt="sm" />
         ) : (
@@ -264,17 +270,19 @@ function ScheduleTab({
           </Table>
         )}
       </Card>
-      <Card withBorder>
-        <Text fw={600} mb="xs">Sinh buổi học</Text>
-        <Group align="flex-end">
-          <DateInput label="Từ ngày" value={range.from} onChange={(d) => setRange((r) => ({ ...r, from: d }))} valueFormat="DD/MM/YYYY" />
-          <DateInput label="Đến ngày" value={range.to} onChange={(d) => setRange((r) => ({ ...r, to: d }))} valueFormat="DD/MM/YYYY" />
-          <Button onClick={generate} disabled={!range.from || !range.to}>Sinh lịch</Button>
-        </Group>
-        {msg && (
-          <Text size="sm" mt="xs" c={msg.startsWith('Lỗi') ? 'red' : 'green'}>{msg}</Text>
-        )}
-      </Card>
+      {canAddSlot && (
+        <Card withBorder>
+          <Text fw={600} mb="xs">Sinh buổi học</Text>
+          <Group align="flex-end">
+            <DateInput label="Từ ngày" value={range.from} onChange={(d) => setRange((r) => ({ ...r, from: d }))} valueFormat="DD/MM/YYYY" />
+            <DateInput label="Đến ngày" value={range.to} onChange={(d) => setRange((r) => ({ ...r, to: d }))} valueFormat="DD/MM/YYYY" />
+            <Button onClick={generate} disabled={!range.from || !range.to}>Sinh lịch</Button>
+          </Group>
+          {msg && (
+            <Text size="sm" mt="xs" c={msg.startsWith('Lỗi') ? 'red' : 'green'}>{msg}</Text>
+          )}
+        </Card>
+      )}
     </Stack>
   );
 }
@@ -389,6 +397,10 @@ function CreateStudentModal({ facilityId, onCreated }: { facilityId: number; onC
 // ─── EnrollTab ────────────────────────────────────────────────────────────────
 
 function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) {
+  const { me } = useSession();
+  const canEnroll = can(me.roles, me.isSuperAdmin, 'enrollment', 'enroll');
+  // student.create is superAdminProcedure — not in PERMISSIONS registry, super_admin only.
+  const canCreateStudent = me.isSuperAdmin;
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [students, setStudents] = useState<StudentT[]>([]);
   const [studentId, setStudentId] = useState<string | null>(null);
@@ -439,19 +451,27 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
 
   return (
     <Stack>
-      <Group align="flex-end">
-        <Select
-          label="Học sinh"
-          style={{ flex: 1 }}
-          searchable
-          placeholder={enrollable.length ? 'Chọn học sinh' : 'Không còn học sinh để ghi danh'}
-          data={enrollable.map((s) => ({ value: s.id, label: `${s.studentCode} — ${s.fullName}` }))}
-          value={studentId}
-          onChange={setStudentId}
-        />
-        <Button onClick={enroll} disabled={!studentId}>Ghi danh</Button>
-        <CreateStudentModal facilityId={facilityId} onCreated={load} />
-      </Group>
+      {(canEnroll || canCreateStudent) && (
+        <Group align="flex-end">
+          {canEnroll && (
+            <>
+              <Select
+                label="Học sinh"
+                style={{ flex: 1 }}
+                searchable
+                placeholder={enrollable.length ? 'Chọn học sinh' : 'Không còn học sinh để ghi danh'}
+                data={enrollable.map((s) => ({ value: s.id, label: `${s.studentCode} — ${s.fullName}` }))}
+                value={studentId}
+                onChange={setStudentId}
+              />
+              <Button onClick={enroll} disabled={!studentId}>Ghi danh</Button>
+            </>
+          )}
+          {canCreateStudent && (
+            <CreateStudentModal facilityId={facilityId} onCreated={load} />
+          )}
+        </Group>
+      )}
       {msg && (
         <Text size="sm" c={msg.startsWith('Lỗi') ? 'red' : msg.startsWith('⚠') ? 'orange' : 'green'}>{msg}</Text>
       )}
@@ -607,6 +627,8 @@ function ClassDetail({
   onChanged: () => void;
   initialTab?: string;
 }) {
+  const { me } = useSession();
+  const canSetStatus = can(me.roles, me.isSuperAdmin, 'classBatch', 'setStatus');
   const [cancelOpen, cancel] = useDisclosure(false);
   const [reason, setReason] = useState('');
 
@@ -649,20 +671,22 @@ function ClassDetail({
           </Group>
           <Text c="dimmed" size="sm">{batch.name} · {batch.course.code}</Text>
         </div>
-        <Group gap="xs">
-          {batch.status !== 'cancelled' ? (
-            <>
-              <Select
-                size="xs" w={130} placeholder="Đổi trạng thái"
-                data={['open', 'running', 'closed']}
-                onChange={(v) => v && setStatus(v)}
-              />
-              <Button size="xs" color="red" variant="light" onClick={cancel.open}>Hủy lớp</Button>
-            </>
-          ) : (
-            <Button size="xs" onClick={doReopen}>Mở lại</Button>
-          )}
-        </Group>
+        {canSetStatus && (
+          <Group gap="xs">
+            {batch.status !== 'cancelled' ? (
+              <>
+                <Select
+                  size="xs" w={130} placeholder="Đổi trạng thái"
+                  data={['open', 'running', 'closed']}
+                  onChange={(v) => v && setStatus(v)}
+                />
+                <Button size="xs" color="red" variant="light" onClick={cancel.open}>Hủy lớp</Button>
+              </>
+            ) : (
+              <Button size="xs" onClick={doReopen}>Mở lại</Button>
+            )}
+          </Group>
+        )}
       </Group>
 
       <Tabs defaultValue={initialTab}>
@@ -694,12 +718,14 @@ function ClassDetail({
         </Tabs.Panel>
       </Tabs>
 
-      <Modal opened={cancelOpen} onClose={cancel.close} title="Hủy lớp">
-        <Stack>
-          <TextInput label="Lý do hủy (bắt buộc)" value={reason} onChange={(e) => setReason(e.currentTarget.value)} />
-          <Button color="red" onClick={doCancel} disabled={!reason}>Xác nhận hủy</Button>
-        </Stack>
-      </Modal>
+      {canSetStatus && (
+        <Modal opened={cancelOpen} onClose={cancel.close} title="Hủy lớp">
+          <Stack>
+            <TextInput label="Lý do hủy (bắt buộc)" value={reason} onChange={(e) => setReason(e.currentTarget.value)} />
+            <Button color="red" onClick={doCancel} disabled={!reason}>Xác nhận hủy</Button>
+          </Stack>
+        </Modal>
+      )}
     </Card>
   );
 }

@@ -625,9 +625,11 @@ function Dashboard() {
         return (
           <Stack>
             <Courses />
-            {/* Terms load via assessment.termList (permission-gated) — only render for roles that
-                can read it, otherwise the panel shows a raw FORBIDDEN to non-teaching staff. */}
-            {can(me.roles, me.isSuperAdmin, 'assessment', 'termList') &&
+            {/* TermsPanel is a term-MANAGEMENT surface (create/edit/lock kỳ học). Only render it
+                for roles that can actually manage terms (assessment.termCreate = head_teacher/
+                quản lý/GĐĐT) — teachers can read terms elsewhere but here would only see dead,
+                FORBIDDEN-on-click buttons. */}
+            {can(me.roles, me.isSuperAdmin, 'assessment', 'termCreate') &&
               (me.facilityIds[0] ?? (me.isSuperAdmin ? 1 : null)) != null && (
                 <TermsPanel facilityId={me.facilityIds[0] ?? 1} />
               )}
