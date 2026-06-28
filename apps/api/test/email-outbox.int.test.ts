@@ -112,14 +112,37 @@ describe('email outbox', () => {
     expect(row.scheduledFor.getTime()).toBeGreaterThan(now.getTime());
   });
 
-  it('hard failure: ends failed after MAX_ATTEMPTS', async () => {
-    await enqueue('broken');
+  it('hard failure: ends failed after MAX_ATTEMPTS, keeps body for non-secret (re-sendable)', async () => {
+    await enqueue('broken'); // account_security_alert = non-secret
     // Drive attempts to the cap by ticking past each backoff window.
     let now = new Date();
     for (let i = 0; i < 5; i++) {
       await withGraphEnv(() => runEmailOutbox(now, { getToken, fetchImpl: fetchReturning(500) }));
       now = new Date(now.getTime() + 31 * 60_000); // jump beyond the max backoff
     }
-    expect((await rows())[0].status).toBe('failed');
+    const row = (await rows())[0];
+    expect(row.status).toBe('failed');
+    // Non-secret body is retained so a failed row can be requeued + re-sent with its content intact.
+    expect(row.bodyHtml).not.toBe('');
+  });
+
+  it('secret-bearing template (otp_login) scrubs body on terminal fail', async () => {
+    await withRls(SUPER, (tx) =>
+      enqueueEmail(tx, {
+        dedupKey: `${PREFIX}:secret`,
+        to: 'a@b.com',
+        mailbox: 'notify',
+        kind: 'otp_login',
+        data: { code: '123456', expiresMinutes: 5 },
+      }),
+    );
+    let now = new Date();
+    for (let i = 0; i < 5; i++) {
+      await withGraphEnv(() => runEmailOutbox(now, { getToken, fetchImpl: fetchReturning(500) }));
+      now = new Date(now.getTime() + 31 * 60_000);
+    }
+    const row = (await rows())[0];
+    expect(row.status).toBe('failed');
+    expect(row.bodyHtml).toBe(''); // the one-time code must not linger even on failure
   });
 });
