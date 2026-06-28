@@ -6,6 +6,21 @@
 
 Đấu nối các procedure backend đã có nhưng thiếu UI (operators đang phải dùng raw DB), + thêm student management.
 
+## Scout (2026-06-26) — procedure nào đã có vs cần thêm
+
+Backend **đã tồn tại** (chỉ cần wire UI, KHÔNG cần thêm backend):
+- `finance.priceCreate/priceList/voucherCreate/voucherList` ✅
+- `aftersale.assign` ✅ (+ list/create/transition/setStudentLifecycle)
+- `rewards.giftCreate/review` ✅
+- `crm.contactList` ✅
+- `payroll.*` lifecycle ✅ (compute/finalize/markPaid/reopen + KPI từ Phase 03)
+
+Backend **cần thêm** (touch apps/api):
+- `student.update` (hiện chỉ có list/create) — cho students-panel edit
+- (tùy chọn, thấp) `course.update`, `room.update`, `crm.contactUpdate`
+
+→ Phần lớn Phase 06 là **frontend wiring admin** tới procedure có sẵn. Chỉ `student.update` là backend mới.
+
 ## Admin (`apps/admin/src/`)
 
 ### 1. Finance: price + voucher UI

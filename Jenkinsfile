@@ -33,14 +33,14 @@ pipeline {
     }
 
     stage('Integration tests') {
-      when { anyOf { branch 'develop'; branch 'main' } }
+      when { branch 'main' }   // CI/CD pipeline runs on main only; other branches get lint+typecheck as a PR gate
       steps {
         sh 'bash scripts/ci-integration-tests.sh'   // spins an ephemeral Postgres, runs vitest, tears down
       }
     }
 
     stage('Build + Deploy') {
-      when { anyOf { branch 'develop'; branch 'main' } }
+      when { branch 'main' }   // deploy the live stack only from main
       steps {
         sh '''
           # Ensure an origin cert exists (self-signed for CF Full) so nginx can start.
@@ -53,7 +53,7 @@ pipeline {
     }
 
     stage('Smoke') {
-      when { anyOf { branch 'develop'; branch 'main' } }
+      when { branch 'main' }   // smoke-test the deploy that only main performs
       steps {
         sh '''
           # api health from inside the compose network
