@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CMC LMS · Leo Tầng Mây — Wireframe</title>
+<style>
+  :root{
+    --sky-top:#0071E3; --sky-mid:#4494E9; --sky-low:#A3C8F5; --sky-horizon:#E8F1FC;
+    --cloud:#ffffff; --cloud-2:#F2F6FD;
+    --star-a:#FF9F0A; --star-b:#FFD98A;
+    --done:#34C759; --locked:#BCBCC2; --ink:#1D1D1F; --muted:#6E6E73;
+    --brand:#0071E3; --brand-hover:#005DC0;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,'Helvetica Neue',Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#dbe9fb,#f4f7fb 60%);color:var(--ink);min-height:100vh;padding:24px 12px 64px}
+  .head{max-width:960px;margin:0 auto 18px;text-align:center}
+  .head h1{font-size:22px;margin:0 0 4px}
+  .head p{margin:0;color:var(--muted);font-size:14px}
+  .tabs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:16px auto;max-width:960px}
+  .tabs button{border:1px solid #d2d2d7;background:#fff;border-radius:999px;padding:8px 16px;font-size:14px;font-weight:600;cursor:pointer;color:var(--muted);transition:.15s}
+  .tabs button.active{background:var(--brand);border-color:var(--brand);color:#fff}
+  .stage{display:flex;justify-content:center;gap:24px;flex-wrap:wrap}
+
+  .phone{width:390px;height:780px;border-radius:44px;background:#0b1d33;padding:12px;box-shadow:0 30px 70px rgba(13,40,80,.35);position:relative;flex:0 0 auto}
+  .screen{position:relative;width:100%;height:100%;border-radius:34px;overflow:hidden;background:linear-gradient(180deg,var(--sky-top) 0%,var(--sky-mid) 26%,var(--sky-low) 55%,var(--sky-horizon) 100%)}
+  .notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:120px;height:22px;background:#0b1d33;border-radius:0 0 16px 16px;z-index:40}
+  .panel{display:none;height:100%}
+  .panel.show{display:block}
+  .scroll{height:100%;overflow:auto;-webkit-overflow-scrolling:touch}
+
+  .hud{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:10px;padding:34px 16px 12px;background:linear-gradient(180deg,rgba(0,113,227,.92),rgba(0,113,227,0));backdrop-filter:blur(6px)}
+  .hud .logo{height:30px;width:auto;border-radius:7px;background:#fff;padding:3px 6px}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.92);border-radius:999px;padding:5px 11px;font-weight:800;font-size:13px;color:#1d1d1f;box-shadow:0 4px 12px rgba(0,0,0,.12)}
+  .chip.gold{color:#9a5b00}
+  .spacer{flex:1}
+
+  .climb{position:relative;padding:8px 0 60px}
+  .zone{margin:18px 16px 6px;display:flex;align-items:center;gap:10px}
+  .zone img{height:42px;width:42px;object-fit:contain;background:#fff;border-radius:12px;padding:4px;box-shadow:0 6px 16px rgba(0,0,0,.14)}
+  .zone .zt{font-weight:900;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.35);font-size:15px}
+  .zone .zs{font-size:12px;color:rgba(255,255,255,.85);font-weight:600}
+  .path{position:relative;min-height:60px}
+  .node{position:relative;width:118px;margin:14px auto;text-align:center}
+  .node.l{margin-left:36px;margin-right:auto}
+  .node.r{margin-right:36px;margin-left:auto}
+  .cloud-node{position:relative;width:96px;height:70px;margin:0 auto;cursor:pointer;filter:drop-shadow(0 10px 16px rgba(13,40,80,.22));transition:transform .15s}
+  .cloud-node:hover{transform:translateY(-3px) scale(1.03)}
+  .cloud-node svg{position:absolute;inset:0;width:100%;height:100%}
+  .cloud-face{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:900;color:#fff;font-size:20px;text-shadow:0 1px 4px rgba(0,0,0,.25)}
+  .cloud-face small{font-size:10px;font-weight:700;color:#7a4a00;text-shadow:none;margin-top:1px}
+  .cloud-face.gray{color:#8a8f98}
+  .node .label{margin-top:6px;font-size:12px;font-weight:700;color:#1d1d1f;background:rgba(255,255,255,.82);display:inline-block;padding:2px 8px;border-radius:8px}
+  .node .stars{font-size:11px;font-weight:800;color:#9a5b00;margin-top:3px}
+  .here{position:absolute;top:-24px;left:50%;transform:translateX(-50%);background:var(--star-a);color:#fff;font-size:10px;font-weight:900;padding:3px 9px;border-radius:999px;white-space:nowrap;box-shadow:0 4px 10px rgba(255,159,10,.5);animation:bob 1.6s ease-in-out infinite;z-index:5}
+  .pulse{animation:pulse 2s ease-in-out infinite}
+  .milestone{position:absolute;right:-6px;top:-10px;width:38px;height:38px;border-radius:50%;border:3px solid #fff;object-fit:cover;box-shadow:0 6px 14px rgba(0,0,0,.2);z-index:4}
+  .lock{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px}
+
+  .overlay{position:absolute;inset:0;background:rgba(11,29,51,.45);display:flex;align-items:flex-end;justify-content:center;z-index:50}
+  .sheet{background:#fff;width:100%;border-radius:24px 24px 0 0;padding:20px 18px 26px;box-shadow:0 -10px 40px rgba(0,0,0,.25)}
+  .sheet h3{margin:2px 0 4px;font-size:18px}
+  .sheet .meta{color:var(--muted);font-size:13px;margin-bottom:12px}
+  .reward{display:inline-flex;gap:6px;align-items:center;background:#FFF8EC;color:#9a5b00;font-weight:800;padding:6px 12px;border-radius:999px;font-size:13px;margin-bottom:14px}
+  .btn{display:block;width:100%;text-align:center;background:var(--brand);color:#fff;border:none;border-radius:999px;padding:14px;font-size:16px;font-weight:700;cursor:pointer}
+  .btn.ghost{background:#F2F2F5;color:#1d1d1f;margin-top:8px}
+
+  .act-hud{display:flex;align-items:center;gap:8px;padding:34px 16px 10px}
+  .pbar{flex:1;height:12px;border-radius:999px;background:rgba(255,255,255,.5);overflow:hidden}
+  .pbar > i{display:block;height:100%;width:45%;background:linear-gradient(90deg,#FFD98A,#FF9F0A)}
+  .hearts{font-size:15px}
+  .stage-wrap{padding:18px 16px}
+  .content-stage{background:rgba(255,255,255,.95);border-radius:28px;padding:22px 18px;box-shadow:0 16px 40px rgba(13,40,80,.22),inset 0 2px 0 rgba(255,255,255,.9)}
+  .q-kicker{font-size:12px;font-weight:800;color:var(--brand);letter-spacing:.04em;text-transform:uppercase}
+  .q-text{font-size:20px;font-weight:800;margin:8px 0 4px}
+  .q-illus{height:120px;width:100%;object-fit:contain;margin:6px 0 2px}
+  .answers{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px}
+  .ans{background:#fff;border:none;border-radius:22px;padding:16px;font-size:18px;font-weight:800;color:#1d1d1f;cursor:pointer;box-shadow:0 8px 18px rgba(13,40,80,.16),inset 0 2px 0 rgba(255,255,255,.9);transition:.12s}
+  .ans:hover{transform:translateY(-2px)}
+  .ans.correct{background:#E9FBEE;color:#137a34;outline:3px solid var(--done)}
+  .submit{margin:4px 16px}
+
+  .done-screen{position:absolute;inset:0;background:linear-gradient(160deg,rgba(0,57,153,.95),rgba(0,113,227,.92));display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;color:#fff;z-index:20;overflow:hidden}
+  .burst{position:absolute;top:34%;left:50%;width:2px;height:2px}
+  .burst i{position:absolute;width:10px;height:10px;border-radius:2px;background:var(--star-b);transform-origin:center;animation:burst 1.4s ease-out infinite}
+  .ring{width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:54px;border:2px solid rgba(255,255,255,.3);margin-bottom:10px}
+  .rate{font-size:38px;letter-spacing:6px;margin:6px 0}
+  .done-screen h2{font-size:26px;margin:6px 0 2px;font-weight:900}
+  .done-screen p{opacity:.9;margin:0 0 18px}
+  .earn{background:#FF9F0A;color:#fff;font-weight:900;padding:8px 18px;border-radius:999px;font-size:18px;margin-bottom:20px;box-shadow:0 8px 22px rgba(255,159,10,.5)}
+  .done-screen .btn{max-width:300px}
+  .done-screen .btn.ghost{background:rgba(255,255,255,.16);color:#fff}
+
+  @keyframes bob{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-4px)}}
+  @keyframes pulse{0%,100%{filter:drop-shadow(0 0 0 rgba(255,159,10,0)) drop-shadow(0 10px 16px rgba(13,40,80,.22))}50%{filter:drop-shadow(0 0 14px rgba(255,159,10,.8)) drop-shadow(0 10px 16px rgba(13,40,80,.22))}}
+  @keyframes burst{0%{transform:rotate(var(--r)) translateY(0);opacity:1}100%{transform:rotate(var(--r)) translateY(-150px);opacity:0}}
+  .legend{max-width:960px;margin:22px auto 0;font-size:13px;color:var(--muted);text-align:center;line-height:1.7}
+  .legend b{color:#1d1d1f}
+</style>
+</head>
+<body>
+  <div class="head">
+    <h1>CMC LMS · "Leo Tầng Mây" — Wireframe để duyệt</h1>
+    <p>Reskin của hệ thống bài tập hiện có thành hành trình leo mây · thương hiệu CMC · KHÔNG có linh vật</p>
+  </div>
+
+  <div class="tabs">
+    <button class="active" data-p="map">1 · Bản đồ leo mây</button>
+    <button data-p="open">2 · Mở bài</button>
+    <button data-p="act">3 · Màn làm bài</button>
+    <button data-p="done">4 · Hoàn thành</button>
+  </div>
+
+  <div class="stage">
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="screen">
+
+        <!-- 1 · CLIMB MAP -->
+        <div class="panel show" id="map">
+          <div class="scroll">
+            <div class="hud">
+              <img class="logo" src="./assets/brand_logo_cmc_edu_primary.jpg" alt="CMC">
+              <div class="spacer"></div>
+              <span class="chip gold">⭐ 240</span>
+              <span class="chip">Cấp 5</span>
+              <span class="chip">🔥 7</span>
+            </div>
+            <div class="climb">
+
+              <div class="zone">
+                <img src="./assets/be_hoc_duoc_gi_voi_black_hole.png" alt="">
+                <div><div class="zt">BlackHole · Tư duy</div><div class="zs">Tầng 1 — đã chinh phục</div></div>
+              </div>
+              <div class="path">
+                <div class="node l">
+                  <div class="cloud-node">
+                    <svg viewBox="0 0 96 70" preserveAspectRatio="none"><path d="M20 56 Q4 56 6 42 Q-2 30 12 26 Q12 10 30 12 Q38 0 52 8 Q70 2 74 18 Q92 18 90 36 Q98 50 80 56 Z" fill="#34C759" stroke="rgba(255,255,255,.85)" stroke-width="2"/></svg>
+                    <div class="cloud-face">✓</div>
+                  </div>
+                  <div class="label">Bài 1 · Số đếm</div><div class="stars">⭐⭐⭐</div>
+                </div>
+                <div class="node r">
+                  <div class="cloud-node">
+                    <svg viewBox="0 0 96 70" preserveAspectRatio="none"><path d="M20 56 Q4 56 6 42 Q-2 30 12 26 Q12 10 30 12 Q38 0 52 8 Q70 2 74 18 Q92 18 90 36 Q98 50 80 56 Z" fill="#34C759" stroke="rgba(255,255,255,.85)" stroke-width="2"/></svg>
+                    <div class="cloud-face">✓</div>
+                    <img class="milestone" src="./assets/hero_02_kid_blocks_round.png" alt="">
+                  </div>
+                  <div class="label">Bài 2 · Xếp khối</div><div class="stars">⭐⭐</div>
+                </div>
+                <div class="node l">
+                  <div class="cloud-node">
+                    <svg viewBox="0 0 96 70" preserveAspectRatio="none"><path d="M20 56 Q4 56 6 42 Q-2 30 12 26 Q12 10 30 12 Q38 0 52 8 Q70 2 74 18 Q92 18 90 36 Q98 50 80 56 Z" fill="#34C759" stroke="rgba(255,255,255,.85)" stroke-width="2"/></svg>
+                    <div class="cloud-face">✓</div>
+                  </div>
+                  <div class="label">Bài 3 · So sánh</div><div class="stars">⭐⭐⭐</div>
+                </div>
+              </div>
+
+              <div class="zone">
+                <img src="./assets/be_hoc_duoc_gi_voi_BRIGHT_I.G.png" alt="">
+                <div><div class="zt">BRIGHT I.G · Đang leo</div><div class="zs">Tầng 2 — bạn đang ở đây</div></div>
+              </div>
+              <div class="path">
+                <div class="node r">
+                  <div class="here">Bạn ở đây</div>
+                  <div class="cloud-node pulse" onclick="show('open')">
+                    <svg viewBox="0 0 96 70" preserveAspectRatio="none"><path d="M20 56 Q4 56 6 42 Q-2 30 12 26 Q12 10 30 12 Q38 0 52 8 Q70 2 74 18 Q92 18 90 36 Q98 50 80 56 Z" fill="#FF9F0A" stroke="rgba(255,255,255,.85)" stroke-width="2"/></svg>
+                    <div class="cloud-face">★<small>Làm ngay</small></div>
+                    <img class="milestone" src="./assets/hero_04_two_kids_studying_round.png" alt="">
+                  </div>
+                  <div class="label">Bài 4 · Phép cộng</div><div class="stars">+15 sao</div>
+                </div>
+                <div class="node l">
+                  <div class="cloud-node">
+                    <svg viewBox="0 0 96 70" preserveAspectRatio="none"><path d="M20 56 Q4 56 6 42 Q-2 30 12 26 Q12 10 30 12 Q38 0 52 8 Q70 2 74 18 Q92 18 90 36 Q98 50 80 56 Z" fill="#D9DCE2" stroke="#fff" stroke-width="2"/></svg>
+                    <div class="lock">🔒</div>
+                  </div>
+                  <div class="label">Bài 5 · Phép trừ</div>
+                </div>
+                <div class="node r">
+                  <div class="cloud-node">
+                    <svg viewBox="0 0 96 70" preserveAspectRatio="none"><path d="M20 56 Q4 56 6 42 Q-2 30 12 26 Q12 10 30 12 Q38 0 52 8 Q70 2 74 18 Q92 18 90 36 Q98 50 80 56 Z" fill="#D9DCE2" stroke="#fff" stroke-width="2"/></svg>
+                    <div class="lock">🔒</div>
+                  </div>
+                  <div class="label">Bài 6 · Đố vui</div>
+                </div>
+              </div>
+
+              <div class="zone">
+                <img src="./assets/be_hoc_duoc_gi_voi_ucreca.png" alt="">
+                <div><div class="zt">UCREA · Sáng tạo</div><div class="zs">Tầng 3 — khoá</div></div>
+              </div>
+              <div class="path">
+                <div class="node l">
+                  <div class="cloud-node">
+                    <svg viewBox="0 0 96 70" preserveAspectRatio="none"><path d="M20 56 Q4 56 6 42 Q-2 30 12 26 Q12 10 30 12 Q38 0 52 8 Q70 2 74 18 Q92 18 90 36 Q98 50 80 56 Z" fill="#D9DCE2" stroke="#fff" stroke-width="2"/></svg>
+                    <div class="lock">🔒</div>
+                  </div>
+                  <div class="label">Bài 7 · Vẽ hình</div>
+                </div>
+                <div class="node r" style="margin-bottom:30px">
+                  <div class="cloud-node" style="width:110px;height:84px">
+                    <svg viewBox="0 0 96 70" preserveAspectRatio="none"><path d="M20 56 Q4 56 6 42 Q-2 30 12 26 Q12 10 30 12 Q38 0 52 8 Q70 2 74 18 Q92 18 90 36 Q98 50 80 56 Z" fill="#D9DCE2" stroke="#fff" stroke-width="2"/></svg>
+                    <div class="lock" style="font-size:26px">👑</div>
+                  </div>
+                  <div class="label">Đỉnh mây · Thử thách lớn</div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- 2 · OPEN (popover over the map) -->
+        <div class="panel" id="open">
+          <div class="scroll" style="filter:blur(2px)">
+            <div class="hud"><img class="logo" src="./assets/brand_logo_cmc_edu_primary.jpg" alt="CMC"><div class="spacer"></div><span class="chip gold">⭐ 240</span></div>
+            <div style="height:560px"></div>
+          </div>
+          <div class="overlay">
+            <div class="sheet">
+              <div class="q-kicker">BRIGHT I.G · Tầng 2</div>
+              <h3>Bài 4 · Phép cộng trong phạm vi 10</h3>
+              <div class="meta">Hạn nộp: 30/06/2026 · Điểm tối đa: 10 · Trạng thái: Chưa làm</div>
+              <span class="reward">⭐ Hoàn thành để nhận +15 sao</span>
+              <button class="btn" onclick="show('act')">Làm bài →</button>
+              <button class="btn ghost" onclick="show('map')">Để sau</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3 · ACTIVITY -->
+        <div class="panel" id="act">
+          <div class="scroll">
+            <div class="act-hud">
+              <span class="chip" onclick="show('map')" style="cursor:pointer">✕</span>
+              <div class="pbar"><i></i></div>
+              <span class="hearts">❤️❤️❤️</span>
+              <span class="chip gold">⭐ 240</span>
+            </div>
+            <div class="stage-wrap">
+              <div class="content-stage">
+                <div class="q-kicker">Câu 3 / 6</div>
+                <div class="q-text">6 + 3 = ?</div>
+                <img class="q-illus" src="./assets/hero-boy-building-blocks-global-banner.webp" alt="minh hoạ">
+                <div class="meta" style="color:#6E6E73;font-size:13px">Chọn đám mây có đáp án đúng. Bài dạng tệp/PDF sẽ dùng trình chú thích hiện có.</div>
+              </div>
+            </div>
+            <div class="answers">
+              <button class="ans">7</button>
+              <button class="ans">8</button>
+              <button class="ans correct">9 ✓</button>
+              <button class="ans">10</button>
+            </div>
+            <button class="btn submit" onclick="show('done')">Nộp bài</button>
+          </div>
+        </div>
+
+        <!-- 4 · COMPLETION -->
+        <div class="panel" id="done">
+          <div class="done-screen">
+            <div class="burst" id="burst"></div>
+            <div class="ring">⛅</div>
+            <div class="rate">★ ★ ★</div>
+            <h2>Lên một tầng mây!</h2>
+            <p>Bạn đã hoàn thành Bài 4 · Phép cộng</p>
+            <div class="earn">+15 ⭐</div>
+            <button class="btn" onclick="show('map')">Leo tiếp →</button>
+            <button class="btn ghost" onclick="show('map')">Về bản đồ</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <b>Trạng thái nút mây:</b> ✓ xanh = đã xong (kèm sao đạt được) · ★ vàng nhấp nháy = bài hiện tại ("Bạn ở đây") · 🔒 xám = chưa mở · 👑 = thử thách đỉnh.<br>
+    <b>Thương hiệu CMC:</b> logo + ảnh trẻ (bo tròn) + dấu chương trình BlackHole / BRIGHT I.G / UCREA lấy từ website public. Trời xanh = màu thương hiệu <b>#0071E3</b>. KHÔNG dùng linh vật.<br>
+    Bấm các tab phía trên hoặc nút trên màn hình để đi qua luồng: Bản đồ → Mở bài → Làm bài → Hoàn thành.
+  </div>
+
+<script>
+  function show(id){
+    var panels = document.querySelectorAll('.panel');
+    for (var i=0;i<panels.length;i++){ panels[i].classList.remove('show'); }
+    document.getElementById(id).classList.add('show');
+    var btns = document.querySelectorAll('.tabs button');
+    for (var j=0;j<btns.length;j++){ btns[j].classList.toggle('active', btns[j].dataset.p===id); }
+    if (id==='done'){ makeBurst(); }
+  }
+  var tabBtns = document.querySelectorAll('.tabs button');
+  for (var k=0;k<tabBtns.length;k++){
+    tabBtns[k].addEventListener('click', function(){ show(this.dataset.p); });
+  }
+  function makeBurst(){
+    var host = document.getElementById('burst');
+    host.replaceChildren();
+    var colors = ['#FFD98A','#FF9F0A','#34C759','#4494E9','#ffffff'];
+    for (var i=0;i<28;i++){
+      var s = document.createElement('i');
+      s.style.setProperty('--r', (i*(360/28))+'deg');
+      s.style.background = colors[i % colors.length];
+      s.style.animationDelay = ((i % 6) * 0.08) + 's';
+      host.appendChild(s);
+    }
+  }
+</script>
+</body>
+</html>

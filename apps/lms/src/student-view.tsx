@@ -30,6 +30,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconCircleCheck, IconClock, IconPencil, IconAlertCircle } from '@tabler/icons-react';
+import { ClimbView } from './climb-view';
 
 export type StudentTab = 'overview' | 'exercises' | 'results' | 'gradebook' | 'badges' | 'ranking' | 'rewards' | 'courses';
 
@@ -91,18 +92,21 @@ function giftStockLabel(stock: number): string {
   return `Còn ${stock}`;
 }
 
-function ExerciseModal({
+export function ExerciseModal({
   exercise,
   submission,
   opened,
   onClose,
   onChanged,
+  onSubmitted,
 }: {
   exercise: Exercise;
   submission: Submission | undefined;
   opened: boolean;
   onClose: () => void;
   onChanged: () => void | Promise<void>;
+  /** Called after a successful submit (not a draft save) — used by the climb to celebrate. */
+  onSubmitted?: () => void;
 }) {
   const [answer, setAnswer] = useState('');
   const [annotation, setAnnotation] = useState<AnnotationData | null>(null);
@@ -178,6 +182,7 @@ function ExerciseModal({
       await trpc.submission.submit.mutate({ exerciseId: exercise.id });
       notifySuccess('Đã nộp bài thành công');
       await onChanged();
+      onSubmitted?.();
       onClose();
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Không nộp được bài';
@@ -857,7 +862,7 @@ export function StudentView({ principal, activeTab, onTabChange: _onTabChange, o
       case 'overview':
         return <OverviewTab principal={principal} refreshKey={refreshKey} />;
       case 'exercises':
-        return <ExercisesTab refreshKey={refreshKey} />;
+        return <ClimbView refreshKey={refreshKey} />;
       case 'results':
         return <ExercisesTab refreshKey={refreshKey} gradedOnly />;
       case 'gradebook':
