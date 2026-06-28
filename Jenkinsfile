@@ -48,6 +48,10 @@ pipeline {
           $COMPOSE up -d postgres redis
           $COMPOSE --profile migrate run --rm api-migrate
           $COMPOSE up -d --build
+          # nginx resolves the admin/lms/api upstream hostnames once at startup. Recreated app
+          # containers get new IPs, so restart nginx to re-resolve — otherwise it can proxy a
+          # vhost to the wrong (stale-IP) container and the apps appear swapped.
+          $COMPOSE restart nginx
         '''
       }
     }

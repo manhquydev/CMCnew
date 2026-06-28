@@ -28,9 +28,10 @@ export const NAV_GATES: Record<SectionKey, NavGate> = {
   schedule:       { kind: 'open' },
   // classes: class list/detail are protectedProcedure; any staff can browse classes
   classes:        { kind: 'open' },
-  // overview: panel shows facility overview; dashboard.summary is restricted but overview
-  //           itself is a read-only landing page for any logged-in staff
-  overview:       { kind: 'open' },
+  // overview: the panel's ONLY load query is dashboard.summary (restricted to BGĐ/quản lý/
+  //   directors), so it must be gated to that action — otherwise teachers etc. see "Tổng quan"
+  //   and every open returns FORBIDDEN ("Không tải được tổng quan").
+  overview:       { kind: 'permission', module: 'dashboard', action: 'summary' },
   // courses: course.list is protectedProcedure; any staff can view the course catalogue
   courses:        { kind: 'open' },
   // my-payslips: payroll.myPayslips is protectedProcedure; every staff member owns their payslips

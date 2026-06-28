@@ -11,7 +11,7 @@ import {
   minLength,
   combine,
 } from '@cmc/ui';
-import { assignableRoles } from '@cmc/auth/permissions';
+import { assignableRoles, can } from '@cmc/auth/permissions';
 import { useForm } from '@mantine/form';
 import {
   Badge,
@@ -80,12 +80,20 @@ function defaultSection(me: Session): SectionKey {
   if (me.roles.includes('ke_toan')) return 'finance';
   if (me.roles.includes('hr')) return 'hr';
   if (me.roles.includes('cskh')) return 'cskh';
-  return 'overview';
+  // Exec roles can see the dashboard (dashboard.summary); land them there. Any other role
+  // falls back to an always-open section so the landing never 403s.
+  if (me.roles.includes('bgd') || me.roles.includes('giam_doc_kinh_doanh') || me.roles.includes('giam_doc_dao_tao'))
+    return 'overview';
+  return 'schedule';
 }
 
 // ─── Courses ──────────────────────────────────────────────────────────────────
 
 function Courses() {
+  const { me } = useSession();
+  // Any staff may browse the catalogue (course.list is open), but only roles with course.create
+  // (quản lý / GĐ Đào tạo) may create — hide the button for everyone else so they never hit FORBIDDEN.
+  const canCreate = me ? can(me.roles, me.isSuperAdmin, 'course', 'create') : false;
   const [courses, setCourses] = useState<Course[]>([]);
   const [opened, { open, close }] = useDisclosure(false);
   const [busy, setBusy] = useState(false);
@@ -125,9 +133,11 @@ function Courses() {
     <Stack>
       <Group justify="space-between" mb="xs">
         <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }}>Khóa học</Text>
-        <Button variant="filled" radius={9999} leftSection={<IconPlus size={16} />} onClick={open}>
-          Tạo khóa
-        </Button>
+        {canCreate && (
+          <Button variant="filled" radius={9999} leftSection={<IconPlus size={16} />} onClick={open}>
+            Tạo khóa
+          </Button>
+        )}
       </Group>
 
       <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
@@ -615,9 +625,12 @@ function Dashboard() {
         return (
           <Stack>
             <Courses />
-            {(me.facilityIds[0] ?? (me.isSuperAdmin ? 1 : null)) && (
-              <TermsPanel facilityId={me.facilityIds[0] ?? 1} />
-            )}
+            {/* Terms load via assessment.termList (permission-gated) — only render for roles that
+                can read it, otherwise the panel shows a raw FORBIDDEN to non-teaching staff. */}
+            {can(me.roles, me.isSuperAdmin, 'assessment', 'termList') &&
+              (me.facilityIds[0] ?? (me.isSuperAdmin ? 1 : null)) != null && (
+                <TermsPanel facilityId={me.facilityIds[0] ?? 1} />
+              )}
           </Stack>
         );
 
