@@ -40,6 +40,18 @@ export function LmsFooter() {
         <Anchor size="xs" href={CMC_BRAND.websiteUrl} target="_blank" c="cmc.7">{CMC_BRAND.website}</Anchor>
       </Group>
       <Text size="xs" style={{ color: 'var(--cmc-text-2)' }} ta="center">{CMC_BRAND.address}</Text>
+      <Group gap={10} justify="center" mt={2}>
+        {[
+          { label: 'UCREA', color: '#FF7B2E' },
+          { label: 'BRIGHT I.G', color: '#1B98E0' },
+          { label: 'BlackHole', color: '#7950F2' },
+        ].map((p) => (
+          <Group key={p.label} gap={5} wrap="nowrap">
+            <span style={{ width: 8, height: 8, borderRadius: 999, background: p.color, display: 'inline-block' }} />
+            <Text size="xs" fw={600} style={{ color: 'var(--cmc-text-2)' }}>{p.label}</Text>
+          </Group>
+        ))}
+      </Group>
       <Group gap="md" justify="center" mt={2}>
         <Anchor size="xs" href={CMC_BRAND.facebook} target="_blank" c="cmc.7">Facebook</Anchor>
         <Anchor size="xs" href={CMC_BRAND.zalo} target="_blank" c="cmc.7">Zalo</Anchor>

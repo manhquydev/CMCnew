@@ -48,6 +48,20 @@ exercise/star/badge data. Visual + gamification layer only — no API/DB/auth ch
 - **Live render proof**: provisioned a dev student (`HS-DEMO-LEOMAY`) with 7 exercises across 3 programs,
   started the LMS dev server, logged in, and captured real screenshots: `render-01..05-*.png`.
 
+## UI revamp pass (2026-06-28) — DONE + live-verified
+- **Nav overlap bug FIXED** (`student-shell.tsx` + `parent-shell.tsx`): the inline
+  `<AppShell.Main style={{padding}}>` override dropped Mantine's navbar/header offset → fixed
+  240px navbar overlapped content. Fix: `padding={32}` on `<AppShell>`, remove Main override;
+  climb bleed now `calc(var(--app-shell-padding) * -1)`. Aligns with admin shell's `padding={0}`
+  pattern (system-sync). Verified live: climb starts at x=240 (navbar edge), no overlap.
+- **"Lung linh" garden re-skin** (mascot-free): ported cloud-garden assets from cungcontuhoc
+  into `apps/lms/public/garden/` (flower/cloud nodes, ambient cloud/leaf/butterfly, ground strip,
+  cloud-burst/star-pop VFX). The pre-rendered scene backgrounds embed the Kisu fox → excluded;
+  garden look composed from clean elements + gradient sky.
+- **Login** now layers a CMC website classroom photo behind the gradient; footer gained a
+  3-program color-dot row.
+- Code review: LOW risk, ship-ready. Follow-up: compress cloud-platform.png (2.2MB) + leaf.png (1.7MB).
+
 ## Open questions (block phase 2) — see design-spec.md
 1. Sky palette: CMC-blue daytime (this wireframe) vs purple→peach dusk (original)?
 2. Climb for student only, or also a read-only parent view?

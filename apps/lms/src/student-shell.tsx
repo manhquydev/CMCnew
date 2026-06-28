@@ -86,6 +86,7 @@ export function StudentShell({ principal }: StudentShellProps) {
     <AppShell
       header={{ height: 56 }}
       navbar={{ width: 240, breakpoint: 'sm', collapsed: { mobile: !mobileOpened } }}
+      padding={32}
       bg="var(--cmc-bg)"
     >
       {/* ── Topbar ── */}
@@ -184,8 +185,10 @@ export function StudentShell({ principal }: StudentShellProps) {
         </ScrollArea>
       </AppShell.Navbar>
 
-      {/* ── Main content ── */}
-      <AppShell.Main style={{ padding: 'var(--cmc-space-6, 32px)' }}>
+      {/* ── Main content ── (padding comes from AppShell `padding` so Mantine keeps the
+           navbar/header offset; overriding Main padding inline would drop that offset and
+           let the fixed navbar overlap the content). */}
+      <AppShell.Main>
         <StudentView
           principal={principal}
           activeTab={activeTab}

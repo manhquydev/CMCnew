@@ -2,14 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Center, Loader, Alert } from '@mantine/core';
 import { trpc, notifyError } from '@cmc/ui';
 import { ExerciseModal } from './student-view';
-import { ClimbHud, ProgramBanner, CloudNode, CloudCelebration, type NodeState, type ProgramKey } from './climb/cloud-climb';
+import { ClimbHud, ProgramBanner, CloudNode, CloudCelebration, ClimbAmbient, ClimbGround, type NodeState, type ProgramKey } from './climb/cloud-climb';
 
 type Exercise = Awaited<ReturnType<typeof trpc.exercise.listForPrincipal.query>>[number];
 type Submission = Awaited<ReturnType<typeof trpc.submission.mine.query>>[number];
 
 // Display order of the three CMC programs along the climb.
 const PROGRAM_ORDER: ProgramKey[] = ['BLACK_HOLE', 'BRIGHT_IG', 'UCREA'];
-const MILESTONES = ['/brand/kid-blocks.png', '/brand/kid-studying.png'];
 
 function isDone(sub: Submission | undefined): boolean {
   return sub?.status === 'graded' && !!sub.grade?.isPublished;
@@ -117,6 +116,7 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
 
   return (
     <div className="climb-root">
+      <ClimbAmbient />
       <ClimbHud stars={balance} climbed={doneCount} total={visible.length} />
       <div className="climb-track">
         {err && <Alert color="red" mb="md">{err}</Alert>}
@@ -142,7 +142,6 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
                       side={i % 2 === 0 ? 'l' : 'r'}
                       earnedStars={state === 'done' ? scoreToStars(sub) : undefined}
                       reward={ex.starReward}
-                      milestoneImg={state === 'current' ? MILESTONES[i % MILESTONES.length] : undefined}
                       onClick={() => openExercise(ex)}
                     />
                   );
@@ -167,6 +166,7 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
       {celebrate && (
         <CloudCelebration title={celebrate.title} reward={celebrate.reward} onClose={() => setCelebrate(null)} />
       )}
+      <ClimbGround />
     </div>
   );
 }

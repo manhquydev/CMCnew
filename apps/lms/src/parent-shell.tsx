@@ -52,6 +52,7 @@ export function ParentShell({ principal }: ParentShellProps) {
     <AppShell
       header={{ height: 56 }}
       navbar={{ width: 240, breakpoint: 'sm', collapsed: { mobile: !mobileOpened } }}
+      padding={32}
       bg="var(--cmc-bg)"
     >
       {/* ── Topbar ── */}
@@ -136,8 +137,9 @@ export function ParentShell({ principal }: ParentShellProps) {
         </ScrollArea>
       </AppShell.Navbar>
 
-      {/* ── Main content ── */}
-      <AppShell.Main style={{ padding: 'var(--cmc-space-6, 32px)' }}>
+      {/* ── Main content ── (padding via AppShell `padding` keeps Mantine's navbar/header
+           offset; an inline Main padding override would drop it and overlap the navbar). */}
+      <AppShell.Main>
         <ParentView
           principal={principal}
           activeTab={activeTab}

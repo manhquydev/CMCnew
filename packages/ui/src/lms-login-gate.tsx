@@ -133,7 +133,8 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
       <div
         style={{
           minHeight: '100vh',
-          background: 'linear-gradient(180deg,#0071E3 0%,#4494E9 30%,#A3C8F5 68%,#E8F1FC 100%)',
+          background:
+            'linear-gradient(180deg,#0071E3 0%,#3f8fe8 30%,rgba(120,170,235,0.86) 60%,rgba(190,215,245,0.55) 100%), url(/brand/login-bg.jpg) center bottom / cover no-repeat, #0071E3',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
