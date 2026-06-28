@@ -8,7 +8,7 @@
   position: relative;
   /* Bleed past ONLY the AppShell content padding (not the navbar/header offset). */
   margin: calc(var(--app-shell-padding, 32px) * -1);
-  height: calc(100vh - 56px);
+  height: calc(100dvh - 56px); /* dvh avoids the mobile URL-bar 100vh jump */
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -17,12 +17,12 @@
 .climb-bg {
   position: sticky;
   top: 0;
-  height: calc(100vh - 56px);
-  margin-bottom: calc(56px - 100vh); /* remove from flow so the scene overlays it */
+  height: calc(100dvh - 56px);
+  margin-bottom: calc(56px - 100dvh); /* remove from flow so the scene overlays it */
   z-index: 0;
   background:
-    linear-gradient(180deg, #0071e3 0%, #4f97e8 28%, rgba(110, 165, 235, 0.82) 58%, rgba(150, 196, 244, 0.66) 100%),
-    url('/garden/bg-cmc.jpg') center bottom / cover no-repeat;
+    linear-gradient(180deg, rgba(0, 113, 227, 0.42) 0%, rgba(79, 151, 232, 0.3) 32%, rgba(120, 175, 238, 0.4) 64%, rgba(150, 196, 244, 0.4) 100%),
+    url('/garden/bg-cmc.jpg') center center / cover no-repeat;
 }
 
 .climb-scene { position: relative; z-index: 1; width: 100%; }

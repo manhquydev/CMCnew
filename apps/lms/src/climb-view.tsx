@@ -178,12 +178,13 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
             {layout.signs.map((s) => (
               <ProgramSign key={s.program} program={s.program} doneCount={s.doneCount} total={s.total} yPos={s.yPos} />
             ))}
-            {layout.nodes.map((n) => (
+            {layout.nodes.map((n, i) => (
               <BeanNode
                 key={n.ex.id}
                 state={n.state}
                 side={n.side}
                 yPos={n.yPos}
+                step={i + 1}
                 title={n.ex.title}
                 earnedStars={n.state === 'done' ? scoreToStars(subByExercise.get(n.ex.id)) : undefined}
                 reward={n.ex.starReward}

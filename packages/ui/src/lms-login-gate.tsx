@@ -80,6 +80,9 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
         setDevHint(res.devCode);
       }
       setOtpStep('verify');
+    } catch {
+      // e.g. rate-limited (throttle) — surface a message instead of failing silently.
+      setOtpError('Không gửi được mã, vui lòng thử lại sau ít phút.');
     } finally {
       setBusy(false);
     }
@@ -186,6 +189,11 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
                   onChange={(e) => setParentEmail(e.currentTarget.value)}
                   required
                 />
+                {otpError && (
+                  <Text c="red" size="sm">
+                    {otpError}
+                  </Text>
+                )}
                 <Button type="submit" loading={busy} fullWidth>
                   Gửi mã đăng nhập
                 </Button>

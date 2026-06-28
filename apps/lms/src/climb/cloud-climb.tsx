@@ -50,17 +50,20 @@ interface BeanNodeProps {
   state: NodeState;
   side: NodeSide;
   yPos: number;
+  /** 1-based step shown on the button for not-yet-done nodes (homework is never hard-locked). */
+  step: number;
   title: string;
   earnedStars?: number;
   reward?: number;
   onClick: () => void;
 }
 
-const NODE_GLYPH: Record<NodeState, string> = { done: '✓', current: '★', submitted: '⏳', upcoming: '🔒' };
-
 /** One lesson node: a floating cloud platform with a round status button + label. */
-export function BeanNode({ state, side, yPos, title, earnedStars, reward, onClick }: BeanNodeProps) {
+export function BeanNode({ state, side, yPos, step, title, earnedStars, reward, onClick }: BeanNodeProps) {
   const leftPct = side === 'left' ? '34%' : side === 'right' ? '66%' : '50%';
+  // Done = check, submitted = waiting; otherwise show the step number (no padlock — every
+  // published exercise is openable, so a lock glyph would mis-signal).
+  const glyph = state === 'done' ? '✓' : state === 'submitted' ? '⏳' : String(step);
   return (
     <div className="climb-bnode" style={{ bottom: yPos, left: leftPct }}>
       {state === 'current' && <span className="climb-bnode__here">Bạn ở đây</span>}
@@ -69,9 +72,9 @@ export function BeanNode({ state, side, yPos, title, earnedStars, reward, onClic
         type="button"
         className={`climb-bnode__btn climb-bnode__btn--${state}`}
         onClick={onClick}
-        aria-label={`${title} — ${stateLabel(state)}`}
+        aria-label={`Bài ${step}: ${title} — ${stateLabel(state)}`}
       >
-        <span>{NODE_GLYPH[state]}</span>
+        <span>{glyph}</span>
       </button>
       <div className="climb-bnode__meta">
         <strong>{title}</strong>
