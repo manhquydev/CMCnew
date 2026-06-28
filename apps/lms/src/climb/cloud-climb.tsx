@@ -3,6 +3,7 @@ import './cloud-climb.css';
 
 /** Visual state of a single exercise node on the climb. */
 export type NodeState = 'done' | 'current' | 'submitted' | 'upcoming';
+export type NodeSide = 'left' | 'right' | 'center';
 
 /** The three CMC programs — mirrors the Prisma `Program` enum the API serialises as strings.
  *  Kept local so the browser bundle never imports the server-side @cmc/db (Prisma) package. */
@@ -15,13 +16,10 @@ export const PROGRAM_META: Record<ProgramKey, { label: string; sub: string; img:
   UCREA: { label: 'UCREA', sub: 'Sáng tạo', img: '/brand/program-ucrea.png', accent: '#FF7B2E' },
 };
 
-/** Garden node artwork per state (cloud-garden assets, mascot-free). */
-const NODE_IMG: Record<NodeState, string> = {
-  done: '/garden/nodes/flower-done.png',
-  current: '/garden/platform/cloud-platform.png',
-  submitted: '/garden/platform/cloud-fluffy.png',
-  upcoming: '/garden/nodes/flower-locked.png',
-};
+/** Vertical rhythm of the beanstalk (matches the cungcontuhoc journey: nodes climb upward). */
+export const NODE_GAP = 300;
+export const NODE_BASE = 360;
+export const SCENE_PAD = 560;
 
 export function ClimbHud({ stars, climbed, total }: { stars: number; climbed: number; total: number }) {
   return (
@@ -34,52 +32,56 @@ export function ClimbHud({ stars, climbed, total }: { stars: number; climbed: nu
   );
 }
 
-export function ProgramBanner({ program, doneCount, total }: { program: ProgramKey; doneCount: number; total: number }) {
+/** A wooden program sign pinned along the trunk where a new program tier begins. */
+export function ProgramSign({ program, doneCount, total, yPos }: { program: ProgramKey; doneCount: number; total: number; yPos: number }) {
   const meta = PROGRAM_META[program];
   return (
-    <div className="climb-zone" style={{ borderLeftColor: meta.accent }}>
-      <img className="climb-zone__img" src={meta.img} alt="" />
-      <div>
-        <div className="climb-zone__title">{meta.label} · {meta.sub}</div>
-        <div className="climb-zone__sub">Đã xong {doneCount}/{total} bài</div>
+    <div className="climb-sign" style={{ bottom: yPos, borderColor: meta.accent }}>
+      <img className="climb-sign__img" src={meta.img} alt="" />
+      <div className="climb-sign__text">
+        <strong>{meta.label} · {meta.sub}</strong>
+        <span>Đã xong {doneCount}/{total} bài</span>
       </div>
     </div>
   );
 }
 
-interface CloudNodeProps {
+interface BeanNodeProps {
   state: NodeState;
+  side: NodeSide;
+  yPos: number;
   title: string;
-  side: 'l' | 'r';
-  /** Earned stars (done) — rendered as ⭐ run. */
   earnedStars?: number;
-  /** Reward preview (current/upcoming). */
   reward?: number;
   onClick: () => void;
 }
 
-export function CloudNode({ state, title, side, earnedStars, reward, onClick }: CloudNodeProps) {
+const NODE_GLYPH: Record<NodeState, string> = { done: '✓', current: '★', submitted: '⏳', upcoming: '🔒' };
+
+/** One lesson node: a floating cloud platform with a round status button + label. */
+export function BeanNode({ state, side, yPos, title, earnedStars, reward, onClick }: BeanNodeProps) {
+  const leftPct = side === 'left' ? '34%' : side === 'right' ? '66%' : '50%';
   return (
-    <div className={`climb-node climb-node--${side}`}>
-      {state === 'current' && <span className="climb-node__here">Bạn ở đây</span>}
+    <div className="climb-bnode" style={{ bottom: yPos, left: leftPct }}>
+      {state === 'current' && <span className="climb-bnode__here">Bạn ở đây</span>}
+      <img className="climb-bnode__cloud" src="/garden/platform/cloud-platform.png" alt="" />
       <button
         type="button"
-        className={`climb-node__btn climb-node__btn--${state}`}
+        className={`climb-bnode__btn climb-bnode__btn--${state}`}
         onClick={onClick}
         aria-label={`${title} — ${stateLabel(state)}`}
       >
-        <img className="climb-node__art" src={NODE_IMG[state]} alt="" />
-        {state === 'done' && <span className="climb-node__badge climb-node__badge--done">✓</span>}
-        {state === 'current' && <span className="climb-node__badge climb-node__badge--go">Làm ngay</span>}
-        {state === 'submitted' && <span className="climb-node__badge climb-node__badge--wait">⏳</span>}
+        <span>{NODE_GLYPH[state]}</span>
       </button>
-      <div className="climb-node__label">{title}</div>
-      {state === 'done' && earnedStars != null && (
-        <div className="climb-node__stars">{'⭐'.repeat(Math.max(1, Math.min(3, earnedStars)))}</div>
-      )}
-      {(state === 'current' || state === 'upcoming') && reward != null && reward > 0 && (
-        <div className="climb-node__stars">+{reward} sao</div>
-      )}
+      <div className="climb-bnode__meta">
+        <strong>{title}</strong>
+        {state === 'done' && earnedStars != null && (
+          <span className="climb-bnode__stars">{'⭐'.repeat(Math.max(1, Math.min(3, earnedStars)))}</span>
+        )}
+        {(state === 'current' || state === 'upcoming') && reward != null && reward > 0 && (
+          <span className="climb-bnode__stars">+{reward} sao</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -88,33 +90,19 @@ function stateLabel(s: NodeState): string {
   return s === 'done' ? 'đã hoàn thành' : s === 'current' ? 'làm ngay' : s === 'submitted' ? 'đã nộp, chờ chấm' : 'sắp tới';
 }
 
-/** Decorative floating elements (butterfly / leaf / far cloud strip). Pure atmosphere. */
+/** Decorative floating clouds drifting across the sky. Pure atmosphere. */
 export function ClimbAmbient() {
   return (
     <div className="climb-ambient" aria-hidden="true">
       <img className="climb-ambient__cloud climb-ambient__cloud--1" src="/garden/ambient/cloud-strip.png" alt="" />
       <img className="climb-ambient__cloud climb-ambient__cloud--2" src="/garden/ambient/cloud-strip.png" alt="" />
-      <img className="climb-ambient__leaf climb-ambient__leaf--1" src="/garden/ambient/leaf.png" alt="" />
-      <img className="climb-ambient__butterfly" src="/garden/ambient/butterfly.png" alt="" />
+      <img className="climb-ambient__cloud climb-ambient__cloud--3" src="/garden/ambient/cloud-strip.png" alt="" />
     </div>
   );
 }
 
-/** Garden ground strip anchored to the bottom of the climb. */
-export function ClimbGround() {
-  return <div className="climb-ground" aria-hidden="true" />;
-}
-
 /** Full-screen celebration shown briefly after a successful submit. No mascot — garden VFX. */
-export function CloudCelebration({
-  title,
-  reward,
-  onClose,
-}: {
-  title: string;
-  reward: number;
-  onClose: () => void;
-}) {
+export function CloudCelebration({ title, reward, onClose }: { title: string; reward: number; onClose: () => void }) {
   const [pieces] = useState(() =>
     Array.from({ length: 28 }, (_, i) => ({
       r: `${i * (360 / 28)}deg`,
@@ -123,17 +111,11 @@ export function CloudCelebration({
     })),
   );
 
-  // Auto-dismiss so the climb returns without a tap; Escape closes early for keyboard users.
   useEffect(() => {
     const t = setTimeout(onClose, 3200);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener('keydown', onKey);
-    };
+    return () => { clearTimeout(t); window.removeEventListener('keydown', onKey); };
   }, [onClose]);
 
   return (

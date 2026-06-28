@@ -1,37 +1,56 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Center, Loader, Alert } from '@mantine/core';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Center, Loader } from '@mantine/core';
 import { trpc, notifyError } from '@cmc/ui';
 import { ExerciseModal } from './student-view';
-import { ClimbHud, ProgramBanner, CloudNode, CloudCelebration, ClimbAmbient, ClimbGround, type NodeState, type ProgramKey } from './climb/cloud-climb';
+import {
+  ClimbHud,
+  ProgramSign,
+  BeanNode,
+  CloudCelebration,
+  ClimbAmbient,
+  NODE_BASE,
+  NODE_GAP,
+  SCENE_PAD,
+  type NodeState,
+  type NodeSide,
+  type ProgramKey,
+} from './climb/cloud-climb';
 
 type Exercise = Awaited<ReturnType<typeof trpc.exercise.listForPrincipal.query>>[number];
 type Submission = Awaited<ReturnType<typeof trpc.submission.mine.query>>[number];
 
-// Display order of the three CMC programs along the climb.
+// Display order of the three CMC programs along the climb (bottom → top).
 const PROGRAM_ORDER: ProgramKey[] = ['BLACK_HOLE', 'BRIGHT_IG', 'UCREA'];
 
 function isDone(sub: Submission | undefined): boolean {
   return sub?.status === 'graded' && !!sub.grade?.isPublished;
 }
 
+/** Alternating climb path: left / right, with the very top node centred (the summit). */
+function nodeSide(i: number, total: number): NodeSide {
+  if (i === total - 1 && total > 2) return 'center';
+  return i % 2 === 0 ? 'left' : 'right';
+}
+
 /**
- * Student "leo tầng mây" surface — replaces the flat exercises table. Each published
- * exercise is a cloud node; completing it earns stars and climbs higher. State is derived
- * entirely from existing data: done = graded+published, the earliest not-done node is the
- * current one, the rest are upcoming (still openable — homework is never hard-locked).
+ * Student "leo tầng mây" surface — a beanstalk journey (modelled on cungcontuhoc): each
+ * published exercise is a cloud platform climbing UP a central trunk, grouped into program
+ * tiers, with the ground at the bottom. State is derived entirely from existing data:
+ * done = graded+published, the earliest not-done node is "current", the rest are upcoming
+ * (still openable — homework is never hard-locked). The view auto-scrolls to the bottom so
+ * the student starts at the ground and climbs.
  */
 export function ClimbView({ refreshKey }: { refreshKey: number }) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [balance, setBalance] = useState<number>(0);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
   const [active, setActive] = useState<Exercise | null>(null);
   const [celebrate, setCelebrate] = useState<{ title: string; reward: number } | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    setErr('');
     try {
       const [ex, subs, bal] = await Promise.all([
         trpc.exercise.listForPrincipal.query(),
@@ -42,7 +61,6 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
       setSubmissions(subs);
       setBalance(bal);
     } catch (e) {
-      setErr('Không tải được hành trình học tập: ' + (e instanceof Error ? e.message : ''));
       notifyError(e, 'Tải bài tập thất bại');
     } finally {
       setLoading(false);
@@ -59,8 +77,7 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
     return m;
   }, [submissions]);
 
-  // Group exercises by program (render order: BlackHole → BRIGHT I.G → UCREA); only
-  // programs that actually have exercises appear.
+  // Group by program (climb order BlackHole → BRIGHT I.G → UCREA); only programs with exercises.
   const groups = useMemo(() => {
     const byProgram = new Map<ProgramKey, Exercise[]>();
     for (const ex of exercises) {
@@ -73,16 +90,12 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
     return PROGRAM_ORDER.filter((p) => byProgram.has(p)).map((p) => ({ program: p, items: byProgram.get(p)! }));
   }, [exercises]);
 
-  // Flattened render set — the single source of truth for counts so the HUD/zone totals can
-  // never diverge from the nodes actually drawn (an exercise without a program is excluded).
+  // Flattened climb order — single source of truth for counts and node positions.
   const visible = useMemo(() => groups.flatMap((g) => g.items), [groups]);
 
-  // The earliest not-done node in render order is "current"; before it = done, after = upcoming.
   const currentId = useMemo(() => {
-    for (const ex of visible) {
-      if (!isDone(subByExercise.get(ex.id))) return ex.id;
-    }
-    return null; // all done
+    for (const ex of visible) if (!isDone(subByExercise.get(ex.id))) return ex.id;
+    return null;
   }, [visible, subByExercise]);
 
   const doneCount = useMemo(
@@ -90,16 +103,48 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
     [visible, subByExercise],
   );
 
-  function nodeState(ex: Exercise): NodeState {
-    const sub = subByExercise.get(ex.id);
-    if (isDone(sub)) return 'done';
-    if (ex.id === currentId) return sub?.status === 'submitted' ? 'submitted' : 'current';
-    return sub?.status === 'submitted' ? 'submitted' : 'upcoming';
-  }
+  const nodeState = useCallback(
+    (ex: Exercise): NodeState => {
+      const sub = subByExercise.get(ex.id);
+      if (isDone(sub)) return 'done';
+      if (ex.id === currentId) return sub?.status === 'submitted' ? 'submitted' : 'current';
+      return sub?.status === 'submitted' ? 'submitted' : 'upcoming';
+    },
+    [subByExercise, currentId],
+  );
 
-  function openExercise(ex: Exercise) {
-    setActive(ex);
-  }
+  // Lay every node onto the beanstalk: index 0 at the bottom, climbing upward.
+  const layout = useMemo(() => {
+    const total = visible.length;
+    const nodes = visible.map((ex, i) => ({
+      ex,
+      state: nodeState(ex),
+      side: nodeSide(i, total),
+      yPos: NODE_BASE + i * NODE_GAP,
+    }));
+    let idx = 0;
+    const signs = groups.map((g) => {
+      const startIndex = idx;
+      idx += g.items.length;
+      const groupDone = g.items.filter((ex) => isDone(subByExercise.get(ex.id))).length;
+      return {
+        program: g.program,
+        doneCount: groupDone,
+        total: g.items.length,
+        yPos: Math.max(230, NODE_BASE + startIndex * NODE_GAP - 168),
+      };
+    });
+    return { nodes, signs, sceneHeight: Math.max(1100, total * NODE_GAP + SCENE_PAD) };
+  }, [visible, groups, subByExercise, nodeState]);
+
+  // Start the climb at the ground (bottom) ONCE on first load — never yank the student back
+  // on later refreshes (e.g. after submitting an exercise partway up the climb).
+  const didInitialScroll = useRef(false);
+  useEffect(() => {
+    if (loading || didInitialScroll.current || !rootRef.current) return;
+    rootRef.current.scrollTop = rootRef.current.scrollHeight;
+    didInitialScroll.current = true;
+  }, [loading]);
 
   function handleSubmitted(ex: Exercise) {
     // The modal already awaited onChanged (= load) before calling this, so just celebrate.
@@ -109,46 +154,43 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
   if (loading) {
     return (
       <div className="climb-root">
-        <Center py="xl"><Loader color="white" /></Center>
+        <div className="climb-bg" />
+        <Center h="60vh"><Loader color="white" /></Center>
       </div>
     );
   }
 
   return (
-    <div className="climb-root">
-      <ClimbAmbient />
-      <ClimbHud stars={balance} climbed={doneCount} total={visible.length} />
-      <div className="climb-track">
-        {err && <Alert color="red" mb="md">{err}</Alert>}
+    <div className="climb-root" ref={rootRef}>
+      <div className="climb-bg" />
+      <div className="climb-scene" style={{ height: layout.sceneHeight }}>
+        <ClimbHud stars={balance} climbed={doneCount} total={visible.length} />
+        <div className="climb-trunk" style={{ height: layout.sceneHeight }} />
+        <ClimbAmbient />
+        <div className="climb-ground" />
 
         {visible.length === 0 ? (
           <div className="climb-empty">
             Chưa có bài tập nào trên hành trình của bạn. Khi thầy cô giao bài, các tầng mây sẽ xuất hiện ở đây.
           </div>
         ) : (
-          groups.map(({ program, items }) => {
-            const groupDone = items.filter((ex) => isDone(subByExercise.get(ex.id))).length;
-            return (
-              <div key={program}>
-                <ProgramBanner program={program} doneCount={groupDone} total={items.length} />
-                {items.map((ex, i) => {
-                  const state = nodeState(ex);
-                  const sub = subByExercise.get(ex.id);
-                  return (
-                    <CloudNode
-                      key={ex.id}
-                      state={state}
-                      title={ex.title}
-                      side={i % 2 === 0 ? 'l' : 'r'}
-                      earnedStars={state === 'done' ? scoreToStars(sub) : undefined}
-                      reward={ex.starReward}
-                      onClick={() => openExercise(ex)}
-                    />
-                  );
-                })}
-              </div>
-            );
-          })
+          <>
+            {layout.signs.map((s) => (
+              <ProgramSign key={s.program} program={s.program} doneCount={s.doneCount} total={s.total} yPos={s.yPos} />
+            ))}
+            {layout.nodes.map((n) => (
+              <BeanNode
+                key={n.ex.id}
+                state={n.state}
+                side={n.side}
+                yPos={n.yPos}
+                title={n.ex.title}
+                earnedStars={n.state === 'done' ? scoreToStars(subByExercise.get(n.ex.id)) : undefined}
+                reward={n.ex.starReward}
+                onClick={() => setActive(n.ex)}
+              />
+            ))}
+          </>
         )}
       </div>
 
@@ -166,7 +208,6 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
       {celebrate && (
         <CloudCelebration title={celebrate.title} reward={celebrate.reward} onClose={() => setCelebrate(null)} />
       )}
-      <ClimbGround />
     </div>
   );
 }

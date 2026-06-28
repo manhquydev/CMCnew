@@ -62,6 +62,19 @@ exercise/star/badge data. Visual + gamification layer only — no API/DB/auth ch
   3-program color-dot row.
 - Code review: LOW risk, ship-ready. Follow-up: compress cloud-platform.png (2.2MB) + leaf.png (1.7MB).
 
+## Beanstalk rebuild (2026-06-28) — DONE + live-verified
+- Earlier "loose nodes" version did NOT match cungcontuhoc. Rebuilt as a faithful **beanstalk
+  journey** (read `cungcontuhoc/.../beanstalk-garden/BeanstalkJourney.tsx` + `beanstalk.css`):
+  tall internally-scrolling scene, central **trunk** tiled vertically, cloud-platform lesson
+  nodes climbing UP (`bottom = NODE_BASE + i*NODE_GAP`, alternating left/right, summit centred),
+  **program-tier signs**, garden **ground** at the bottom, auto-scroll to the ground on first load.
+- **#exercises background** = a CMC website image (`hero-boy-building-blocks-global-banner`) as a
+  sticky sky backdrop under a gradient (sky-dominant so the climb pops).
+- Assets (mascot-free): `garden/platform/{trunk,cloud-platform}.png`, `garden/ground/ground.png`,
+  `garden/bg-cmc.jpg`, `garden/ambient/cloud-strip.png`, `garden/vfx/{cloud-burst,star-pop}.png`.
+- Code review LOW risk; fixed M1 (one-time scroll guard so submit/refresh never yanks the user to
+  the bottom) + L1 (program-sign/ground overlap floor). Renders: `render-10..12-beanstalk-*.png`.
+
 ## Open questions (block phase 2) — see design-spec.md
 1. Sky palette: CMC-blue daytime (this wireframe) vs purple→peach dusk (original)?
 2. Climb for student only, or also a read-only parent view?
