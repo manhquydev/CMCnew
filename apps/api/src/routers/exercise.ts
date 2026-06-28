@@ -21,11 +21,16 @@ export const exerciseRouter = router({
 
   // LMS (parent/student): published exercises. RLS (exercise_isolation) already scopes
   // these to classes the principal's student(s) are enrolled in.
+  // The batch's course program/name comes along so the student climb can group exercises
+  // by program (BlackHole / BRIGHT I.G / UCREA) without a second round-trip.
   listForPrincipal: lmsProcedure.query(({ ctx }) =>
     withRls(lmsRlsContextOf(ctx.lms), (tx) =>
       tx.exercise.findMany({
         where: { status: 'published', archivedAt: null },
         orderBy: { dueAt: 'asc' },
+        include: {
+          batch: { select: { name: true, course: { select: { program: true, name: true } } } },
+        },
       }),
     ),
   ),
