@@ -8,11 +8,11 @@ export type NodeState = 'done' | 'current' | 'submitted' | 'upcoming';
  *  Kept local so the browser bundle never imports the server-side @cmc/db (Prisma) package. */
 export type ProgramKey = 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE';
 
-/** Per-program branding: label + public asset + cloud accent fill. */
-export const PROGRAM_META: Record<ProgramKey, { label: string; sub: string; img: string }> = {
-  BLACK_HOLE: { label: 'BlackHole', sub: 'Tư duy', img: '/brand/program-black-hole.png' },
-  BRIGHT_IG: { label: 'BRIGHT I.G', sub: 'Trí tuệ', img: '/brand/program-bright-ig.png' },
-  UCREA: { label: 'UCREA', sub: 'Sáng tạo', img: '/brand/program-ucrea.png' },
+/** Per-program branding: label + public asset + official marketing accent color. */
+export const PROGRAM_META: Record<ProgramKey, { label: string; sub: string; img: string; accent: string }> = {
+  BLACK_HOLE: { label: 'BlackHole', sub: 'Tư duy', img: '/brand/program-black-hole.png', accent: '#7950F2' },
+  BRIGHT_IG: { label: 'BRIGHT I.G', sub: 'Trí tuệ', img: '/brand/program-bright-ig.png', accent: '#1B98E0' },
+  UCREA: { label: 'UCREA', sub: 'Sáng tạo', img: '/brand/program-ucrea.png', accent: '#FF7B2E' },
 };
 
 const CLOUD_FILL: Record<NodeState, { fill: string; stroke: string }> = {
@@ -39,7 +39,7 @@ export function ClimbHud({ stars, climbed, total }: { stars: number; climbed: nu
 export function ProgramBanner({ program, doneCount, total }: { program: ProgramKey; doneCount: number; total: number }) {
   const meta = PROGRAM_META[program];
   return (
-    <div className="climb-zone">
+    <div className="climb-zone" style={{ borderLeft: `4px solid ${meta.accent}`, paddingLeft: 10, borderRadius: 8 }}>
       <img className="climb-zone__img" src={meta.img} alt="" />
       <div>
         <div className="climb-zone__title">{meta.label} · {meta.sub}</div>

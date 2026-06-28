@@ -35,6 +35,19 @@ exercise/star/badge data. Visual + gamification layer only — no API/DB/auth ch
 - Completion celebration on grade/pass. No mascots. CMC branding throughout.
 - No changes to API routers, DB schema, auth, or env vars.
 
+## Login & branding pass (2026-06-28) — DONE + live-verified
+- **Auth design is correct as-is** (verified against `apps/api/src/routers/lms-auth.ts`): **Phụ huynh = Email OTP**
+  (`otpRequest`/`otpVerify`), **Học sinh = mã đăng nhập + mật khẩu** (`loginStudent`). Both already
+  implemented in `lms-login-gate.tsx`. No mismatch — the student code+password is intentional, not a bug.
+- Redesigned the bare login into a branded page: CMC sky gradient, logo, tagline, PH/HS helper copy, and a
+  real-info footer (`packages/ui/src/lms-brand.tsx` `CMC_BRAND` + `LmsFooter`) sourced from the public site
+  `D:\project\CMC\src\website` (hotline 0856 636 398, contact@cmcvn.edu.vn, address, FB/Zalo, cmcvn.edu.vn).
+- Favicon + apple-touch-icon + theme-color + description + title in `apps/lms/index.html` (CMC icon assets).
+- Climb program zones now use the official program accent colors (UCREA #FF7B2E, BRIGHT I.G #1B98E0,
+  BlackHole #7950F2).
+- **Live render proof**: provisioned a dev student (`HS-DEMO-LEOMAY`) with 7 exercises across 3 programs,
+  started the LMS dev server, logged in, and captured real screenshots: `render-01..05-*.png`.
+
 ## Open questions (block phase 2) — see design-spec.md
 1. Sky palette: CMC-blue daytime (this wireframe) vs purple→peach dusk (original)?
 2. Climb for student only, or also a read-only parent view?

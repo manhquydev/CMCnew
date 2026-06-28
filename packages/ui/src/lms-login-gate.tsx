@@ -13,6 +13,7 @@ import {
   Title,
 } from '@mantine/core';
 import { trpc } from './client.js';
+import { CMC_BRAND, LmsFooter } from './lms-brand.js';
 
 type Principal = Awaited<ReturnType<typeof trpc.lmsAuth.me.query>>;
 export type LmsPrincipal = NonNullable<Principal>;
@@ -129,14 +130,37 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
 
   if (principal === null) {
     return (
-      <Center h="100vh">
-        <Paper withBorder shadow="sm" p="xl" w={400}>
-          <Title order={3} ta="center" mb="lg" c="cmc.7">
-            CMC · Học tập
-          </Title>
+      <div
+        style={{
+          minHeight: '100vh',
+          background: 'linear-gradient(180deg,#0071E3 0%,#4494E9 30%,#A3C8F5 68%,#E8F1FC 100%)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '32px 16px',
+        }}
+      >
+        <Stack align="center" gap="lg" w="100%" maw={420}>
+          {/* Brand header */}
+          <Stack align="center" gap={6}>
+            <img
+              src={CMC_BRAND.logo}
+              alt={CMC_BRAND.name}
+              style={{ height: 56, borderRadius: 12, background: '#fff', padding: '6px 10px', boxShadow: '0 8px 24px rgba(0,0,0,0.18)' }}
+            />
+            <Title order={1} size="h3" ta="center" style={{ color: '#fff' }}>
+              Học tập cùng {CMC_BRAND.name}
+            </Title>
+            <Text ta="center" size="sm" style={{ color: 'rgba(255,255,255,0.92)' }}>
+              {CMC_BRAND.tagline}
+            </Text>
+          </Stack>
+
+          <Paper withBorder shadow="md" p="xl" radius="lg" w="100%">
           <SegmentedControl
             fullWidth
-            mb="md"
+            mb="xs"
             value={mode}
             onChange={handleModeChange}
             data={[
@@ -144,6 +168,11 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
               { value: 'student', label: 'Học sinh' },
             ]}
           />
+          <Text size="xs" c="dimmed" ta="center" mb="md">
+            {mode === 'parent'
+              ? 'Phụ huynh đăng nhập bằng email để theo dõi việc học của con.'
+              : 'Học sinh dùng mã đăng nhập và mật khẩu thầy cô đã cấp.'}
+          </Text>
 
           {/* ── Phụ huynh: OTP hai bước ── */}
           {mode === 'parent' && otpStep === 'request' && (
@@ -235,8 +264,11 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
               </Stack>
             </form>
           )}
-        </Paper>
-      </Center>
+          </Paper>
+
+          <LmsFooter />
+        </Stack>
+      </div>
     );
   }
 
