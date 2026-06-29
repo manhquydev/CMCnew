@@ -130,6 +130,39 @@
   --cmc-transition-fast:   100ms var(--cmc-ease);
   --cmc-transition:        200ms var(--cmc-ease-out);
   --cmc-transition-slow:   300ms var(--cmc-ease-out);
+
+  /* ─── Data-view density ───────────────────────────────────────────────────
+     Odoo-grade scan density for data-heavy views. Opt-in via DataTable
+     density="compact"; also consumed by FilterBar/ViewSwitcher and record-page
+     form grids. ADDITIVE ONLY — does not alter the identity tokens above
+     (brand, font, card radius, shadow, section spacing stay Apple-minimal).   */
+  --cmc-dt-cell-py:      7px;                    /* row vertical padding (vs space-3 12px) */
+  --cmc-dt-cell-px:      10px;                   /* cell horizontal padding                */
+  --cmc-dt-font:         var(--cmc-text-sm);     /* 13px cell text                          */
+  --cmc-dt-radius:       6px;                    /* table container (cells square)          */
+  --cmc-dt-divider:      var(--cmc-border-faint);/* hairline row divider                    */
+  --cmc-dt-header-bg:    var(--cmc-surface-2);   /* column header background                */
+  --cmc-dt-header-font:  var(--cmc-text-xs);     /* 11px header text                        */
+  --cmc-dt-header-ls:    0.04em;                 /* header letter-spacing (uppercase)       */
+  --cmc-dt-header-color: var(--cmc-text-muted);  /* header text color                       */
+  --cmc-dt-row-hover:    var(--cmc-bg);          /* row hover fill                          */
+  --cmc-dt-row-selected: var(--cmc-brand-muted); /* selected row fill                       */
+
+  /* Control bar (FilterBar / facet chips / pager) — consumed by odoo-parity F2 */
+  --cmc-filterbar-h:     44px;
+  --cmc-chip-bg:         var(--cmc-brand-muted);
+  --cmc-chip-text:       var(--cmc-brand-ink);
+  --cmc-chip-radius:     var(--cmc-radius-sm);   /* 8px (not pill — Odoo-ish)               */
+  --cmc-chip-font:       var(--cmc-text-xs);
+
+  /* Form-view grid (record pages: staff / opportunity / ...)                   */
+  --cmc-form-label-w:    160px;                  /* label column width                      */
+  --cmc-form-label-font: var(--cmc-text-sm);     /* 13px label                              */
+  --cmc-form-label-color:var(--cmc-text-muted);
+  --cmc-form-row-gap:    10px;
+  --cmc-form-group-title:var(--cmc-text-md);     /* section heading 17px                    */
+  --cmc-notebook-active: var(--cmc-brand);       /* active notebook tab underline           */
+  --cmc-chatter-w:       340px;                  /* right-rail activity log width           */
 }
 
 /* ─── Base Reset ──────────────────────────────────────────────────────────── */
