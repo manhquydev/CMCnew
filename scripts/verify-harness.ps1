@@ -67,8 +67,10 @@ try {
     Check-Rejects "non-numeric story proof"  @("story","update","--id","US-SMOKE","--unit","yes")
 
     Write-Host "--- trace quality tiers ---"
-    # Thin trace -> expect "minimal" tier in output.
-    Check-Ok    "thin trace = minimal tier"  @("trace","--summary","thin","--outcome","completed") "minimal"
+    # Summary-only trace -> minimal tier. Summary must be >=10 chars to reach
+    # minimal at all (shorter scores 'incomplete'); anchor the match to the
+    # "Tier achieved:" line so the "Missing for minimal:" hint cannot satisfy it.
+    Check-Ok    "summary-only trace = minimal tier" @("trace","--summary","summary only baseline trace","--outcome","completed") "Tier achieved:\s*minimal"
     # Fully-populated trace -> expect standard or higher (NOT minimal).
     $rich = Invoke-Cli @("trace","--summary","rich smoke trace","--outcome","completed","--intake","1","--agent","smoke","--actions","ran cli; asserted constraints","--read","docs/TRACE_SPEC.md","--changed","scripts/verify-harness.ps1","--errors","none")
     if ($rich.Code -eq 0 -and $rich.Out -match "standard|rich|comprehensive" -and $rich.Out -notmatch "minimal") {
