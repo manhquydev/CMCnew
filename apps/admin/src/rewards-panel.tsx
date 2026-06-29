@@ -1,26 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { trpc, notifyError, notifySuccess } from '@cmc/ui';
 import {
-  Alert,
+  Badge,
   Button,
   Card,
   Group,
+  Loader,
+  Modal,
   NumberInput,
   Select,
   Stack,
+  Table,
   Text,
   TextInput,
   Textarea,
   Title,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
-
-// ─── Gap notice ───────────────────────────────────────────────────────────────
-// Backend gap: no `rewards.pendingList` (or equivalent staff-accessible query)
-// to enumerate pending redemptions. `rewards.gifts` uses lmsProcedure and is
-// not callable from the admin session. Until a `rewards.pendingList` procedure
-// is added to the API, operators must obtain the redemption ID from DB tooling.
-// Tracked as backend gap; see report.
 
 const PROGRAMS = [
   { value: 'UCREA', label: 'UCREA' },
@@ -121,81 +117,181 @@ function GiftCreateCard({ facilities }: { facilities: { id: number; code: string
   );
 }
 
-// ─── Reward review ────────────────────────────────────────────────────────────
-// Requires manual redemption ID until `rewards.pendingList` is implemented.
+// ─── Pending redemptions review ────────────────────────────────────────────────
 
-function RewardReviewCard() {
-  const [id, setId] = useState('');
-  const [decision, setDecision] = useState<string | null>(null);
+type PendingReward = {
+  id: string;
+  giftName: string;
+  studentName: string;
+  studentCode: string;
+  starsSpent: number;
+  createdAt: string | Date;
+};
+
+function PendingReviewCard() {
+  const [rows, setRows] = useState<PendingReward[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actingId, setActingId] = useState<string | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<PendingReward | null>(null);
   const [reason, setReason] = useState('');
-  const [busy, setBusy] = useState(false);
 
-  async function submit() {
-    if (!id.trim() || !decision) return;
-    setBusy(true);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await trpc.rewards.pendingList.query();
+      setRows(list);
+    } catch (e) {
+      notifyError(e, 'Không tải được danh sách đơn đổi quà');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function approve(r: PendingReward) {
+    setActingId(r.id);
+    try {
+      await trpc.rewards.review.mutate({ id: r.id, decision: 'approved' });
+      notifySuccess(`Đã duyệt đổi quà "${r.giftName}"`);
+      await load();
+    } catch (e) {
+      notifyError(e, 'Duyệt đổi quà thất bại');
+      // A conflict usually means the row was already handled elsewhere — resync.
+      await load();
+    } finally {
+      setActingId(null);
+    }
+  }
+
+  async function confirmReject() {
+    if (!rejectTarget) return;
+    setActingId(rejectTarget.id);
     try {
       await trpc.rewards.review.mutate({
-        id: id.trim(),
-        decision: decision as 'approved' | 'rejected',
+        id: rejectTarget.id,
+        decision: 'rejected',
         reason: reason.trim() || undefined,
       });
-      notifySuccess(decision === 'approved' ? 'Đã duyệt đổi quà' : 'Đã từ chối đổi quà (hoàn sao)');
-      setId('');
-      setDecision(null);
+      notifySuccess('Đã từ chối đổi quà (hoàn sao)');
+      setRejectTarget(null);
       setReason('');
+      await load();
     } catch (e) {
-      notifyError(e, 'Xử lý đổi quà thất bại');
+      notifyError(e, 'Từ chối đổi quà thất bại');
+      // A conflict usually means the row was already handled elsewhere — resync.
+      await load();
     } finally {
-      setBusy(false);
+      setActingId(null);
     }
   }
 
   return (
     <Card withBorder>
-      <Title order={5} mb="xs">
-        Duyệt đổi quà
-      </Title>
-      {/* Gap notice shown inline so operators are aware */}
-      <Alert color="yellow" mb="md" title="Chú ý: thiếu danh sách pending">
-        Backend chưa có `rewards.pendingList`. Nhập ID đơn đổi quà thủ công (lấy từ DB/log) cho đến
-        khi thủ tục được bổ sung.
-      </Alert>
-      <Stack>
-        <TextInput
-          label="ID đơn đổi quà (UUID)"
-          placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-          value={id}
-          onChange={(e) => setId(e.currentTarget.value)}
-        />
-        <Select
-          label="Quyết định"
-          data={[
-            { value: 'approved', label: 'Duyệt' },
-            { value: 'rejected', label: 'Từ chối (hoàn sao)' },
-          ]}
-          value={decision}
-          onChange={setDecision}
-        />
-        {decision === 'rejected' && (
-          <Textarea
-            label="Lý do từ chối"
-            autosize
-            minRows={2}
-            value={reason}
-            onChange={(e) => setReason(e.currentTarget.value)}
-          />
-        )}
-        <Group>
-          <Button
-            disabled={!id.trim() || !decision}
-            loading={busy}
-            color={decision === 'rejected' ? 'red' : 'teal'}
-            onClick={() => void submit()}
-          >
-            Xác nhận
-          </Button>
+      <Group justify="space-between" mb="xs">
+        <Title order={5}>Đơn đổi quà chờ duyệt</Title>
+        <Button variant="subtle" size="xs" onClick={() => void load()} disabled={loading}>
+          Tải lại
+        </Button>
+      </Group>
+
+      {loading ? (
+        <Group justify="center" py="lg">
+          <Loader size="sm" />
         </Group>
-      </Stack>
+      ) : rows.length === 0 ? (
+        <Text c="dimmed" py="md" ta="center">
+          Không có đơn đổi quà nào đang chờ duyệt.
+        </Text>
+      ) : (
+        <Table verticalSpacing="sm" highlightOnHover>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Học sinh</Table.Th>
+              <Table.Th>Quà</Table.Th>
+              <Table.Th>Sao</Table.Th>
+              <Table.Th>Ngày đổi</Table.Th>
+              <Table.Th ta="right">Hành động</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {rows.map((r) => (
+              <Table.Tr key={r.id}>
+                <Table.Td>
+                  <Text fw={500}>{r.studentName}</Text>
+                  <Text size="xs" c="dimmed">
+                    {r.studentCode}
+                  </Text>
+                </Table.Td>
+                <Table.Td>{r.giftName}</Table.Td>
+                <Table.Td>
+                  <Badge color="yellow" variant="light">
+                    {r.starsSpent} ★
+                  </Badge>
+                </Table.Td>
+                <Table.Td>{new Date(r.createdAt).toLocaleDateString('vi-VN')}</Table.Td>
+                <Table.Td>
+                  <Group gap="xs" justify="flex-end" wrap="nowrap">
+                    <Button
+                      size="xs"
+                      color="teal"
+                      loading={actingId === r.id}
+                      onClick={() => void approve(r)}
+                    >
+                      Duyệt
+                    </Button>
+                    <Button
+                      size="xs"
+                      color="red"
+                      variant="light"
+                      disabled={actingId === r.id}
+                      onClick={() => {
+                        setReason('');
+                        setRejectTarget(r);
+                      }}
+                    >
+                      Từ chối
+                    </Button>
+                  </Group>
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      )}
+
+      <Modal
+        opened={rejectTarget !== null}
+        onClose={() => setRejectTarget(null)}
+        title="Từ chối đổi quà (hoàn sao)"
+        centered
+      >
+        {rejectTarget && (
+          <Stack>
+            <Text size="sm">
+              Từ chối đơn của <b>{rejectTarget.studentName}</b> — quà{' '}
+              <b>{rejectTarget.giftName}</b>. {rejectTarget.starsSpent} sao sẽ được hoàn lại.
+            </Text>
+            <Textarea
+              label="Lý do từ chối (tùy chọn)"
+              autosize
+              minRows={2}
+              value={reason}
+              onChange={(e) => setReason(e.currentTarget.value)}
+            />
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setRejectTarget(null)}>
+                Huỷ
+              </Button>
+              <Button color="red" loading={actingId === rejectTarget.id} onClick={() => void confirmReject()}>
+                Xác nhận từ chối
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
     </Card>
   );
 }
@@ -216,12 +312,8 @@ export function RewardsPanel() {
 
   return (
     <Stack>
-      <Text size="xs" c="dimmed">
-        Backend gap: cần bổ sung thủ tục <code>rewards.pendingList</code> để liệt kê đơn đổi quà
-        đang chờ xử lý.
-      </Text>
+      <PendingReviewCard />
       <GiftCreateCard facilities={facilities} />
-      <RewardReviewCard />
     </Stack>
   );
 }

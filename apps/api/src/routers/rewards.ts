@@ -107,6 +107,28 @@ export const rewardsRouter = router({
       }),
     ),
 
+  // Staff queue of redemptions awaiting review. RLS scopes to the operator's facility.
+  pendingList: requirePermission('rewards', 'review').query(({ ctx }) =>
+    withRls(rlsContextOf(ctx.session), async (tx) => {
+      const rewards = await tx.reward.findMany({
+        where: { status: 'pending' },
+        orderBy: { createdAt: 'asc' },
+        include: {
+          gift: { select: { name: true } },
+          student: { select: { fullName: true, studentCode: true } },
+        },
+      });
+      return rewards.map((r) => ({
+        id: r.id,
+        giftName: r.gift.name,
+        studentName: r.student.fullName,
+        studentCode: r.student.studentCode,
+        starsSpent: r.starsSpent,
+        createdAt: r.createdAt,
+      }));
+    }),
+  ),
+
   // Staff approves/rejects a pending redemption. Reject → refund stars + restore stock.
   review: requirePermission('rewards', 'review')
     .input(
