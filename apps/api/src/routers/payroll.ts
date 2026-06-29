@@ -844,6 +844,11 @@ export const payrollRouter = router({
         });
         if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
         if (row.status !== 'submitted') throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu KPI chưa được nộp' });
+        // Separation of duties (decision 0011): submit is the only self-step. Nobody confirms their
+        // own sheet — otherwise a manager who also holds kpiEvalConfirm could rubber-stamp themselves.
+        if (row.userId === ctx.session.userId) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Không thể tự xác nhận phiếu KPI của chính mình (tách trách nhiệm)' });
+        }
 
         const updated = await tx.kpiScore.update({
           where: { id: row.id },
@@ -876,6 +881,10 @@ export const payrollRouter = router({
         });
         if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
         if (row.status !== 'confirmed') throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu KPI chưa được xác nhận' });
+        // Separation of duties (decision 0011): never approve your own sheet, nor one you confirmed.
+        if (row.userId === ctx.session.userId) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Không thể tự duyệt phiếu KPI của chính mình (tách trách nhiệm)' });
+        }
         if (row.confirmedById && row.confirmedById === ctx.session.userId) {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Không thể duyệt phiếu do chính mình xác nhận (tách trách nhiệm)' });
         }
