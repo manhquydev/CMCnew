@@ -106,7 +106,7 @@ only at the plan file. This is the single biggest quality lever for a long sessi
 ```bash
 /ck:test                         # regression: existing behavior must still pass
 /ck:code-review --pending        # security, N+1, dead code, contract drift
-/ck:simplify                     # optional: shorten/clarify without changing logic
+code-simplifier agent            # optional: shorten/clarify without changing logic (no simplify skill exists — spawn the agent, or rely on /ck:cook's conditional-simplify step)
 ```
 
 ### 3e. Record proof + trace (durable layer = source of truth)

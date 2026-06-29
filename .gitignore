@@ -23,6 +23,9 @@ coverage/
 .gemini/
 # local AI-agent harness config (Claude Code)
 .claude/
+# local AI-agent tool configs (Codex CLI, agent skills) — not project source
+.codex/
+.agents/
 
 # scratch verify artifacts (screenshots, playwright aria snapshots) — not source
 *-verify.png
