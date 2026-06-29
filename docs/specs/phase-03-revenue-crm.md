@@ -49,12 +49,15 @@
 
 ### 2.1 Contact — facility-scoped
 - Người liên hệ/khách tiềm năng: `fullName`, `phone` (chuẩn hóa E.164/`+84`), `email?`, `source?` (web/walk-in/referral), `note?`. Soft-delete.
+- **Quy nguồn (attribution):** `medium?` (cpc/organic/referral/event…), `campaign?` (mã/tên chiến dịch). Ghi ở **lần chạm đầu** (lúc tạo contact / lead-ingest); không ghi đè khi liên hệ đã tồn tại — để đo ROI marketing.
 - **Dedup:** `phone` chuẩn hóa là khóa nhận diện trong cơ sở.
 
 ### 2.2 Opportunity — facility-scoped
-- `contactId`, `studentName?` (HS dự kiến), `program?`, `stage` (`O1_LEAD`|`O2_CONTACTED`|`O3_TEST_SCHEDULED`|`O4_TESTED`|`O5_ENROLLED`), `lostReason?`, `closedAt?`.
+- `contactId`, `studentName?` (HS dự kiến), `program?`, `stage` (`O1_LEAD`|`O2_CONTACTED`|`O3_TEST_SCHEDULED`|`O4_TESTED`|`O5_ENROLLED`), `ownerId?` (CVTV credited — nguồn hoa hồng → `Receipt.soldById` tại approve), `lostReason?` (enum `LostReason`), `lostNote?` (ghi chú tự do, đặc biệt khi `lostReason=other`), `closedAt?`.
 - **1 opportunity = 1 HS / 1 SĐT** (ràng buộc nghiệp vụ; nhiều con cùng SĐT → nhiều opportunity, phân biệt bởi `studentName`).
 - **Transition:** O1→O2→O3→O4→O5 (tiến); cho **lùi stage / re-open** (vd O5→O2) — **mọi transition ghi `record_event`** (cũ→mới + actor + lý do). O3/O4 set bởi auto-hook (§2.5); O2/O5 manual.
+- **LostReason (enum):** `price | schedule | distance | competitor | no_response | not_ready | other` — chuẩn hóa để phân tích phễu (thay vì free-text). `markLost` nhận enum + `note?`.
+- **Owner validation:** `ownerId` (khi tạo / đổi) phải là nhân viên đang hoạt động thuộc cơ sở của cơ hội — bảo vệ nguồn hoa hồng (super_admin bypass để test/system).
 - Liên kết kết quả: O5 close-won → tạo/nối `Enrollment` qua `Enrollment.opportunityId` (seam Phase 1).
 
 ### 2.3 CoursePrice — effective-dated, facility-scoped
@@ -87,7 +90,13 @@
 ### 2.9 Lead-ingest seam
 - Endpoint nhận lead (public, rate-limited, token cơ sở) → tạo `Contact` + `Opportunity(O1_LEAD)`. Phase 3 chỉ dựng seam + test nội bộ; website tích hợp sau.
 
-### 2.10 Audit/Chatter
+### 2.10 Sổ phân bổ cơ hội (OpportunityAssignment) — facility-scoped
+- **Append-only log** mọi lần set/đổi `ownerId`: `fromOwnerId?`, `toOwnerId?`, `assignedById`, `reason?`, `createdAt`. `fromOwnerId=null` = lần gán đầu (lúc tạo cơ hội).
+- **`opportunityReassign`** (manager-only: `quan_ly`/`giam_doc_kinh_doanh`): đổi owner + ghi 1 dòng + chatter; `ownerId` validate (§2.2). Không sửa/xoá dòng cũ.
+- **`assignmentHistory`**: đọc sổ phân bổ (mới → cũ) — phục vụ minh bạch KPI/hoa hồng.
+- Bảng mang `facilityId` + RLS như các bảng CRM khác.
+
+### 2.11 Audit/Chatter
 - Mọi mutation trạng thái (opp transition, receipt approve/cancel/sent, voucher consume/refund, test scheduled/graded) → `record_event` (hạ tầng Phase 1). Không lưu PII nhạy cảm trong nội dung log.
 
 ---
@@ -109,6 +118,9 @@
 |---|---|
 | Phạm vi | Spec cả Phase 3; build slice S1→S4; S1 = giá→phiếu thu→discount+voucher atomic |
 | CRM stage | O1 lead→O2 contacted(manual)→O3 đặt lịch test(auto)→O4 đã test(auto)→O5 nhập học(manual); 1 opp=1 HS/SĐT; cho lùi/re-open có audit |
+| Lost reason | Enum `LostReason` + `lostNote` (thay free-text) — chuẩn hóa phân tích phễu |
+| Sổ phân bổ | `OpportunityAssignment` append-only (set/đổi owner); `opportunityReassign` manager-only; owner validate là nhân viên cơ sở (bảo vệ hoa hồng `ownerId→soldById`) |
+| Attribution | `Contact.medium/campaign` ghi lần chạm đầu (contactCreate + leadIngest) — đo ROI marketing |
 | Discount+voucher | tier 15/20/30% theo 1/2/3 năm + voucher; **cộng dồn rồi cap về 35%** |
 | Voucher | scope **theo cơ sở**; multi-use (maxUses); consume nguyên tử tại approve (WHERE used_count<max_uses, sửa M2); refund khi cancel |
 | Course price | effective-dated; áp giá theo **ngày lập phiếu thu** |

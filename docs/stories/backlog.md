@@ -42,6 +42,7 @@
 | LMS-REWARD | Reward review + star refund on rejection | normal | E06-rewards | `apps/api/test/reward-review-refund.int.test.ts` |
 | CRM-HOOKS | CRM stage hooks fire on opportunity transitions | normal | E07-crm-aftersale | `apps/api/test/crm-hooks.int.test.ts` |
 | CRM-BATCH | Batch code counter is atomic (concurrent generation) | normal | E07-crm-aftersale | `apps/api/test/batch-code-atomicity.int.test.ts` |
+| CRM-SALESOPS | Sales-ops: opportunity assignment log + reassign (manager-only, owner validated), channel attribution, lost-reason enum, hot-table indexes | normal | E07-crm-aftersale | `apps/api/test/crm-sales-ops.int.test.ts` |
 | BELL-NOTIF | Staff bell notification: polling-fed unread badge + dropdown in the unified admin staff shell | normal | UI/Infra | `packages/ui/src/use-staff-notif.ts`, `apps/admin/src/shell.tsx` |
 | HR-PANEL-UI | Admin HR panel: StaffTable roster view + StaffDetailDrawer with payslip list and bulk-pay | normal | UI/Infra | `apps/admin/src/payroll-panel.tsx`, `apps/api/src/routers/payroll.ts` |
 | TEACH-SHELL | Grouped NavLink sidebar in the unified admin staff shell (apps/teaching retired, consolidated into apps/admin) | normal | UI/Infra | `apps/admin/src/shell.tsx` |
