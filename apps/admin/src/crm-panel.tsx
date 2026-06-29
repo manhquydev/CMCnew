@@ -55,7 +55,10 @@ const LOST_REASON_OPTIONS = [
   { value: 'no_response', label: 'Không phản hồi' },
   { value: 'not_ready', label: 'Chưa sẵn sàng' },
   { value: 'other', label: 'Khác' },
-];
+] as const;
+// Union of the literal values above — structurally identical to the server LostReason enum,
+// so it satisfies tRPC's z.nativeEnum(LostReason) input without an inline cast.
+type LostReasonValue = (typeof LOST_REASON_OPTIONS)[number]['value'];
 
 const LOST_REASON_LABEL: Record<string, string> = Object.fromEntries(
   LOST_REASON_OPTIONS.map(({ value, label }) => [value, label]),
@@ -117,7 +120,7 @@ export function CrmPanel() {
   const [campaign, setCampaign] = useState('');
   const [busy, setBusy] = useState(false);
   const [lostTarget, setLostTarget] = useState<Opp | null>(null);
-  const [lostReason, setLostReason] = useState<string | null>(null);
+  const [lostReason, setLostReason] = useState<LostReasonValue | null>(null);
   const [lostNote, setLostNote] = useState('');
   const [tests, setTests] = useState<TestAppt[]>([]);
   const [oppsLoading, setOppsLoading] = useState(true);
@@ -253,13 +256,11 @@ export function CrmPanel() {
     try {
       await trpc.crm.opportunityMarkLost.mutate({
         id: lostTarget.id,
-        reason: lostReason as 'price' | 'schedule' | 'distance' | 'competitor' | 'no_response' | 'not_ready' | 'other',
+        reason: lostReason,
         note: lostNote.trim() || undefined,
       });
       notifySuccess('Đã đánh dấu cơ hội mất');
-      setLostTarget(null);
-      setLostReason(null);
-      setLostNote('');
+      closeLostModal();
       load();
     } catch (e) {
       notifyError(e, 'Đánh dấu cơ hội mất thất bại');
@@ -275,13 +276,23 @@ export function CrmPanel() {
         reason: reassignReason.trim() || undefined,
       });
       notifySuccess('Đã đổi người phụ trách');
-      setReassignTarget(null);
-      setReassignToOwnerId('');
-      setReassignReason('');
+      closeReassignModal();
       load();
     } catch (e) {
       notifyError(e, 'Đổi người phụ trách thất bại');
     }
+  }
+
+  // Đặt lại state của 2 modal về rỗng — gọi khi đóng/hủy/thành công để lần mở sau luôn sạch.
+  function closeLostModal() {
+    setLostTarget(null);
+    setLostReason(null);
+    setLostNote('');
+  }
+  function closeReassignModal() {
+    setReassignTarget(null);
+    setReassignToOwnerId('');
+    setReassignReason('');
   }
 
   const oppColumns: DataTableColumn<Opp>[] = [
@@ -518,7 +529,7 @@ export function CrmPanel() {
 
       <Modal
         opened={!!lostTarget}
-        onClose={() => { setLostTarget(null); setLostReason(null); setLostNote(''); }}
+        onClose={closeLostModal}
         title="Đánh dấu cơ hội mất"
       >
         <Stack>
@@ -526,7 +537,7 @@ export function CrmPanel() {
             label="Lý do"
             data={LOST_REASON_OPTIONS}
             value={lostReason}
-            onChange={setLostReason}
+            onChange={(v) => setLostReason(v as LostReasonValue)}
             placeholder="Chọn lý do..."
             allowDeselect={false}
           />
@@ -539,7 +550,7 @@ export function CrmPanel() {
             onChange={(e) => setLostNote(e.currentTarget.value)}
           />
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => { setLostTarget(null); setLostReason(null); setLostNote(''); }}>
+            <Button variant="default" onClick={closeLostModal}>
               Đóng
             </Button>
             <Button color="red" disabled={!lostReason} onClick={doMarkLost}>
@@ -551,7 +562,7 @@ export function CrmPanel() {
 
       <Modal
         opened={!!reassignTarget}
-        onClose={() => { setReassignTarget(null); setReassignToOwnerId(''); setReassignReason(''); }}
+        onClose={closeReassignModal}
         title="Đổi người phụ trách"
       >
         <Stack>
@@ -571,7 +582,7 @@ export function CrmPanel() {
             onChange={(e) => setReassignReason(e.currentTarget.value)}
           />
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => { setReassignTarget(null); setReassignToOwnerId(''); setReassignReason(''); }}>
+            <Button variant="default" onClick={closeReassignModal}>
               Đóng
             </Button>
             <Button
