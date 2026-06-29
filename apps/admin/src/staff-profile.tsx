@@ -337,6 +337,11 @@ export function StaffProfilePanel({
               onChange={(v) => { setRoles(v); if (primaryRole && !v.includes(primaryRole)) setPrimaryRole(null); }}
             />
             <Select label="Vai trò chính" data={roles} value={primaryRole} onChange={setPrimaryRole} disabled={roles.length === 0} />
+            {roleEditInvalid && (
+              <Text size="xs" c="red">
+                {roles.length === 0 ? 'Phải có ít nhất một vai trò.' : 'Chọn vai trò chính để lưu.'}
+              </Text>
+            )}
             <MultiSelect label="Cơ sở được truy cập" data={facilityData} value={facilityIds} onChange={setFacilityIds} />
             <Switch label="Đang hoạt động" checked={isActive} onChange={(e) => setIsActive(e.currentTarget.checked)} />
             <Text size="xs" c="dimmed">Đổi vai trò / cơ sở / trạng thái sẽ vô hiệu hóa các phiên đăng nhập hiện tại.</Text>
@@ -379,7 +384,7 @@ export function StaffProfilePanel({
     <Stack>
       <Group justify="space-between">
         <Group>
-          <ActionIcon variant="subtle" onClick={onBack} title="Quay lại danh sách">
+          <ActionIcon variant="subtle" onClick={onBack} title="Quay lại danh sách" aria-label="Quay lại danh sách">
             <IconArrowLeft size={18} />
           </ActionIcon>
           <Title order={5}>{view.displayName}</Title>

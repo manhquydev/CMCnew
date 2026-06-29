@@ -53,11 +53,14 @@ function changeRows(
   fmt: (field: string, value: unknown) => string,
 ): { label: string; from: string; to: string }[] {
   if (!Array.isArray(changes)) return [];
-  return (changes as { field: string; old: unknown; new: unknown }[]).map((c) => ({
-    label: fieldLabels[c.field] ?? c.field,
-    from: fmt(c.field, c.old),
-    to: fmt(c.field, c.new),
-  }));
+  return (changes as { field: string; old: unknown; new: unknown }[])
+    .map((c) => ({
+      label: fieldLabels[c.field] ?? c.field,
+      from: fmt(c.field, c.old),
+      to: fmt(c.field, c.new),
+    }))
+    // Drop no-op lines (X → X) so the log shows only what actually changed.
+    .filter((r) => r.from !== r.to);
 }
 
 export function ActivityLog({

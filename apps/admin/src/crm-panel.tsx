@@ -90,11 +90,13 @@ function OppKanban({ opps, loading, onOpen }: { opps: Opp[]; loading: boolean; o
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 5 }} spacing="sm" style={{ minWidth: 760 }}>
         {STAGES.map((s) => {
           const col = opps.filter((o) => o.stage === s.value);
+          // Badge counts OPEN opps in the stage (a lost/closed lead shouldn't inflate the pipeline).
+          const openCount = col.filter((o) => !o.lostReason && !(o.closedAt && o.stage === 'O5_ENROLLED')).length;
           return (
             <Card key={s.value} withBorder p="sm" radius="md">
               <Group justify="space-between" mb="xs">
                 <Text size="sm" fw={600}>{s.label}</Text>
-                <Badge variant="light" radius="xl" size="sm">{col.length}</Badge>
+                <Badge variant="light" radius="xl" size="sm">{openCount}</Badge>
               </Group>
               <Stack gap="xs">
                 {col.length === 0 ? (
@@ -103,7 +105,15 @@ function OppKanban({ opps, loading, onOpen }: { opps: Opp[]; loading: boolean; o
                   col.map((o) => {
                     const st = statusOf(o);
                     return (
-                      <Card key={o.id} withBorder p="xs" radius="md" style={{ cursor: 'pointer' }} onClick={() => onOpen(o)}>
+                      <Card
+                        key={o.id}
+                        withBorder p="xs" radius="md"
+                        style={{ cursor: 'pointer' }}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onOpen(o)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(o); } }}
+                      >
                         <Text size="sm" fw={500}>{o.contact.fullName}</Text>
                         {o.studentName && <Text size="xs" c="dimmed">HS: {o.studentName}</Text>}
                         <Text size="xs" c="dimmed">{o.contact.phone}</Text>
