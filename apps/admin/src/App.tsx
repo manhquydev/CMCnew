@@ -29,6 +29,8 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconCircleX, IconCircleCheck, IconPlus } from '@tabler/icons-react';
+import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
+import { DesignShowcase } from './design-showcase';
 
 // Panels — admin-native
 import { GuardiansPanel } from './guardians-panel';
@@ -575,45 +577,45 @@ const ALL_SECTION_KEYS = new Set<string>([
   'classes', 'meetings', 'levelup', 'my-payslips',
 ]);
 
-function hashToSection(): SectionKey | undefined {
-  const raw = window.location.hash.slice(1);
-  return ALL_SECTION_KEYS.has(raw) ? (raw as SectionKey) : undefined;
-}
-
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 function Dashboard() {
   const { me } = useSession();
+  const navigate = useNavigate();
+  // section comes from /:section; oppId from the CRM record route /crm/opportunities/:oppId.
+  const params = useParams<{ section?: string; oppId?: string }>();
   const [navAction, setNavAction] = useState<NavAction | null>(null);
   // Selected lesson for the connected Session Detail view inside the schedule section.
   const [selectedSession, setSelectedSession] = useState<MySession | null>(null);
 
-  // Compute initial section: hash → persona default
-  const [activeSection, setActiveSection] = useState<SectionKey>(
-    () => hashToSection() ?? defaultSection(me),
-  );
+  // Active section is derived from the URL (single source of truth). A CRM record route
+  // forces the crm section; a bare/unknown path falls back to the persona default.
+  const oppId = params.oppId ?? null;
+  const rawSection = oppId ? 'crm' : params.section;
+  const activeSection: SectionKey =
+    rawSection && ALL_SECTION_KEYS.has(rawSection) ? (rawSection as SectionKey) : defaultSection(me);
 
+  // Normalise "/" or an unknown section to the canonical persona-default path so the URL bar
+  // always reflects a real section.
   useEffect(() => {
-    const onHashChange = () => {
-      const next = hashToSection();
-      if (next) setActiveSection(next);
-    };
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
+    if (!oppId && (!params.section || !ALL_SECTION_KEYS.has(params.section))) {
+      navigate('/' + defaultSection(me), { replace: true });
+    }
+  }, [oppId, params.section, me, navigate]);
 
   // goToClass: navigate to the class workspace with a pre-selected batch + tab
-  const goToClass = useCallback((batchId: string | undefined, tab: string) => {
-    setActiveSection('classes');
-    setNavAction({ batchId, tab, ts: Date.now() });
-    window.location.hash = 'classes';
-  }, []);
+  const goToClass = useCallback(
+    (batchId: string | undefined, tab: string) => {
+      setNavAction({ batchId, tab, ts: Date.now() });
+      navigate('/classes');
+    },
+    [navigate],
+  );
 
   function handleSectionChange(key: SectionKey) {
     setNavAction(null);
     setSelectedSession(null);
-    window.location.hash = key;
-    setActiveSection(key);
+    navigate('/' + key);
   }
 
   const navGroups = buildNavGroups({ roles: me.roles as string[], isSuperAdmin: me.isSuperAdmin });
@@ -733,7 +735,7 @@ function Dashboard() {
         );
 
       case 'crm':
-        return <CrmPanel />;
+        return <CrmPanel selectedOppId={oppId} />;
 
       case 'cskh':
         return (
@@ -798,10 +800,25 @@ function Dashboard() {
 
 // ─── App root ─────────────────────────────────────────────────────────────────
 
-export function App() {
+function Authenticated() {
   return (
     <LoginGate appTitle="CMC Staff">
       <Dashboard />
     </LoginGate>
+  );
+}
+
+export function App() {
+  return (
+    <Routes>
+      {/* Dev-only design preview, reachable without login (was #design). */}
+      <Route path="/design" element={<DesignShowcase />} />
+      {/* CRM record deep link — shareable link to one opportunity. */}
+      <Route path="/crm/opportunities/:oppId" element={<Authenticated />} />
+      <Route path="/:section" element={<Authenticated />} />
+      <Route path="/" element={<Authenticated />} />
+      {/* Unknown path → Dashboard redirects to the persona default. */}
+      <Route path="*" element={<Authenticated />} />
+    </Routes>
   );
 }

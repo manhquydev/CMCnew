@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   trpc,
-  Chatter,
   notifyError,
   notifySuccess,
   useSession,
@@ -13,13 +13,11 @@ import {
   ViewSwitcher,
   useViewSwitcher,
   type DataTableColumn,
-  type StatusTone,
 } from '@cmc/ui';
 import {
   Badge,
   Button,
   Card,
-  Divider,
   Group,
   Modal,
   NumberInput,
@@ -30,60 +28,40 @@ import {
   Stack,
   Text,
   TextInput,
-  Textarea,
   Title,
 } from '@mantine/core';
-import { DateTimePicker } from '@mantine/dates';
 import { IconTargetArrow, IconCalendarStats } from '@tabler/icons-react';
 import { getDefaultView, getAllowedViews } from './view-defaults';
+import { STAGES, PROGRAMS, statusOf, isClosed } from './crm-shared';
+import { OpportunityDetailPanel } from './opportunity-detail';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Opp = Awaited<ReturnType<typeof trpc.crm.opportunityList.query>>[number];
 type TestAppt = Awaited<ReturnType<typeof trpc.crm.testList.query>>[number];
-type AssignmentLog = Awaited<ReturnType<typeof trpc.crm.assignmentHistory.query>>[number];
+type Owner = Awaited<ReturnType<typeof trpc.crm.assignableOwners.query>>[number];
 
-const STAGES = [
-  { value: 'O1_LEAD', label: 'O1 · Lead' },
-  { value: 'O2_CONTACTED', label: 'O2 · Đã liên hệ' },
-  { value: 'O3_TEST_SCHEDULED', label: 'O3 · Đặt lịch test' },
-  { value: 'O4_TESTED', label: 'O4 · Đã test' },
-  { value: 'O5_ENROLLED', label: 'O5 · Nhập học' },
-];
-const PROGRAMS = [
-  { value: 'UCREA', label: 'UCREA' },
-  { value: 'BRIGHT_IG', label: 'Bright I.G' },
-  { value: 'BLACK_HOLE', label: 'Black Hole' },
-];
+const STAGE_LABEL: Record<string, string> = Object.fromEntries(STAGES.map((s) => [s.value, s.label]));
 
-const LOST_REASON_OPTIONS = [
-  { value: 'price', label: 'Giá' },
-  { value: 'schedule', label: 'Lịch học' },
-  { value: 'distance', label: 'Khoảng cách' },
-  { value: 'competitor', label: 'Đối thủ' },
-  { value: 'no_response', label: 'Không phản hồi' },
-  { value: 'not_ready', label: 'Chưa sẵn sàng' },
-  { value: 'other', label: 'Khác' },
-] as const;
-// Union of the literal values above — structurally identical to the server LostReason enum,
-// so it satisfies tRPC's z.nativeEnum(LostReason) input without an inline cast.
-type LostReasonValue = (typeof LOST_REASON_OPTIONS)[number]['value'];
-
-const LOST_REASON_LABEL: Record<string, string> = Object.fromEntries(
-  LOST_REASON_OPTIONS.map(({ value, label }) => [value, label]),
-);
-
-/** Roles allowed to reassign an opportunity (must match server PERMISSIONS registry). */
-const REASSIGN_ROLES = ['quan_ly', 'giam_doc_kinh_doanh', 'bgd'];
-
-function statusOf(o: Opp): { label: string; tone: StatusTone } {
-  if (o.lostReason) return { label: 'Mất', tone: 'rejected' };
-  if (o.stage === 'O5_ENROLLED' && o.closedAt) return { label: 'Thành công', tone: 'active' };
-  return { label: 'Đang mở', tone: 'info' };
+/** Whole days since a date (used for the kanban "age in pipeline" hint). */
+function daysAgo(date: string | Date): number {
+  const ms = Date.now() - new Date(date).getTime();
+  return Math.max(0, Math.floor(ms / 86_400_000));
 }
 
-// Kanban view of the pipeline: one column per stage (O1→O5), cards open the detail modal.
-// Read-only grouping (no drag) per the framework decision; stage changes stay in the detail/table.
-function OppKanban({ opps, loading, onOpen }: { opps: Opp[]; loading: boolean; onOpen: (o: Opp) => void }) {
+// Kanban view of the pipeline: one column per stage (O1→O5). Cards open the record page.
+// Card content is trimmed to what a consultant scans for: who, which program, who owns it,
+// the phone to call, and how long it has sat in the pipeline.
+function OppKanban({
+  opps,
+  loading,
+  ownerName,
+  onOpen,
+}: {
+  opps: Opp[];
+  loading: boolean;
+  ownerName: (id: string | null) => string;
+  onOpen: (o: Opp) => void;
+}) {
   if (loading) return <Skeleton height={200} radius="md" />;
   return (
     <ScrollArea>
@@ -91,7 +69,7 @@ function OppKanban({ opps, loading, onOpen }: { opps: Opp[]; loading: boolean; o
         {STAGES.map((s) => {
           const col = opps.filter((o) => o.stage === s.value);
           // Badge counts OPEN opps in the stage (a lost/closed lead shouldn't inflate the pipeline).
-          const openCount = col.filter((o) => !o.lostReason && !(o.closedAt && o.stage === 'O5_ENROLLED')).length;
+          const openCount = col.filter((o) => !isClosed(o)).length;
           return (
             <Card key={s.value} withBorder p="sm" radius="md">
               <Group justify="space-between" mb="xs">
@@ -104,6 +82,7 @@ function OppKanban({ opps, loading, onOpen }: { opps: Opp[]; loading: boolean; o
                 ) : (
                   col.map((o) => {
                     const st = statusOf(o);
+                    const closed = isClosed(o);
                     return (
                       <Card
                         key={o.id}
@@ -114,10 +93,19 @@ function OppKanban({ opps, loading, onOpen }: { opps: Opp[]; loading: boolean; o
                         onClick={() => onOpen(o)}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(o); } }}
                       >
-                        <Text size="sm" fw={500}>{o.contact.fullName}</Text>
-                        {o.studentName && <Text size="xs" c="dimmed">HS: {o.studentName}</Text>}
+                        <Group justify="space-between" gap="xs" wrap="nowrap">
+                          <Text size="sm" fw={500} lineClamp={1}>{o.studentName || o.contact.fullName}</Text>
+                          {o.program && <Badge size="xs" variant="light" radius="sm">{o.program}</Badge>}
+                        </Group>
                         <Text size="xs" c="dimmed">{o.contact.phone}</Text>
-                        <StatusBadge status={st.label} label={st.label} tone={st.tone} />
+                        <Group justify="space-between" gap="xs" wrap="nowrap" mt={2}>
+                          <Text size="xs" c="dimmed" lineClamp={1}>PT: {ownerName(o.ownerId)}</Text>
+                          {closed ? (
+                            <StatusBadge status={st.label} label={st.label} tone={st.tone} />
+                          ) : (
+                            <Text size="xs" style={{ color: 'var(--cmc-text-faint)' }}>{daysAgo(o.createdAt)} ngày</Text>
+                          )}
+                        </Group>
                       </Card>
                     );
                   })
@@ -131,45 +119,18 @@ function OppKanban({ opps, loading, onOpen }: { opps: Opp[]; loading: boolean; o
   );
 }
 
-function testStatus(t: TestAppt): { label: string; tone: StatusTone } {
+function testStatus(t: TestAppt): { label: string; tone: ReturnType<typeof statusOf>['tone'] } {
   if (t.status === 'done') return { label: 'Đã test', tone: 'active' };
   if (t.status === 'no_show') return { label: 'Vắng', tone: 'rejected' };
   return { label: 'Đã đặt', tone: 'inactive' };
 }
 
-function AssignmentHistoryBlock({ opportunityId }: { opportunityId: string }) {
-  const [logs, setLogs] = useState<AssignmentLog[] | null>(null);
-
-  useEffect(() => {
-    trpc.crm.assignmentHistory
-      .query({ opportunityId })
-      .then(setLogs)
-      .catch(() => setLogs([]));
-  }, [opportunityId]);
-
-  if (!logs) return <Text size="sm" c="dimmed">Đang tải lịch sử phân bổ...</Text>;
-  if (logs.length === 0) return <Text size="sm" c="dimmed">Chưa có lịch sử phân bổ.</Text>;
-
-  return (
-    <Stack gap={4}>
-      {logs.map((log, i) => (
-        <Text key={i} size="xs" c="dimmed">
-          {new Date(log.createdAt).toLocaleString('vi-VN')}
-          {' — '}
-          {log.fromOwnerId ? `${log.fromOwnerId.slice(0, 8)}…` : '(chưa có)'}
-          {' → '}
-          {log.toOwnerId ? `${log.toOwnerId.slice(0, 8)}…` : '(bỏ trống)'}
-          {log.reason ? ` · ${log.reason}` : ''}
-        </Text>
-      ))}
-    </Stack>
-  );
-}
-
-export function CrmPanel() {
+export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
+  const navigate = useNavigate();
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facilityId, setFacilityId] = useState<number | null>(null);
   const [opps, setOpps] = useState<Opp[]>([]);
+  const [owners, setOwners] = useState<Owner[]>([]);
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [studentName, setStudentName] = useState('');
@@ -177,31 +138,21 @@ export function CrmPanel() {
   const [medium, setMedium] = useState('');
   const [campaign, setCampaign] = useState('');
   const [busy, setBusy] = useState(false);
-  const [lostTarget, setLostTarget] = useState<Opp | null>(null);
-  const [lostReason, setLostReason] = useState<LostReasonValue | null>(null);
-  const [lostNote, setLostNote] = useState('');
   const [tests, setTests] = useState<TestAppt[]>([]);
   const [oppsLoading, setOppsLoading] = useState(true);
   const [oppsError, setOppsError] = useState<string | null>(null);
   const [testsLoading, setTestsLoading] = useState(true);
   const { me } = useSession();
   const canGrade = me.isSuperAdmin || me.roles.some((r) => ['giao_vien', 'head_teacher', 'quan_ly'].includes(r));
-  const canReassign = me.isSuperAdmin || me.roles.some((r) => REASSIGN_ROLES.includes(r));
 
-  const [testTarget, setTestTarget] = useState<Opp | null>(null);
-  const [testAt, setTestAt] = useState<Date | null>(null);
   const [gradeTarget, setGradeTarget] = useState<TestAppt | null>(null);
   const [gradeScore, setGradeScore] = useState<number | string>('');
   const [gradeResult, setGradeResult] = useState('');
-  const [detailTarget, setDetailTarget] = useState<Opp | null>(null);
   const { view: oppView, setView: setOppView } = useViewSwitcher(
     'crm.opportunity',
     getDefaultView('opportunity'),
     getAllowedViews('opportunity'),
   );
-  const [reassignTarget, setReassignTarget] = useState<Opp | null>(null);
-  const [reassignToOwnerId, setReassignToOwnerId] = useState('');
-  const [reassignReason, setReassignReason] = useState('');
 
   useEffect(() => {
     trpc.facility.list.query().then((fs) => {
@@ -222,6 +173,8 @@ export function CrmPanel() {
         notifyError(e, 'Không tải được cơ hội');
       })
       .finally(() => setOppsLoading(false));
+    // Owner names for the pipeline (best-effort; falls back to a short id if unavailable).
+    trpc.crm.assignableOwners.query({ facilityId }).then(setOwners).catch(() => setOwners([]));
     setTestsLoading(true);
     trpc.crm.testList
       .query({ facilityId })
@@ -231,24 +184,16 @@ export function CrmPanel() {
   }, [facilityId]);
   useEffect(load, [load]);
 
-  async function scheduleTest() {
-    if (!facilityId || !testTarget || !testAt) return;
-    try {
-      await trpc.crm.testCreate.mutate({
-        facilityId,
-        opportunityId: testTarget.id,
-        studentName: testTarget.studentName ?? undefined,
-        type: 'entrance',
-        scheduledAt: testAt.toISOString(),
-      });
-      notifySuccess('Đã đặt lịch test (cơ hội tự lên O3)');
-      setTestTarget(null);
-      setTestAt(null);
-      load();
-    } catch (e) {
-      notifyError(e, 'Đặt lịch test thất bại');
-    }
-  }
+  const ownerName = useCallback(
+    (id: string | null) => {
+      if (!id) return '—';
+      return owners.find((o) => o.id === id)?.displayName ?? `${id.slice(0, 8)}…`;
+    },
+    [owners],
+  );
+
+  const openOpp = useCallback((o: Opp) => navigate(`/crm/opportunities/${o.id}`), [navigate]);
+
   async function doGrade() {
     if (!gradeTarget || typeof gradeScore !== 'number') return;
     try {
@@ -297,65 +242,16 @@ export function CrmPanel() {
     }
   }
 
-  async function transition(o: Opp, stage: string) {
-    try {
-      await trpc.crm.opportunityTransition.mutate({ id: o.id, stage: stage as Opp['stage'] });
-      load();
-    } catch (e) {
-      notifyError(e, 'Chuyển bước cơ hội thất bại');
-    }
-  }
-  async function reopen(o: Opp) {
-    try {
-      await trpc.crm.opportunityReopen.mutate({ id: o.id });
-      notifySuccess('Đã mở lại cơ hội');
-      load();
-    } catch (e) {
-      notifyError(e, 'Mở lại cơ hội thất bại');
-    }
-  }
-  async function doMarkLost() {
-    if (!lostTarget || !lostReason) return;
-    try {
-      await trpc.crm.opportunityMarkLost.mutate({
-        id: lostTarget.id,
-        reason: lostReason,
-        note: lostNote.trim() || undefined,
-      });
-      notifySuccess('Đã đánh dấu cơ hội mất');
-      closeLostModal();
-      load();
-    } catch (e) {
-      notifyError(e, 'Đánh dấu cơ hội mất thất bại');
-    }
-  }
-
-  async function doReassign() {
-    if (!reassignTarget || !reassignToOwnerId.trim()) return;
-    try {
-      await trpc.crm.opportunityReassign.mutate({
-        id: reassignTarget.id,
-        toOwnerId: reassignToOwnerId.trim(),
-        reason: reassignReason.trim() || undefined,
-      });
-      notifySuccess('Đã đổi người phụ trách');
-      closeReassignModal();
-      load();
-    } catch (e) {
-      notifyError(e, 'Đổi người phụ trách thất bại');
-    }
-  }
-
-  // Đặt lại state của 2 modal về rỗng — gọi khi đóng/hủy/thành công để lần mở sau luôn sạch.
-  function closeLostModal() {
-    setLostTarget(null);
-    setLostReason(null);
-    setLostNote('');
-  }
-  function closeReassignModal() {
-    setReassignTarget(null);
-    setReassignToOwnerId('');
-    setReassignReason('');
+  // Record page (Odoo-style form view) for a deep-linked / clicked opportunity. Replaces the
+  // pipeline + create form until the user navigates back.
+  if (selectedOppId) {
+    return (
+      <OpportunityDetailPanel
+        oppId={selectedOppId}
+        onBack={() => navigate('/crm')}
+        onChanged={load}
+      />
+    );
   }
 
   const oppColumns: DataTableColumn<Opp>[] = [
@@ -369,65 +265,18 @@ export function CrmPanel() {
     {
       key: 'stage',
       header: 'Bước',
-      width: 210,
-      render: (o) => {
-        const closed = !!o.lostReason || !!(o.closedAt && o.stage === 'O5_ENROLLED');
-        return (
-          <Select
-            size="xs"
-            data={STAGES}
-            value={o.stage}
-            disabled={closed}
-            onChange={(v) => v && transition(o, v)}
-            allowDeselect={false}
-          />
-        );
-      },
+      width: 160,
+      sortValue: (o) => o.stage,
+      render: (o) => <Badge variant="light" radius="sm">{STAGE_LABEL[o.stage] ?? o.stage}</Badge>,
     },
+    { key: 'owner', header: 'Phụ trách', width: 150, render: (o) => ownerName(o.ownerId) },
     {
       key: 'status',
       header: 'Trạng thái',
-      width: 130,
+      width: 140,
       render: (o) => {
         const st = statusOf(o);
-        const label = o.lostReason
-          ? `Mất · ${LOST_REASON_LABEL[o.lostReason] ?? o.lostReason}`
-          : st.label;
-        return <StatusBadge status={st.label} label={label} tone={st.tone} />;
-      },
-    },
-    {
-      key: 'actions',
-      header: '',
-      align: 'right',
-      render: (o) => {
-        const closed = !!o.lostReason || !!(o.closedAt && o.stage === 'O5_ENROLLED');
-        return (
-          <Group gap="xs" justify="flex-end" wrap="nowrap">
-            <Button size="compact-xs" variant="subtle" color="gray" onClick={() => setDetailTarget(o)}>
-              Nhật ký
-            </Button>
-            {!closed && (
-              <Button size="compact-xs" variant="light" onClick={() => setTestTarget(o)}>
-                Đặt test
-              </Button>
-            )}
-            {!closed && canReassign && (
-              <Button size="compact-xs" variant="light" color="violet" onClick={() => setReassignTarget(o)}>
-                Đổi phụ trách
-              </Button>
-            )}
-            {closed ? (
-              <Button size="compact-xs" variant="light" onClick={() => reopen(o)}>
-                Mở lại
-              </Button>
-            ) : (
-              <Button size="compact-xs" variant="light" color="red" onClick={() => setLostTarget(o)}>
-                Mất
-              </Button>
-            )}
-          </Group>
-        );
+        return <StatusBadge status={st.label} label={st.label} tone={st.tone} />;
       },
     },
   ];
@@ -523,7 +372,7 @@ export function CrmPanel() {
           <Title order={5}>Pipeline cơ hội</Title>
         </FilterBar>
         {oppView === 'kanban' ? (
-          <OppKanban opps={opps} loading={oppsLoading} onOpen={setDetailTarget} />
+          <OppKanban opps={opps} loading={oppsLoading} ownerName={ownerName} onOpen={openOpp} />
         ) : (
           <DataTable
             data={opps}
@@ -532,6 +381,7 @@ export function CrmPanel() {
             loading={oppsLoading}
             error={oppsError}
             onRetry={load}
+            onRowClick={openOpp}
             searchText={(o) => `${o.studentName ?? ''} ${o.contact.fullName} ${o.contact.phone}`}
             searchPlaceholder="Tên hoặc SĐT"
             pageSize={15}
@@ -558,28 +408,11 @@ export function CrmPanel() {
             <EmptyState
               icon={<IconCalendarStats size={28} stroke={1.5} />}
               title="Chưa có lịch test"
-              description="Đặt lịch test cho một cơ hội ở pipeline để hiển thị tại đây."
+              description="Đặt lịch test cho một cơ hội ở trang chi tiết để hiển thị tại đây."
             />
           }
         />
       </Stack>
-
-      <Modal opened={!!testTarget} onClose={() => setTestTarget(null)} title="Đặt lịch test đầu vào">
-        <Stack>
-          <Text size="sm">
-            {testTarget?.studentName || testTarget?.contact.fullName} — cơ hội sẽ tự chuyển sang O3.
-          </Text>
-          <DateTimePicker label="Thời gian test" value={testAt} onChange={(v: Date | null) => setTestAt(v)} />
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setTestTarget(null)}>
-              Đóng
-            </Button>
-            <Button disabled={!testAt} onClick={scheduleTest}>
-              Đặt lịch
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
 
       <Modal opened={!!gradeTarget} onClose={() => setGradeTarget(null)} title="Chấm test">
         <Stack>
@@ -594,91 +427,6 @@ export function CrmPanel() {
             </Button>
           </Group>
         </Stack>
-      </Modal>
-
-      <Modal
-        opened={!!lostTarget}
-        onClose={closeLostModal}
-        title="Đánh dấu cơ hội mất"
-      >
-        <Stack>
-          <Select
-            label="Lý do"
-            data={LOST_REASON_OPTIONS}
-            value={lostReason}
-            onChange={(v) => setLostReason(v as LostReasonValue)}
-            placeholder="Chọn lý do..."
-            allowDeselect={false}
-          />
-          <Textarea
-            label="Ghi chú (tùy chọn)"
-            description={lostReason === 'other' ? 'Vui lòng mô tả thêm lý do cụ thể.' : undefined}
-            autosize
-            minRows={2}
-            value={lostNote}
-            onChange={(e) => setLostNote(e.currentTarget.value)}
-          />
-          <Group justify="flex-end">
-            <Button variant="default" onClick={closeLostModal}>
-              Đóng
-            </Button>
-            <Button color="red" disabled={!lostReason} onClick={doMarkLost}>
-              Xác nhận
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-
-      <Modal
-        opened={!!reassignTarget}
-        onClose={closeReassignModal}
-        title="Đổi người phụ trách"
-      >
-        <Stack>
-          <Text size="sm">
-            Cơ hội: <strong>{reassignTarget?.studentName || reassignTarget?.contact.fullName}</strong>
-          </Text>
-          <TextInput
-            label="ID người phụ trách mới"
-            placeholder="UUID của nhân viên (sale/cskh)…"
-            value={reassignToOwnerId}
-            onChange={(e) => setReassignToOwnerId(e.currentTarget.value)}
-          />
-          <TextInput
-            label="Lý do (tùy chọn)"
-            placeholder="Chia lại vùng, nghỉ phép…"
-            value={reassignReason}
-            onChange={(e) => setReassignReason(e.currentTarget.value)}
-          />
-          <Group justify="flex-end">
-            <Button variant="default" onClick={closeReassignModal}>
-              Đóng
-            </Button>
-            <Button
-              color="violet"
-              disabled={!reassignToOwnerId.trim()}
-              onClick={doReassign}
-            >
-              Xác nhận
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-
-      <Modal
-        opened={!!detailTarget}
-        onClose={() => setDetailTarget(null)}
-        title={`Cơ hội — ${detailTarget?.studentName || detailTarget?.contact.fullName || ''}`}
-        size="lg"
-      >
-        {detailTarget && (
-          <Stack>
-            <Divider label="Lịch sử phân bổ" labelPosition="left" />
-            <AssignmentHistoryBlock opportunityId={detailTarget.id} />
-            <Divider label="Nhật ký hoạt động" labelPosition="left" />
-            <Chatter entityType="opportunity" entityId={detailTarget.id} />
-          </Stack>
-        )}
       </Modal>
     </Stack>
   );

@@ -1,5 +1,5 @@
 /**
- * Design System Showcase — accessible at /#design (no login required).
+ * Design System Showcase — accessible at /design (no login required).
  * Demonstrates all tokens and Mantine component overrides from the CMC design system.
  * For dev review only.
  */

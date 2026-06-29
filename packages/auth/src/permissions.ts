@@ -81,6 +81,9 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     contactList: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
     contactCreate: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
     opportunityList: ['sale', 'cskh', 'quan_ly', 'ctv_mkt', 'giam_doc_kinh_doanh'],
+    opportunityGet: ['sale', 'cskh', 'quan_ly', 'ctv_mkt', 'giam_doc_kinh_doanh'],
+    // Owner picker / name resolution: anyone who can view the pipeline can read the staff list.
+    assignableOwners: ['sale', 'cskh', 'quan_ly', 'ctv_mkt', 'giam_doc_kinh_doanh'],
     opportunityCreate: ['sale', 'cskh', 'quan_ly', 'ctv_mkt', 'giam_doc_kinh_doanh'],
     opportunityTransition: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
     opportunityMarkLost: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],

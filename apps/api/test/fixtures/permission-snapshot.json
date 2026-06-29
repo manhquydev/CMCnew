@@ -33,6 +33,8 @@
   "crm.contactList": ["sale", "cskh", "quan_ly", "giam_doc_kinh_doanh"],
   "crm.contactCreate": ["sale", "cskh", "quan_ly", "giam_doc_kinh_doanh"],
   "crm.opportunityList": ["sale", "cskh", "quan_ly", "ctv_mkt", "giam_doc_kinh_doanh"],
+  "crm.opportunityGet": ["sale", "cskh", "quan_ly", "ctv_mkt", "giam_doc_kinh_doanh"],
+  "crm.assignableOwners": ["sale", "cskh", "quan_ly", "ctv_mkt", "giam_doc_kinh_doanh"],
   "crm.opportunityCreate": ["sale", "cskh", "quan_ly", "ctv_mkt", "giam_doc_kinh_doanh"],
   "crm.opportunityTransition": ["sale", "cskh", "quan_ly", "giam_doc_kinh_doanh"],
   "crm.opportunityMarkLost": ["sale", "cskh", "quan_ly", "giam_doc_kinh_doanh"],

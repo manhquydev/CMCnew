@@ -35,6 +35,18 @@ function tokenMatches(provided: string, expected: string): boolean {
  */
 const CRM_MANAGER_ROLES: Role[] = [Role.quan_ly, Role.giam_doc_kinh_doanh, Role.bgd, Role.super_admin];
 
+/**
+ * Roles that may own an opportunity (carry commission attribution). Drives the
+ * "Đổi người phụ trách" picker so a manager chooses a name instead of pasting a UUID.
+ */
+const CRM_OWNER_ROLES: Role[] = [
+  Role.sale,
+  Role.cskh,
+  Role.ctv_mkt,
+  Role.quan_ly,
+  Role.giam_doc_kinh_doanh,
+];
+
 const STAGE_ORDER: OpportunityStage[] = [
   OpportunityStage.O1_LEAD,
   OpportunityStage.O2_CONTACTED,
@@ -196,6 +208,37 @@ export const crmRouter = router({
           orderBy: { createdAt: 'desc' },
           take: 200,
           include: { contact: { select: { fullName: true, phone: true } } },
+        }),
+      ),
+    ),
+
+  // One opportunity + its full contact, for the record detail page. RLS scopes it to the
+  // caller's facilities, so a deep link to another facility's opp resolves to NOT_FOUND.
+  opportunityGet: requirePermission('crm', 'opportunityGet')
+    .input(z.object({ id: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.opportunity.findFirstOrThrow({
+          where: { id: input.id, archivedAt: null },
+          include: { contact: true },
+        }),
+      ),
+    ),
+
+  // Active staff at a facility who may own an opportunity — feeds the reassign picker
+  // and lets the UI resolve an ownerId to a display name.
+  assignableOwners: requirePermission('crm', 'assignableOwners')
+    .input(z.object({ facilityId: z.number().int().positive() }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.appUser.findMany({
+          where: {
+            isActive: true,
+            facilities: { some: { facilityId: input.facilityId } },
+            roles: { hasSome: CRM_OWNER_ROLES },
+          },
+          select: { id: true, displayName: true, primaryRole: true },
+          orderBy: { displayName: 'asc' },
         }),
       ),
     ),
