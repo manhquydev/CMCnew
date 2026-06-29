@@ -12,6 +12,10 @@ Mental model in one line:
 > **Harness answers WHEN / WHAT-to-prove / governance. ClaudeKit answers HOW / who-does-it.**
 > ck plugs *into* the Harness Task Loop; it does not replace it.
 
+For the day-to-day command sequence (open → context → intake → plan → /clear →
+cook → test → review → trace → wrap-up), see `docs/SESSION_LOOP.md`. This file
+defines the routing; `SESSION_LOOP.md` defines the order to run it in.
+
 The Harness durable layer (`scripts/bin/harness-cli`, `harness.db`) stays the single
 source of truth for intake, stories, decisions, traces, and backlog. ck supplies the
 execution muscle and quality gates. Where they overlap, the Harness wins on
