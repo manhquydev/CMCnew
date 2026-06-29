@@ -1,11 +1,22 @@
 import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { withRls, Program, OpportunityStage, TestType, type RlsContext } from '@cmc/db';
+import { withRls, Program, OpportunityStage, LostReason, TestType, type RlsContext } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, publicProcedure, requirePermission, Role } from '../trpc.js';
 import { throttle } from '../rate-limit.js';
+
+/** Nhãn tiếng Việt cho lý do mất — dùng trong chatter/log. */
+const LOST_REASON_LABEL: Record<LostReason, string> = {
+  price: 'Giá',
+  schedule: 'Lịch học',
+  distance: 'Khoảng cách',
+  competitor: 'Đối thủ',
+  no_response: 'Không phản hồi',
+  not_ready: 'Chưa sẵn sàng',
+  other: 'Khác',
+};
 
 // Public lead-ingest throttle: a generous per-IP cap (a real tuition centre never submits anywhere
 // near this in 15 min) that still stops scripted spam if the shared token leaks. Env-tunable.
@@ -48,10 +59,20 @@ function normalizePhone(raw: string): string {
 /** Find-or-create a contact by (facility, normalised phone) inside the given tx. */
 async function upsertContact(
   tx: Parameters<Parameters<typeof withRls>[1]>[0],
-  input: { facilityId: number; fullName: string; phone: string; email?: string; source?: string; note?: string },
+  input: {
+    facilityId: number;
+    fullName: string;
+    phone: string;
+    email?: string;
+    source?: string;
+    medium?: string;
+    campaign?: string;
+    note?: string;
+  },
 ) {
   const phone = normalizePhone(input.phone);
   const existing = await tx.contact.findFirst({ where: { facilityId: input.facilityId, phone } });
+  // Quy nguồn (source/medium/campaign) thuộc về lần chạm ĐẦU — không ghi đè khi liên hệ đã tồn tại.
   if (existing) return existing;
   return tx.contact.create({
     data: {
@@ -60,8 +81,67 @@ async function upsertContact(
       phone,
       email: input.email,
       source: input.source,
+      medium: input.medium,
+      campaign: input.campaign,
       note: input.note,
     },
+  });
+}
+
+/**
+ * Owner cơ hội chảy vào hoa hồng (Receipt.soldById tại approve) → phải là nhân viên đang hoạt động
+ * và thuộc cơ sở của cơ hội. Bỏ qua khi caller là super (system/admin tin cậy).
+ */
+async function assertValidOwner(
+  tx: Parameters<Parameters<typeof withRls>[1]>[0],
+  facilityId: number,
+  ownerId: string,
+) {
+  const u = await tx.appUser.findFirst({
+    where: { id: ownerId, isActive: true, facilities: { some: { facilityId } } },
+    select: { id: true },
+  });
+  if (!u) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Người phụ trách phải là nhân viên đang hoạt động của cơ sở',
+    });
+  }
+}
+
+/**
+ * Ghi một dòng vào sổ phân bổ cơ hội (append-only) + chatter. Gọi mỗi khi owner được set/đổi.
+ * fromOwnerId null = lần gán đầu (lúc tạo cơ hội).
+ */
+async function logAssignment(
+  tx: Parameters<Parameters<typeof withRls>[1]>[0],
+  args: {
+    facilityId: number;
+    opportunityId: string;
+    fromOwnerId: string | null;
+    toOwnerId: string | null;
+    assignedById: string;
+    reason?: string;
+  },
+) {
+  await tx.opportunityAssignment.create({
+    data: {
+      facilityId: args.facilityId,
+      opportunityId: args.opportunityId,
+      fromOwnerId: args.fromOwnerId,
+      toOwnerId: args.toOwnerId,
+      assignedById: args.assignedById,
+      reason: args.reason,
+    },
+  });
+  await logEvent(tx, {
+    facilityId: args.facilityId,
+    entityType: 'opportunity',
+    entityId: args.opportunityId,
+    type: 'status_changed',
+    body: args.fromOwnerId ? `Đổi người phụ trách${args.reason ? ': ' + args.reason : ''}` : 'Gán người phụ trách',
+    changes: [{ field: 'ownerId', old: args.fromOwnerId, new: args.toOwnerId }],
+    actorId: args.assignedById,
   });
 }
 
@@ -86,6 +166,8 @@ export const crmRouter = router({
         phone: z.string().min(6),
         email: z.string().email().optional(),
         source: z.string().optional(),
+        medium: z.string().optional(),
+        campaign: z.string().optional(),
         note: z.string().optional(),
       }),
     )
@@ -142,6 +224,10 @@ export const crmRouter = router({
             message: 'Chỉ quản lý mới có thể gán cơ hội cho người khác',
           });
         }
+        // Owner nuôi hoa hồng → chặn gán cho id không phải nhân viên cơ sở (super bỏ qua).
+        if (!ctx.session.isSuperAdmin) {
+          await assertValidOwner(tx, contact.facilityId, resolvedOwnerId);
+        }
 
         const opp = await tx.opportunity.create({
           data: {
@@ -161,8 +247,55 @@ export const crmRouter = router({
           body: `Cơ hội mới: ${input.studentName ?? contact.fullName} (O1)`,
           actorId: ctx.session.userId,
         });
+        // B1: lần gán đầu (from=null) vào sổ phân bổ để KPI/hoa hồng có dấu vết từ đầu.
+        await logAssignment(tx, {
+          facilityId: opp.facilityId,
+          opportunityId: opp.id,
+          fromOwnerId: null,
+          toOwnerId: resolvedOwnerId,
+          assignedById: ctx.session.userId,
+        });
         return opp;
       }),
+    ),
+
+  // Đổi người phụ trách (manager-only qua registry) — ghi sổ phân bổ. KHÔNG đổi nghĩa ownerId
+  // (vẫn là nguồn hoa hồng → Receipt.soldById tại approve), chỉ thêm bản ghi append-only.
+  opportunityReassign: requirePermission('crm', 'opportunityReassign')
+    .input(z.object({ id: z.string().uuid(), toOwnerId: z.string().uuid(), reason: z.string().optional() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const before = await tx.opportunity.findUniqueOrThrow({ where: { id: input.id } });
+        if (before.ownerId === input.toOwnerId) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cơ hội đã thuộc người này' });
+        }
+        if (!ctx.session.isSuperAdmin) {
+          await assertValidOwner(tx, before.facilityId, input.toOwnerId);
+        }
+        const opp = await tx.opportunity.update({ where: { id: input.id }, data: { ownerId: input.toOwnerId } });
+        await logAssignment(tx, {
+          facilityId: opp.facilityId,
+          opportunityId: opp.id,
+          fromOwnerId: before.ownerId,
+          toOwnerId: input.toOwnerId,
+          assignedById: ctx.session.userId,
+          reason: input.reason,
+        });
+        return opp;
+      }),
+    ),
+
+  // Sổ phân bổ của một cơ hội (mới → cũ). Append-only, không sửa/xoá.
+  assignmentHistory: requirePermission('crm', 'assignmentHistory')
+    .input(z.object({ opportunityId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.opportunityAssignment.findMany({
+          where: { opportunityId: input.opportunityId },
+          orderBy: { createdAt: 'desc' },
+          take: 100,
+        }),
+      ),
     ),
 
   // Manual stage move (forward or back). Reaching O5 closes the opportunity (won).
@@ -189,6 +322,7 @@ export const crmRouter = router({
             stage: input.stage,
             closedAt: input.stage === 'O5_ENROLLED' ? new Date() : null,
             lostReason: null,
+            lostNote: null,
           },
         });
         await logEvent(tx, {
@@ -205,7 +339,7 @@ export const crmRouter = router({
     ),
 
   opportunityMarkLost: requirePermission('crm', 'opportunityMarkLost')
-    .input(z.object({ id: z.string().uuid(), reason: z.string().min(1) }))
+    .input(z.object({ id: z.string().uuid(), reason: z.nativeEnum(LostReason), note: z.string().optional() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const before = await tx.opportunity.findUniqueOrThrow({ where: { id: input.id } });
@@ -219,14 +353,15 @@ export const crmRouter = router({
         }
         const opp = await tx.opportunity.update({
           where: { id: input.id },
-          data: { closedAt: new Date(), lostReason: input.reason },
+          data: { closedAt: new Date(), lostReason: input.reason, lostNote: input.note ?? null },
         });
+        const label = LOST_REASON_LABEL[input.reason];
         await logEvent(tx, {
           facilityId: opp.facilityId,
           entityType: 'opportunity',
           entityId: opp.id,
           type: 'status_changed',
-          body: `Đóng (mất): ${input.reason}`,
+          body: `Đóng (mất): ${label}${input.note ? ' — ' + input.note : ''}`,
           changes: [{ field: 'lostReason', old: null, new: input.reason }],
           actorId: ctx.session.userId,
         });
@@ -245,7 +380,7 @@ export const crmRouter = router({
         }
         const opp = await tx.opportunity.update({
           where: { id: input.id },
-          data: { closedAt: null, lostReason: null },
+          data: { closedAt: null, lostReason: null, lostNote: null },
         });
         await logEvent(tx, {
           facilityId: opp.facilityId,
@@ -379,6 +514,8 @@ export const crmRouter = router({
         phone: z.string().min(6),
         email: z.string().email().optional(),
         source: z.string().optional(),
+        medium: z.string().optional(),
+        campaign: z.string().optional(),
         studentName: z.string().optional(),
         program: z.nativeEnum(Program).optional(),
       }),

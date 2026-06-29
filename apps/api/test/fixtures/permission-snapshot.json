@@ -37,6 +37,8 @@
   "crm.opportunityTransition": ["sale", "cskh", "quan_ly", "giam_doc_kinh_doanh"],
   "crm.opportunityMarkLost": ["sale", "cskh", "quan_ly", "giam_doc_kinh_doanh"],
   "crm.opportunityReopen": ["sale", "cskh", "quan_ly", "giam_doc_kinh_doanh"],
+  "crm.opportunityReassign": ["quan_ly", "giam_doc_kinh_doanh"],
+  "crm.assignmentHistory": ["sale", "cskh", "quan_ly", "ctv_mkt", "giam_doc_kinh_doanh"],
   "crm.testList": ["sale", "cskh", "quan_ly", "giam_doc_kinh_doanh"],
   "crm.testCreate": ["sale", "cskh", "quan_ly", "giam_doc_kinh_doanh"],
   "crm.testGrade": ["giao_vien", "head_teacher", "quan_ly"],

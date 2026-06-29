@@ -15,6 +15,7 @@ import {
 import {
   Button,
   Card,
+  Divider,
   Group,
   Modal,
   NumberInput,
@@ -31,6 +32,7 @@ import { IconTargetArrow, IconCalendarStats } from '@tabler/icons-react';
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Opp = Awaited<ReturnType<typeof trpc.crm.opportunityList.query>>[number];
 type TestAppt = Awaited<ReturnType<typeof trpc.crm.testList.query>>[number];
+type AssignmentLog = Awaited<ReturnType<typeof trpc.crm.assignmentHistory.query>>[number];
 
 const STAGES = [
   { value: 'O1_LEAD', label: 'O1 · Lead' },
@@ -45,6 +47,23 @@ const PROGRAMS = [
   { value: 'BLACK_HOLE', label: 'Black Hole' },
 ];
 
+const LOST_REASON_OPTIONS = [
+  { value: 'price', label: 'Giá' },
+  { value: 'schedule', label: 'Lịch học' },
+  { value: 'distance', label: 'Khoảng cách' },
+  { value: 'competitor', label: 'Đối thủ' },
+  { value: 'no_response', label: 'Không phản hồi' },
+  { value: 'not_ready', label: 'Chưa sẵn sàng' },
+  { value: 'other', label: 'Khác' },
+];
+
+const LOST_REASON_LABEL: Record<string, string> = Object.fromEntries(
+  LOST_REASON_OPTIONS.map(({ value, label }) => [value, label]),
+);
+
+/** Roles allowed to reassign an opportunity (must match server PERMISSIONS registry). */
+const REASSIGN_ROLES = ['quan_ly', 'giam_doc_kinh_doanh', 'bgd'];
+
 function statusOf(o: Opp): { label: string; tone: StatusTone } {
   if (o.lostReason) return { label: 'Mất', tone: 'rejected' };
   if (o.stage === 'O5_ENROLLED' && o.closedAt) return { label: 'Thành công', tone: 'active' };
@@ -57,6 +76,35 @@ function testStatus(t: TestAppt): { label: string; tone: StatusTone } {
   return { label: 'Đã đặt', tone: 'inactive' };
 }
 
+function AssignmentHistoryBlock({ opportunityId }: { opportunityId: string }) {
+  const [logs, setLogs] = useState<AssignmentLog[] | null>(null);
+
+  useEffect(() => {
+    trpc.crm.assignmentHistory
+      .query({ opportunityId })
+      .then(setLogs)
+      .catch(() => setLogs([]));
+  }, [opportunityId]);
+
+  if (!logs) return <Text size="sm" c="dimmed">Đang tải lịch sử phân bổ...</Text>;
+  if (logs.length === 0) return <Text size="sm" c="dimmed">Chưa có lịch sử phân bổ.</Text>;
+
+  return (
+    <Stack gap={4}>
+      {logs.map((log, i) => (
+        <Text key={i} size="xs" c="dimmed">
+          {new Date(log.createdAt).toLocaleString('vi-VN')}
+          {' — '}
+          {log.fromOwnerId ? `${log.fromOwnerId.slice(0, 8)}…` : '(chưa có)'}
+          {' → '}
+          {log.toOwnerId ? `${log.toOwnerId.slice(0, 8)}…` : '(bỏ trống)'}
+          {log.reason ? ` · ${log.reason}` : ''}
+        </Text>
+      ))}
+    </Stack>
+  );
+}
+
 export function CrmPanel() {
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facilityId, setFacilityId] = useState<number | null>(null);
@@ -65,15 +113,19 @@ export function CrmPanel() {
   const [phone, setPhone] = useState('');
   const [studentName, setStudentName] = useState('');
   const [program, setProgram] = useState<string | null>(null);
+  const [medium, setMedium] = useState('');
+  const [campaign, setCampaign] = useState('');
   const [busy, setBusy] = useState(false);
   const [lostTarget, setLostTarget] = useState<Opp | null>(null);
-  const [lostReason, setLostReason] = useState('');
+  const [lostReason, setLostReason] = useState<string | null>(null);
+  const [lostNote, setLostNote] = useState('');
   const [tests, setTests] = useState<TestAppt[]>([]);
   const [oppsLoading, setOppsLoading] = useState(true);
   const [oppsError, setOppsError] = useState<string | null>(null);
   const [testsLoading, setTestsLoading] = useState(true);
   const { me } = useSession();
   const canGrade = me.isSuperAdmin || me.roles.some((r) => ['giao_vien', 'head_teacher', 'quan_ly'].includes(r));
+  const canReassign = me.isSuperAdmin || me.roles.some((r) => REASSIGN_ROLES.includes(r));
 
   const [testTarget, setTestTarget] = useState<Opp | null>(null);
   const [testAt, setTestAt] = useState<Date | null>(null);
@@ -81,6 +133,9 @@ export function CrmPanel() {
   const [gradeScore, setGradeScore] = useState<number | string>('');
   const [gradeResult, setGradeResult] = useState('');
   const [detailTarget, setDetailTarget] = useState<Opp | null>(null);
+  const [reassignTarget, setReassignTarget] = useState<Opp | null>(null);
+  const [reassignToOwnerId, setReassignToOwnerId] = useState('');
+  const [reassignReason, setReassignReason] = useState('');
 
   useEffect(() => {
     trpc.facility.list.query().then((fs) => {
@@ -153,6 +208,8 @@ export function CrmPanel() {
         facilityId,
         fullName: fullName.trim(),
         phone: phone.trim(),
+        medium: medium.trim() || undefined,
+        campaign: campaign.trim() || undefined,
       });
       await trpc.crm.opportunityCreate.mutate({
         contactId: contact.id,
@@ -164,6 +221,8 @@ export function CrmPanel() {
       setPhone('');
       setStudentName('');
       setProgram(null);
+      setMedium('');
+      setCampaign('');
       load();
     } catch (e) {
       notifyError(e, 'Tạo cơ hội thất bại');
@@ -190,15 +249,38 @@ export function CrmPanel() {
     }
   }
   async function doMarkLost() {
-    if (!lostTarget || !lostReason.trim()) return;
+    if (!lostTarget || !lostReason) return;
     try {
-      await trpc.crm.opportunityMarkLost.mutate({ id: lostTarget.id, reason: lostReason.trim() });
+      await trpc.crm.opportunityMarkLost.mutate({
+        id: lostTarget.id,
+        reason: lostReason as 'price' | 'schedule' | 'distance' | 'competitor' | 'no_response' | 'not_ready' | 'other',
+        note: lostNote.trim() || undefined,
+      });
       notifySuccess('Đã đánh dấu cơ hội mất');
       setLostTarget(null);
-      setLostReason('');
+      setLostReason(null);
+      setLostNote('');
       load();
     } catch (e) {
       notifyError(e, 'Đánh dấu cơ hội mất thất bại');
+    }
+  }
+
+  async function doReassign() {
+    if (!reassignTarget || !reassignToOwnerId.trim()) return;
+    try {
+      await trpc.crm.opportunityReassign.mutate({
+        id: reassignTarget.id,
+        toOwnerId: reassignToOwnerId.trim(),
+        reason: reassignReason.trim() || undefined,
+      });
+      notifySuccess('Đã đổi người phụ trách');
+      setReassignTarget(null);
+      setReassignToOwnerId('');
+      setReassignReason('');
+      load();
+    } catch (e) {
+      notifyError(e, 'Đổi người phụ trách thất bại');
     }
   }
 
@@ -234,7 +316,10 @@ export function CrmPanel() {
       width: 130,
       render: (o) => {
         const st = statusOf(o);
-        return <StatusBadge status={st.label} label={st.label} tone={st.tone} />;
+        const label = o.lostReason
+          ? `Mất · ${LOST_REASON_LABEL[o.lostReason] ?? o.lostReason}`
+          : st.label;
+        return <StatusBadge status={st.label} label={label} tone={st.tone} />;
       },
     },
     {
@@ -251,6 +336,11 @@ export function CrmPanel() {
             {!closed && (
               <Button size="compact-xs" variant="light" onClick={() => setTestTarget(o)}>
                 Đặt test
+              </Button>
+            )}
+            {!closed && canReassign && (
+              <Button size="compact-xs" variant="light" color="violet" onClick={() => setReassignTarget(o)}>
+                Đổi phụ trách
               </Button>
             )}
             {closed ? (
@@ -333,6 +423,20 @@ export function CrmPanel() {
           />
           <Select label="Chương trình (tùy chọn)" data={PROGRAMS} value={program} onChange={setProgram} clearable />
         </Group>
+        <Group grow align="flex-end" mt="sm">
+          <TextInput
+            label="Kênh nguồn / Medium (tùy chọn)"
+            placeholder="cpc, organic, referral, event…"
+            value={medium}
+            onChange={(e) => setMedium(e.currentTarget.value)}
+          />
+          <TextInput
+            label="Chiến dịch / Campaign (tùy chọn)"
+            placeholder="he-2026, tet-ads…"
+            value={campaign}
+            onChange={(e) => setCampaign(e.currentTarget.value)}
+          />
+        </Group>
         <Group mt="md">
           <Button onClick={createLead} loading={busy}>
             Tạo cơ hội (O1)
@@ -412,20 +516,69 @@ export function CrmPanel() {
         </Stack>
       </Modal>
 
-      <Modal opened={!!lostTarget} onClose={() => setLostTarget(null)} title="Đánh dấu cơ hội mất">
+      <Modal
+        opened={!!lostTarget}
+        onClose={() => { setLostTarget(null); setLostReason(null); setLostNote(''); }}
+        title="Đánh dấu cơ hội mất"
+      >
         <Stack>
-          <Textarea
+          <Select
             label="Lý do"
+            data={LOST_REASON_OPTIONS}
+            value={lostReason}
+            onChange={setLostReason}
+            placeholder="Chọn lý do..."
+            allowDeselect={false}
+          />
+          <Textarea
+            label="Ghi chú (tùy chọn)"
+            description={lostReason === 'other' ? 'Vui lòng mô tả thêm lý do cụ thể.' : undefined}
             autosize
             minRows={2}
-            value={lostReason}
-            onChange={(e) => setLostReason(e.currentTarget.value)}
+            value={lostNote}
+            onChange={(e) => setLostNote(e.currentTarget.value)}
           />
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => setLostTarget(null)}>
+            <Button variant="default" onClick={() => { setLostTarget(null); setLostReason(null); setLostNote(''); }}>
               Đóng
             </Button>
-            <Button color="red" disabled={!lostReason.trim()} onClick={doMarkLost}>
+            <Button color="red" disabled={!lostReason} onClick={doMarkLost}>
+              Xác nhận
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={!!reassignTarget}
+        onClose={() => { setReassignTarget(null); setReassignToOwnerId(''); setReassignReason(''); }}
+        title="Đổi người phụ trách"
+      >
+        <Stack>
+          <Text size="sm">
+            Cơ hội: <strong>{reassignTarget?.studentName || reassignTarget?.contact.fullName}</strong>
+          </Text>
+          <TextInput
+            label="ID người phụ trách mới"
+            placeholder="UUID của nhân viên (sale/cskh)…"
+            value={reassignToOwnerId}
+            onChange={(e) => setReassignToOwnerId(e.currentTarget.value)}
+          />
+          <TextInput
+            label="Lý do (tùy chọn)"
+            placeholder="Chia lại vùng, nghỉ phép…"
+            value={reassignReason}
+            onChange={(e) => setReassignReason(e.currentTarget.value)}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => { setReassignTarget(null); setReassignToOwnerId(''); setReassignReason(''); }}>
+              Đóng
+            </Button>
+            <Button
+              color="violet"
+              disabled={!reassignToOwnerId.trim()}
+              onClick={doReassign}
+            >
               Xác nhận
             </Button>
           </Group>
@@ -439,7 +592,12 @@ export function CrmPanel() {
         size="lg"
       >
         {detailTarget && (
-          <Chatter entityType="opportunity" entityId={detailTarget.id} />
+          <Stack>
+            <Divider label="Lịch sử phân bổ" labelPosition="left" />
+            <AssignmentHistoryBlock opportunityId={detailTarget.id} />
+            <Divider label="Nhật ký hoạt động" labelPosition="left" />
+            <Chatter entityType="opportunity" entityId={detailTarget.id} />
+          </Stack>
         )}
       </Modal>
     </Stack>

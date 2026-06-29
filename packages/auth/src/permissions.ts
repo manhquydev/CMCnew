@@ -85,6 +85,9 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     opportunityTransition: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
     opportunityMarkLost: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
     opportunityReopen: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
+    // Đổi người phụ trách là hành vi quản lý → chỉ quản lý/giám đốc KD (khớp các entry CRM khác, không có bgd).
+    opportunityReassign: ['quan_ly', 'giam_doc_kinh_doanh'],
+    assignmentHistory: ['sale', 'cskh', 'quan_ly', 'ctv_mkt', 'giam_doc_kinh_doanh'],
     testList: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
     testCreate: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
     testGrade: ['giao_vien', 'head_teacher', 'quan_ly'],
