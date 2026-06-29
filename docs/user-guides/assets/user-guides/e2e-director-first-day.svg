@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-labelledby="title desc">
+  <title id="title">Checklist ngày đầu của giám đốc</title>
+  <desc id="desc">Hình minh họa danh sách việc cần làm sau lần đăng nhập đầu của giám đốc.</desc>
+  <rect width="960" height="420" rx="24" fill="#f5f7fb"/>
+  <rect x="36" y="34" width="888" height="352" rx="18" fill="#ffffff" stroke="#d8e0eb"/>
+  <text x="64" y="82" font-family="Be Vietnam Pro, Noto Sans, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#121826">30 phút đầu sau khi đăng nhập</text>
+  <g font-family="Be Vietnam Pro, Noto Sans, Segoe UI, Arial, sans-serif">
+    <rect x="72" y="126" width="250" height="92" rx="16" fill="#eef4ff" stroke="#0b73e8"/>
+    <text x="96" y="162" font-size="18" font-weight="700" fill="#0b73e8">1. Kiểm tra phạm vi</text>
+    <text x="96" y="190" font-size="15" fill="#5f6b7a">Vai trò, cơ sở, menu</text>
+    <rect x="354" y="126" width="250" height="92" rx="16" fill="#eaf8f0" stroke="#177245"/>
+    <text x="378" y="162" font-size="18" font-weight="700" fill="#177245">2. Chuẩn bị nhóm</text>
+    <text x="378" y="190" font-size="15" fill="#5f6b7a">Tạo nhân sự đúng quyền</text>
+    <rect x="636" y="126" width="250" height="92" rx="16" fill="#fff4de" stroke="#b26a00"/>
+    <text x="660" y="162" font-size="18" font-weight="700" fill="#b26a00">3. Mở luồng chính</text>
+    <text x="660" y="190" font-size="15" fill="#5f6b7a">CRM hoặc đào tạo</text>
+    <rect x="212" y="262" width="250" height="92" rx="16" fill="#f4f9ff" stroke="#d8e0eb"/>
+    <text x="236" y="298" font-size="18" font-weight="700" fill="#121826">4. Xem việc đang chờ</text>
+    <text x="236" y="326" font-size="15" fill="#5f6b7a">CSKH, lên cấp, họp PH</text>
+    <rect x="494" y="262" width="250" height="92" rx="16" fill="#f4f9ff" stroke="#d8e0eb"/>
+    <text x="518" y="298" font-size="18" font-weight="700" fill="#121826">5. Kiểm tra KPI</text>
+    <text x="518" y="326" font-size="15" fill="#5f6b7a">Xác nhận và duyệt tách người</text>
+  </g>
+</svg>

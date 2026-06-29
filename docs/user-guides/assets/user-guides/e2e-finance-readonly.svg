@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-labelledby="title desc">
+  <title id="title">Ranh giới tài chính chỉ xem</title>
+  <desc id="desc">Hình minh họa ranh giới chỉ xem tài chính cho giám đốc kinh doanh và sale.</desc>
+  <rect width="960" height="420" rx="24" fill="#f5f7fb"/>
+  <rect x="42" y="42" width="876" height="336" rx="18" fill="#ffffff" stroke="#d8e0eb"/>
+  <text x="72" y="92" font-family="Be Vietnam Pro, Noto Sans, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#121826">Ranh giới tài chính</text>
+  <text x="72" y="124" font-family="Be Vietnam Pro, Noto Sans, Segoe UI, Arial, sans-serif" font-size="16" fill="#5f6b7a">Chỉ dùng màn tài chính để kiểm tra trạng thái. Không tạo, duyệt, đối soát hoặc hủy phiếu thu nếu vai trò không cho phép.</text>
+  <g font-family="Be Vietnam Pro, Noto Sans, Segoe UI, Arial, sans-serif">
+    <rect x="86" y="170" width="246" height="124" rx="16" fill="#eaf8f0" stroke="#177245"/>
+    <text x="116" y="210" font-size="20" font-weight="700" fill="#177245">Được làm</text>
+    <text x="116" y="242" font-size="16" fill="#121826">Xem bảng giá / voucher</text>
+    <text x="116" y="268" font-size="16" fill="#121826">Xem trạng thái phiếu thu</text>
+    <rect x="357" y="170" width="246" height="124" rx="16" fill="#fff0ee" stroke="#b42318"/>
+    <text x="387" y="210" font-size="20" font-weight="700" fill="#b42318">Không được làm</text>
+    <text x="387" y="242" font-size="16" fill="#121826">Tạo / duyệt phiếu thu</text>
+    <text x="387" y="268" font-size="16" fill="#121826">Đối soát / hủy phiếu</text>
+    <rect x="628" y="170" width="246" height="124" rx="16" fill="#eef4ff" stroke="#0b73e8"/>
+    <text x="658" y="210" font-size="20" font-weight="700" fill="#0b73e8">Việc tiếp theo</text>
+    <text x="658" y="242" font-size="16" fill="#121826">Báo kế toán/quản lý</text>
+    <text x="658" y="268" font-size="16" fill="#121826">Sau đó cập nhật CRM</text>
+  </g>
+</svg>

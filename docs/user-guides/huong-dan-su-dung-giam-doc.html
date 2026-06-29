@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CMCnew - Hướng dẫn Giám Đốc</title>
+  <link rel="stylesheet" href="assets/guide.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">CMC</span><span>Hướng dẫn Giám Đốc</span></div>
+      <a class="guide-link" href="index.html">← Tất cả hướng dẫn</a>
+      <div class="toc-title">Mục lục</div>
+      <nav class="toc">
+        <a href="#login">1. Đăng nhập</a>
+        <a href="#layout">2. Giao diện</a>
+        <a href="#first-login">3. Lần đầu vào hệ thống</a>
+        <a href="#director-business">4. GĐ Kinh Doanh</a>
+        <a href="#director-training">5. GĐ Đào Tạo</a>
+        <a href="#create-staff">6. Tạo nhân sự</a>
+        <a href="#kpi">7. KPI</a>
+        <a href="#notes">8. Lưu ý nhanh</a>
+      </nav>
+      <div class="toc-title">Lọc nhanh</div>
+      <div class="quick-filter">
+        <button class="active" data-filter="all" type="button">Tất cả</button>
+        <button data-filter="business" type="button">GĐ KD</button>
+        <button data-filter="training" type="button">GĐ ĐT</button>
+      </div>
+    </aside>
+
+    <main class="content">
+      <section class="hero">
+        <div class="eyebrow">CMCnew · Staff Web App</div>
+        <h1>Hướng dẫn sử dụng cho Giám Đốc</h1>
+        <p class="lead">Dành cho hai vai trò giám đốc trong mô hình 3 trụ cột: Giám Đốc Kinh Doanh phụ trách tuyển sinh/doanh thu/CSKH, Giám Đốc Đào Tạo phụ trách học vụ/lớp/giáo viên.</p>
+        <div class="doc-meta">
+          <span>Dành cho lần đầu đăng nhập</span>
+          <span>Checklist vận hành</span>
+          <span>Luồng thao tác trọn vẹn</span>
+        </div>
+        <div class="grid two">
+          <div class="card role-card" data-role="business">
+            <h3>Giám Đốc Kinh Doanh</h3>
+            <p><code>giam_doc_kinh_doanh</code> · CRM, CSKH, đổi quà, xem tài chính, xác nhận/duyệt KPI.</p>
+            <div class="pill-row"><span class="pill ok">CRM</span><span class="pill ok">CSKH</span><span class="pill warn">Tài chính chỉ xem</span></div>
+          </div>
+          <div class="card role-card training" data-role="training">
+            <h3>Giám Đốc Đào Tạo</h3>
+            <p><code>giam_doc_dao_tao</code> · học vụ, khóa học, lớp, lịch, điểm danh, chấm bài, học bạ, level-up.</p>
+            <div class="pill-row"><span class="pill ok">Học vụ</span><span class="pill ok">Lớp học</span><span class="pill warn">Không CRM/tài chính</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="login" class="section">
+        <h2>1. Đăng nhập</h2>
+        <p>Cả hai giám đốc đăng nhập bằng tài khoản CMC EDU qua tài khoản Microsoft của công ty.</p>
+        <ol class="steps">
+          <li>Mở ứng dụng nhân viên trên trình duyệt.</li>
+          <li>Bấm <strong>Đăng nhập bằng tài khoản CMC EDU</strong>.</li>
+          <li>Dùng email công ty: <code>nhungdt@cmcvn.edu.vn</code> hoặc <code>hongltn@cmcvn.edu.vn</code>.</li>
+          <li>Sau khi Microsoft xác thực, hệ thống đưa vào đúng giao diện theo vai trò.</li>
+        </ol>
+        <div class="callout warn">Giám đốc không dùng mật khẩu riêng. Đường email + mật khẩu là đường đăng nhập dự phòng cho IT/super_admin khi tài khoản Microsoft gặp sự cố.</div>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-dev-login.png" alt="Màn hình đăng nhập nhân viên CMC">
+          <figcaption>Màn đăng nhập có nút tài khoản Microsoft của công ty. Ảnh chụp từ môi trường thử nghiệm.</figcaption>
+        </figure>
+      </section>
+
+      <section id="layout" class="section">
+        <h2>2. Tổng quan giao diện</h2>
+        <p>Ứng dụng nhân viên dùng một shell chung: thanh trên cùng, chuông thông báo, avatar, nút đăng xuất, menu trái và vùng nội dung chính. Menu được lọc theo vai trò, còn nút hành động bên trong cũng đi theo quyền.</p>
+        <div class="callout">Thấy một trang ở chế độ xem không đồng nghĩa có quyền thao tác. Nếu nút không hiện hoặc thao tác bị chặn, đó là phân quyền có chủ đích.</div>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-overview-dashboard.png" alt="Màn Tổng quan trong hệ thống nhân viên">
+          <figcaption>Màn Tổng quan. Ảnh minh họa lấy từ dữ liệu thử nghiệm; menu thực tế của giám đốc được hệ thống lọc theo vai trò.</figcaption>
+        </figure>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-notifications-popover.png" alt="Chuông thông báo nhân viên">
+          <figcaption>Chuông thông báo nằm trên thanh trên cùng.</figcaption>
+        </figure>
+      </section>
+
+      <section id="first-login" class="section">
+        <h2>3. Lần đầu vào hệ thống: cần làm gì trước?</h2>
+        <p>Giám đốc không nên bắt đầu bằng việc bấm thử tất cả menu. Hãy đi theo thứ tự dưới đây để hệ thống có đủ dữ liệu vận hành cho nhóm.</p>
+        <div class="grid two">
+          <div class="card" data-role="business">
+            <h3>GĐ Kinh Doanh: 30 phút đầu</h3>
+            <ol class="mini-steps">
+              <li>Mở <strong>Tổng quan</strong> để kiểm tra đúng cơ sở và đúng vai trò.</li>
+              <li>Mở <strong>Cơ sở & Người dùng</strong>, tạo sale/CSKH/CTV marketing cần dùng ngay.</li>
+              <li>Mở <strong>CRM</strong>, kiểm tra các bước O1-O5 O1-O5 và thống nhất cách sale cập nhật từng bước.</li>
+              <li>Mở <strong>Chăm sóc khách hàng</strong>, kiểm tra người nhận ca after-sale.</li>
+              <li>Mở <strong>Tài chính</strong> ở chế độ xem để nắm doanh thu/phiếu thu, không ghi nhận giao dịch.</li>
+              <li>Mở <strong>Đánh giá KPI</strong>, xác định kỳ nào đang cần xác nhận hoặc duyệt.</li>
+            </ol>
+          </div>
+          <div class="card training" data-role="training">
+            <h3>GĐ Đào Tạo: 30 phút đầu</h3>
+            <ol class="mini-steps">
+              <li>Mở <strong>Tổng quan</strong> để kiểm tra đúng cơ sở và đúng vai trò.</li>
+              <li>Mở <strong>Cơ sở & Người dùng</strong>, tạo giáo viên/trưởng bộ môn cần phân lớp.</li>
+              <li>Mở <strong>Khóa học</strong>, kiểm tra chương trình/khóa học đã đủ để tạo lớp.</li>
+              <li>Mở <strong>Lớp học</strong>, tạo lớp hoặc kiểm tra lớp đang planned/running.</li>
+              <li>Mở <strong>Lịch dạy</strong>, kiểm tra giáo viên, phòng học và lịch sinh buổi.</li>
+              <li>Mở <strong>Học bạ</strong>/<strong>Duyệt cấp độ</strong>, kiểm tra kỳ học và đề xuất đang chờ.</li>
+            </ol>
+          </div>
+        </div>
+        <h3>Checklist ngày đầu</h3>
+        <table class="matrix">
+          <thead><tr><th>Mục kiểm tra</th><th>Vì sao quan trọng</th><th>Kết quả mong đợi</th></tr></thead>
+          <tbody>
+            <tr><td>Cơ sở</td><td>Dữ liệu bị cô lập theo cơ sở; chọn sai cơ sở sẽ không thấy đúng nhân sự/lớp/khách.</td><td>Thấy đúng cơ sở được phân quyền.</td></tr>
+            <tr><td>Nhân sự</td><td>Không có nhân sự thì không giao CRM, CSKH, lớp hoặc lịch dạy được.</td><td>Sale/CSKH/GV/trưởng bộ môn cần dùng đã có tài khoản CMCnew.</td></tr>
+            <tr><td>Luồng chính</td><td>Mỗi giám đốc có một trục vận hành khác nhau.</td><td>GĐ KD bắt đầu từ CRM; GĐ ĐT bắt đầu từ khóa học/lớp/lịch.</td></tr>
+            <tr><td>KPI</td><td>KPI ảnh hưởng lương; cần biết phiếu nào chờ xác nhận/duyệt.</td><td>Biết kỳ hiện tại và trạng thái phiếu của nhóm.</td></tr>
+          </tbody>
+        </table>
+        <div class="callout">Nếu thấy thiếu menu, kiểm tra lại vai trò trước khi báo lỗi. Ví dụ GĐ Kinh Doanh không có học vụ; GĐ Đào Tạo không có CRM/tài chính.</div>
+      </section>
+
+      <section id="director-business" class="section" data-role="business">
+        <h2>4. Hướng dẫn cho Giám Đốc Kinh Doanh</h2>
+        <p>GĐ Kinh Doanh nhìn thấy các mục chính: Tổng quan, Cơ sở & Người dùng, CRM, Chăm sóc khách hàng, Đổi quà, Tài chính chỉ xem, Đánh giá KPI, Phiếu lương của tôi.</p>
+        <div class="grid two">
+          <div class="card">
+            <h3>CRM toàn quyền</h3>
+            <p>Xem/tạo cơ hội, tạo liên hệ, chuyển giai đoạn O1 → O5, đánh dấu mất, mở lại, tạo lịch test đầu vào.</p>
+            <p><strong>Không làm:</strong> chấm điểm test.</p>
+          </div>
+          <div class="card">
+            <h3>CSKH after-sale</h3>
+            <p>Xem danh sách ca, tạo ca, chuyển trạng thái, gán/phân ca cho CSKH.</p>
+            <p><strong>Không làm:</strong> đặt vòng đời học sinh vì ảnh hưởng tài chính.</p>
+          </div>
+          <div class="card">
+            <h3>Đổi quà</h3>
+            <p>Tạo phần quà và duyệt yêu cầu đổi quà theo chương trình thưởng.</p>
+          </div>
+          <div class="card">
+            <h3>Tài chính chỉ xem</h3>
+            <p>Xem phiếu thu, bảng giá, voucher. Không tạo/duyệt/đối soát/hủy phiếu thu.</p>
+          </div>
+        </div>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-cskh-panel.png" alt="Màn hình chăm sóc khách hàng không có dữ liệu cá nhân">
+          <figcaption>Ảnh minh họa vùng thao tác an toàn dữ liệu. Các bảng CRM/phiếu thu thật không đưa vào tài liệu để tránh lộ thông tin học sinh/khách hàng.</figcaption>
+        </figure>
+        <h3>Luồng thao tác trọn vẹn: xử lý một khách tuyển sinh từ cơ hội đến chăm sóc sau bán</h3>
+        <ol class="steps">
+          <li>Mở <strong>CRM</strong>, kiểm tra các bước O1-O5 để biết khách đang ở bước O1-O5.</li>
+          <li>Tạo hoặc mở cơ hội, nhập thông tin liên hệ tối thiểu, chọn chương trình nếu đã rõ.</li>
+          <li>Sale cập nhật bước các bước O1-O5 sau từng lần tư vấn. GĐ Kinh Doanh dùng màn này để giám sát tiến độ và phát hiện khách bị dừng quá lâu.</li>
+          <li>Khi khách cần test đầu vào, tạo lịch test trong khu vực CRM. Giáo viên hoặc trưởng bộ môn là người chấm test.</li>
+          <li>Khi khách nhập học và phát sinh ca chăm sóc, mở <strong>Chăm sóc khách hàng</strong> để theo dõi, chuyển trạng thái hoặc phân ca cho CSKH.</li>
+          <li>Với yêu cầu đổi quà, mở <strong>Đổi quà</strong>, kiểm tra yêu cầu và duyệt nếu hợp lệ.</li>
+          <li>Vào <strong>Tài chính</strong> để xem doanh thu/phiếu thu liên quan. Không tạo, duyệt, đối soát hoặc hủy phiếu thu ở vai trò này.</li>
+        </ol>
+        <p class="visual-note">Minh họa luồng thao tác dùng hình an toàn dữ liệu cho CRM/tài chính vì các màn thật có thể chứa tên, số điện thoại, mã phiếu hoặc thông tin học sinh.</p>
+        <div class="visual-strip two">
+          <figure class="figure">
+            <img src="assets/user-guides/e2e-crm-admission-flow.svg" alt="Luồng CRM tuyển sinh từ O1 đến ghi danh">
+            <figcaption>Các bước O1-O5 tuyển sinh: Sale cập nhật O1-O5, giáo viên chấm test, tài chính/quản lý xử lý phiếu thu, CSKH theo sau.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/e2e-finance-readonly.svg" alt="Ranh giới tài chính chỉ xem">
+            <figcaption>Ranh giới tài chính của GĐ KD: xem để đối chiếu, không tạo/duyệt/đối soát/hủy phiếu thu.</figcaption>
+          </figure>
+        </div>
+        <h3>Luồng thao tác trọn vẹn: mở ngày làm việc của nhóm sale</h3>
+        <ol class="steps">
+          <li>Mở <strong>Tổng quan</strong> để xem tình hình chung của cơ sở.</li>
+          <li>Mở <strong>CRM</strong>, lọc các cơ hội đang ở O1/O2 quá lâu để nhắc sale cập nhật.</li>
+          <li>Kiểm tra cơ hội O4/O5 để biết khách nào cần test, ghi danh hoặc xử lý phiếu thu.</li>
+          <li>Mở <strong>Chăm sóc khách hàng</strong>, xem ca mới, ca quá hạn và người đang phụ trách.</li>
+          <li>Mở <strong>Tài chính</strong> để đối chiếu trạng thái phiếu thu với CRM, nhưng không thực hiện tạo/duyệt.</li>
+          <li>Cuối ngày, mở <strong>Đánh giá KPI</strong> hoặc báo cáo liên quan để theo dõi dữ liệu sales của kỳ.</li>
+        </ol>
+        <div class="visual-strip two">
+          <figure class="figure">
+            <img src="assets/user-guides/e2e-director-first-day.svg" alt="Checklist 30 phút đầu của giám đốc">
+            <figcaption>Thứ tự mở ngày: xác nhận phạm vi, chuẩn bị nhóm, mở luồng chính, xử lý việc chờ, xem KPI.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/staff-cskh-panel.png" alt="Màn hình chăm sóc khách hàng an toàn dữ liệu">
+            <figcaption>CSKH là nơi GĐ KD theo dõi ca after-sale và phân người phụ trách.</figcaption>
+          </figure>
+        </div>
+        <div class="callout warn">Không chụp bảng CRM/phiếu thu có dữ liệu thật vào tài liệu. Khi cần đào tạo nội bộ bằng ảnh, dùng môi trường demo đã ẩn tên, số điện thoại và mã phiếu.</div>
+      </section>
+
+      <section id="director-training" class="section" data-role="training">
+        <h2>5. Hướng dẫn cho Giám Đốc Đào Tạo</h2>
+        <p>GĐ Đào Tạo nhìn thấy các mục: Tổng quan, Cơ sở & Người dùng, Lịch dạy, Điểm danh, Chấm bài, Học bạ, Lớp học, Họp phụ huynh, Duyệt cấp độ, Khóa học, KPI, Phiếu lương của tôi.</p>
+        <div class="grid three">
+          <div class="card"><h3>Khóa học</h3><p>Tạo khóa học mới và lưu trữ khóa khi cần.</p></div>
+          <div class="card"><h3>Lớp học</h3><p>Tạo lớp, đổi trạng thái, hủy lớp, mở lại lớp.</p></div>
+          <div class="card"><h3>Lịch dạy</h3><p>Thêm khung lịch và sinh buổi học theo khoảng ngày.</p></div>
+          <div class="card"><h3>Điểm danh</h3><p>Đánh dấu có mặt/vắng cho từng buổi.</p></div>
+          <div class="card"><h3>Chấm bài & Học bạ</h3><p>Chấm/phát hành điểm, quản lý kỳ học, mẫu đánh giá, định tính, điểm tổng kết.</p></div>
+          <div class="card"><h3>Level-up</h3><p>Đề xuất, xem danh sách chờ, duyệt hoặc từ chối nâng cấp độ.</p></div>
+        </div>
+        <div class="callout warn">Chứng chỉ hiện tạm ẩn và chưa sử dụng. Khi bật lại, việc cấp/xem chứng chỉ thuộc GĐ Đào Tạo.</div>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-schedule-panel.png" alt="Màn hình lịch dạy">
+          <figcaption>Lịch dạy: xem và điều phối buổi học.</figcaption>
+        </figure>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-classes-panel.png" alt="Màn hình lớp học">
+          <figcaption>Lớp học: vòng đời lớp và các tab thao tác.</figcaption>
+        </figure>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-assessment-panel.png" alt="Màn hình học bạ">
+          <figcaption>Học bạ: kỳ học, mẫu đánh giá, định tính và tổng kết.</figcaption>
+        </figure>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-levelup-panel.png" alt="Màn hình duyệt cấp độ">
+          <figcaption>Duyệt cấp độ: xử lý đề xuất nâng cấp độ.</figcaption>
+        </figure>
+        <h3>Luồng thao tác trọn vẹn: mở lớp, chạy buổi học và xử lý kết quả học tập</h3>
+        <ol class="steps">
+          <li>Mở <strong>Khóa học</strong>, kiểm tra khóa/chương trình đã tồn tại. Nếu thiếu, tạo khóa mới với mã, tên và chương trình.</li>
+          <li>Mở <strong>Lớp học</strong>, tạo lớp, chọn khóa, cơ sở và giáo viên phụ trách.</li>
+          <li>Trong lớp, chuyển trạng thái theo vòng đời: planned -> running khi bắt đầu, closed khi kết thúc; dùng cancel/reopen khi cần xử lý ngoại lệ.</li>
+          <li>Mở <strong>Lịch dạy</strong>, thêm khung lịch, sau đó sinh buổi học cho khoảng ngày cần chạy.</li>
+          <li>Trong từng buổi, dùng <strong>Điểm danh</strong> để ghi nhận có mặt/vắng.</li>
+          <li>Giáo viên hoặc bộ phận đào tạo dùng <strong>Chấm bài</strong> để chấm và phát hành điểm.</li>
+          <li>Mở <strong>Học bạ</strong>, nhập đánh giá định tính và tính điểm tổng kết.</li>
+          <li>Nếu học sinh đủ điều kiện, tạo hoặc xem đề xuất ở <strong>Duyệt cấp độ</strong>, sau đó quyết định duyệt/từ chối.</li>
+          <li>Dùng <strong>Họp phụ huynh</strong> để đặt lịch và cập nhật trạng thái buổi họp theo lớp.</li>
+        </ol>
+        <p class="visual-note">Luồng đào tạo dùng một sơ đồ tổng quan và ảnh màn hình từ môi trường thử nghiệm. Ảnh màn hình hiện tại là ảnh định vị màn hình; dữ liệu lớp/học sinh thật không đưa vào tài liệu.</p>
+        <div class="visual-strip two">
+          <figure class="figure">
+            <img src="assets/user-guides/e2e-training-class-flow.svg" alt="Luồng vận hành lớp học từ khóa học đến họp phụ huynh">
+            <figcaption>Chuỗi đào tạo: khóa học -> lớp -> lịch -> điểm danh -> chấm bài -> học bạ -> level-up/họp phụ huynh.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/staff-classes-panel.png" alt="Màn hình lớp học">
+            <figcaption>Lớp học: điểm vào để xem vòng đời lớp và các tab vận hành.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/staff-attendance-panel.png" alt="Màn hình điểm danh">
+            <figcaption>Điểm danh: kiểm tra buổi học và lưu trạng thái học sinh.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/staff-grading-panel.png" alt="Màn hình chấm bài">
+            <figcaption>Chấm bài: nơi kiểm tra bài tập/bài nộp và phát hành điểm.</figcaption>
+          </figure>
+        </div>
+        <h3>Luồng thao tác trọn vẹn: mở ngày làm việc của phòng đào tạo</h3>
+        <ol class="steps">
+          <li>Mở <strong>Lịch dạy</strong> để xem buổi hôm nay, giáo viên phụ trách và phòng học.</li>
+          <li>Mở <strong>Lớp học</strong>, kiểm tra lớp planned cần chạy, running cần theo dõi, closed/cancelled cần xử lý.</li>
+          <li>Mở <strong>Điểm danh</strong> sau giờ học để kiểm tra lớp nào chưa được lưu điểm danh.</li>
+          <li>Mở <strong>Chấm bài</strong> để phát hiện bài tập đã nộp nhưng chưa chấm hoặc chưa phát hành điểm.</li>
+          <li>Mở <strong>Học bạ</strong> để xem kỳ học, nhận xét định tính và điểm tổng kết còn thiếu.</li>
+          <li>Mở <strong>Duyệt cấp độ</strong> để xử lý đề xuất đang chờ, tránh học sinh bị kẹt level.</li>
+          <li>Mở <strong>Họp phụ huynh</strong> để kiểm tra lịch họp và trạng thái đã hoàn tất/chưa hoàn tất.</li>
+        </ol>
+        <div class="visual-strip two">
+          <figure class="figure">
+            <img src="assets/user-guides/staff-schedule-panel.png" alt="Màn hình lịch dạy">
+            <figcaption>Lịch dạy: mở đầu ngày để biết buổi học, giáo viên và phòng.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/staff-assessment-panel.png" alt="Màn hình học bạ">
+            <figcaption>Học bạ: kiểm tra kỳ học, nhận xét định tính, điểm tổng kết và đề xuất cấp độ.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/staff-levelup-panel.png" alt="Màn hình duyệt cấp độ">
+            <figcaption>Duyệt cấp độ: xử lý đề xuất nâng cấp độ đang chờ.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/staff-meetings-panel.png" alt="Màn hình họp phụ huynh">
+            <figcaption>Họp phụ huynh: kiểm tra lịch và cập nhật trạng thái buổi họp.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="create-staff" class="section">
+        <h2>6. Tạo nhân sự mới</h2>
+        <p>Việc đưa nhân sự mới vào hệ thống gồm hai bước do hai người khác nhau thực hiện.</p>
+        <table class="matrix">
+          <thead><tr><th>Bước</th><th>Người làm</th><th>Nội dung</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>IT / super_admin</td><td>Tạo email Microsoft <code>@cmcvn.edu.vn</code> cho nhân viên.</td></tr>
+            <tr><td>2</td><td>Giám đốc</td><td>Mở <strong>Cơ sở & Người dùng</strong>, bấm <strong>Tạo người dùng</strong>, nhập email, tên, vai trò, vai trò chính, cơ sở.</td></tr>
+          </tbody>
+        </table>
+        <div class="grid two">
+          <div class="card" data-role="business"><h3>GĐ KD được tạo</h3><p>Sale, CSKH, CTV Marketing.</p></div>
+          <div class="card" data-role="training"><h3>GĐ ĐT được tạo</h3><p>Giáo viên, Trưởng Bộ Môn.</p></div>
+        </div>
+        <div class="callout">Mẫu nhập thông tin tạo người dùng không có ô mật khẩu vì nhân sự đăng nhập bằng tài khoản Microsoft của công ty.</div>
+        <div class="callout warn">Sau khi tạo, giám đốc không đổi vai trò, trạng thái hoạt động hoặc cơ sở của tài khoản đã tồn tại. Các thao tác này dành cho IT/super_admin. Giám đốc chỉ nhìn thấy nhân sự trong phạm vi cơ sở được phân quyền.</div>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-create-user-modal.png" alt="Mẫu nhập thông tin tạo người dùng">
+          <figcaption>Mẫu nhập thông tin tạo người dùng trong hệ thống. Danh sách vai trò thực tế được lọc theo quyền người đăng nhập.</figcaption>
+        </figure>
+        <h3>Luồng thao tác trọn vẹn: thêm một nhân sự mới vào nhóm</h3>
+        <ol class="steps">
+          <li>Xác nhận IT đã tạo email Microsoft <code>@cmcvn.edu.vn</code> cho nhân sự.</li>
+          <li>Mở <strong>Cơ sở & Người dùng</strong>, bấm <strong>Tạo người dùng</strong>.</li>
+          <li>Nhập email công ty và tên hiển thị.</li>
+          <li>Chọn vai trò trong danh sách đã lọc: GĐ KD chỉ chọn sale/cskh/ctv_mkt; GĐ ĐT chỉ chọn giao_vien/head_teacher.</li>
+          <li>Chọn vai trò chính nếu nhân sự có nhiều vai trò.</li>
+          <li>Chọn cơ sở được truy cập, rồi bấm <strong>Tạo</strong>.</li>
+          <li>Nhân sự đăng nhập lần đầu bằng tài khoản Microsoft của công ty, không nhận mật khẩu CMCnew riêng.</li>
+        </ol>
+        <div class="visual-strip two">
+          <figure class="figure">
+            <img src="assets/user-guides/e2e-staff-onboarding-flow.svg" alt="Luồng tạo nhân sự mới">
+            <figcaption>Luồng tạo nhân sự: IT tạo email, giám đốc tạo tài khoản CMCnew trong phạm vi vai trò/cơ sở, nhân sự đăng nhập tài khoản Microsoft.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/staff-create-user-modal.png" alt="Mẫu nhập thông tin tạo người dùng">
+            <figcaption>Mẫu nhập thông tin tạo người dùng: nhập email, tên, vai trò, vai trò chính và cơ sở.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="kpi" class="section">
+        <h2>7. Quy trình chấm & duyệt KPI</h2>
+        <p>KPI đi qua bốn trạng thái: <strong>Nháp</strong> → <strong>Đã nộp</strong> → <strong>Đã xác nhận</strong> → <strong>Đã duyệt</strong>.</p>
+        <table class="matrix">
+          <thead><tr><th>Bước</th><th>Trạng thái</th><th>Người thực hiện</th></tr></thead>
+          <tbody>
+            <tr><td>Chuẩn bị dữ liệu</td><td>Nháp</td><td>Nhân sự / Kế toán</td></tr>
+            <tr><td>Nộp phiếu</td><td>Đã nộp</td><td>Nhân sự / Quản lý</td></tr>
+            <tr><td>Xác nhận</td><td>Đã xác nhận</td><td>Quản Lý hoặc Giám Đốc</td></tr>
+            <tr><td>Duyệt cuối</td><td>Đã duyệt</td><td>Giám Đốc</td></tr>
+          </tbody>
+        </table>
+        <div class="callout danger">Người duyệt phải khác người xác nhận trên cùng một phiếu. Hệ thống chặn tự xác nhận rồi tự duyệt.</div>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-kpi-panel.png" alt="Màn hình đánh giá KPI">
+          <figcaption>Đánh giá KPI: giám đốc dùng cho bước xác nhận/duyệt; dữ liệu chuẩn bị thuộc Nhân sự/Kế toán.</figcaption>
+        </figure>
+        <h3>Luồng thao tác trọn vẹn: xác nhận và duyệt một phiếu KPI</h3>
+        <ol class="steps">
+          <li>Nhân sự/Kế toán chuẩn bị dữ liệu và tạo phiếu ở trạng thái Nháp.</li>
+          <li>Nhân sự/Quản lý nộp phiếu, chuyển sang Đã nộp.</li>
+          <li>Giám đốc hoặc Quản Lý mở <strong>Đánh giá KPI</strong>, kiểm tra kỳ lương, bộ phận, điểm và ghi chú.</li>
+          <li>Người xác nhận bấm <strong>Xác nhận</strong>, phiếu chuyển sang Đã xác nhận.</li>
+          <li>Một người khác mở lại phiếu đã xác nhận và bấm <strong>Duyệt</strong>.</li>
+          <li>Khi phiếu ở trạng thái Đã duyệt, điểm được khóa và đổ vào phiếu lương kỳ đó.</li>
+        </ol>
+        <div class="visual-strip two">
+          <figure class="figure">
+            <img src="assets/user-guides/e2e-kpi-approval-flow.svg" alt="Luồng KPI từ nháp đến duyệt">
+            <figcaption>Luồng KPI: Nháp -> Đã nộp -> Đã xác nhận -> Đã duyệt; người xác nhận và người duyệt phải khác nhau.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/staff-kpi-panel.png" alt="Màn hình đánh giá KPI">
+            <figcaption>Màn KPI trong môi trường thử nghiệm dùng để định vị khu vực thao tác; dữ liệu thật không đưa vào tài liệu.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="notes" class="section">
+        <h2>8. Lưu ý nhanh</h2>
+        <ul>
+          <li>Menu và nút hành động đều theo quyền; thiếu nút không phải lỗi.</li>
+          <li>GĐ Kinh Doanh không có quyền học vụ/giảng dạy và không ghi tài chính.</li>
+          <li>GĐ Đào Tạo không có CRM, CSKH, tài chính, đổi quà.</li>
+          <li>Đặt lại mật khẩu LMS cho học sinh hiện do Quản Lý cơ sở thực hiện qua mục Học sinh.</li>
+        </ul>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-my-payslips-panel.png" alt="Màn hình phiếu lương của tôi">
+          <figcaption>Phiếu lương của tôi: mọi nhân sự xem phiếu lương cá nhân.</figcaption>
+        </figure>
+      </section>
+    </main>
+  </div>
+  <script src="assets/guide.js"></script>
+</body>
+</html>
