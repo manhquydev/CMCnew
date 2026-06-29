@@ -45,3 +45,7 @@ scripts/bin/harness-cli.exe
 
 # Email template preview output (dev QA)
 apps/api/email-previews/
+
+# repomix packed-context output (regenerable, not source)
+repomix-output.*
+repomix-product-source.md
