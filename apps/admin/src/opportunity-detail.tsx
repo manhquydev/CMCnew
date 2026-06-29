@@ -4,7 +4,8 @@
 // schedule test / mark-lost / reopen), and the body shows lead info, the assignment ledger, and
 // the activity log. All writes reuse the existing crm.* endpoints — no new mutation behaviour.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { can } from '@cmc/auth/permissions';
 import {
   trpc,
   Chatter,
@@ -37,7 +38,7 @@ import {
   STAGES,
   LOST_REASON_OPTIONS,
   LOST_REASON_LABEL,
-  REASSIGN_ROLES,
+  makeOwnerName,
   type LostReasonValue,
   statusOf,
   isClosed,
@@ -152,7 +153,9 @@ export function OpportunityDetailPanel({
   onChanged?: () => void;
 }) {
   const { me } = useSession();
-  const canReassign = me.isSuperAdmin || me.roles.some((r) => REASSIGN_ROLES.includes(r));
+  // Mirror the server gate exactly (no hand-kept role list): only roles that hold
+  // crm.opportunityReassign see the button; the mutation re-checks server-side regardless.
+  const canReassign = can(me.roles, me.isSuperAdmin, 'crm', 'opportunityReassign');
 
   const [opp, setOpp] = useState<OppDetail | null>(null);
   const [owners, setOwners] = useState<Owner[]>([]);
@@ -191,13 +194,7 @@ export function OpportunityDetailPanel({
     onChanged?.();
   }, [load, onChanged]);
 
-  const ownerName = useCallback(
-    (id: string | null) => {
-      if (!id) return '—';
-      return owners.find((o) => o.id === id)?.displayName ?? `${id.slice(0, 8)}…`;
-    },
-    [owners],
-  );
+  const ownerName = useMemo(() => makeOwnerName(owners), [owners]);
 
   async function pickStage(stage: string) {
     if (!opp) return;

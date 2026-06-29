@@ -44,11 +44,33 @@ admin typecheck/lint/build ✓ · auth+api typecheck ✓ · permission-parity 25
 crm integration 9/9 ✓ · GitNexus change-scope confined to expected files · code-review
 DONE_WITH_CONCERNS (no Critical/High; nits L1 key + L3 comment fixed).
 
+## Browser QC (done after the above)
+
+Real Chrome against the new code (admin dev → dev API :4100, dev DB, seed `quanly`):
+clean paths `/crm` `/overview` ✓; kanban card + list row → `/crm/opportunities/:id` ✓;
+detail page renders (forward-only statusbar O1 disabled / O2–O5 enabled, owner *name*, actions,
+chatter) ✓; reassign = populated searchable staff picker (no UUID) ✓; **hard refresh on the record
+URL loads the detail directly** (SPA fallback) ✓. Caught + fixed a real `<p><div>` nesting bug
+(`Field` value rendered as `<p>`, owner `<Badge>` is a `<div>`) → value now `component="div"`.
+Three `Unsupported style property` warnings confirmed pre-existing (appear on untouched pages too).
+
+## Quality pass (post-commit simplify)
+
+4 cleanup-review agents (reuse / simplification / efficiency / altitude). Consensus was the code is
+at the right altitude; applied three behavior-preserving fixes:
+- `ownerName` resolver (duplicated verbatim in both panels) → `makeOwnerName(owners)` in `crm-shared.ts`.
+- Hand-kept `REASSIGN_ROLES` mirror → existing `can(roles, isSuperAdmin, 'crm', 'opportunityReassign')`
+  helper. Also **fixed a latent mismatch**: the list had `bgd`, but the server grants reassign only to
+  `quan_ly`/`giam_doc_kinh_doanh` — `bgd` no longer sees a button the server would 403.
+- `App.tsx`: one `knownSection` const reused by the active-section pick and the redirect guard.
+Deferred (cross-stream / YAGNI): promote the `Field` row to `@cmc/ui` (also in schedule/staff detail),
+a shared `vi-VN` date formatter, and a generic record-route pattern (wait for a 2nd record route).
+
 ## Follow-ups / unresolved
 
-- Browser persona-QC (real Chrome, deep-link hard-refresh + statusbar) not yet run — recommended
-  before merge to main.
+- `develop` has a concurrent harness/session-loop commit stream; CRM work committed selectively
+  (own files only) — `df24c6b` (feature) + a follow-up refactor commit.
 - LMS app (`hoc`) still uses hash routing — out of scope (separate SPA); migrate later using this
   CRM route as the pattern.
 - Staff-profile / schedule-session detail still use in-place state (no URL) — can adopt record
-  routes later.
+  routes later (must move to id-fetch, not prop-passing, to be deep-linkable).

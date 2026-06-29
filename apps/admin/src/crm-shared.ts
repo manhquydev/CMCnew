@@ -35,8 +35,22 @@ export const LOST_REASON_LABEL: Record<string, string> = Object.fromEntries(
   LOST_REASON_OPTIONS.map(({ value, label }) => [value, label]),
 );
 
-/** Roles allowed to reassign an opportunity (must match server PERMISSIONS registry). */
-export const REASSIGN_ROLES = ['quan_ly', 'giam_doc_kinh_doanh', 'bgd'];
+/** Minimal shape for resolving an owner id to a display name. */
+export interface OwnerLike {
+  id: string;
+  displayName: string;
+}
+
+/**
+ * Build an ownerId → display-name resolver over a known owner set (from crm.assignableOwners).
+ * Falls back to a short id when the owner isn't in the set (e.g. deactivated / role-changed).
+ */
+export function makeOwnerName(owners: OwnerLike[]): (id: string | null) => string {
+  return (id) => {
+    if (!id) return '—';
+    return owners.find((o) => o.id === id)?.displayName ?? `${id.slice(0, 8)}…`;
+  };
+}
 
 /** Minimal shape needed to derive an opportunity's open/won/lost status. */
 export interface OppStatusShape {

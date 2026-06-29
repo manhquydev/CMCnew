@@ -592,16 +592,17 @@ function Dashboard() {
   // forces the crm section; a bare/unknown path falls back to the persona default.
   const oppId = params.oppId ?? null;
   const rawSection = oppId ? 'crm' : params.section;
-  const activeSection: SectionKey =
-    rawSection && ALL_SECTION_KEYS.has(rawSection) ? (rawSection as SectionKey) : defaultSection(me);
+  // Single "is this a real section?" check, reused by the active-section pick and the redirect.
+  const knownSection = !!(rawSection && ALL_SECTION_KEYS.has(rawSection));
+  const activeSection: SectionKey = knownSection ? (rawSection as SectionKey) : defaultSection(me);
 
   // Normalise "/" or an unknown section to the canonical persona-default path so the URL bar
   // always reflects a real section.
   useEffect(() => {
-    if (!oppId && (!params.section || !ALL_SECTION_KEYS.has(params.section))) {
+    if (!oppId && !knownSection) {
       navigate('/' + defaultSection(me), { replace: true });
     }
-  }, [oppId, params.section, me, navigate]);
+  }, [oppId, knownSection, me, navigate]);
 
   // goToClass: navigate to the class workspace with a pre-selected batch + tab
   const goToClass = useCallback(

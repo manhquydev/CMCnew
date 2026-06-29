@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   trpc,
@@ -32,7 +32,7 @@ import {
 } from '@mantine/core';
 import { IconTargetArrow, IconCalendarStats } from '@tabler/icons-react';
 import { getDefaultView, getAllowedViews } from './view-defaults';
-import { STAGES, PROGRAMS, statusOf, isClosed } from './crm-shared';
+import { STAGES, PROGRAMS, statusOf, isClosed, makeOwnerName } from './crm-shared';
 import { OpportunityDetailPanel } from './opportunity-detail';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
@@ -184,13 +184,7 @@ export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
   }, [facilityId]);
   useEffect(load, [load]);
 
-  const ownerName = useCallback(
-    (id: string | null) => {
-      if (!id) return '—';
-      return owners.find((o) => o.id === id)?.displayName ?? `${id.slice(0, 8)}…`;
-    },
-    [owners],
-  );
+  const ownerName = useMemo(() => makeOwnerName(owners), [owners]);
 
   const openOpp = useCallback((o: Opp) => navigate(`/crm/opportunities/${o.id}`), [navigate]);
 
