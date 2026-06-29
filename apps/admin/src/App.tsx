@@ -54,6 +54,7 @@ import { MyPayslipsPanel } from './my-payslips-panel';
 import { Workspace, type NavAction } from './class-workspace';
 
 import { Shell, buildNavGroups, SECTION_TITLES, type SectionKey } from './shell';
+import { StaffProfilePanel } from './staff-profile';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type User = Awaited<ReturnType<typeof trpc.user.list.query>>[number];
@@ -462,7 +463,17 @@ function UserEditModal({
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
-function Users({ users, facilities, reload }: { users: User[]; facilities: Facility[]; reload: () => void }) {
+function Users({
+  users,
+  facilities,
+  reload,
+  onView,
+}: {
+  users: User[];
+  facilities: Facility[];
+  reload: () => void;
+  onView: (u: User) => void;
+}) {
   const { me } = useSession();
   const [createOpen, { open, close }] = useDisclosure(false);
   const [editing, setEditing] = useState<User | null>(null);
@@ -506,7 +517,10 @@ function Users({ users, facilities, reload }: { users: User[]; facilities: Facil
               <Table.Td><Text size="sm">{u.roles.join(', ')}</Text></Table.Td>
               <Table.Td><Text size="sm">{u.facilities.length}</Text></Table.Td>
               <Table.Td>
-                <Button variant="subtle" size="compact-xs" onClick={() => setEditing(u)}>Sửa</Button>
+                <Group gap="xs" wrap="nowrap">
+                  <Button variant="subtle" size="compact-xs" onClick={() => onView(u)}>Xem</Button>
+                  <Button variant="subtle" size="compact-xs" onClick={() => setEditing(u)}>Sửa</Button>
+                </Group>
               </Table.Td>
             </Table.Tr>
           ))}
@@ -523,6 +537,9 @@ function Users({ users, facilities, reload }: { users: User[]; facilities: Facil
 function OrgPanel() {
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  // When a user is selected, the org section shows their read-only Staff Profile (plan U1)
+  // instead of the lists. Back returns to the lists.
+  const [viewing, setViewing] = useState<User | null>(null);
 
   const loadFacilities = () =>
     trpc.facility.list.query().then(setFacilities).catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
@@ -531,11 +548,22 @@ function OrgPanel() {
 
   useEffect(() => { loadFacilities(); loadUsers(); }, []);
 
+  const facilityLabels = useMemo(
+    () => Object.fromEntries(facilities.map((f) => [f.id, `${f.code} — ${f.name}`])) as Record<number, string>,
+    [facilities],
+  );
+
+  if (viewing) {
+    return (
+      <StaffProfilePanel user={viewing} facilityLabels={facilityLabels} onBack={() => setViewing(null)} />
+    );
+  }
+
   return (
     <Stack>
       <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Cơ sở &amp; Người dùng</Text>
       <Facilities facilities={facilities} reload={loadFacilities} />
-      <Users users={users} facilities={facilities} reload={loadUsers} />
+      <Users users={users} facilities={facilities} reload={loadUsers} onView={setViewing} />
     </Stack>
   );
 }
