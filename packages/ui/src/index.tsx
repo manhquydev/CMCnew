@@ -13,6 +13,8 @@ export { LmsLoginGate, useLmsSession, type LmsPrincipal } from './lms-login-gate
 export { Chatter } from './chatter.js';
 export { ActivityLog, type ActivityEntry, type ActivityLogProps } from './activity-log.js';
 export { FacilityPicker, type FacilityOption, type FacilityPickerProps } from './facility-picker.js';
+export { ViewSwitcher, useViewSwitcher, type ViewMode, type ViewSwitcherProps } from './view-switcher.js';
+export { FilterBar, type FilterBarProps } from './filter-bar.js';
 export { BadgeShelf } from './badge-shelf.js';
 export { Leaderboard } from './leaderboard.js';
 export { NotificationCenter } from './notification-center.js';

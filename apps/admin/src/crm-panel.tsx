@@ -9,17 +9,24 @@ import {
   DataTable,
   StatusBadge,
   EmptyState,
+  FilterBar,
+  ViewSwitcher,
+  useViewSwitcher,
   type DataTableColumn,
   type StatusTone,
 } from '@cmc/ui';
 import {
+  Badge,
   Button,
   Card,
   Divider,
   Group,
   Modal,
   NumberInput,
+  ScrollArea,
   Select,
+  SimpleGrid,
+  Skeleton,
   Stack,
   Text,
   TextInput,
@@ -28,6 +35,7 @@ import {
 } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
 import { IconTargetArrow, IconCalendarStats } from '@tabler/icons-react';
+import { getDefaultView, getAllowedViews } from './view-defaults';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Opp = Awaited<ReturnType<typeof trpc.crm.opportunityList.query>>[number];
@@ -71,6 +79,46 @@ function statusOf(o: Opp): { label: string; tone: StatusTone } {
   if (o.lostReason) return { label: 'Mất', tone: 'rejected' };
   if (o.stage === 'O5_ENROLLED' && o.closedAt) return { label: 'Thành công', tone: 'active' };
   return { label: 'Đang mở', tone: 'info' };
+}
+
+// Kanban view of the pipeline: one column per stage (O1→O5), cards open the detail modal.
+// Read-only grouping (no drag) per the framework decision; stage changes stay in the detail/table.
+function OppKanban({ opps, loading, onOpen }: { opps: Opp[]; loading: boolean; onOpen: (o: Opp) => void }) {
+  if (loading) return <Skeleton height={200} radius="md" />;
+  return (
+    <ScrollArea>
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 5 }} spacing="sm" style={{ minWidth: 760 }}>
+        {STAGES.map((s) => {
+          const col = opps.filter((o) => o.stage === s.value);
+          return (
+            <Card key={s.value} withBorder p="sm" radius="md">
+              <Group justify="space-between" mb="xs">
+                <Text size="sm" fw={600}>{s.label}</Text>
+                <Badge variant="light" radius="xl" size="sm">{col.length}</Badge>
+              </Group>
+              <Stack gap="xs">
+                {col.length === 0 ? (
+                  <Text size="xs" c="dimmed">—</Text>
+                ) : (
+                  col.map((o) => {
+                    const st = statusOf(o);
+                    return (
+                      <Card key={o.id} withBorder p="xs" radius="md" style={{ cursor: 'pointer' }} onClick={() => onOpen(o)}>
+                        <Text size="sm" fw={500}>{o.contact.fullName}</Text>
+                        {o.studentName && <Text size="xs" c="dimmed">HS: {o.studentName}</Text>}
+                        <Text size="xs" c="dimmed">{o.contact.phone}</Text>
+                        <StatusBadge status={st.label} label={st.label} tone={st.tone} />
+                      </Card>
+                    );
+                  })
+                )}
+              </Stack>
+            </Card>
+          );
+        })}
+      </SimpleGrid>
+    </ScrollArea>
+  );
 }
 
 function testStatus(t: TestAppt): { label: string; tone: StatusTone } {
@@ -136,6 +184,11 @@ export function CrmPanel() {
   const [gradeScore, setGradeScore] = useState<number | string>('');
   const [gradeResult, setGradeResult] = useState('');
   const [detailTarget, setDetailTarget] = useState<Opp | null>(null);
+  const { view: oppView, setView: setOppView } = useViewSwitcher(
+    'crm.opportunity',
+    getDefaultView('opportunity'),
+    getAllowedViews('opportunity'),
+  );
   const [reassignTarget, setReassignTarget] = useState<Opp | null>(null);
   const [reassignToOwnerId, setReassignToOwnerId] = useState('');
   const [reassignReason, setReassignReason] = useState('');
@@ -456,25 +509,31 @@ export function CrmPanel() {
       </Card>
 
       <Stack gap="xs">
-        <Title order={5}>Pipeline cơ hội</Title>
-        <DataTable
-          data={opps}
-          columns={oppColumns}
-          getRowKey={(o) => o.id}
-          loading={oppsLoading}
-          error={oppsError}
-          onRetry={load}
-          searchText={(o) => `${o.studentName ?? ''} ${o.contact.fullName} ${o.contact.phone}`}
-          searchPlaceholder="Tên hoặc SĐT"
-          pageSize={15}
-          emptyState={
-            <EmptyState
-              icon={<IconTargetArrow size={28} stroke={1.5} />}
-              title="Chưa có cơ hội nào"
-              description="Tạo cơ hội đầu tiên ở khung phía trên để bắt đầu theo dõi pipeline tuyển sinh."
-            />
-          }
-        />
+        <FilterBar right={<ViewSwitcher value={oppView} allowed={getAllowedViews('opportunity')} onChange={setOppView} />}>
+          <Title order={5}>Pipeline cơ hội</Title>
+        </FilterBar>
+        {oppView === 'kanban' ? (
+          <OppKanban opps={opps} loading={oppsLoading} onOpen={setDetailTarget} />
+        ) : (
+          <DataTable
+            data={opps}
+            columns={oppColumns}
+            getRowKey={(o) => o.id}
+            loading={oppsLoading}
+            error={oppsError}
+            onRetry={load}
+            searchText={(o) => `${o.studentName ?? ''} ${o.contact.fullName} ${o.contact.phone}`}
+            searchPlaceholder="Tên hoặc SĐT"
+            pageSize={15}
+            emptyState={
+              <EmptyState
+                icon={<IconTargetArrow size={28} stroke={1.5} />}
+                title="Chưa có cơ hội nào"
+                description="Tạo cơ hội đầu tiên ở khung phía trên để bắt đầu theo dõi pipeline tuyển sinh."
+              />
+            }
+          />
+        )}
       </Stack>
 
       <Stack gap="xs">

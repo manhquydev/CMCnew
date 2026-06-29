@@ -3,7 +3,10 @@
 // ViewSwitcher (F2) reads this so every list lands on a sensible default (kanban for pipelines,
 // calendar for time-based, list for ledgers) without per-panel hardcoding.
 
-export type ViewMode = 'list' | 'kanban' | 'calendar' | 'form';
+// Single source of truth for the view-mode union lives in @cmc/ui (with the ViewSwitcher), so the
+// registry can never drift from the modes the switcher accepts.
+import type { ViewMode } from '@cmc/ui';
+export type { ViewMode };
 
 export interface ViewConfig {
   default: ViewMode;
