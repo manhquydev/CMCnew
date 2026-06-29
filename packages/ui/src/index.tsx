@@ -11,6 +11,7 @@ export { AppProviders } from './provider.js';
 export { LoginGate, useSession } from './login-gate.js';
 export { LmsLoginGate, useLmsSession, type LmsPrincipal } from './lms-login-gate.js';
 export { Chatter } from './chatter.js';
+export { ActivityLog, type ActivityEntry, type ActivityLogProps } from './activity-log.js';
 export { BadgeShelf } from './badge-shelf.js';
 export { Leaderboard } from './leaderboard.js';
 export { NotificationCenter } from './notification-center.js';

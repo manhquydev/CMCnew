@@ -7,7 +7,7 @@
 // tabs lazy-load behind their own permission gates so unprivileged roles never over-fetch them.
 
 import { useEffect, useState } from 'react';
-import { trpc, useSession, notifyError, notifySuccess } from '@cmc/ui';
+import { trpc, useSession, notifyError, notifySuccess, ActivityLog } from '@cmc/ui';
 import { can } from '@cmc/auth/permissions';
 import {
   ActionIcon,
@@ -18,7 +18,6 @@ import {
   Grid,
   Group,
   MultiSelect,
-  ScrollArea,
   Select,
   SimpleGrid,
   Skeleton,
@@ -28,7 +27,6 @@ import {
   Tabs,
   Text,
   TextInput,
-  Timeline,
   Title,
 } from '@mantine/core';
 import { IconArrowLeft, IconPencil } from '@tabler/icons-react';
@@ -175,9 +173,9 @@ function PayrollTab({ user }: { user: StaffProfileUser }) {
   );
 }
 
-// ─── Activity log (secure, inline right column) ──────────────────────────────
-// Plain-language field labels so the log reads for a manager, not a developer.
-const FIELD_LABEL: Record<string, string> = {
+// ─── Activity log (secure fetch + shared <ActivityLog> primitive) ────────────
+// Field labels + value formatting for the staff entity; the generic rendering lives in @cmc/ui.
+const STAFF_FIELD_LABELS: Record<string, string> = {
   displayName: 'Tên hiển thị',
   phone: 'Số điện thoại',
   roles: 'Vai trò',
@@ -185,30 +183,14 @@ const FIELD_LABEL: Record<string, string> = {
   facilities: 'Cơ sở',
   isActive: 'Trạng thái',
 };
-function fmtValue(field: string, v: unknown): string {
+function staffFormatValue(field: string, v: unknown): string {
   if (v === null || v === undefined || v === '') return '(trống)';
   if (field === 'isActive') return v ? 'Đang hoạt động' : 'Ngừng';
   if (Array.isArray(v)) return v.join(', ');
   return String(v);
 }
-function fmtChanges(changes: unknown): { label: string; from: string; to: string }[] {
-  if (!Array.isArray(changes)) return [];
-  return (changes as { field: string; old: unknown; new: unknown }[]).map((c) => ({
-    label: FIELD_LABEL[c.field] ?? c.field,
-    from: fmtValue(c.field, c.old),
-    to: fmtValue(c.field, c.new),
-  }));
-}
-const EVENT_LABEL: Record<string, string> = {
-  created: 'đã tạo tài khoản',
-  updated: 'đã cập nhật',
-  status_changed: 'đã đổi trạng thái',
-  archived: 'đã lưu trữ',
-  restored: 'đã khôi phục',
-  note: 'đã ghi chú',
-};
 
-function ActivityLog({ userId, refreshKey }: { userId: string; refreshKey: number }) {
+function StaffActivityLog({ userId, refreshKey }: { userId: string; refreshKey: number }) {
   const [rows, setRows] = useState<TimelineEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -222,31 +204,9 @@ function ActivityLog({ userId, refreshKey }: { userId: string; refreshKey: numbe
   }, [userId, refreshKey]);
 
   return (
-    <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)', position: 'sticky', top: 12 }}>
-      <Text fw={600} mb="sm">Nhật ký hoạt động</Text>
-      {loading ? (
-        <Skeleton height={60} radius="md" />
-      ) : rows.length === 0 ? (
-        <Text size="sm" c="dimmed">Chưa có hoạt động.</Text>
-      ) : (
-        <ScrollArea.Autosize mah={420}>
-          <Timeline active={-1} bulletSize={14} lineWidth={2}>
-            {rows.map((r) => (
-              <Timeline.Item
-                key={r.id}
-                title={<Text size="sm" fw={500}>{r.actorName} {EVENT_LABEL[r.type] ?? r.type}</Text>}
-              >
-                {r.body && <Text size="xs">{r.body}</Text>}
-                {fmtChanges(r.changes).map((c, i) => (
-                  <Text key={i} size="xs" c="dimmed">{c.label}: {c.from} → {c.to}</Text>
-                ))}
-                <Text size="xs" c="dimmed">{new Date(r.createdAt).toLocaleString('vi-VN')}</Text>
-              </Timeline.Item>
-            ))}
-          </Timeline>
-        </ScrollArea.Autosize>
-      )}
-    </Card>
+    <div style={{ position: 'sticky', top: 12 }}>
+      <ActivityLog entries={rows} loading={loading} fieldLabels={STAFF_FIELD_LABELS} formatValue={staffFormatValue} />
+    </div>
   );
 }
 
@@ -440,7 +400,7 @@ export function StaffProfilePanel({
       {canActivity ? (
         <Grid gutter="lg">
           <Grid.Col span={{ base: 12, md: 8 }}>{sheet}</Grid.Col>
-          <Grid.Col span={{ base: 12, md: 4 }}><ActivityLog userId={view.id} refreshKey={activityKey} /></Grid.Col>
+          <Grid.Col span={{ base: 12, md: 4 }}><StaffActivityLog userId={view.id} refreshKey={activityKey} /></Grid.Col>
         </Grid>
       ) : (
         sheet
