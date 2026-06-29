@@ -12,6 +12,7 @@ const role = z.nativeEnum(Role);
 const userSelect = {
   id: true,
   email: true,
+  phone: true,
   displayName: true,
   roles: true,
   primaryRole: true,
@@ -264,6 +265,49 @@ export const userRouter = router({
         input.isActive ? 'Kích hoạt lại tài khoản' : 'Vô hiệu hóa tài khoản',
       );
       return user;
+    }),
+
+  // Edit basic contact fields only (displayName, phone). email is SSO-derived and intentionally
+  // NOT editable here. This is a profile-data change, not a security-session change, so it does
+  // NOT bump tokenVersion (unlike setRoles/setActive/setFacilities). super_admin-only for F0;
+  // director-scoped editing is a deliberate open question deferred to a later decision.
+  updateProfile: superAdminProcedure
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        displayName: z.string().min(1),
+        phone: z.string().trim().max(32).optional().nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const phone = input.phone === '' ? null : (input.phone ?? null);
+      return withRls(rlsContextOf(ctx.session), async (tx) => {
+        const before = await tx.appUser.findUniqueOrThrow({
+          where: { id: input.id },
+          select: { displayName: true, phone: true },
+        });
+        const user = await tx.appUser.update({
+          where: { id: input.id },
+          data: { displayName: input.displayName, phone },
+          select: userSelect,
+        });
+        const changes = [];
+        if (before.displayName !== input.displayName)
+          changes.push({ field: 'displayName', old: before.displayName, new: input.displayName });
+        if ((before.phone ?? null) !== phone)
+          changes.push({ field: 'phone', old: before.phone ?? null, new: phone });
+        // Skip the audit row entirely on a no-op save (no field changed) to avoid audit noise.
+        if (changes.length > 0) {
+          await logEvent(tx, {
+            entityType: 'user',
+            entityId: user.id,
+            type: 'updated',
+            actorId: ctx.session.userId,
+            changes,
+          });
+        }
+        return user;
+      });
     }),
 });
 

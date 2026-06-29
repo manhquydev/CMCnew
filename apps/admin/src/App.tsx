@@ -55,10 +55,12 @@ import { Workspace, type NavAction } from './class-workspace';
 
 import { Shell, buildNavGroups, SECTION_TITLES, type SectionKey } from './shell';
 import { StaffProfilePanel } from './staff-profile';
+import { ScheduleDetailPanel } from './schedule-detail';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type User = Awaited<ReturnType<typeof trpc.user.list.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
+type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
 type Program = 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE';
 type Session = ReturnType<typeof useSession>['me'];
 
@@ -188,8 +190,67 @@ function Courses() {
 
 // ─── Facilities ───────────────────────────────────────────────────────────────
 
+// Edit existing facility metadata (code/name/address/isActive) via the existing
+// super-admin-only facility.update endpoint (plan U2). Create stays in Facilities below.
+function FacilityEditModal({
+  facility,
+  close,
+  reload,
+}: {
+  facility: Facility | null;
+  close: () => void;
+  reload: () => void;
+}) {
+  const [code, setCode] = useState('');
+  const [name, setName] = useState('');
+  const [address, setAddress] = useState('');
+  const [isActive, setIsActive] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!facility) return;
+    setCode(facility.code);
+    setName(facility.name);
+    setAddress(facility.address ?? '');
+    setIsActive(facility.isActive);
+  }, [facility]);
+
+  if (!facility) return null;
+
+  async function save() {
+    if (!facility) return;
+    setBusy(true);
+    try {
+      await trpc.facility.update.mutate({ id: facility.id, code, name, address, isActive });
+      notifySuccess('Đã cập nhật cơ sở');
+      close();
+      reload();
+    } catch (e) {
+      notifyError(e, 'Cập nhật cơ sở thất bại');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal opened={!!facility} onClose={close} title={`Sửa cơ sở: ${facility.code}`} radius="xl" centered>
+      <Stack>
+        <TextInput label="Mã" value={code} onChange={(e) => setCode(e.currentTarget.value)} />
+        <TextInput label="Tên" value={name} onChange={(e) => setName(e.currentTarget.value)} />
+        <TextInput label="Địa chỉ" value={address} onChange={(e) => setAddress(e.currentTarget.value)} />
+        <Switch label="Đang hoạt động" checked={isActive} onChange={(e) => setIsActive(e.currentTarget.checked)} />
+        <Group justify="flex-end" mt="xs">
+          <Button variant="subtle" onClick={close}>Hủy</Button>
+          <Button variant="filled" radius={9999} loading={busy} onClick={save} disabled={!code || !name}>Lưu</Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
 function Facilities({ facilities, reload }: { facilities: Facility[]; reload: () => void }) {
   const [opened, { open, close }] = useDisclosure(false);
+  const [editing, setEditing] = useState<Facility | null>(null);
   const [busy, setBusy] = useState(false);
   const form = useForm({
     initialValues: { code: '', name: '', address: '' },
@@ -233,6 +294,7 @@ function Facilities({ facilities, reload }: { facilities: Facility[]; reload: ()
             <Table.Th style={TH_STYLE}>Mã</Table.Th>
             <Table.Th style={TH_STYLE}>Tên</Table.Th>
             <Table.Th style={TH_STYLE}>Trạng thái</Table.Th>
+            <Table.Th style={{ ...TH_STYLE, width: 60 }} />
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -254,10 +316,15 @@ function Facilities({ facilities, reload }: { facilities: Facility[]; reload: ()
                   </Group>
                 )}
               </Table.Td>
+              <Table.Td>
+                <Button variant="subtle" size="compact-xs" onClick={() => setEditing(f)}>Sửa</Button>
+              </Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>
       </Table>
+
+      <FacilityEditModal facility={editing} close={() => setEditing(null)} reload={reload} />
 
       <Modal opened={opened} onClose={close} title="Tạo cơ sở" radius="xl" centered>
         <form onSubmit={form.onSubmit(create)}>
@@ -367,100 +434,6 @@ function UserCreateModal({
   );
 }
 
-function UserEditModal({
-  user,
-  close,
-  facilities,
-  reload,
-  roleOptions,
-}: {
-  user: User | null;
-  close: () => void;
-  facilities: Facility[];
-  reload: () => void;
-  roleOptions: string[];
-}) {
-  const [roles, setRoles] = useState<string[]>([]);
-  const [primaryRole, setPrimaryRole] = useState<string | null>(null);
-  const [facilityIds, setFacilityIds] = useState<string[]>([]);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (!user) return;
-    setRoles(user.roles);
-    setPrimaryRole(user.primaryRole);
-    setFacilityIds(user.facilities.map((f) => String(f.facilityId)));
-  }, [user]);
-
-  const facilityData = facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }));
-
-  async function run(fn: () => Promise<unknown>, successMsg: string) {
-    setBusy(true);
-    try {
-      await fn();
-      notifySuccess(successMsg);
-      reload();
-    } catch (e) {
-      notifyError(e, 'Cập nhật thất bại');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (!user) return null;
-
-  return (
-    <Modal opened={!!user} onClose={close} title={`Sửa: ${user.displayName}`} size="lg" radius="xl" centered>
-      <Stack>
-        <Text size="sm" c="dimmed">{user.email}</Text>
-        <MultiSelect
-          label="Vai trò" data={roleOptions}
-          value={roles}
-          onChange={(v) => { setRoles(v); if (primaryRole && !v.includes(primaryRole)) setPrimaryRole(null); }}
-        />
-        <Select label="Vai trò chính" data={roles} value={primaryRole} onChange={setPrimaryRole} disabled={roles.length === 0} />
-        <Button
-          variant="light" size="xs" loading={busy}
-          disabled={roles.length === 0 || !primaryRole}
-          onClick={() =>
-            run(
-              () => trpc.user.setRoles.mutate({ id: user.id, roles: roles as User['roles'], primaryRole: primaryRole as User['primaryRole'] }),
-              'Đã lưu vai trò',
-            )
-          }
-        >
-          Lưu vai trò
-        </Button>
-        <MultiSelect label="Cơ sở được truy cập" data={facilityData} value={facilityIds} onChange={setFacilityIds} />
-        <Button
-          variant="light" size="xs" loading={busy}
-          onClick={() =>
-            run(
-              () => trpc.user.setFacilities.mutate({ id: user.id, facilityIds: facilityIds.map(Number) }),
-              'Đã lưu cơ sở',
-            )
-          }
-        >
-          Lưu cơ sở
-        </Button>
-        <Switch
-          label="Đang hoạt động"
-          checked={user.isActive}
-          onChange={(e) =>
-            run(
-              () => trpc.user.setActive.mutate({ id: user.id, isActive: e.currentTarget.checked }),
-              'Đã cập nhật trạng thái',
-            )
-          }
-        />
-        <Text size="xs" c="dimmed">
-          Đổi vai trò / cơ sở / trạng thái sẽ vô hiệu hóa các phiên đăng nhập hiện tại của người dùng.
-        </Text>
-      </Stack>
-    </Modal>
-  );
-}
-
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 function Users({
@@ -476,7 +449,6 @@ function Users({
 }) {
   const { me } = useSession();
   const [createOpen, { open, close }] = useDisclosure(false);
-  const [editing, setEditing] = useState<User | null>(null);
 
   // Role choices come from the registry-driven assignableRoles(session): super_admin sees every role
   // (incl. the two director roles); a director sees only their grant set. Keeps the dropdown in sync
@@ -501,12 +473,12 @@ function Users({
             <Table.Th style={TH_STYLE}>Email</Table.Th>
             <Table.Th style={TH_STYLE}>Vai trò</Table.Th>
             <Table.Th style={TH_STYLE}>Cơ sở</Table.Th>
-            <Table.Th style={{ ...TH_STYLE, width: 80 }} />
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
+          {/* Row click opens the staff record page (view + inline edit). No separate view/edit split. */}
           {users.map((u) => (
-            <Table.Tr key={u.id}>
+            <Table.Tr key={u.id} style={{ cursor: 'pointer' }} onClick={() => onView(u)}>
               <Table.Td>
                 <Group gap="xs">
                   <Text size="sm">{u.displayName}</Text>
@@ -516,18 +488,11 @@ function Users({
               <Table.Td><Text size="sm" style={{ color: 'var(--cmc-text-muted)' }}>{u.email}</Text></Table.Td>
               <Table.Td><Text size="sm">{u.roles.join(', ')}</Text></Table.Td>
               <Table.Td><Text size="sm">{u.facilities.length}</Text></Table.Td>
-              <Table.Td>
-                <Group gap="xs" wrap="nowrap">
-                  <Button variant="subtle" size="compact-xs" onClick={() => onView(u)}>Xem</Button>
-                  <Button variant="subtle" size="compact-xs" onClick={() => setEditing(u)}>Sửa</Button>
-                </Group>
-              </Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>
       </Table>
       <UserCreateModal opened={createOpen} close={close} facilities={facilities} reload={reload} roleOptions={roleOptions} />
-      <UserEditModal user={editing} close={() => setEditing(null)} facilities={facilities} reload={reload} roleOptions={roleOptions} />
     </Card>
   );
 }
@@ -535,9 +500,10 @@ function Users({
 // ─── Org (Cơ sở & Users) ─────────────────────────────────────────────────────
 
 function OrgPanel() {
+  const { me } = useSession();
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [users, setUsers] = useState<User[]>([]);
-  // When a user is selected, the org section shows their read-only Staff Profile (plan U1)
+  // When a user is selected, the org section shows their staff record page (view + inline edit)
   // instead of the lists. Back returns to the lists.
   const [viewing, setViewing] = useState<User | null>(null);
 
@@ -548,14 +514,20 @@ function OrgPanel() {
 
   useEffect(() => { loadFacilities(); loadUsers(); }, []);
 
-  const facilityLabels = useMemo(
-    () => Object.fromEntries(facilities.map((f) => [f.id, `${f.code} — ${f.name}`])) as Record<number, string>,
-    [facilities],
+  const roleOptions = useMemo(
+    () => [...assignableRoles({ isSuperAdmin: me.isSuperAdmin, roles: me.roles as string[] })].sort(),
+    [me.isSuperAdmin, me.roles],
   );
 
   if (viewing) {
     return (
-      <StaffProfilePanel user={viewing} facilityLabels={facilityLabels} onBack={() => setViewing(null)} />
+      <StaffProfilePanel
+        user={viewing}
+        facilities={facilities}
+        roleOptions={roleOptions}
+        onBack={() => setViewing(null)}
+        reload={loadUsers}
+      />
     );
   }
 
@@ -613,6 +585,8 @@ function hashToSection(): SectionKey | undefined {
 function Dashboard() {
   const { me } = useSession();
   const [navAction, setNavAction] = useState<NavAction | null>(null);
+  // Selected lesson for the connected Session Detail view inside the schedule section.
+  const [selectedSession, setSelectedSession] = useState<MySession | null>(null);
 
   // Compute initial section: hash → persona default
   const [activeSection, setActiveSection] = useState<SectionKey>(
@@ -637,6 +611,7 @@ function Dashboard() {
 
   function handleSectionChange(key: SectionKey) {
     setNavAction(null);
+    setSelectedSession(null);
     window.location.hash = key;
     setActiveSection(key);
   }
@@ -684,7 +659,15 @@ function Dashboard() {
         return (
           <Stack>
             <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Lịch dạy</Text>
-            <SchedulePanel goToClass={goToClass} />
+            {selectedSession ? (
+              <ScheduleDetailPanel
+                session={selectedSession}
+                goToClass={goToClass}
+                onBack={() => setSelectedSession(null)}
+              />
+            ) : (
+              <SchedulePanel goToClass={goToClass} onOpenSession={setSelectedSession} />
+            )}
           </Stack>
         );
 

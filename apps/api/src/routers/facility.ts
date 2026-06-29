@@ -10,7 +10,7 @@ export const facilityRouter = router({
     withRls(rlsContextOf(ctx.session), (tx) =>
       tx.facility.findMany({
         orderBy: { id: 'asc' },
-        select: { id: true, code: true, name: true, isActive: true },
+        select: { id: true, code: true, name: true, address: true, isActive: true },
       }),
     ),
   ),

@@ -1,35 +1,49 @@
-// Staff Profile — read-only unified detail page for one staff member (plan U1).
-// Reuses the student-detail.tsx pattern (multi-tab + back button). Tabs lazy-load from EXISTING
-// permission-gated tRPC procedures, so a viewer without payroll permission never receives salary
-// data over the wire (the salary tab is hidden AND its query never fires). No new write power here;
-// editing still happens through the existing UserEditModal. Activity-log tab is a U3 placeholder —
-// it must NOT reuse the open Chatter path (audit NOTE_TARGETS deliberately excludes `user`).
+// Staff record page (Odoo-style single surface) — plan R0/R1/R2.
+// ONE page for a staff member: read by default, a header "Chỉnh sửa" unlocks only the fields the
+// caller may write (super_admin for F0), with a single Lưu/Hủy that batches the underlying mutations
+// (updateProfile + setRoles/setFacilities/setActive) so a partial save can't happen. The activity
+// log is INLINE in a right column (stacks below on mobile), fed by the SECURE audit.staffTimeline
+// endpoint (facility-scoped + permission-gated) — never the open Chatter path. Salary/employment
+// tabs lazy-load behind their own permission gates so unprivileged roles never over-fetch them.
 
 import { useEffect, useState } from 'react';
-import { trpc, useSession, notifyError } from '@cmc/ui';
+import { trpc, useSession, notifyError, notifySuccess } from '@cmc/ui';
 import { can } from '@cmc/auth/permissions';
 import {
   ActionIcon,
   Badge,
+  Button,
   Card,
+  Fieldset,
+  Grid,
   Group,
+  MultiSelect,
+  ScrollArea,
+  Select,
+  SimpleGrid,
   Skeleton,
   Stack,
+  Switch,
   Table,
   Tabs,
   Text,
+  TextInput,
+  Timeline,
   Title,
 } from '@mantine/core';
-import { IconArrowLeft } from '@tabler/icons-react';
+import { IconArrowLeft, IconPencil } from '@tabler/icons-react';
 
 type EmploymentProfile = Awaited<ReturnType<typeof trpc.payroll.profileList.query>>[number];
 type SalaryRate = Awaited<ReturnType<typeof trpc.payroll.rateList.query>>[number];
 type Payslip = Awaited<ReturnType<typeof trpc.payroll.listByStaff.query>>[number];
+type TimelineEntry = Awaited<ReturnType<typeof trpc.audit.staffTimeline.query>>[number];
+// Role union/array shapes, derived from the mutation input so casts stay in sync with the API.
+type RoleArr = Parameters<typeof trpc.user.setRoles.mutate>[0]['roles'];
 
-/** Structural subset of the admin `User` row (user.list) needed to render a profile. */
 export interface StaffProfileUser {
   id: string;
   email: string;
+  phone?: string | null;
   displayName: string;
   roles: readonly string[];
   primaryRole: string;
@@ -37,17 +51,15 @@ export interface StaffProfileUser {
   facilities: readonly { facilityId: number }[];
 }
 
-const TH: React.CSSProperties = {
-  fontSize: 11,
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  color: 'var(--cmc-text-muted)',
-  fontWeight: 600,
-};
+export interface FacilityOption {
+  id: number;
+  code: string;
+  name: string;
+}
 
 const money = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
+const sortedNums = (a: number[]) => [...a].sort((x, y) => x - y).join(',');
 
-/** Two-column read-only field row. */
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <Group justify="space-between" wrap="nowrap" gap="xl">
@@ -57,91 +69,36 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-// ─── Hồ sơ (identity + employment) ───────────────────────────────────────────
-function ProfileTab({ user }: { user: StaffProfileUser }) {
+// ─── Employment (R0: look across ALL the user's facilities, not just [0]) ─────
+function EmploymentTab({ user }: { user: StaffProfileUser }) {
   const { me } = useSession();
-  // Employment lives in EmploymentProfile (gated payroll.profileList). super_admin bypasses can().
   const canEmployment = me.isSuperAdmin || can(me.roles as string[], me.isSuperAdmin, 'payroll', 'profileList');
-  const firstFacility = user.facilities[0]?.facilityId ?? null;
-
   const [profile, setProfile] = useState<EmploymentProfile | null>(null);
-  const [loading, setLoading] = useState(canEmployment && firstFacility != null);
+  const [loading, setLoading] = useState(canEmployment && user.facilities.length > 0);
 
   useEffect(() => {
-    if (!canEmployment || firstFacility == null) return;
+    if (!canEmployment || user.facilities.length === 0) return;
     setLoading(true);
-    trpc.payroll.profileList
-      .query({ facilityId: firstFacility })
-      .then((rows) => setProfile(rows.find((r) => r.userId === user.id) ?? null))
+    // profileList is per-facility; a staffer may sit at any of their facilities → query each and
+    // take the first profile that matches this user (fixes the prior facilities[0]-only bug).
+    Promise.all(user.facilities.map((f) => trpc.payroll.profileList.query({ facilityId: f.facilityId })))
+      .then((lists) => setProfile(lists.flat().find((r) => r.userId === user.id) ?? null))
       .catch((e) => notifyError(e, 'Không tải được hồ sơ nhân sự'))
       .finally(() => setLoading(false));
-  }, [canEmployment, firstFacility, user.id]);
+  }, [canEmployment, user.id, user.facilities]);
+
+  if (!canEmployment) return <Text size="sm" c="dimmed">Bạn không có quyền xem hồ sơ nhân sự.</Text>;
+  if (loading) return <Skeleton height={48} radius="md" />;
+  if (!profile) return <Text size="sm" c="dimmed">Chưa có hồ sơ nhân sự cho người dùng này.</Text>;
 
   return (
     <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
       <Stack gap="xs">
-        <Text fw={600}>Định danh</Text>
-        <Field label="Họ tên" value={user.displayName} />
-        <Field label="Email (đăng nhập SSO)" value={user.email} />
-        <Field label="Vai trò chính" value={user.primaryRole} />
-        <Field label="Trạng thái" value={user.isActive ? 'Đang hoạt động' : 'Ngừng'} />
-
-        {canEmployment && (
-          <>
-            <Text fw={600} mt="md">Hồ sơ nhân sự</Text>
-            {loading ? (
-              <Skeleton height={12} radius="xl" />
-            ) : profile ? (
-              <>
-                <Field label="Vị trí" value={profile.position} />
-                <Field label="Bậc lương" value={profile.grade} />
-                <Field label="Người phụ thuộc" value={profile.dependents} />
-                <Field label="Số máy nhánh (Callio)" value={profile.callioExt} />
-                <Field
-                  label="Ngày vào làm"
-                  value={profile.startedAt ? new Date(profile.startedAt).toLocaleDateString('vi-VN') : '—'}
-                />
-              </>
-            ) : (
-              <Text size="sm" c="dimmed">Chưa có hồ sơ nhân sự cho người dùng này.</Text>
-            )}
-          </>
-        )}
-      </Stack>
-    </Card>
-  );
-}
-
-// ─── Phân quyền (read-only display) ──────────────────────────────────────────
-function AccessTab({ user, facilityLabels }: { user: StaffProfileUser; facilityLabels: Record<number, string> }) {
-  return (
-    <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
-      <Stack gap="sm">
-        <div>
-          <Text size="sm" c="dimmed" mb={4}>Vai trò</Text>
-          <Group gap="xs">
-            {user.roles.map((r) => (
-              <Badge key={r} variant="light" radius="xl">{r}{r === user.primaryRole ? ' ★' : ''}</Badge>
-            ))}
-          </Group>
-        </div>
-        <div>
-          <Text size="sm" c="dimmed" mb={4}>Cơ sở được truy cập</Text>
-          <Group gap="xs">
-            {user.facilities.length === 0 ? (
-              <Text size="sm" c="dimmed">—</Text>
-            ) : (
-              user.facilities.map((f) => (
-                <Badge key={f.facilityId} variant="outline" radius="xl">
-                  {facilityLabels[f.facilityId] ?? `#${f.facilityId}`}
-                </Badge>
-              ))
-            )}
-          </Group>
-        </div>
-        <Text size="xs" c="dimmed">
-          Sửa vai trò / cơ sở / trạng thái ở nút “Sửa” trong danh sách người dùng (chỉ super admin).
-        </Text>
+        <Field label="Vị trí" value={profile.position} />
+        <Field label="Bậc lương" value={profile.grade} />
+        <Field label="Người phụ thuộc" value={profile.dependents} />
+        <Field label="Số máy nhánh (Callio)" value={profile.callioExt} />
+        <Field label="Ngày vào làm" value={profile.startedAt ? new Date(profile.startedAt).toLocaleDateString('vi-VN') : '—'} />
       </Stack>
     </Card>
   );
@@ -174,14 +131,10 @@ function PayrollTab({ user }: { user: StaffProfileUser }) {
           <Text size="sm" c="dimmed">Chưa có mức lương.</Text>
         ) : (
           <Table striped>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th style={TH}>Hiệu lực từ</Table.Th>
-                <Table.Th style={TH}>Lương cơ bản</Table.Th>
-                <Table.Th style={TH}>Phụ cấp ăn</Table.Th>
-                <Table.Th style={TH}>Phụ cấp khác</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
+            <Table.Thead><Table.Tr>
+              <Table.Th>Hiệu lực từ</Table.Th><Table.Th>Lương cơ bản</Table.Th>
+              <Table.Th>Phụ cấp ăn</Table.Th><Table.Th>Phụ cấp khác</Table.Th>
+            </Table.Tr></Table.Thead>
             <Table.Tbody>
               {rates.map((r) => (
                 <Table.Tr key={r.id}>
@@ -195,21 +148,16 @@ function PayrollTab({ user }: { user: StaffProfileUser }) {
           </Table>
         )}
       </Card>
-
       <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
         <Text fw={600} mb="sm">Phiếu lương gần đây</Text>
         {slips.length === 0 ? (
           <Text size="sm" c="dimmed">Chưa có phiếu lương.</Text>
         ) : (
           <Table striped>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th style={TH}>Kỳ</Table.Th>
-                <Table.Th style={TH}>Trạng thái</Table.Th>
-                <Table.Th style={TH}>Xếp hạng KPI</Table.Th>
-                <Table.Th style={TH}>Thực nhận</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
+            <Table.Thead><Table.Tr>
+              <Table.Th>Kỳ</Table.Th><Table.Th>Trạng thái</Table.Th>
+              <Table.Th>Xếp hạng KPI</Table.Th><Table.Th>Thực nhận</Table.Th>
+            </Table.Tr></Table.Thead>
             <Table.Tbody>
               {slips.map((s) => (
                 <Table.Tr key={s.id}>
@@ -227,58 +175,276 @@ function PayrollTab({ user }: { user: StaffProfileUser }) {
   );
 }
 
-// ─── Main export ─────────────────────────────────────────────────────────────
+// ─── Activity log (secure, inline right column) ──────────────────────────────
+// Plain-language field labels so the log reads for a manager, not a developer.
+const FIELD_LABEL: Record<string, string> = {
+  displayName: 'Tên hiển thị',
+  phone: 'Số điện thoại',
+  roles: 'Vai trò',
+  primaryRole: 'Vai trò chính',
+  facilities: 'Cơ sở',
+  isActive: 'Trạng thái',
+};
+function fmtValue(field: string, v: unknown): string {
+  if (v === null || v === undefined || v === '') return '(trống)';
+  if (field === 'isActive') return v ? 'Đang hoạt động' : 'Ngừng';
+  if (Array.isArray(v)) return v.join(', ');
+  return String(v);
+}
+function fmtChanges(changes: unknown): { label: string; from: string; to: string }[] {
+  if (!Array.isArray(changes)) return [];
+  return (changes as { field: string; old: unknown; new: unknown }[]).map((c) => ({
+    label: FIELD_LABEL[c.field] ?? c.field,
+    from: fmtValue(c.field, c.old),
+    to: fmtValue(c.field, c.new),
+  }));
+}
+const EVENT_LABEL: Record<string, string> = {
+  created: 'đã tạo tài khoản',
+  updated: 'đã cập nhật',
+  status_changed: 'đã đổi trạng thái',
+  archived: 'đã lưu trữ',
+  restored: 'đã khôi phục',
+  note: 'đã ghi chú',
+};
+
+function ActivityLog({ userId, refreshKey }: { userId: string; refreshKey: number }) {
+  const [rows, setRows] = useState<TimelineEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    trpc.audit.staffTimeline
+      .query({ userId })
+      .then(setRows)
+      .catch((e) => notifyError(e, 'Không tải được nhật ký'))
+      .finally(() => setLoading(false));
+  }, [userId, refreshKey]);
+
+  return (
+    <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)', position: 'sticky', top: 12 }}>
+      <Text fw={600} mb="sm">Nhật ký hoạt động</Text>
+      {loading ? (
+        <Skeleton height={60} radius="md" />
+      ) : rows.length === 0 ? (
+        <Text size="sm" c="dimmed">Chưa có hoạt động.</Text>
+      ) : (
+        <ScrollArea.Autosize mah={420}>
+          <Timeline active={-1} bulletSize={14} lineWidth={2}>
+            {rows.map((r) => (
+              <Timeline.Item
+                key={r.id}
+                title={<Text size="sm" fw={500}>{r.actorName} {EVENT_LABEL[r.type] ?? r.type}</Text>}
+              >
+                {r.body && <Text size="xs">{r.body}</Text>}
+                {fmtChanges(r.changes).map((c, i) => (
+                  <Text key={i} size="xs" c="dimmed">{c.label}: {c.from} → {c.to}</Text>
+                ))}
+                <Text size="xs" c="dimmed">{new Date(r.createdAt).toLocaleString('vi-VN')}</Text>
+              </Timeline.Item>
+            ))}
+          </Timeline>
+        </ScrollArea.Autosize>
+      )}
+    </Card>
+  );
+}
+
+// ─── Main: single record page ────────────────────────────────────────────────
 export function StaffProfilePanel({
   user,
-  facilityLabels,
+  facilities,
+  roleOptions,
   onBack,
+  reload,
 }: {
   user: StaffProfileUser;
-  facilityLabels: Record<number, string>;
+  facilities: FacilityOption[];
+  roleOptions: string[];
   onBack: () => void;
+  reload: () => void;
 }) {
   const { me } = useSession();
-  // Salary tab is hidden AND never queried unless the viewer is allowed to read payslips.
+  const canEdit = me.isSuperAdmin; // identity + access mutations are super_admin-only (F0)
   const canPayroll = me.isSuperAdmin || can(me.roles as string[], me.isSuperAdmin, 'payroll', 'listByStaff');
+  const canActivity = me.isSuperAdmin || can(me.roles as string[], me.isSuperAdmin, 'user', 'viewActivity');
+
+  const facilityLabels = Object.fromEntries(facilities.map((f) => [f.id, `${f.code} — ${f.name}`])) as Record<number, string>;
+  const facilityData = facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }));
+
+  // Local view state so a save reflects immediately without a single-user getter.
+  const [view, setView] = useState<StaffProfileUser>(user);
+  useEffect(() => setView(user), [user]);
+
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [activityKey, setActivityKey] = useState(0);
+
+  // Edit form state
+  const [displayName, setDisplayName] = useState(view.displayName);
+  const [phone, setPhone] = useState(view.phone ?? '');
+  const [roles, setRoles] = useState<string[]>([...view.roles]);
+  const [primaryRole, setPrimaryRole] = useState<string | null>(view.primaryRole);
+  const [facilityIds, setFacilityIds] = useState<string[]>(view.facilities.map((f) => String(f.facilityId)));
+  const [isActive, setIsActive] = useState(view.isActive);
+
+  function beginEdit() {
+    setDisplayName(view.displayName);
+    setPhone(view.phone ?? '');
+    setRoles([...view.roles]);
+    setPrimaryRole(view.primaryRole);
+    setFacilityIds(view.facilities.map((f) => String(f.facilityId)));
+    setIsActive(view.isActive);
+    setEditing(true);
+  }
+
+  const rolesChanged =
+    roles.slice().sort().join(',') !== [...view.roles].sort().join(',')
+    || primaryRole !== view.primaryRole;
+  // A role edit is only valid with ≥1 role AND a primary role within them. Surfacing this (vs the
+  // earlier silent skip) prevents a dropped setRoles call from showing a false "saved" state.
+  const roleEditInvalid = rolesChanged && (roles.length === 0 || !primaryRole);
+
+  async function save() {
+    if (roleEditInvalid) {
+      notifyError(
+        new Error(roles.length === 0 ? 'Phải có ít nhất một vai trò' : 'Chọn vai trò chính'),
+        'Lưu thất bại',
+      );
+      return;
+    }
+    setBusy(true);
+    try {
+      const fIds = facilityIds.map(Number);
+      // Batch only the mutations whose values actually changed — one logical save.
+      if (displayName.trim() !== view.displayName || (phone.trim() || null) !== (view.phone ?? null)) {
+        await trpc.user.updateProfile.mutate({ id: view.id, displayName: displayName.trim(), phone: phone.trim() || null });
+      }
+      if (rolesChanged && primaryRole) {
+        await trpc.user.setRoles.mutate({ id: view.id, roles: roles as RoleArr, primaryRole: primaryRole as RoleArr[number] });
+      }
+      if (sortedNums(fIds) !== sortedNums(view.facilities.map((f) => f.facilityId))) {
+        await trpc.user.setFacilities.mutate({ id: view.id, facilityIds: fIds });
+      }
+      if (isActive !== view.isActive) {
+        await trpc.user.setActive.mutate({ id: view.id, isActive });
+      }
+      // Reflect locally + refresh the list behind + re-pull the activity log.
+      setView({
+        ...view,
+        displayName: displayName.trim(),
+        phone: phone.trim() || null,
+        roles: [...roles],
+        primaryRole: primaryRole ?? view.primaryRole,
+        isActive,
+        facilities: fIds.map((facilityId) => ({ facilityId })),
+      });
+      setEditing(false);
+      setActivityKey((k) => k + 1);
+      reload();
+      notifySuccess('Đã lưu thay đổi');
+    } catch (e) {
+      notifyError(e, 'Lưu thất bại');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const sheet = (
+    <Stack>
+      <Fieldset legend="Định danh">
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+          {editing ? (
+            <TextInput label="Tên hiển thị" value={displayName} onChange={(e) => setDisplayName(e.currentTarget.value)} />
+          ) : (
+            <Field label="Tên hiển thị" value={view.displayName} />
+          )}
+          <Field label="Email (SSO — khóa)" value={view.email} />
+          {editing ? (
+            <TextInput label="Số điện thoại" value={phone} onChange={(e) => setPhone(e.currentTarget.value)} />
+          ) : (
+            <Field label="Số điện thoại" value={view.phone || '—'} />
+          )}
+          <Field label="Trạng thái" value={view.isActive ? 'Đang hoạt động' : 'Ngừng'} />
+        </SimpleGrid>
+      </Fieldset>
+
+      <Fieldset legend="Phân quyền">
+        {editing && canEdit ? (
+          <Stack gap="sm">
+            <MultiSelect
+              label="Vai trò" data={roleOptions} value={roles}
+              onChange={(v) => { setRoles(v); if (primaryRole && !v.includes(primaryRole)) setPrimaryRole(null); }}
+            />
+            <Select label="Vai trò chính" data={roles} value={primaryRole} onChange={setPrimaryRole} disabled={roles.length === 0} />
+            <MultiSelect label="Cơ sở được truy cập" data={facilityData} value={facilityIds} onChange={setFacilityIds} />
+            <Switch label="Đang hoạt động" checked={isActive} onChange={(e) => setIsActive(e.currentTarget.checked)} />
+            <Text size="xs" c="dimmed">Đổi vai trò / cơ sở / trạng thái sẽ vô hiệu hóa các phiên đăng nhập hiện tại.</Text>
+          </Stack>
+        ) : (
+          <Stack gap="sm">
+            <div>
+              <Text size="sm" c="dimmed" mb={4}>Vai trò</Text>
+              <Group gap="xs">
+                {view.roles.map((r) => (
+                  <Badge key={r} variant="light" radius="xl">{r}{r === view.primaryRole ? ' ★' : ''}</Badge>
+                ))}
+              </Group>
+            </div>
+            <div>
+              <Text size="sm" c="dimmed" mb={4}>Cơ sở được truy cập</Text>
+              <Group gap="xs">
+                {view.facilities.length === 0 ? <Text size="sm" c="dimmed">—</Text> :
+                  view.facilities.map((f) => (
+                    <Badge key={f.facilityId} variant="outline" radius="xl">{facilityLabels[f.facilityId] ?? `#${f.facilityId}`}</Badge>
+                  ))}
+              </Group>
+            </div>
+          </Stack>
+        )}
+      </Fieldset>
+
+      <Tabs defaultValue="employment" variant="outline">
+        <Tabs.List>
+          <Tabs.Tab value="employment">Hồ sơ nhân sự</Tabs.Tab>
+          {canPayroll && <Tabs.Tab value="payroll">Lương &amp; phụ cấp</Tabs.Tab>}
+        </Tabs.List>
+        <Tabs.Panel value="employment" pt="md"><EmploymentTab user={view} /></Tabs.Panel>
+        {canPayroll && <Tabs.Panel value="payroll" pt="md"><PayrollTab user={view} /></Tabs.Panel>}
+      </Tabs>
+    </Stack>
+  );
 
   return (
     <Stack>
-      <Group>
-        <ActionIcon variant="subtle" onClick={onBack} title="Quay lại danh sách">
-          <IconArrowLeft size={18} />
-        </ActionIcon>
-        <Title order={5}>{user.displayName}</Title>
-        {!user.isActive && <Badge color="gray" variant="light" radius="xl" size="xs">Ngừng</Badge>}
+      <Group justify="space-between">
+        <Group>
+          <ActionIcon variant="subtle" onClick={onBack} title="Quay lại danh sách">
+            <IconArrowLeft size={18} />
+          </ActionIcon>
+          <Title order={5}>{view.displayName}</Title>
+          {!view.isActive && <Badge color="gray" variant="light" radius="xl" size="xs">Ngừng</Badge>}
+        </Group>
+        {canEdit && (
+          editing ? (
+            <Group gap="xs">
+              <Button variant="default" size="xs" onClick={() => setEditing(false)} disabled={busy}>Hủy</Button>
+              <Button variant="filled" radius={9999} size="xs" loading={busy} onClick={save} disabled={displayName.trim().length === 0 || roleEditInvalid}>Lưu</Button>
+            </Group>
+          ) : (
+            <Button variant="light" size="xs" leftSection={<IconPencil size={14} />} onClick={beginEdit}>Chỉnh sửa</Button>
+          )
+        )}
       </Group>
 
-      <Tabs defaultValue="profile" variant="outline">
-        <Tabs.List>
-          <Tabs.Tab value="profile">Hồ sơ</Tabs.Tab>
-          <Tabs.Tab value="access">Phân quyền</Tabs.Tab>
-          {canPayroll && <Tabs.Tab value="payroll">Lương &amp; phụ cấp</Tabs.Tab>}
-          <Tabs.Tab value="history">Nhật ký</Tabs.Tab>
-        </Tabs.List>
-
-        <Tabs.Panel value="profile" pt="md">
-          <ProfileTab user={user} />
-        </Tabs.Panel>
-
-        <Tabs.Panel value="access" pt="md">
-          <AccessTab user={user} facilityLabels={facilityLabels} />
-        </Tabs.Panel>
-
-        {canPayroll && (
-          <Tabs.Panel value="payroll" pt="md">
-            <PayrollTab user={user} />
-          </Tabs.Panel>
-        )}
-
-        <Tabs.Panel value="history" pt="md">
-          {/* U3: secure facility-scoped staff activity log. NOT the open Chatter path — audit
-              NOTE_TARGETS deliberately excludes `user` for RLS reasons. Placeholder until U3. */}
-          <Text size="sm" c="dimmed">Nhật ký hoạt động nhân sự sẽ có ở bước U3 (kênh bảo mật riêng).</Text>
-        </Tabs.Panel>
-      </Tabs>
+      {canActivity ? (
+        <Grid gutter="lg">
+          <Grid.Col span={{ base: 12, md: 8 }}>{sheet}</Grid.Col>
+          <Grid.Col span={{ base: 12, md: 4 }}><ActivityLog userId={view.id} refreshKey={activityKey} /></Grid.Col>
+        </Grid>
+      ) : (
+        sheet
+      )}
     </Stack>
   );
 }

@@ -112,5 +112,6 @@
   "user.create": ["super_admin", "giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "user.setRoles": ["super_admin"],
   "user.setFacilities": ["super_admin"],
-  "user.setActive": ["super_admin"]
+  "user.setActive": ["super_admin"],
+  "user.viewActivity": ["hr", "giam_doc_kinh_doanh", "giam_doc_dao_tao"]
 }

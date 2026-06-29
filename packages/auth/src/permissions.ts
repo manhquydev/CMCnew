@@ -226,6 +226,10 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     setRoles: ['super_admin'],
     setFacilities: ['super_admin'],
     setActive: ['super_admin'],
+    // Read a staff member's audit activity (role/facility/status history). super_admin bypasses.
+    // HR + the two directors may view; the endpoint additionally requires the caller to share a
+    // facility with the target (record_event for `user` is facility_id NULL, so RLS can't scope it).
+    viewActivity: ['hr', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
 };
 

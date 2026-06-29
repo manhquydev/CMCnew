@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { withRls, type Prisma } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { getTimeline, getFollowers, logEvent, addFollower } from '@cmc/audit';
-import { router, protectedProcedure } from '../trpc.js';
+import { router, protectedProcedure, requirePermission } from '../trpc.js';
 import { emitStaffNotif } from '../lib/emit-staff-notif.js';
 
 // Một ghi chú chỉ được gắn vào record có Chatter + có cơ sở. facilityId LẤY TỪ chính
@@ -125,6 +125,38 @@ export const auditRouter = router({
           throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy bản ghi (hoặc ngoài phạm vi cơ sở)' });
         await addFollower(tx, input.entityType, input.entityId, ctx.session.userId);
         return { ok: true };
+      }),
+    ),
+
+  // Read-only staff activity timeline for the unified staff record page (role/facility/status
+  // history). This is the SECURE channel for `user` events — deliberately NOT in NOTE_TARGETS,
+  // because record_event rows for `user` carry facility_id = NULL and would otherwise be readable
+  // by any staff under RLS. Gated by user.viewActivity AND a per-target visibility pre-check:
+  // a non-super caller must share at least one facility with the target staff. No note posting.
+  staffTimeline: requirePermission('user', 'viewActivity')
+    .input(z.object({ userId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        if (!ctx.session.isSuperAdmin) {
+          const shared = await tx.userFacility.findFirst({
+            where: { userId: input.userId, facilityId: { in: ctx.session.facilityIds } },
+            select: { userId: true },
+          });
+          if (!shared)
+            throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy nhân sự (hoặc ngoài phạm vi cơ sở)' });
+        }
+        const rows = await getTimeline(tx, 'user', input.userId);
+        // Resolve actor names so the log reads "ai làm gì" at a glance (Odoo chatter style) instead
+        // of a raw uuid the user would have to trace. Null actor = system/automated action.
+        const actorIds = [...new Set(rows.map((r) => r.actorId).filter((x): x is string => !!x))];
+        const actors = actorIds.length
+          ? await tx.appUser.findMany({ where: { id: { in: actorIds } }, select: { id: true, displayName: true } })
+          : [];
+        const nameById = new Map(actors.map((a) => [a.id, a.displayName]));
+        return rows.map((r) => ({
+          ...r,
+          actorName: r.actorId ? (nameById.get(r.actorId) ?? 'Người dùng khác') : 'Hệ thống',
+        }));
       }),
     ),
 });
