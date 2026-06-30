@@ -66,6 +66,19 @@ export const classBatchRouter = router({
         startDate: z.string().date().optional(),
         endDate: z.string().date().optional(),
         capacity: z.number().int().positive().optional(),
+        initialSlot: z.object({
+          dayOfWeek: z.number().int().min(0).max(6),
+          startTime: z.string().regex(/^\d{2}:\d{2}$/),
+          endTime: z.string().regex(/^\d{2}:\d{2}$/),
+          roomId: z.string().uuid().optional(),
+          teacherId: z.string().uuid().optional(),
+        }).refine((v) => v.startTime < v.endTime, {
+          message: 'Giờ bắt đầu phải trước giờ kết thúc',
+          path: ['endTime'],
+        }).optional(),
+      }).refine((v) => !v.startDate || !v.endDate || v.startDate <= v.endDate, {
+        message: 'Ngày khai giảng phải trước ngày kết thúc',
+        path: ['endDate'],
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -86,6 +99,19 @@ export const classBatchRouter = router({
             status: 'planned',
           },
         });
+        if (input.initialSlot) {
+          await tx.scheduleSlot.create({
+            data: {
+              facilityId: batch.facilityId,
+              classBatchId: batch.id,
+              dayOfWeek: input.initialSlot.dayOfWeek,
+              startTime: input.initialSlot.startTime,
+              endTime: input.initialSlot.endTime,
+              roomId: input.initialSlot.roomId ?? null,
+              teacherId: input.initialSlot.teacherId ?? null,
+            },
+          });
+        }
         await logEvent(tx, {
           facilityId: batch.facilityId,
           entityType: ENTITY,
@@ -93,6 +119,16 @@ export const classBatchRouter = router({
           type: 'created',
           actorId: ctx.session.userId,
         });
+        if (input.initialSlot) {
+          await logEvent(tx, {
+            facilityId: batch.facilityId,
+            entityType: ENTITY,
+            entityId: batch.id,
+            type: 'updated',
+            body: `Khung lịch đầu tiên: thứ ${input.initialSlot.dayOfWeek} ${input.initialSlot.startTime}-${input.initialSlot.endTime}`,
+            actorId: ctx.session.userId,
+          });
+        }
         await addFollower(tx, ENTITY, batch.id, ctx.session.userId);
         return batch;
       }),

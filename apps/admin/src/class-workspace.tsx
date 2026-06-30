@@ -70,10 +70,14 @@ export interface NavAction {
 function CreateClassModal({
   facilityId,
   courses,
+  rooms,
+  teachers,
   onCreated,
 }: {
   facilityId: number;
   courses: Course[];
+  rooms: Room[];
+  teachers: Teacher[];
   onCreated: () => void;
 }) {
   const [opened, { open, close }] = useDisclosure(false);
@@ -82,12 +86,21 @@ function CreateClassModal({
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [capacity, setCapacity] = useState<number | string>('');
+  const [slotDay, setSlotDay] = useState<string | null>('1');
+  const [slotStart, setSlotStart] = useState('18:00');
+  const [slotEnd, setSlotEnd] = useState('19:30');
+  const [slotRoomId, setSlotRoomId] = useState<string | null>(null);
+  const [slotTeacherId, setSlotTeacherId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
   async function create() {
     if (!courseId || !name) {
       setErr('Chọn khóa học và nhập tên lớp');
+      return;
+    }
+    if (!slotDay || !slotStart || !slotEnd) {
+      setErr('Nhập lịch học đầu tiên của lớp');
       return;
     }
     setBusy(true);
@@ -100,10 +113,25 @@ function CreateClassModal({
         startDate: toApiDate(startDate),
         endDate: toApiDate(endDate),
         capacity: typeof capacity === 'number' ? capacity : undefined,
+        initialSlot: {
+          dayOfWeek: Number(slotDay),
+          startTime: slotStart,
+          endTime: slotEnd,
+          roomId: slotRoomId ?? undefined,
+          teacherId: slotTeacherId ?? undefined,
+        },
       });
       close();
       setName('');
       setCourseId(null);
+      setStartDate(null);
+      setEndDate(null);
+      setCapacity('');
+      setSlotDay('1');
+      setSlotStart('18:00');
+      setSlotEnd('19:30');
+      setSlotRoomId(null);
+      setSlotTeacherId(null);
       onCreated();
     } catch (e) {
       setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
@@ -132,6 +160,44 @@ function CreateClassModal({
             <DateInput label="Kết thúc" value={endDate} onChange={setEndDate} valueFormat="DD/MM/YYYY" clearable />
           </Group>
           <NumberInput label="Sĩ số tối đa (tùy chọn)" value={capacity} onChange={setCapacity} min={1} />
+          <Card withBorder>
+            <Stack gap="xs">
+              <Text fw={600} size="sm">Khung giờ buổi học đầu tiên</Text>
+              <Text size="xs" c="dimmed">
+                Hệ thống dùng khung này để sinh buổi học theo lịch. Có thể thêm khung khác trong tab Lịch sau khi tạo lớp.
+              </Text>
+              <Group align="flex-end">
+                <Select
+                  label="Thứ"
+                  w={110}
+                  data={DOW.map((l, i) => ({ value: String(i), label: l }))}
+                  value={slotDay}
+                  onChange={setSlotDay}
+                />
+                <TextInput label="Bắt đầu" w={110} value={slotStart} onChange={(e) => setSlotStart(e.currentTarget.value)} />
+                <TextInput label="Kết thúc" w={110} value={slotEnd} onChange={(e) => setSlotEnd(e.currentTarget.value)} />
+              </Group>
+              <Group grow>
+                <Select
+                  label="Phòng"
+                  clearable
+                  placeholder={rooms.length ? 'Chọn phòng' : 'Chưa có phòng'}
+                  data={rooms.map((r) => ({ value: r.id, label: `${r.code} — ${r.name}` }))}
+                  value={slotRoomId}
+                  onChange={setSlotRoomId}
+                />
+                <Select
+                  label="Giáo viên"
+                  clearable
+                  searchable
+                  placeholder={teachers.length ? 'Chọn GV' : 'Chưa có GV'}
+                  data={teachers.map((t) => ({ value: t.id, label: t.displayName }))}
+                  value={slotTeacherId}
+                  onChange={setSlotTeacherId}
+                />
+              </Group>
+            </Stack>
+          </Card>
           {err && <Text c="red" size="sm">{err}</Text>}
           <Button onClick={create} loading={busy}>Tạo</Button>
         </Stack>
@@ -929,7 +995,13 @@ export function Workspace({ navAction }: { navAction: NavAction | null }) {
         {facilityId && canManageClass && (
           <Group gap="xs" align="flex-end">
             <RoomsManager facilityId={facilityId} rooms={facilityRooms} reload={loadRooms} />
-            <CreateClassModal facilityId={facilityId} courses={courses} onCreated={loadBatches} />
+            <CreateClassModal
+              facilityId={facilityId}
+              courses={courses}
+              rooms={facilityRooms}
+              teachers={teachers}
+              onCreated={loadBatches}
+            />
           </Group>
         )}
       </Group>
