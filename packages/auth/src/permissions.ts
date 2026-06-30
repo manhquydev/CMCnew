@@ -81,10 +81,16 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     contactList: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
     contactCreate: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
     opportunityList: ['sale', 'cskh', 'quan_ly', 'ctv_mkt', 'giam_doc_kinh_doanh'],
+    opportunityGet: ['sale', 'cskh', 'quan_ly', 'ctv_mkt', 'giam_doc_kinh_doanh'],
+    // Owner picker / name resolution: anyone who can view the pipeline can read the staff list.
+    assignableOwners: ['sale', 'cskh', 'quan_ly', 'ctv_mkt', 'giam_doc_kinh_doanh'],
     opportunityCreate: ['sale', 'cskh', 'quan_ly', 'ctv_mkt', 'giam_doc_kinh_doanh'],
     opportunityTransition: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
     opportunityMarkLost: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
     opportunityReopen: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
+    // Đổi người phụ trách là hành vi quản lý → chỉ quản lý/giám đốc KD (khớp các entry CRM khác, không có bgd).
+    opportunityReassign: ['quan_ly', 'giam_doc_kinh_doanh'],
+    assignmentHistory: ['sale', 'cskh', 'quan_ly', 'ctv_mkt', 'giam_doc_kinh_doanh'],
     testList: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
     testCreate: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
     testGrade: ['giao_vien', 'head_teacher', 'quan_ly'],
@@ -223,6 +229,10 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     setRoles: ['super_admin'],
     setFacilities: ['super_admin'],
     setActive: ['super_admin'],
+    // Read a staff member's audit activity (role/facility/status history). super_admin bypasses.
+    // HR + the two directors may view; the endpoint additionally requires the caller to share a
+    // facility with the target (record_event for `user` is facility_id NULL, so RLS can't scope it).
+    viewActivity: ['hr', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
 };
 

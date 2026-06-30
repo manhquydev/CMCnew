@@ -33,10 +33,14 @@
   "crm.contactList": ["sale", "cskh", "quan_ly", "giam_doc_kinh_doanh"],
   "crm.contactCreate": ["sale", "cskh", "quan_ly", "giam_doc_kinh_doanh"],
   "crm.opportunityList": ["sale", "cskh", "quan_ly", "ctv_mkt", "giam_doc_kinh_doanh"],
+  "crm.opportunityGet": ["sale", "cskh", "quan_ly", "ctv_mkt", "giam_doc_kinh_doanh"],
+  "crm.assignableOwners": ["sale", "cskh", "quan_ly", "ctv_mkt", "giam_doc_kinh_doanh"],
   "crm.opportunityCreate": ["sale", "cskh", "quan_ly", "ctv_mkt", "giam_doc_kinh_doanh"],
   "crm.opportunityTransition": ["sale", "cskh", "quan_ly", "giam_doc_kinh_doanh"],
   "crm.opportunityMarkLost": ["sale", "cskh", "quan_ly", "giam_doc_kinh_doanh"],
   "crm.opportunityReopen": ["sale", "cskh", "quan_ly", "giam_doc_kinh_doanh"],
+  "crm.opportunityReassign": ["quan_ly", "giam_doc_kinh_doanh"],
+  "crm.assignmentHistory": ["sale", "cskh", "quan_ly", "ctv_mkt", "giam_doc_kinh_doanh"],
   "crm.testList": ["sale", "cskh", "quan_ly", "giam_doc_kinh_doanh"],
   "crm.testCreate": ["sale", "cskh", "quan_ly", "giam_doc_kinh_doanh"],
   "crm.testGrade": ["giao_vien", "head_teacher", "quan_ly"],
@@ -110,5 +114,6 @@
   "user.create": ["super_admin", "giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "user.setRoles": ["super_admin"],
   "user.setFacilities": ["super_admin"],
-  "user.setActive": ["super_admin"]
+  "user.setActive": ["super_admin"],
+  "user.viewActivity": ["hr", "giam_doc_kinh_doanh", "giam_doc_dao_tao"]
 }

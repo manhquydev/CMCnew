@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CMCnew - Hướng dẫn Sale & Giáo Viên</title>
+  <link rel="stylesheet" href="assets/guide.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">CMC</span><span>Sale & Giáo Viên</span></div>
+      <a class="guide-link" href="index.html">← Tất cả hướng dẫn</a>
+      <div class="toc-title">Mục lục</div>
+      <nav class="toc">
+        <a href="#login">1. Đăng nhập</a>
+        <a href="#first-login">2. Lần đầu vào hệ thống</a>
+        <a href="#sale">3. Sale</a>
+        <a href="#teacher">4. Giáo viên</a>
+        <a href="#kpi-payroll">5. KPI & lương</a>
+        <a href="#notes">6. Lưu ý nhanh</a>
+      </nav>
+      <div class="toc-title">Lọc nhanh</div>
+      <div class="quick-filter">
+        <button class="active" data-filter="all" type="button">Tất cả</button>
+        <button data-filter="sale" type="button">Sale</button>
+        <button data-filter="teacher" type="button">Giáo viên</button>
+      </div>
+    </aside>
+
+    <main class="content">
+      <section class="hero">
+        <div class="eyebrow">CMCnew · Staff Web App</div>
+        <h1>Hướng dẫn sử dụng cho Sale & Giáo Viên</h1>
+        <p class="lead">Dành cho hai vai trò trực tiếp: Sale tư vấn tuyển sinh và Giáo Viên đứng lớp/chấm bài/đánh giá học sinh.</p>
+        <div class="doc-meta">
+          <span>Checklist ngày đầu</span>
+          <span>Luồng công việc thật</span>
+          <span>Không vượt quyền</span>
+        </div>
+        <div class="grid two">
+          <div class="card role-card" data-role="sale">
+            <h3>Sale</h3>
+            <p><code>sale</code> · CRM, tạo cơ hội, lịch test, ghi danh, cập nhật thông tin học sinh, xem lương.</p>
+            <div class="pill-row"><span class="pill ok">CRM</span><span class="pill ok">Ghi danh</span><span class="pill warn">Không tài chính</span></div>
+          </div>
+          <div class="card role-card training" data-role="teacher">
+            <h3>Giáo Viên</h3>
+            <p><code>giao_vien</code> · lịch dạy, điểm danh, chấm bài, học bạ, chấm test, họp PH, đề xuất cấp độ.</p>
+            <div class="pill-row"><span class="pill ok">Lớp học</span><span class="pill ok">Chấm bài</span><span class="pill warn">Không tạo lớp</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="login" class="section">
+        <h2>1. Đăng nhập</h2>
+        <ol class="steps">
+          <li>Mở ứng dụng nhân viên.</li>
+          <li>Bấm <strong>Đăng nhập bằng tài khoản CMC EDU</strong>.</li>
+          <li>Dùng email công ty <code>@cmcvn.edu.vn</code>.</li>
+          <li>Vào giao diện đã lọc theo vai trò.</li>
+        </ol>
+        <div class="callout">Sale do GĐ Kinh Doanh tạo tài khoản CMCnew. Giáo viên do GĐ Đào Tạo tạo tài khoản CMCnew. IT cấp email Microsoft trước.</div>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-dev-login.png" alt="Màn hình đăng nhập nhân viên">
+          <figcaption>Màn đăng nhập nhân viên: dùng tài khoản Microsoft của công ty cho nhân sự.</figcaption>
+        </figure>
+      </section>
+
+      <section id="first-login" class="section">
+        <h2>2. Lần đầu vào hệ thống: bắt đầu từ đâu?</h2>
+        <p>Sale và giáo viên không dùng chung điểm bắt đầu. Hệ thống tự đưa mỗi vai trò vào menu chính của họ, nhưng vẫn cần kiểm tra theo danh sách dưới đây.</p>
+        <div class="grid two">
+          <div class="card" data-role="sale">
+            <h3>Sale: việc đầu tiên cần làm</h3>
+            <ol class="mini-steps">
+              <li>Kiểm tra đúng email công ty và đúng cơ sở được phân quyền.</li>
+              <li>Mở <strong>CRM</strong>, xem các bước O1-O5 O1-O5 để hiểu khách đang ở bước nào.</li>
+              <li>Kiểm tra khách/cơ hội đã được giao cho mình trước khi tạo mới.</li>
+              <li>Thống nhất với quản lý cách cập nhật O1-O5, lý do mất, và thời điểm tạo lịch test.</li>
+              <li>Mở <strong>Học sinh</strong> để biết nơi cập nhật hồ sơ sau khi khách đã được duyệt nhập học.</li>
+              <li>Mở <strong>Phiếu lương của tôi</strong> để biết nơi xem lương cá nhân, không phải nơi tự chấm KPI.</li>
+            </ol>
+          </div>
+          <div class="card training" data-role="teacher">
+            <h3>Giáo viên: việc đầu tiên cần làm</h3>
+            <ol class="mini-steps">
+              <li>Kiểm tra đúng email công ty và đúng cơ sở được phân quyền.</li>
+              <li>Mở <strong>Lịch dạy</strong>, xem buổi hôm nay/tuần này và lớp mình phụ trách.</li>
+              <li>Mở <strong>Điểm danh</strong> để biết cách chọn buổi và lưu trạng thái học sinh.</li>
+              <li>Mở <strong>Chấm bài</strong>, kiểm tra lớp nào có bài tập/bài nộp cần xử lý.</li>
+              <li>Mở <strong>Học bạ</strong>, kiểm tra kỳ học, mẫu đánh giá và nơi nhập nhận xét.</li>
+              <li>Mở <strong>Họp phụ huynh</strong> để biết lịch họp hoặc việc cần cập nhật trạng thái.</li>
+            </ol>
+          </div>
+        </div>
+        <h3>Checklist ngày đầu</h3>
+        <table class="matrix">
+          <thead><tr><th>Vai trò</th><th>Cần thấy</th><th>Nếu không thấy</th></tr></thead>
+          <tbody>
+            <tr><td>Sale</td><td>CRM, Học sinh, Phiếu lương của tôi.</td><td>Báo GĐ Kinh Doanh hoặc IT kiểm tra vai trò/cơ sở.</td></tr>
+            <tr><td>Giáo viên</td><td>Lịch dạy, Điểm danh, Chấm bài, Học bạ, Lớp học, Họp phụ huynh, Phiếu lương của tôi.</td><td>Báo GĐ Đào Tạo hoặc IT kiểm tra phân lớp/vai trò/cơ sở.</td></tr>
+          </tbody>
+        </table>
+        <div class="callout warn">Không dùng tài khoản của người khác để “xem thử”. Menu, dữ liệu và hành động đều được ghi nhận theo tài khoản đăng nhập.</div>
+      </section>
+
+      <section id="sale" class="section" data-role="sale">
+        <h2>3. Hướng dẫn cho Sale</h2>
+        <p>Sale nhìn thấy CRM, Học sinh, Phiếu lương của tôi và một số trang mở chung ở chế độ xem.</p>
+        <div class="grid two">
+          <div class="card">
+            <h3>CRM là công việc chính</h3>
+            <p>Xem/tạo cơ hội, tạo liên hệ, chuyển giai đoạn O1 → O5, đánh dấu mất hoặc mở lại, tạo lịch test cho khách.</p>
+          </div>
+          <div class="card">
+            <h3>Ghi danh & cập nhật học sinh</h3>
+            <p>Ghi danh học sinh vào lớp và cập nhật thông tin học sinh như liên hệ, hồ sơ cơ bản.</p>
+          </div>
+        </div>
+        <div class="callout warn">Sale không chấm test, không tạo/duyệt phiếu thu, không tạo học sinh thủ công, không tự chấm/xác nhận/duyệt KPI.</div>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-classes-panel.png" alt="Lớp học và ghi danh">
+          <figcaption>Lớp học: sale dùng các phần liên quan đến ghi danh khi có quyền.</figcaption>
+        </figure>
+        <h3>Luồng thao tác trọn vẹn: tư vấn một khách mới đến khi ghi danh</h3>
+        <ol class="steps">
+          <li>Mở <strong>CRM</strong>, kiểm tra các bước O1-O5 để tránh tạo trùng khách theo tên hoặc số điện thoại.</li>
+          <li>Tạo cơ hội mới với thông tin liên hệ tối thiểu và chương trình quan tâm nếu đã rõ.</li>
+          <li>Sau mỗi lần tư vấn, cập nhật bước O1 -> O5 để quản lý nhìn được tiến độ.</li>
+          <li>Nếu khách cần test đầu vào, tạo lịch test trong CRM. Không tự chấm test.</li>
+          <li>Khi khách quyết định học, phối hợp Kế Toán/Quản Lý để duyệt phiếu thu. Học sinh được tạo tự động sau bước duyệt, không tạo thủ công.</li>
+          <li>Mở <strong>Học sinh</strong> để cập nhật thông tin liên hệ nếu được phân quyền.</li>
+          <li>Mở <strong>Lớp học</strong>, chọn lớp phù hợp và thực hiện ghi danh nếu lớp còn chỗ và đúng chương trình.</li>
+          <li>Kiểm tra lại trạng thái cơ hội và thông tin học sinh sau ghi danh.</li>
+        </ol>
+        <p class="visual-note">CRM, học sinh và ghi danh thường chứa tên, số điện thoại, mã học sinh. Vì vậy tài liệu dùng hình minh họa đã ẩn dữ liệu thay vì chụp bảng thật.</p>
+        <div class="visual-strip two">
+          <figure class="figure">
+            <img src="assets/user-guides/e2e-crm-admission-flow.svg" alt="Luồng Sale từ CRM đến ghi danh">
+            <figcaption>Luồng tuyển sinh: kiểm tra trùng, tạo cơ hội, cập nhật O1-O5, tạo lịch test, phối hợp phiếu thu, ghi danh.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/e2e-finance-readonly.svg" alt="Sale phối hợp tài chính nhưng không thao tác phiếu thu">
+            <figcaption>Sale phối hợp Kế Toán/Quản Lý ở bước phiếu thu; không tự tạo hoặc duyệt phiếu thu.</figcaption>
+          </figure>
+        </div>
+        <h3>Luồng thao tác trọn vẹn: một ngày làm việc của Sale</h3>
+        <ol class="steps">
+          <li>Mở <strong>CRM</strong>, xem danh sách cơ hội của mình và ưu tiên khách ở O3/O4/O5.</li>
+          <li>Cập nhật ghi chú hoặc trạng thái sau mỗi lần gọi/tư vấn để quản lý không phải hỏi lại.</li>
+          <li>Với khách mới, kiểm tra trùng trước, sau đó tạo cơ hội và nhập thông tin tối thiểu.</li>
+          <li>Với khách cần kiểm tra đầu vào, tạo lịch test và báo giáo viên/trưởng bộ môn theo quy trình cơ sở.</li>
+          <li>Với khách đồng ý học, phối hợp Kế Toán/Quản Lý để xử lý phiếu thu; không tự tạo/duyệt phiếu thu.</li>
+          <li>Sau khi nhập học, cập nhật hồ sơ học sinh và ghi danh vào lớp phù hợp nếu được phân quyền.</li>
+          <li>Cuối ngày, kiểm tra lại các bước O1-O5 để không còn cơ hội thiếu bước, thiếu ghi chú hoặc kẹt lịch test.</li>
+        </ol>
+        <div class="visual-strip two">
+          <figure class="figure">
+            <img src="assets/user-guides/e2e-crm-admission-flow.svg" alt="Các bước O1-O5 một ngày làm việc của Sale">
+            <figcaption>Sale dùng các bước O1-O5 làm danh sách kiểm tra cuối ngày: không bỏ sót khách, test, ghi chú hoặc bước O1-O5.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/e2e-test-grading-flow.svg" alt="Luồng Sale tạo lịch test và giáo viên chấm test">
+            <figcaption>Test đầu vào là luồng liên vai trò: Sale đặt lịch, giáo viên chấm, Sale dùng kết quả để tư vấn lớp.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="teacher" class="section" data-role="teacher">
+        <h2>4. Hướng dẫn cho Giáo Viên</h2>
+        <p>Giáo viên nhìn thấy Lịch dạy, Điểm danh, Chấm bài, Học bạ, Lớp học, Họp phụ huynh và Phiếu lương của tôi.</p>
+        <div class="grid three">
+          <div class="card"><h3>Lịch dạy</h3><p>Xem lịch dạy của mình theo buổi/ngày/tuần.</p></div>
+          <div class="card"><h3>Điểm danh</h3><p>Chọn buổi học, đánh dấu học sinh có mặt/vắng, lưu.</p></div>
+          <div class="card"><h3>Chấm bài</h3><p>Tạo/phát hành bài tập, xem bài nộp, chấm điểm, phát hành điểm.</p></div>
+          <div class="card"><h3>Học bạ</h3><p>Xem mẫu/kỳ học, nhập đánh giá định tính, tính điểm tổng kết.</p></div>
+          <div class="card"><h3>Họp phụ huynh</h3><p>Đặt lịch họp và đổi trạng thái buổi họp cho lớp phụ trách.</p></div>
+          <div class="card"><h3>Đề xuất cấp độ</h3><p>Đề xuất nâng cấp độ trong mục Học bạ; quyết định thuộc Trưởng Bộ Môn/GĐ Đào Tạo.</p></div>
+        </div>
+        <div class="callout warn">Giáo viên không tạo lớp, không tạo/sửa/khóa kỳ học, không quyết định cấp độ, không CRM/tài chính/CSKH/phụ huynh/nhân sự/đổi quà. Chứng chỉ hiện tạm ẩn. Huy hiệu có quyền ở backend nhưng chưa có giao diện thao tác, nên chưa dùng trong vận hành.</div>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-schedule-panel.png" alt="Lịch dạy giáo viên">
+          <figcaption>Lịch dạy: điểm bắt đầu mỗi ngày làm việc của giáo viên.</figcaption>
+        </figure>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-attendance-panel.png" alt="Điểm danh học sinh">
+          <figcaption>Điểm danh: chọn buổi và lưu trạng thái học sinh.</figcaption>
+        </figure>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-grading-panel.png" alt="Chấm bài">
+          <figcaption>Chấm bài: tạo/phát hành bài tập và chấm bài nộp.</figcaption>
+        </figure>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-assessment-panel.png" alt="Học bạ">
+          <figcaption>Học bạ: đánh giá định tính, tổng kết và đề xuất cấp độ.</figcaption>
+        </figure>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-meetings-panel.png" alt="Họp phụ huynh">
+          <figcaption>Họp phụ huynh: đặt lịch và đổi trạng thái buổi họp.</figcaption>
+        </figure>
+        <h3>Luồng thao tác trọn vẹn: một buổi dạy từ lịch đến học bạ</h3>
+        <ol class="steps">
+          <li>Mở <strong>Lịch dạy</strong> để xem buổi hôm nay hoặc tuần này.</li>
+          <li>Vào đúng buổi học, mở <strong>Điểm danh</strong>, đánh dấu có mặt/vắng và lưu.</li>
+          <li>Mở <strong>Chấm bài</strong>, tạo bài tập nếu cần, phát hành cho học sinh làm.</li>
+          <li>Khi học sinh nộp bài, mở danh sách bài nộp, chấm điểm và phát hành điểm để học sinh thấy.</li>
+          <li>Mở <strong>Học bạ</strong>, nhập đánh giá định tính theo kỳ học/mẫu đánh giá.</li>
+          <li>Tính điểm tổng kết khi dữ liệu điểm đã đủ.</li>
+          <li>Nếu học sinh đủ điều kiện nâng cấp độ, tạo đề xuất trong Học bạ. Giáo viên chỉ đề xuất, không quyết định.</li>
+          <li>Nếu cần trao đổi với phụ huynh, mở <strong>Họp phụ huynh</strong>, đặt lịch và cập nhật trạng thái buổi họp.</li>
+        </ol>
+        <p class="visual-note">Ảnh màn hình giáo viên hiện tại dùng để chỉ vị trí màn hình. Các bảng học sinh/bài nộp thật cần dùng dữ liệu demo đã ẩn danh trước khi chụp.</p>
+        <div class="visual-strip two">
+          <figure class="figure">
+            <img src="assets/user-guides/e2e-teacher-day-flow.svg" alt="Luồng một ngày của giáo viên">
+            <figcaption>Chuỗi làm việc của giáo viên: lịch dạy -> lớp -> điểm danh -> chấm bài -> học bạ -> đề xuất cấp độ -> họp phụ huynh.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/staff-schedule-panel.png" alt="Màn hình lịch dạy">
+            <figcaption>Lịch dạy là điểm bắt đầu để biết lớp, giờ, phòng và buổi cần xử lý.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/staff-attendance-panel.png" alt="Màn hình điểm danh">
+            <figcaption>Điểm danh: chọn đúng buổi học và lưu trạng thái có mặt/vắng.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/staff-grading-panel.png" alt="Màn hình chấm bài">
+            <figcaption>Chấm bài: tạo/phát hành bài, xem bài nộp, chấm và công bố điểm.</figcaption>
+          </figure>
+        </div>
+        <h3>Luồng thao tác trọn vẹn: một ngày làm việc của Giáo viên</h3>
+        <ol class="steps">
+          <li>Mở <strong>Lịch dạy</strong> vào đầu ngày để kiểm tra lớp, giờ học, phòng học.</li>
+          <li>Trước giờ học, mở <strong>Lớp học</strong> nếu cần xem danh sách học sinh hoặc bối cảnh lớp.</li>
+          <li>Trong/sau buổi học, mở <strong>Điểm danh</strong>, chọn đúng buổi và lưu trạng thái.</li>
+          <li>Sau buổi học, mở <strong>Chấm bài</strong> để tạo bài tập, xem bài nộp, chấm và phát hành điểm.</li>
+          <li>Mở <strong>Học bạ</strong> để nhập nhận xét định tính khi đến kỳ đánh giá.</li>
+          <li>Nếu học sinh đủ điều kiện lên cấp độ, gửi đề xuất; quyết định thuộc trưởng bộ môn/GĐ Đào Tạo.</li>
+          <li>Nếu có trao đổi phụ huynh, mở <strong>Họp phụ huynh</strong> và cập nhật trạng thái sau buổi họp.</li>
+        </ol>
+        <div class="visual-strip two">
+          <figure class="figure">
+            <img src="assets/user-guides/e2e-training-class-flow.svg" alt="Luồng vận hành lớp học cho giáo viên">
+            <figcaption>Góc nhìn giáo viên trong chuỗi lớp học: thực hiện buổi học, điểm danh, chấm bài, học bạ và họp phụ huynh.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/staff-assessment-panel.png" alt="Màn hình học bạ">
+            <figcaption>Học bạ: nhập nhận xét định tính, tính điểm tổng kết và gửi đề xuất cấp độ nếu đủ điều kiện.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/staff-meetings-panel.png" alt="Màn hình họp phụ huynh">
+            <figcaption>Họp phụ huynh: cập nhật trạng thái buổi họp sau khi trao đổi với phụ huynh.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/staff-my-payslips-panel.png" alt="Màn hình phiếu lương cá nhân">
+            <figcaption>Cuối kỳ, giáo viên xem phiếu lương cá nhân ở mục Phiếu lương của tôi; không tự chấm KPI.</figcaption>
+          </figure>
+        </div>
+        <h3>Luồng thao tác trọn vẹn: chấm bài test đầu vào</h3>
+        <ol class="steps">
+          <li>Sale/CSKH tạo lịch test đầu vào cho khách trong CRM.</li>
+          <li>Giáo viên nhận thông tin bài test cần chấm theo phân công vận hành.</li>
+          <li>Mở màn hình chấm test theo luồng được phân quyền, nhập điểm và nhận xét nếu có.</li>
+          <li>Lưu kết quả để bộ phận tuyển sinh dùng khi tư vấn lớp/chương trình phù hợp.</li>
+        </ol>
+        <div class="visual-strip two">
+          <figure class="figure">
+            <img src="assets/user-guides/e2e-test-grading-flow.svg" alt="Luồng chấm test đầu vào">
+            <figcaption>Test đầu vào: Sale/CSKH đặt lịch, giáo viên chấm, bộ phận tuyển sinh dùng kết quả để tư vấn.</figcaption>
+          </figure>
+          <figure class="figure">
+            <img src="assets/user-guides/staff-grading-panel.png" alt="Màn hình chấm bài">
+            <figcaption>Màn chấm bài là điểm định vị cho thao tác chấm; khi chụp thực tế phải dùng dữ liệu test đã ẩn danh.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="kpi-payroll" class="section">
+        <h2>5. KPI & phiếu lương</h2>
+        <div class="grid two">
+          <div class="card" data-role="sale">
+            <h3>KPI của Sale</h3>
+            <p>Phiếu KPI do Nhân sự/quản lý khởi tạo và hệ thống tự tính theo dữ liệu. Sale xem kết quả qua Nhân sự/quản lý, không tự chấm/xác nhận/duyệt.</p>
+          </div>
+          <div class="card" data-role="teacher">
+            <h3>KPI của Giáo Viên</h3>
+            <p>Phiếu KPI do Nhân sự/quản lý khởi tạo và hệ thống tự tính. Giáo viên xem kết quả, không có menu tự chấm riêng.</p>
+          </div>
+        </div>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-my-payslips-panel.png" alt="Phiếu lương cá nhân">
+          <figcaption>Phiếu lương của tôi: xem phiếu lương cá nhân.</figcaption>
+        </figure>
+      </section>
+
+      <section id="notes" class="section">
+        <h2>6. Lưu ý nhanh</h2>
+        <table class="matrix">
+          <thead><tr><th>Vai trò</th><th>Làm được</th><th>Không làm</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Sale</td>
+              <td>CRM, ghi danh, cập nhật học sinh, xem lương.</td>
+              <td>Chấm test, tài chính, tạo học sinh thủ công, lớp/học vụ, KPI duyệt.</td>
+            </tr>
+            <tr>
+              <td>Giáo viên</td>
+              <td>Lịch dạy, điểm danh, chấm bài, học bạ, chấm test, họp PH, đề xuất cấp độ, xem lương.</td>
+              <td>Tạo lớp, quyết định cấp độ, CRM, tài chính, CSKH, phụ huynh, nhân sự, đổi quà.</td>
+            </tr>
+          </tbody>
+        </table>
+        <figure class="figure">
+          <img src="assets/user-guides/staff-overview-dashboard.png" alt="Màn Tổng quan hệ thống nhân viên">
+          <figcaption>Menu chỉ hiện đúng phần việc theo quyền; thiếu mục hoặc thiếu nút là phân quyền có chủ đích.</figcaption>
+        </figure>
+      </section>
+    </main>
+  </div>
+  <script src="assets/guide.js"></script>
+</body>
+</html>

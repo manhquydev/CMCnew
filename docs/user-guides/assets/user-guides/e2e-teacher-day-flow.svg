@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-labelledby="title desc">
+  <title id="title">Luồng một ngày của giáo viên</title>
+  <desc id="desc">Hình minh họa một ngày làm việc của giáo viên.</desc>
+  <rect width="960" height="420" rx="24" fill="#f5f7fb"/>
+  <rect x="42" y="42" width="876" height="336" rx="18" fill="#ffffff" stroke="#d8e0eb"/>
+  <text x="74" y="92" font-family="Be Vietnam Pro, Noto Sans, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#121826">Một ngày của giáo viên</text>
+  <g font-family="Be Vietnam Pro, Noto Sans, Segoe UI, Arial, sans-serif" font-size="15">
+    <rect x="82" y="142" width="152" height="74" rx="14" fill="#eef4ff" stroke="#0b73e8"/>
+    <text x="108" y="184" font-weight="700" fill="#0b73e8">Lịch dạy</text>
+    <rect x="266" y="142" width="152" height="74" rx="14" fill="#eef4ff" stroke="#0b73e8"/>
+    <text x="292" y="184" font-weight="700" fill="#0b73e8">Lớp học</text>
+    <rect x="450" y="142" width="152" height="74" rx="14" fill="#eaf8f0" stroke="#177245"/>
+    <text x="476" y="184" font-weight="700" fill="#177245">Điểm danh</text>
+    <rect x="634" y="142" width="152" height="74" rx="14" fill="#eaf8f0" stroke="#177245"/>
+    <text x="660" y="184" font-weight="700" fill="#177245">Chấm bài</text>
+    <rect x="174" y="264" width="178" height="74" rx="14" fill="#fff4de" stroke="#b26a00"/>
+    <text x="200" y="306" font-weight="700" fill="#b26a00">Học bạ</text>
+    <rect x="390" y="264" width="178" height="74" rx="14" fill="#fff4de" stroke="#b26a00"/>
+    <text x="416" y="306" font-weight="700" fill="#b26a00">Đề xuất lên cấp</text>
+    <rect x="606" y="264" width="178" height="74" rx="14" fill="#fff4de" stroke="#b26a00"/>
+    <text x="632" y="306" font-weight="700" fill="#b26a00">Họp phụ huynh</text>
+  </g>
+  <g stroke="#8a96a8" stroke-width="2" fill="none" stroke-linecap="round">
+    <path d="M238 179h24"/><path d="M422 179h24"/><path d="M606 179h24"/>
+    <path d="M710 220c0 46-350 22-350 76"/><path d="M356 301h30"/><path d="M572 301h30"/>
+  </g>
+</svg>

@@ -257,6 +257,42 @@ describe('KPI evaluation workflow (P05 — phiếu đánh giá)', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
+  it('Tự xác nhận phiếu của chính mình → FORBIDDEN (tách trách nhiệm)', async () => {
+    // managerId là quan_ly, có quyền kpiEvalConfirm. Tạo phiếu cho chính managerId, manager tự nộp,
+    // rồi cố tự xác nhận phiếu của mình → phải bị chặn dù role có quyền.
+    const PERIOD_SELF = '2099-11';
+    const su = await hrCaller();
+    await su.payroll.kpiEvalStart({ userId: managerId, facilityId: FACILITY, periodKey: PERIOD_SELF, block: 'sales' });
+    const mgr = await managerCaller();
+    await mgr.payroll.kpiEvalSubmit({
+      periodKey: PERIOD_SELF,
+      scores: [{ key: 'doanh_so', score: 80 }, { key: 'tuan_thu', score: 70 }, { key: 'khac', score: 60 }],
+    });
+    await expect(
+      mgr.payroll.kpiEvalConfirm({ userId: managerId, periodKey: PERIOD_SELF }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await withRls(SUPER, (tx) => tx.kpiScore.deleteMany({ where: { userId: managerId, periodKey: PERIOD_SELF } }));
+  });
+
+  it('Tự duyệt phiếu của chính mình → FORBIDDEN (tách trách nhiệm)', async () => {
+    // bgd có quyền kpiEvalApprove. Tạo phiếu cho chính bgdId, bgd tự nộp, quản lý xác nhận (≠ subject),
+    // rồi bgd cố tự duyệt phiếu của mình → bị chặn bởi self-guard (trước cả check confirmer≠approver).
+    const PERIOD_SELF = '2099-12';
+    const su = await hrCaller();
+    await su.payroll.kpiEvalStart({ userId: bgdId, facilityId: FACILITY, periodKey: PERIOD_SELF, block: 'sales' });
+    const bgd = await bgdCaller();
+    await bgd.payroll.kpiEvalSubmit({
+      periodKey: PERIOD_SELF,
+      scores: [{ key: 'doanh_so', score: 80 }, { key: 'tuan_thu', score: 70 }, { key: 'khac', score: 60 }],
+    });
+    const mgr = await managerCaller();
+    await mgr.payroll.kpiEvalConfirm({ userId: bgdId, periodKey: PERIOD_SELF });
+    await expect(
+      bgd.payroll.kpiEvalApprove({ userId: bgdId, periodKey: PERIOD_SELF }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await withRls(SUPER, (tx) => tx.kpiScore.deleteMany({ where: { userId: bgdId, periodKey: PERIOD_SELF } }));
+  });
+
   // ─── Gating ───────────────────────────────────────────────────────────────────
 
   it('Approve khi status=submitted (chưa confirmed) → CONFLICT', async () => {

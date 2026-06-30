@@ -42,6 +42,7 @@ This file maps product behavior to proof.
 | LMS-REWARD | Reward review refund (rewards invariant) | no | yes | no | no | implemented | `apps/api/test/reward-review-refund.int.test.ts` |
 | CRM-HOOKS | CRM auto-hooks + lead-ingest token | no | yes | no | no | implemented | `apps/api/test/crm-hooks.int.test.ts` |
 | CRM-BATCH | Batch code atomicity (concurrent generation) | no | yes | no | no | implemented | `apps/api/test/batch-code-atomicity.int.test.ts` |
+| CRM-SALESOPS | Sales-ops: opportunity assignment log + reassign (manager-only, owner validated), channel attribution, lost-reason enum, hot-table indexes | no | yes | no | no | implemented | `apps/api/test/crm-sales-ops.int.test.ts` |
 | BELL-NOTIF | Bell icon shows unread badge from polling; dropdown lists notifications and marks all read (unified admin staff shell) | no | no | no — not covered by current E2E specs | no | implemented | `apps/admin/src/shell.tsx`, `packages/ui/src/use-staff-notif.ts` |
 | HR-PANEL-UI | Admin HR tab renders staff roster table; clicking a row opens payslip drawer with bulk-pay | no | no | planned — admin-hr-panel.spec.ts | no | implemented | `apps/admin/src/payroll-panel.tsx` (StaffTable + StaffDetailDrawer) |
 | TEACH-SHELL | Grouped NavLink sidebar in the unified admin staff shell (back-office + teaching-origin modules under one role-filtered nav). _apps/teaching retired; consolidated into apps/admin._ | no | no | yes — `apps/e2e/tests/unified-staff-shell.spec.ts` | no | changed | `apps/admin/src/shell.tsx` |

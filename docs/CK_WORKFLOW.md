@@ -12,6 +12,12 @@ Mental model in one line:
 > **Harness answers WHEN / WHAT-to-prove / governance. ClaudeKit answers HOW / who-does-it.**
 > ck plugs *into* the Harness Task Loop; it does not replace it.
 
+For the day-to-day command sequence (open → context → intake → plan → /clear →
+cook → test → review → trace → wrap-up), see `docs/SESSION_LOOP.md`. This file
+defines the routing; `SESSION_LOOP.md` defines the order to run it in. For the
+verified inventory of which ck skills/agents are installed and when to use each,
+see `docs/CK_CAPABILITIES.md` (kept honest by `scripts/verify-ck-docs.ps1`).
+
 The Harness durable layer (`scripts/bin/harness-cli`, `harness.db`) stays the single
 source of truth for intake, stories, decisions, traces, and backlog. ck supplies the
 execution muscle and quality gates. Where they overlap, the Harness wins on
@@ -165,8 +171,9 @@ harness-cli trace --story <id> --summary "<x>" --outcome success
 
 ## 5. Adoption depth (recommended for CMCnew right now)
 
-Tuned to current reality: **solo build, CI/CD on Jenkins deferred, merge → `main` paused
-(PR #1), branch rule `develop`/feature → PR-only.**
+Tuned to current reality: **solo build; merge → `main` via human-reviewed PR (the
+earlier pause was lifted — PRs merged through #9); branch rule `develop`/feature →
+PR-only; auto-merge tooling still deferred until a green CI exists.**
 
 - **Tier 1 — adopt now (the core working set):**
   `scout`, `ask`, `brainstorm`, `research`, `plan`, `scenario`, `cook`, `fix`, `debug`,

@@ -125,7 +125,12 @@ describe('badge auto-award idempotency on grade publish', () => {
     const result1 = await caller.grade.publish({ submissionId });
     expect(result1.grade.isPublished).toBe(true);
     expect(result1.starsEarned).toBe(60);
-    expect(result1.badgesAwarded).toBe(1); // One badge awarded on first publish.
+    // At least this test's badge is awarded. The exact count is not asserted because
+    // facility 1 is shared: seed data (seed-lms) and sibling tests
+    // (guardian-principal-isolation creates a stars_total>=1 badge) add other active
+    // badges that also qualify at 60 stars. Idempotency is proven below by the
+    // per-(student,badge) row count and the second-publish award count, not by this total.
+    expect(result1.badgesAwarded).toBeGreaterThanOrEqual(1);
 
     // Verify exactly ONE StudentBadge exists for (studentId, badgeId).
     let owned = await withRls(SUPER, (tx) =>

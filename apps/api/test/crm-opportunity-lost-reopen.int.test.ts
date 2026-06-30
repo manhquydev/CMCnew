@@ -1,6 +1,5 @@
-import { describe, it, expect, afterAll, beforeAll } from 'vitest';
+import { describe, it, expect, afterAll } from 'vitest';
 import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
-import { TRPCError } from '@trpc/server';
 
 /**
  * Integration tests for untested CRM opportunity lifecycle functions:
@@ -80,9 +79,9 @@ describe('CRM opportunity lifecycle — markLost / reopen', () => {
     expect(opp.stage).toBe('O1_LEAD');
     expect(opp.closedAt).toBeNull();
 
-    // Mark as lost
-    const reason = 'Khách hàng hủy quyết định';
-    const result = await caller.crm.opportunityMarkLost({ id: opp.id, reason });
+    // Mark as lost (lostReason is now a structured enum, not free text)
+    const reason = 'no_response' as const;
+    const result = await caller.crm.opportunityMarkLost({ id: opp.id, reason, note: 'Khách không nghe máy' });
 
     expect(result).toMatchObject({
       id: opp.id,
@@ -124,7 +123,7 @@ describe('CRM opportunity lifecycle — markLost / reopen', () => {
     await expect(
       caller.crm.opportunityMarkLost({
         id: opp.id,
-        reason: 'Trying to mark won deal as lost',
+        reason: 'other',
       }),
     ).rejects.toMatchObject({
       code: 'BAD_REQUEST',
@@ -146,7 +145,7 @@ describe('CRM opportunity lifecycle — markLost / reopen', () => {
     const opp = await newOpp(caller);
 
     // First markLost
-    const reason1 = 'Initial lost reason';
+    const reason1 = 'price' as const;
     await caller.crm.opportunityMarkLost({ id: opp.id, reason: reason1 });
 
     // Verify closed
@@ -158,7 +157,7 @@ describe('CRM opportunity lifecycle — markLost / reopen', () => {
     await expect(
       caller.crm.opportunityMarkLost({
         id: opp.id,
-        reason: 'Try again',
+        reason: 'other',
       }),
     ).rejects.toMatchObject({
       code: 'BAD_REQUEST',
@@ -178,7 +177,7 @@ describe('CRM opportunity lifecycle — markLost / reopen', () => {
     const opp = await newOpp(caller);
 
     // Mark as lost
-    const lostReason = 'Khách hàng không hỏi';
+    const lostReason = 'no_response' as const;
     await caller.crm.opportunityMarkLost({ id: opp.id, reason: lostReason });
 
     // Verify closed state
@@ -234,8 +233,8 @@ describe('CRM opportunity lifecycle — markLost / reopen', () => {
     const caller = await staffCaller();
     const opp = await newOpp(caller);
 
-    const reason1 = 'First loss';
-    const reason2 = 'Second loss after reopen';
+    const reason1 = 'price' as const;
+    const reason2 = 'competitor' as const;
 
     // Cycle 1: mark lost
     await caller.crm.opportunityMarkLost({ id: opp.id, reason: reason1 });
@@ -290,14 +289,14 @@ describe('CRM opportunity lifecycle — markLost / reopen', () => {
     await withRls(SUPER, (tx) =>
       tx.opportunity.update({
         where: { id: opp.id },
-        data: { lostReason: 'Manually set lost reason' },
+        data: { lostReason: 'other' },
       }),
     );
 
     // Verify edge state
     state = await getOppState(opp.id);
     expect(state.closedAt).toBeTruthy();
-    expect(state.lostReason).toBe('Manually set lost reason');
+    expect(state.lostReason).toBe('other');
 
     // Should be able to reopen this edge case
     const reopened = await caller.crm.opportunityReopen({ id: opp.id });
@@ -316,7 +315,7 @@ describe('CRM opportunity lifecycle — markLost / reopen', () => {
     await expect(
       caller.crm.opportunityMarkLost({
         id: opp.id,
-        reason: '', // Empty — should violate z.string().min(1)
+        reason: 'invalid_reason' as never, // not a LostReason → Zod nativeEnum rejects
       }),
     ).rejects.toMatchObject({
       code: 'BAD_REQUEST',
@@ -343,13 +342,13 @@ describe('CRM opportunity lifecycle — markLost / reopen', () => {
     // Mark lost
     const result = await caller.crm.opportunityMarkLost({
       id: opp.id,
-      reason: 'Lost at O2',
+      reason: 'schedule',
     });
 
     // Stage should be unchanged
     expect(result.stage).toBe('O2_CONTACTED');
     expect(result.closedAt).toBeTruthy();
-    expect(result.lostReason).toBe('Lost at O2');
+    expect(result.lostReason).toBe('schedule');
   });
 
   // ──────────────────────────────────────────────────────────────────────

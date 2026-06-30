@@ -30,6 +30,7 @@ import {
 import { DateInput } from '@mantine/dates';
 import { useDisclosure } from '@mantine/hooks';
 import { AttendanceRoster } from './attendance-roster.js';
+import { StudentDetailPanel } from './student-detail.js';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
@@ -406,6 +407,8 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
   const [studentId, setStudentId] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  // Deep-link: clicking an enrolled student opens the existing StudentDetailPanel in place.
+  const [detailStudentId, setDetailStudentId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -447,6 +450,10 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
   const enrolledIds = new Set(enrollments.map((e) => e.studentId));
   const enrollable = students.filter((s) => !enrolledIds.has(s.id));
 
+  if (detailStudentId) {
+    return <StudentDetailPanel studentId={detailStudentId} onBack={() => setDetailStudentId(null)} />;
+  }
+
   if (loading) return <Loader size="sm" />;
 
   return (
@@ -479,8 +486,19 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
         <Table.Tbody>
           {enrollments.map((e) => (
             <Table.Tr key={e.id}>
-              <Table.Td>{e.student.studentCode}</Table.Td>
-              <Table.Td>{e.student.fullName}</Table.Td>
+              <Table.Td
+                style={{ cursor: 'pointer' }}
+                onClick={() => setDetailStudentId(e.studentId)}
+              >
+                {e.student.studentCode}
+              </Table.Td>
+              <Table.Td
+                style={{ cursor: 'pointer', color: 'var(--cmc-brand-hover)' }}
+                onClick={() => setDetailStudentId(e.studentId)}
+                title="Xem hồ sơ học viên"
+              >
+                {e.student.fullName}
+              </Table.Td>
               <Table.Td>
                 <Badge size="sm" color={e.status === 'completed' ? 'teal' : undefined}>{e.status}</Badge>
               </Table.Td>
@@ -850,15 +868,19 @@ export function Workspace({ navAction }: { navAction: NavAction | null }) {
       .catch((e) => { setTeachers([]); notifyError(e, 'Không tải được danh sách giáo viên'); });
   }, [facilityId, canListTeachers]);
 
-  // Apply navAction when it changes
+  // Apply navAction when it changes. If a specific batch is requested but `batches` has not
+  // loaded yet, do NOT consume the action — return so this effect re-runs when batches arrive
+  // and can still select the batch. Otherwise a deep-link (e.g. schedule "Mở lớp học") that
+  // fires before the list loads leaves the detail pane empty on the class list.
   useEffect(() => {
     if (!navAction || navAction.ts === appliedNavTs.current) return;
-    appliedNavTs.current = navAction.ts;
-    setDetailTab(navAction.tab);
     if (navAction.batchId) {
       const found = batches.find((b) => b.id === navAction.batchId);
-      if (found) setSelected(found);
+      if (!found) return; // batches not loaded yet — wait, don't consume the nav action
+      setSelected(found);
     }
+    appliedNavTs.current = navAction.ts;
+    setDetailTab(navAction.tab);
     setDetailKey(`nav-${navAction.ts}`);
   }, [navAction, batches]);
 

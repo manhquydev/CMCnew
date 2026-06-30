@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import {
   Alert,
   Box,
@@ -13,6 +13,7 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { IconChevronDown, IconChevronUp, IconSearch, IconSelector } from '@tabler/icons-react';
 import {
   applySearch,
@@ -57,6 +58,12 @@ export interface DataTableProps<T> {
   onRowClick?: (row: T) => void;
   /** Skeleton row count while loading. Default 6. */
   skeletonRows?: number;
+  /**
+   * Visual density. `compact` (default) is Odoo-grade scan density for list views;
+   * `comfortable` keeps the looser default spacing. Compact auto-relaxes to
+   * comfortable below the `sm` breakpoint to preserve touch targets on mobile.
+   */
+  density?: 'comfortable' | 'compact';
 }
 
 export function DataTable<T>({
@@ -74,7 +81,29 @@ export function DataTable<T>({
   pageSize = 20,
   onRowClick,
   skeletonRows = 6,
+  density = 'compact',
 }: DataTableProps<T>) {
+  // Compact density only ≥ sm; below that, relax to comfortable for touch targets.
+  const isWide = useMediaQuery('(min-width: 48em)');
+  const compact = density === 'compact' && isWide;
+  const compactHeaderStyle = compact
+    ? {
+        backgroundColor: 'var(--cmc-dt-header-bg)',
+        fontSize: 'var(--cmc-dt-header-font)',
+        textTransform: 'uppercase' as const,
+        letterSpacing: 'var(--cmc-dt-header-ls)',
+        color: 'var(--cmc-dt-header-color)',
+        fontWeight: 'var(--cmc-weight-semibold)',
+      }
+    : undefined;
+  // Drives Mantine Table's spacing CSS vars from tokens (no magic numbers).
+  const compactTableStyle: CSSProperties | undefined = compact
+    ? ({
+        '--table-vertical-spacing': 'var(--cmc-dt-cell-py)',
+        '--table-horizontal-spacing': 'var(--cmc-dt-cell-px)',
+        fontSize: 'var(--cmc-dt-font)',
+      } as CSSProperties)
+    : undefined;
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [sortKey, setSortKey] = useState<string | null>(null);
@@ -129,7 +158,11 @@ export function DataTable<T>({
         </Group>
       )}
 
-      <Card p={0} withBorder style={{ overflow: 'hidden' }}>
+      <Card
+        p={0}
+        withBorder
+        style={{ overflow: 'hidden', ...(compact ? { borderRadius: 'var(--cmc-dt-radius)' } : null) }}
+      >
         {error ? (
           <Box p="lg">
             <Alert color="cmcRed" title="Lỗi tải dữ liệu" withCloseButton={false}>
@@ -142,11 +175,11 @@ export function DataTable<T>({
             </Alert>
           </Box>
         ) : loading ? (
-          <Table>
+          <Table style={compactTableStyle}>
             <Table.Thead>
               <Table.Tr>
                 {columns.map((c) => (
-                  <Table.Th key={c.key} style={{ width: c.width, textAlign: c.align }}>
+                  <Table.Th key={c.key} style={{ width: c.width, textAlign: c.align, ...compactHeaderStyle }}>
                     {c.header}
                   </Table.Th>
                 ))}
@@ -167,7 +200,7 @@ export function DataTable<T>({
         ) : total === 0 ? (
           <Box>{query.trim() ? (noResults ?? <DefaultNoResults />) : emptyState}</Box>
         ) : (
-          <Table striped highlightOnHover>
+          <Table striped highlightOnHover style={compactTableStyle}>
             <Table.Thead>
               <Table.Tr>
                 {columns.map((c) => {
@@ -181,6 +214,7 @@ export function DataTable<T>({
                         textAlign: c.align,
                         cursor: sortable ? 'pointer' : undefined,
                         userSelect: 'none',
+                        ...compactHeaderStyle,
                       }}
                       onClick={sortable ? () => toggleSort(c.key) : undefined}
                       aria-sort={

@@ -31,14 +31,17 @@ const fmtDate = (d: string | Date) => dayjs(d).format('DD/MM/YYYY');
 interface SchedulePanelProps {
   /** Navigate to a specific class workspace tab (e.g. 'sessions'). */
   goToClass: (batchId: string, tab: string) => void;
+  /** Open the connected Session Detail view for one lesson (row click). */
+  onOpenSession: (session: MySession) => void;
 }
 
 /**
  * Cross-class schedule panel — shows the teacher's (or facility's) agenda for a
- * selected date range, grouped by class. Default = current week. Row click opens
- * the class sessions tab via goToClass.
+ * selected date range, grouped by class. Default = current week. A row click opens
+ * the connected Session Detail (onOpenSession); the class-card title opens the
+ * Class Workspace via goToClass.
  */
-export function SchedulePanel({ goToClass }: SchedulePanelProps) {
+export function SchedulePanel({ goToClass, onOpenSession }: SchedulePanelProps) {
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facilityId, setFacilityId] = useState<number | null>(null);
   // Default to the current week (Monday..Sunday using dayjs)
@@ -142,7 +145,13 @@ export function SchedulePanel({ goToClass }: SchedulePanelProps) {
         !error &&
         [...byBatch.values()].map(({ batch, rows }) => (
           <Card key={batch.id} withBorder>
-            <Title order={6} mb="xs">
+            <Title
+              order={6}
+              mb="xs"
+              style={{ cursor: 'pointer', color: 'var(--cmc-brand-hover)' }}
+              onClick={() => goToClass(batch.id, 'sessions')}
+              title="Mở lớp học"
+            >
               {batch.code} — {batch.name}
             </Title>
             <Table highlightOnHover>
@@ -159,7 +168,7 @@ export function SchedulePanel({ goToClass }: SchedulePanelProps) {
                   <Table.Tr
                     key={s.id}
                     style={{ cursor: 'pointer' }}
-                    onClick={() => goToClass(batch.id, 'sessions')}
+                    onClick={() => onOpenSession(s)}
                   >
                     <Table.Td>{fmtDate(s.sessionDate)}</Table.Td>
                     <Table.Td>

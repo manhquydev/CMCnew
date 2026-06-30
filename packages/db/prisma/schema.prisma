@@ -303,6 +303,7 @@ model ClassSession {
 
   @@unique([classBatchId, sessionDate, startTime])
   @@index([facilityId])
+  @@index([facilityId, sessionDate])
   @@map("class_session")
 }
 
@@ -327,6 +328,7 @@ model Enrollment {
   @@unique([classBatchId, studentId])
   @@index([facilityId])
   @@index([createdByReceiptId])
+  @@index([studentId])
   @@map("enrollment")
 }
 
@@ -347,6 +349,7 @@ model Attendance {
 
   @@unique([classSessionId, enrollmentId])
   @@index([facilityId])
+  @@index([enrollmentId])
   @@map("attendance")
 }
 
@@ -539,6 +542,7 @@ model Submission {
 
   @@unique([exerciseId, studentId])
   @@index([facilityId])
+  @@index([studentId])
   @@map("submission")
 }
 
@@ -1017,6 +1021,17 @@ enum OpportunityStage {
   O5_ENROLLED
 }
 
+/// Lý do mất cơ hội — chuẩn hoá để phân tích phễu. `other` cho mọi trường hợp khác (kèm lostNote).
+enum LostReason {
+  price
+  schedule
+  distance
+  competitor
+  no_response
+  not_ready
+  other
+}
+
 /// Khách tiềm năng — facility-scoped. phone chuẩn hóa +84, dedup theo (cơ sở, phone).
 model Contact {
   id            String        @id @default(uuid()) @db.Uuid
@@ -1025,6 +1040,8 @@ model Contact {
   phone         String
   email         String?
   source        String? // web | walk_in | referral | ...
+  medium        String? // cpc | organic | referral | event | ... (kênh con — quy nguồn marketing)
+  campaign      String? // mã/tên chiến dịch marketing
   note          String?
   archivedAt    DateTime?     @map("archived_at")
   createdAt     DateTime      @default(now()) @map("created_at")
@@ -1049,17 +1066,37 @@ model Opportunity {
   /// Sales consultant (CVTV) credited with this opportunity — source of commission attribution
   /// (docs/specs/payroll-v2-commission-design.md). Flows onto the receipt's soldById at approve.
   ownerId     String?          @map("owner_id") @db.Uuid
-  lostReason  String?          @map("lost_reason")
+  lostReason  LostReason?      @map("lost_reason")
+  lostNote    String?          @map("lost_note") // ghi chú tự do kèm lý do mất (đặc biệt khi = other)
   closedAt    DateTime?        @map("closed_at")
   archivedAt  DateTime?        @map("archived_at")
   createdAt   DateTime         @default(now()) @map("created_at")
   tests       TestAppointment[]
   receipts    Receipt[]
+  assignments OpportunityAssignment[]
 
   @@index([facilityId])
   @@index([contactId])
   @@index([ownerId])
   @@map("opportunity")
+}
+
+/// Sổ phân bổ cơ hội (append-only) — mọi lần set/đổi owner ghi 1 dòng để phục vụ KPI/hoa hồng & minh
+/// bạch. KHÔNG sửa/xoá. fromOwnerId null = lần gán đầu (lúc tạo).
+model OpportunityAssignment {
+  id            String      @id @default(uuid()) @db.Uuid
+  facilityId    Int         @map("facility_id")
+  opportunityId String      @map("opportunity_id") @db.Uuid
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  fromOwnerId   String?     @map("from_owner_id") @db.Uuid
+  toOwnerId     String?     @map("to_owner_id") @db.Uuid
+  assignedById  String      @map("assigned_by_id") @db.Uuid
+  reason        String?
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@index([facilityId])
+  @@index([opportunityId])
+  @@map("opportunity_assignment")
 }
 
 /// Doanh thu khách mới vs tái tục (PA2 hoa hồng tính khác nhau). Suy + đóng băng tại approve.

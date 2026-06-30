@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-labelledby="title desc">
+  <title id="title">Vòng đời lớp học</title>
+  <desc id="desc">Hình minh họa luồng khóa học, lớp, lịch, điểm danh, chấm bài, học bạ, lên cấp và họp phụ huynh.</desc>
+  <rect width="960" height="420" rx="24" fill="#f5f7fb"/>
+  <rect x="34" y="34" width="892" height="352" rx="18" fill="#ffffff" stroke="#d8e0eb"/>
+  <text x="62" y="82" font-family="Be Vietnam Pro, Noto Sans, Segoe UI, Arial, sans-serif" font-size="28" font-weight="700" fill="#121826">Luồng vận hành đào tạo</text>
+  <g font-family="Be Vietnam Pro, Noto Sans, Segoe UI, Arial, sans-serif" font-size="15">
+    <rect x="70" y="130" width="180" height="66" rx="14" fill="#eef4ff" stroke="#0b73e8"/>
+    <text x="94" y="170" font-weight="700" fill="#0b73e8">Khóa học</text>
+    <rect x="278" y="130" width="180" height="66" rx="14" fill="#eef4ff" stroke="#0b73e8"/>
+    <text x="302" y="170" font-weight="700" fill="#0b73e8">Lớp học</text>
+    <rect x="486" y="130" width="180" height="66" rx="14" fill="#eef4ff" stroke="#0b73e8"/>
+    <text x="510" y="170" font-weight="700" fill="#0b73e8">Lịch dạy</text>
+    <rect x="694" y="130" width="180" height="66" rx="14" fill="#eaf8f0" stroke="#177245"/>
+    <text x="718" y="170" font-weight="700" fill="#177245">Điểm danh</text>
+    <rect x="174" y="250" width="180" height="66" rx="14" fill="#eaf8f0" stroke="#177245"/>
+    <text x="198" y="290" font-weight="700" fill="#177245">Chấm bài</text>
+    <rect x="382" y="250" width="180" height="66" rx="14" fill="#eaf8f0" stroke="#177245"/>
+    <text x="406" y="290" font-weight="700" fill="#177245">Học bạ</text>
+    <rect x="590" y="250" width="180" height="66" rx="14" fill="#fff4de" stroke="#b26a00"/>
+    <text x="614" y="290" font-weight="700" fill="#b26a00">Lên cấp / Họp PH</text>
+  </g>
+  <g stroke="#8a96a8" stroke-width="2" fill="none" stroke-linecap="round">
+    <path d="M254 163h20"/><path d="M462 163h20"/><path d="M670 163h20"/>
+    <path d="M784 202c0 50-424 30-424 74"/><path d="M358 283h20"/><path d="M566 283h20"/>
+  </g>
+</svg>

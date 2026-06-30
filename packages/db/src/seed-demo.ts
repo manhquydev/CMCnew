@@ -73,8 +73,94 @@ async function main(): Promise<void> {
     templateCount++;
   }
 
+  // ── Class batch + this-week sessions + enrollments ─────────────────────────
+  // Needed so the schedule (Lịch dạy) has lesson rows to open the connected Session Detail.
+  const ucrea = await prisma.course.findUniqueOrThrow({ where: { code: 'UCREA-01' } });
+  const room = await prisma.room.findUniqueOrThrow({
+    where: { facilityId_code: { facilityId: hq.id, code: 'P101' } },
+  });
+
+  const batch = await prisma.classBatch.upsert({
+    where: { facilityId_code: { facilityId: hq.id, code: 'B-DEMO-001' } },
+    update: {},
+    create: {
+      facilityId: hq.id,
+      code: 'B-DEMO-001',
+      courseId: ucrea.id,
+      name: 'UCREA Sáng tạo — lớp demo',
+      status: 'running',
+    },
+  });
+
+  // One weekly slot (Thứ 4, 18:00–19:30, P101) for context in the class workspace.
+  const existingSlot = await prisma.scheduleSlot.findFirst({
+    where: { classBatchId: batch.id, dayOfWeek: 3, startTime: '18:00', archivedAt: null },
+  });
+  if (!existingSlot) {
+    await prisma.scheduleSlot.create({
+      data: {
+        facilityId: hq.id,
+        classBatchId: batch.id,
+        dayOfWeek: 3,
+        startTime: '18:00',
+        endTime: '19:30',
+        roomId: room.id,
+      },
+    });
+  }
+
+  // Three sessions across THIS week (Mon/Wed/Fri) so the default "Tuần này" view shows rows.
+  const monday = new Date();
+  const dow = monday.getDay(); // 0=Sun..6=Sat
+  const diffToMonday = dow === 0 ? -6 : 1 - dow;
+  monday.setDate(monday.getDate() + diffToMonday);
+  monday.setHours(0, 0, 0, 0);
+  const sessionDates = [0, 2, 4].map((add) => {
+    const d = new Date(monday);
+    d.setDate(d.getDate() + add);
+    return d;
+  });
+  let sessionCount = 0;
+  for (const d of sessionDates) {
+    await prisma.classSession.upsert({
+      where: {
+        classBatchId_sessionDate_startTime: {
+          classBatchId: batch.id,
+          sessionDate: d,
+          startTime: '18:00',
+        },
+      },
+      update: {},
+      create: {
+        facilityId: hq.id,
+        classBatchId: batch.id,
+        sessionDate: d,
+        startTime: '18:00',
+        endTime: '19:30',
+        roomId: room.id,
+        status: 'planned',
+      },
+    });
+    sessionCount++;
+  }
+
+  // Enroll the two UCREA demo students into the demo batch.
+  let enrollCount = 0;
+  for (const code of ['HS-0001', 'HS-0002']) {
+    const stu = await prisma.student.findUniqueOrThrow({
+      where: { facilityId_studentCode: { facilityId: hq.id, studentCode: code } },
+    });
+    await prisma.enrollment.upsert({
+      where: { classBatchId_studentId: { classBatchId: batch.id, studentId: stu.id } },
+      update: {},
+      create: { facilityId: hq.id, classBatchId: batch.id, studentId: stu.id, status: 'active' },
+    });
+    enrollCount++;
+  }
+
   console.log(
-    `✓ Demo seed: ${courses.length} khóa, 2 phòng, ${students.length} học sinh, ${templateCount} grading template mới @ ${hq.code}`,
+    `✓ Demo seed: ${courses.length} khóa, 2 phòng, ${students.length} học sinh, ${templateCount} grading template mới, ` +
+      `1 lớp (${batch.code}), ${sessionCount} buổi học tuần này, ${enrollCount} ghi danh @ ${hq.code}`,
   );
 }
 

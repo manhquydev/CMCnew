@@ -12,17 +12,18 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@cmc/ui": "workspace:*",
     "@cmc/auth": "workspace:*",
+    "@cmc/ui": "workspace:*",
     "@mantine/core": "^7.15.2",
-    "dayjs": "^1.11.13",
     "@mantine/dates": "^7.15.2",
     "@mantine/form": "^7.15.2",
     "@mantine/hooks": "^7.15.2",
     "@mantine/notifications": "^7.15.2",
     "@tabler/icons-react": "^3.26.0",
+    "dayjs": "^1.11.13",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.18.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.2",
