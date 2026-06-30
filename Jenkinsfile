@@ -49,6 +49,10 @@ pipeline {
           export APP_BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           # Ensure an origin cert exists (self-signed for CF Full) so nginx can start.
           docker volume create cmcnew-prod_letsencrypt >/dev/null
+          # Refresh the nginx config at the stable host path the compose mount references
+          # (the deploy runs from the ephemeral Jenkins workspace, so sync to /root/cmcnew).
+          docker run --rm -v /root/cmcnew/docker:/dest -v "$WORKSPACE/docker":/src:ro alpine \
+            cp /src/nginx-prod.conf /dest/nginx-prod.conf
           $COMPOSE up -d postgres redis
           $COMPOSE --profile migrate run --rm api-migrate
           $COMPOSE up -d --build

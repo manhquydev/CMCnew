@@ -39,6 +39,16 @@ services:
           cpus: '1.5'
           memory: 3g
     restart: unless-stopped
+    networks:
+      - default
+      - prod
 
 volumes:
   jenkins_home:
+
+networks:
+  # The app stack's network — lets the prod nginx reach this controller as
+  # `cmcnew-jenkins` for the ci.cmcvn.edu.vn vhost.
+  prod:
+    external: true
+    name: cmcnew-prod_default
