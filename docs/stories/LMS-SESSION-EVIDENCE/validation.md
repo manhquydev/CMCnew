@@ -64,6 +64,16 @@ Verification rerun on 2026-06-30:
 - `class-create-initial-slot.int.test.ts` passed.
 - GitNexus detect changes risk: MEDIUM, no HIGH/CRITICAL.
 
+Review fix on 2026-06-30 (facility-scoping guard):
+
+- Added `assertSlotRefsInFacility` backend guard to `classBatch.create.initialSlot` + `schedule.addSlot` (closes the UI-only facility-scoping gap; schedule_slot has no DB FK yet).
+- `pnpm --filter @cmc/api typecheck` passed.
+- `pnpm --filter @cmc/api test:integration` passed: 67 files, 340 tests (was 66/335; +1 file `schedule-add-slot.int.test.ts`, +5 tests). 0 regressions.
+- New tests: cross-facility room rejected, foreign teacher rejected, backward-compat (create without initialSlot), addSlot happy path, addSlot cross-facility room rejected.
+- code-reviewer subagent: APPROVED (transaction-safe, contract preserved, DRY, all acceptance criteria met).
+- DB FK on schedule_slot deferred (schema.prisma mid-flight with uncommitted shift-registration feature).
+
+
 Still pending for full LMS evidence story:
 
 - Persisted session photo/comment models.

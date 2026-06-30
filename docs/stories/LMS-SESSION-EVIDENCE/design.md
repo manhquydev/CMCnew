@@ -12,7 +12,8 @@ Rules already enforced:
 
 - `initialSlot.startTime` must be before `initialSlot.endTime`.
 - The first slot is created in the same DB transaction as the class.
-- Room choices in the create-class modal are scoped to the selected facility.
+- Facility-scoping of room/teacher refs is enforced at the API layer: `assertSlotRefsInFacility` (apps/api/src/lib/slot-refs-guard.ts) rejects cross-facility/inactive/fabricated room+teacher refs in `classBatch.create.initialSlot` and `schedule.addSlot`, inside the same transaction (not just the UI).
+- The DB FK on schedule_slot.room_id/teacher_id is still deferred (no @relation yet, unlike class_session); the app guard is the current enforcement layer.
 - Attendance continues to use the existing real attendance surface; post-class LMS cards are UI placeholders.
 
 ## Domain Model

@@ -7,6 +7,7 @@ import { logEvent, logStatusChange, addFollower } from '@cmc/audit';
 import { router, protectedProcedure, requirePermission } from '../trpc.js';
 import { nextBatchCode } from '../services/batch-code.js';
 import { emitStaffNotif } from '../lib/emit-staff-notif.js';
+import { assertSlotRefsInFacility } from '../lib/slot-refs-guard.js';
 
 const ENTITY = 'class_batch';
 const TERMINAL_STATUSES: ClassStatus[] = ['closed', 'cancelled'];
@@ -100,6 +101,11 @@ export const classBatchRouter = router({
           },
         });
         if (input.initialSlot) {
+          // Facility-membership guard: schedule_slot has no DB FK on room_id /
+          // teacher_id, so the app layer must reject cross-facility or fabricated
+          // refs before the slot is created (design.md "scoped to facility" is
+          // UI-only; the API is the trust boundary).
+          await assertSlotRefsInFacility(tx, batch.facilityId, input.initialSlot);
           await tx.scheduleSlot.create({
             data: {
               facilityId: batch.facilityId,

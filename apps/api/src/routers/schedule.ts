@@ -5,6 +5,7 @@ import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { enumerateSessions, detectConflicts, type SessionLike } from '@cmc/domain-academic';
 import { router, protectedProcedure, requirePermission } from '../trpc.js';
+import { assertSlotRefsInFacility } from '../lib/slot-refs-guard.js';
 
 const dateKey = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -44,6 +45,12 @@ export const scheduleRouter = router({
         const batch = await tx.classBatch.findUniqueOrThrow({
           where: { id: input.classBatchId },
           select: { facilityId: true },
+        });
+        // Facility-membership guard (same rationale as classBatch.create): the
+        // referenced room/teacher must belong to the batch's facility.
+        await assertSlotRefsInFacility(tx, batch.facilityId, {
+          roomId: input.roomId,
+          teacherId: input.teacherId,
         });
         const slot = await tx.scheduleSlot.create({
           data: {
