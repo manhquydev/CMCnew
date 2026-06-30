@@ -6,7 +6,7 @@
 > For roadmap/status, read [roadmap.md](roadmap.md). This file describes *what
 > exists today* and *where to find it*.
 
-Last reviewed: 2026-06-29 (branch `develop`).
+Last reviewed: 2026-06-30 (branch `develop`).
 
 ## What this is
 
@@ -73,6 +73,9 @@ routes. This is the anti-"chắp vá" (anti-patchwork) rule from the charter.
   file per feature: `auth`, `student`, `enrollment`, `schedule`, `finance`,
   `payroll`, `grade`, `assessment`, `crm`, `aftersale`, `rewards`, `badge`,
   `certificate`, `parent-meeting`, `notification`, `staff-notif`, `dashboard`, …
+- `class-batch.ts` can create a class and its first weekly `ScheduleSlot` in one
+  transaction through optional `initialSlot`; staff can add more slots later in
+  the class schedule tab.
 - `services/` — cross-router workflows: `email-outbox`, `email-templates`,
   `login-otp`, `student-provisioning`, `parent-meeting-cadence/-reminder`,
   `receipt-html`/`certificate-html`, `pdf-store`, code generators.
@@ -119,6 +122,8 @@ Local URLs: API `:4000`, admin `:5173`, lms `:5175`. Full operating procedure:
 | Add an API endpoint | `apps/api/src/routers/<feature>.ts` + register in `routers/index.ts` |
 | Add/restrict a permission | `packages/auth/src/permissions.ts` + `requirePermission` in the router |
 | Change business math | the relevant `packages/domain-*` package (+ its vitest) |
+| Change class setup or first schedule-slot creation | `apps/api/src/routers/class-batch.ts` + `apps/admin/src/class-workspace.tsx` |
+| Change Session 360 lesson workflow | `apps/admin/src/schedule-detail.tsx` |
 | Change the schema | `packages/db/prisma/schema.prisma` → new migration |
 | Add a shared UI component | `packages/ui/src/` (export from `index.tsx`) |
 | Trace a flow / impact | GitNexus tools (see `CLAUDE.md`) |

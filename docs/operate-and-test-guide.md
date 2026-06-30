@@ -184,11 +184,13 @@ Password: ChangeMe123!
 2. **Quản Lý tạo Lớp Học**
    - Menu → **Lớp Học** → **+ Tạo lớp**
    - Chọn Khóa (vd `UCREA-01`)
-   - Nhập: Mã lớp, Tên, Thời gian bắt đầu/kết thúc
+   - Nhập: Tên lớp, Thời gian bắt đầu/kết thúc, sĩ số nếu cần
+   - Nhập **Khung giờ buổi học đầu tiên**: Thứ, giờ bắt đầu, giờ kết thúc, phòng, giáo viên
    - Lưu
+   - Hệ thống tạo lớp và khung lịch đầu tiên trong cùng một thao tác
 
 #### Tạo Lịch Dạy (Khung Lịch & Buổi Học)
-1. **Quản Lý mở Lớp → Tab "Lịch"**
+1. **Quản Lý mở Lớp → Tab "Lịch"** để kiểm tra hoặc bổ sung lịch
    - Bấm **+ Thêm Khung Lịch**
    - Chọn: Thứ (Monday, Tuesday, v.v.), Giờ bắt đầu (vd 09:00), Giờ kết thúc (10:00)
    - Lưu
@@ -204,13 +206,19 @@ Password: ChangeMe123!
 
 #### Điểm Danh & Chấm Bài (Giáo Viên)
 1. **Menu → Lịch Dạy** → xem danh sách buổi dạy hôm nay/tuần
-2. Chọn buổi → **Điểm Danh**
+2. Chọn buổi → mở màn hình **Buổi học 360**
+   - Trước buổi: xem thông tin lớp, phòng, giáo viên, roster
+   - Từ 15 phút trước giờ bắt đầu: hệ thống mở luồng điểm danh
+   - Sau giờ kết thúc: hệ thống hiển thị các việc sau buổi học
+3. **Điểm Danh**
    - Kiểm tra từng học sinh (Có mặt / Vắng)
    - **Lưu**
    
-3. **Menu → Chấm Bài**
+4. **Menu → Chấm Bài**
    - Chọn bài tập → Chấm điểm từng học sinh
    - **Phát Hành** bài tập để học sinh thấy kết quả
+
+> Ghi chú: Các thẻ sau buổi học trong Buổi học 360 hiện là mock cho phase tiếp theo: phát bài tập LMS, nhận xét theo form, upload ảnh lớp, publish cho phụ huynh. Dữ liệu ảnh/nhận xét thật chưa được lưu và chưa hiển thị ở LMS trong slice này.
 
 #### Học Bạ & Đánh Giá
 1. **Giáo Viên → Menu → Học Bạ** (Assessment)
@@ -337,7 +345,7 @@ Cấu hình: `SSO_ENABLED=true` + `ENTRA_*` biến môi trường
    - Ghi danh `TEST-002` vào lớp (hôm nay hoặc khoảng ngày)
 
 5. **Giáo Viên điểm danh & chấm bài**
-   - Menu → Lịch Dạy → chọn buổi → Điểm Danh
+   - Menu → Lịch Dạy → chọn buổi → Buổi học 360 → Điểm Danh
    - Menu → Chấm Bài → Chấm & Phát Hành
 
 6. **Phụ Huynh theo dõi LMS** (`parent@cmc.local`)

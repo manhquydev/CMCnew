@@ -17,9 +17,10 @@ Mục tiêu: bộ khung an toàn để mọi phase sau bám vào.
 
 Mục tiêu: xương sống học thuật + giá trị LMS đầu tiên.
 - Admin: quản lý Facility / User / Role / gán facility.
-- Teaching: Course catalog, Class batch (**mã B-YYYY-NNNN nguyên tử**), Room, Schedule slot → sinh Session, Timetable, gán giáo viên/phòng.
+- Teaching: Course catalog, Class batch (**mã B-YYYY-NNNN nguyên tử**), Room, Schedule slot → sinh Session, Timetable, gán giáo viên/phòng. Tạo lớp có thể nhập khung giờ buổi học đầu tiên để tạo `ClassBatch` + `ScheduleSlot` trong cùng thao tác.
 - Enrollment + student lifecycle.
 - Điểm danh (Teaching) — present/absent/late + excused.
+- Session 360 vertical slice — timetable/session detail là trục thao tác buổi học: trước buổi xem thông tin, T-15 mở điểm danh, sau giờ kết thúc hiện mock bài tập LMS/nhận xét/ảnh lớp/publish PH. Full persisted LMS evidence còn ở Phase 2.
 - **🆕 Hạ tầng Audit/Chatter kiểu Odoo (cross-cutting)** — gắn vào mọi thực thể giáo vụ ngay từ Phase 1.
 - (Cổng học sinh xem điểm danh/streak → Phase 2.)
 - **Done-evidence:** tạo lớp → xếp lịch → điểm danh; đổi trạng thái lớp ghi đầy đủ vào chatter (ai/khi/cũ→mới + lý do). Spec chi tiết: `specs/phase-01-academic-core.md`.
@@ -29,6 +30,7 @@ Mục tiêu: xương sống học thuật + giá trị LMS đầu tiên.
 - Exercise (3 loại) + submission + homework grading.
 - `domain-grading`: 3 công thức UCREA/BI/BH + rubric → Grade/FinalGrade/QualitativeAssessment.
 - Dashboard học sinh (điểm/bài tập), Dashboard phụ huynh (gradebook/học bạ).
+- Session evidence cho PH/HS — persisted ảnh buổi học, nhận xét theo form cho từng học sinh, publish lên LMS. _(⬜ pending; vertical slice Session 360 đã có ở Phase 1, Harness: LMS-SESSION-EVIDENCE.)_
 - `domain-rewards`: Sao (ledger atomic) + Quà + Huy hiệu + Leaderboard.
 - **Thông báo realtime (SSE)** + Level progress + duyệt head-teacher.
 - **Done-evidence:** nộp bài → chấm → điểm + sao hiện realtime; redeem quà không double-spend. Spec chi tiết: `specs/phase-02-assessment-lms.md`.
@@ -81,6 +83,6 @@ RLS + atomic + finalize là checklist bắt buộc ở mọi phase chạm tenant
 | Parent meetings | ACA-CADENCE, ACA-REMIND, ACA-TBD, ACA-CLOSE, ACA-REOPEN, ACA-WARN | admin-smoke (login gate) |
 | Finance | FIN-VOUCHER, FIN-VOW-WIN, FIN-RECEIPT, FIN-COMM | admin-smoke |
 | Payroll | PAY-FINAL, PAY-MYSLIP, CV5-hr-ui | admin-smoke |
-| LMS/Rewards | LMS-BADGE, LMS-ASSESS, LMS-LEVEL, LMS-NO-CERT, LMS-STAR, LMS-REWARD | lms-smoke |
+| LMS/Rewards | LMS-BADGE, LMS-ASSESS, LMS-LEVEL, LMS-NO-CERT, LMS-SESSION-EVIDENCE, LMS-STAR, LMS-REWARD | lms-smoke |
 | CRM/After-sale | AFS-LIFECYCLE, CRM-HOOKS, CRM-BATCH | unified-staff-shell, admin-smoke |
 | UI/Infra | BELL-NOTIF, HR-PANEL-UI, TEACH-SHELL, DOCKER-PROD, TEACH-PAGINATE | admin-smoke, admin-hr-panel, unified-staff-shell |
