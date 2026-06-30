@@ -15,14 +15,21 @@ services:
       dockerfile: docker/Dockerfile.jenkins
     container_name: cmcnew-jenkins
     user: root                       # needs the host docker socket; group-mapping on Debian is brittle
+    # Secrets for CASC (${GITHUB_TOKEN}, ${JENKINS_ADMIN_PASSWORD}). Server-only, gitignored.
+    env_file:
+      - /root/jenkins.env
     ports:
       - '127.0.0.1:8080:8080'
     environment:
-      JAVA_OPTS: '-Djenkins.install.runSetupWizard=true -Xmx3g'
+      # CASC fully configures the controller (admin user + job), so the setup wizard is off.
+      JAVA_OPTS: '-Djenkins.install.runSetupWizard=false -Xmx3g'
       CASC_JENKINS_CONFIG: /var/jenkins_home/casc.yaml
     volumes:
       - jenkins_home:/var/jenkins_home
       - /var/run/docker.sock:/var/run/docker.sock
+      # Mirror the workspace path host<->container so pipeline `docker run -v $WORKSPACE`
+      # (sibling containers via the host socket) can see the checked-out files.
+      - /var/jenkins_home/workspace:/var/jenkins_home/workspace
       - ./jenkins-casc.yaml:/var/jenkins_home/casc.yaml:ro
       # The app's prod secrets, read-only — the deploy stage references this path.
       - /root/cmcnew/.env.production:/secrets/.env.production:ro

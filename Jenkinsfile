@@ -26,6 +26,7 @@ pipeline {
           docker run --rm -v "$WORKSPACE":/app -w /app $NODE_IMG sh -c '
             corepack enable && corepack prepare pnpm@10.24.0 --activate &&
             pnpm install --frozen-lockfile &&
+            pnpm --filter @cmc/db generate &&
             pnpm -r typecheck && pnpm -r lint
           '
         '''

@@ -1,15 +1,55 @@
-# Jenkins Configuration-as-Code (loaded via CASC_JENKINS_CONFIG). Keeps controller config
-# reproducible. The one-time initial-admin unlock + GitHub credential are still done in the UI.
+# Jenkins Configuration-as-Code. Reproducible single-node CI. Secrets via /root/jenkins.env.
 jenkins:
-  systemMessage: "CMCnew CI/CD — single-node. Pipeline: develop/main → build → test → deploy (compose) → migrate → smoke."
+  systemMessage: "CMCnew CI/CD - single-node. main -> build -> test -> deploy (compose) -> migrate -> smoke."
   numExecutors: 1
   scmCheckoutRetryCount: 2
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: admin
+          password: "${JENKINS_ADMIN_PASSWORD}"
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - usernamePassword:
+              scope: GLOBAL
+              id: github-token
+              username: manhquydev
+              password: "${GITHUB_TOKEN}"
+              description: "GitHub PAT (SCM + checks)"
 
 unclassified:
   location:
-    # Set to the externally-reachable URL once a ci vhost / tunnel exists.
     url: "http://127.0.0.1:8080/"
 
-# The pipeline job is created in the UI (or a seed job) pointing at this repo's Jenkinsfile,
-# using a GitHub credential (deploy token) added once under Manage Credentials. Triggers:
-# GitHub webhook → /github-webhook/  (preferred) or SCM poll  H/5 * * * *  (fallback).
+jobs:
+  - script: |
+      multibranchPipelineJob('cmcnew') {
+        branchSources {
+          branchSource {
+            source {
+              github {
+                id('cmcnew-gh')
+                repoOwner('manhquydev')
+                repository('CMCnew')
+                repositoryUrl('https://github.com/manhquydev/CMCnew.git')
+                credentialsId('github-token')
+                configuredByUrl(true)
+                traits {
+                  gitHubBranchDiscovery { strategyId(1) }
+                  gitHubPullRequestDiscovery { strategyId(1) }
+                }
+              }
+            }
+          }
+        }
+        factory { workflowBranchProjectFactory { scriptPath('Jenkinsfile') } }
+        orphanedItemStrategy { discardOldItems { numToKeep(20) } }
+        triggers { periodicFolderTrigger { interval('5m') } }
+      }
