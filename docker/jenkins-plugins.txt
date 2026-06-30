@@ -11,3 +11,4 @@ ws-cleanup
 ansicolor
 blueocean
 github-checks
+job-dsl
