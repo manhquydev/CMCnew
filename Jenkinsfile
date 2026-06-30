@@ -64,11 +64,12 @@ pipeline {
       when { branch 'main' }   // smoke-test the deploy that only main performs
       steps {
         sh '''
-          # api health from inside the compose network
+          # api health from inside the compose network (proves the new container serves)
           $COMPOSE exec -T api wget -qO- http://localhost:4000/health
-          # origin reachability for both vhosts (through nginx, self-signed → -k)
-          curl -fsSk -H 'Host: erp.cmcvn.edu.vn' https://127.0.0.1/ -o /dev/null
-          curl -fsSk -H 'Host: hoc.cmcvn.edu.vn' https://127.0.0.1/ -o /dev/null
+          # public end-to-end reachability (Jenkins runs in its own container, so hit the
+          # real domains via egress→Cloudflare→origin rather than 127.0.0.1, which is not nginx here)
+          curl -fsS https://erp.cmcvn.edu.vn/api/health | grep -q '"ok":true'
+          curl -fsS -o /dev/null https://hoc.cmcvn.edu.vn/
           echo "smoke OK"
         '''
       }
