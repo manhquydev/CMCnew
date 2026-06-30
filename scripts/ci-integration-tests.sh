@@ -20,7 +20,9 @@ done
 export DIRECT_URL="postgresql://cmc:${PW}@127.0.0.1:55432/cmc?schema=public"
 # Apply migrations (creates the cmc_app RLS role), then align its password and point
 # the runtime URL at it so the RLS-scoped tests connect as cmc_app.
-docker run --rm -v "$WORKSPACE":/app -w /app -e DIRECT_URL="$DIRECT_URL" --network host node:22-alpine sh -c \
+# prisma validates the schema's url=env(DATABASE_URL) even for migrate deploy, so both
+# DATABASE_URL and DIRECT_URL must be set; point DATABASE_URL at the migration (cmc) DSN here.
+docker run --rm -v "$WORKSPACE":/app -w /app -e DIRECT_URL="$DIRECT_URL" -e DATABASE_URL="$DIRECT_URL" --network host node:22-alpine sh -c \
   'corepack enable && pnpm install --frozen-lockfile && pnpm --filter @cmc/db generate && pnpm --filter @cmc/db migrate'
 docker exec "$CID" psql -U cmc -d cmc -c "ALTER ROLE cmc_app PASSWORD '${PW}';"
 export DATABASE_URL="postgresql://cmc_app:${PW}@127.0.0.1:55432/cmc?schema=public"
