@@ -112,7 +112,13 @@ code-simplifier agent            # optional: shorten/clarify without changing lo
 ### 3e. Record proof + trace (durable layer = source of truth)
 ```bash
 .\scripts\bin\harness-cli.exe story update --id <US-0XX> --unit 1 --integration 1
-.\scripts\bin\harness-cli.exe trace --story <US-0XX> --summary "<what changed>" --outcome success
+# --outcome MUST be one of: completed | blocked | partial | failed  (NOT "success").
+# Pass the structured fields below or the trace scores 'minimal' and fails the
+# normal/high-risk tier bar. Link --intake so the lane (and required tier) resolves.
+.\scripts\bin\harness-cli.exe trace --intake <N> --story <US-0XX> --agent "<who>" \
+  --summary "<what changed, >=10 chars>" --actions "<steps>" \
+  --read "<files read;...>" --changed "<files changed;...>" \
+  --errors "<errors or none>" --outcome completed
 ```
 **Run the trace even though ck wrote a journal.** A ck journal is evidence; the trace is the record.
 
@@ -165,7 +171,7 @@ git rev-parse --abbrev-ref HEAD                      # not main
 .\scripts\bin\harness-cli.exe story update --id US-0XX --unit 1 --integration 1
 /ck:docs update
 /ck:git cp
-.\scripts\bin\harness-cli.exe trace --story US-0XX --summary "<what changed>" --outcome success
+.\scripts\bin\harness-cli.exe trace --intake <N> --story US-0XX --agent "<who>" --summary "<what changed>" --actions "<steps>" --read "<files>" --changed "<files>" --outcome completed
 /ck:journal
 /ck:watzup
 ```

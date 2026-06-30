@@ -49,6 +49,10 @@ services:
     environment:
       NODE_ENV:         production
       API_PORT:         4000
+      # Deploy markers surfaced at GET /health so a deploy is externally verifiable.
+      # Jenkins exports these from $GIT_COMMIT + build time; default 'unknown' if unset.
+      APP_COMMIT:       ${APP_COMMIT:-unknown}
+      APP_BUILT_AT:     ${APP_BUILT_AT:-unknown}
       DATABASE_URL:     postgresql://cmc_app:${DB_APP_PASSWORD:?DB_APP_PASSWORD is required}@postgres:5432/${DB_NAME:-cmc}?schema=public
       DIRECT_URL:       postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-cmc}?schema=public
       REDIS_URL:        redis://redis:6379

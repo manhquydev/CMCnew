@@ -9,3 +9,5 @@ credentials-binding
 timestamper
 ws-cleanup
 ansicolor
+blueocean
+github-checks
