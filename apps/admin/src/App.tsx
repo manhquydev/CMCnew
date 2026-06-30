@@ -56,6 +56,7 @@ import { MyPayslipsPanel } from './my-payslips-panel';
 import { Workspace, type NavAction } from './class-workspace';
 
 import { Shell, buildNavGroups, SECTION_TITLES, type SectionKey } from './shell';
+import { applyAdminMetadata, getAdminMetadata } from './link-preview-metadata';
 import { StaffProfilePanel } from './staff-profile';
 import { ScheduleDetailPanel } from './schedule-detail';
 
@@ -603,6 +604,11 @@ function Dashboard() {
       navigate('/' + defaultSection(me), { replace: true });
     }
   }, [oppId, knownSection, me, navigate]);
+
+  // Keep the browser tab and share metadata aligned with the current ERP module.
+  useEffect(() => {
+    applyAdminMetadata(getAdminMetadata(activeSection, Boolean(oppId)));
+  }, [activeSection, oppId]);
 
   // goToClass: navigate to the class workspace with a pre-selected batch + tab
   const goToClass = useCallback(
