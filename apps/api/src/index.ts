@@ -41,7 +41,16 @@ const corsOrigins = (
 
 app.use('*', cors({ origin: corsOrigins, credentials: true }));
 
-app.get('/health', (c) => c.json({ ok: true }));
+// Health + deploy marker: `commit`/`builtAt` come from env injected at deploy
+// time (Jenkins passes the git SHA + build time); default 'unknown' locally so
+// the response is additive and the deploy smoke check stays a plain 200.
+app.get('/health', (c) =>
+  c.json({
+    ok: true,
+    commit: process.env.APP_COMMIT ?? 'unknown',
+    builtAt: process.env.APP_BUILT_AT ?? 'unknown',
+  }),
+);
 
 // ── Exercise base-PDF storage (S1.7) ───────────────────────────────────────────────────────
 // Upload: staff only (a teacher attaches the base PDF when creating an exercise). Raw PDF body.

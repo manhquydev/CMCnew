@@ -43,6 +43,9 @@ pipeline {
       when { branch 'main' }   // deploy the live stack only from main
       steps {
         sh '''
+          # Surface the deployed revision at GET /health so a deploy is externally verifiable.
+          export APP_COMMIT="${GIT_COMMIT:-unknown}"
+          export APP_BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           # Ensure an origin cert exists (self-signed for CF Full) so nginx can start.
           docker volume create cmcnew-prod_letsencrypt >/dev/null
           $COMPOSE up -d postgres redis
