@@ -31,6 +31,9 @@ import { useDisclosure } from '@mantine/hooks';
 import { IconCircleX, IconCircleCheck, IconPlus } from '@tabler/icons-react';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { DesignShowcase } from './design-showcase';
+import { CoursesPanel } from './courses-panel';
+import { StudentManagementPanel } from './student-management-panel';
+import { PayrollCheckinPanel } from './payroll-checkin-panel';
 
 // Panels — admin-native
 import { GuardiansPanel } from './guardians-panel';
@@ -67,9 +70,7 @@ import { ScheduleDetailPanel } from './schedule-detail';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type User = Awaited<ReturnType<typeof trpc.user.list.query>>[number];
-type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
-type Program = 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE';
 type Session = ReturnType<typeof useSession>['me'];
 
 // ─── Table header style ────────────────────────────────────────────────────────
@@ -85,115 +86,17 @@ const TH_STYLE: React.CSSProperties = {
 // ─── Persona → default landing ─────────────────────────────────────────────────
 
 function defaultSection(me: Session): SectionKey {
-  if (me.isSuperAdmin || me.roles.includes('quan_ly')) return 'overview';
-  if (me.roles.includes('giao_vien') || me.roles.includes('head_teacher')) return 'schedule';
+  if (me.isSuperAdmin) return 'overview';
+  if (me.roles.includes('giao_vien')) return 'schedule';
   if (me.roles.includes('sale') || me.roles.includes('ctv_mkt')) return 'crm';
   if (me.roles.includes('ke_toan')) return 'finance';
   if (me.roles.includes('hr')) return 'hr';
   if (me.roles.includes('cskh')) return 'cskh';
   // Exec roles can see the dashboard (dashboard.summary); land them there. Any other role
   // falls back to an always-open section so the landing never 403s.
-  if (me.roles.includes('bgd') || me.roles.includes('giam_doc_kinh_doanh') || me.roles.includes('giam_doc_dao_tao'))
+  if (me.roles.includes('giam_doc_kinh_doanh') || me.roles.includes('giam_doc_dao_tao'))
     return 'overview';
   return 'schedule';
-}
-
-// ─── Courses ──────────────────────────────────────────────────────────────────
-
-function Courses() {
-  const { me } = useSession();
-  // Any staff may browse the catalogue (course.list is open), but only roles with course.create
-  // (quản lý / GĐ Đào tạo) may create — hide the button for everyone else so they never hit FORBIDDEN.
-  const canCreate = me ? can(me.roles, me.isSuperAdmin, 'course', 'create') : false;
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [opened, { open, close }] = useDisclosure(false);
-  const [busy, setBusy] = useState(false);
-  const form = useForm({
-    initialValues: { code: '', name: '', program: 'UCREA' as Program },
-    validate: {
-      code: combine(required('Nhập mã khóa'), minLength(2, 'Mã cần tối thiểu 2 ký tự')),
-      name: required('Nhập tên khóa'),
-      program: required('Chọn chương trình'),
-    },
-  });
-
-  const load = () =>
-    trpc.course.list
-      .query()
-      .then(setCourses)
-      .catch((e) => notifyError(e, 'Không tải được danh sách khóa học'));
-
-  useEffect(() => { load(); }, []);
-
-  async function create(values: typeof form.values) {
-    setBusy(true);
-    try {
-      await trpc.course.create.mutate(values);
-      notifySuccess(`Đã tạo khóa "${values.name}"`);
-      close();
-      form.reset();
-      load();
-    } catch (e) {
-      notifyError(e, 'Tạo khóa học thất bại');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Stack>
-      <Group justify="space-between" mb="xs">
-        <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }}>Khóa học</Text>
-        {canCreate && (
-          <Button variant="filled" radius={9999} leftSection={<IconPlus size={16} />} onClick={open}>
-            Tạo khóa
-          </Button>
-        )}
-      </Group>
-
-      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-        <Table striped highlightOnHover withTableBorder={false}>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th style={TH_STYLE}>Mã</Table.Th>
-              <Table.Th style={TH_STYLE}>Tên</Table.Th>
-              <Table.Th style={TH_STYLE}>Chương trình</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {courses.map((c) => (
-              <Table.Tr key={c.id}>
-                <Table.Td>{c.code}</Table.Td>
-                <Table.Td>{c.name}</Table.Td>
-                <Table.Td>{c.program}</Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-        {courses.length === 0 && (
-          <Text c="dimmed" size="sm" mt="sm">Chưa có khóa học.</Text>
-        )}
-      </Card>
-
-      <Modal opened={opened} onClose={close} title="Tạo khóa học" radius="xl" centered>
-        <form onSubmit={form.onSubmit(create)}>
-          <Stack>
-            <TextInput label="Mã" withAsterisk {...form.getInputProps('code')} />
-            <TextInput label="Tên" withAsterisk {...form.getInputProps('name')} />
-            <Select
-              label="Chương trình" withAsterisk
-              data={['UCREA', 'BRIGHT_IG', 'BLACK_HOLE']}
-              {...form.getInputProps('program')}
-            />
-            <Group justify="flex-end" mt="xs">
-              <Button variant="subtle" onClick={close}>Hủy</Button>
-              <Button type="submit" variant="filled" radius={9999} loading={busy}>Tạo</Button>
-            </Group>
-          </Stack>
-        </form>
-      </Modal>
-    </Stack>
-  );
 }
 
 // ─── Facilities ───────────────────────────────────────────────────────────────
@@ -582,6 +485,7 @@ const ALL_SECTION_KEYS = new Set<string>([
   // so #certificate is not a reachable hash route either. Re-add when the feature is re-enabled.
   'classes', 'meetings', 'levelup', 'my-payslips',
   'checkin', 'shift-registration', 'facility-network', 'shift-config',
+  'student-mgmt', 'payroll-checkin',
 ]);
 
 // ─── Work Shift Section ──────────────────────────────────────────────────────
@@ -627,13 +531,16 @@ function Dashboard() {
     applyAdminMetadata(getAdminMetadata(activeSection, Boolean(oppId)));
   }, [activeSection, oppId]);
 
-  // goToClass: navigate to the class workspace with a pre-selected batch + tab
+  // goToClass: navigate to the class workspace with a pre-selected batch + tab.
+  // Teachers see the classes workspace nested inside the consolidated "Quản lý học sinh" screen
+  // (student-mgmt), not the standalone /classes route which is hidden from their nav.
+  const isTeacherOnly = me.roles.length === 1 && me.roles.includes('giao_vien');
   const goToClass = useCallback(
     (batchId: string | undefined, tab: string) => {
       setNavAction({ batchId, tab, ts: Date.now() });
-      navigate('/classes');
+      navigate(isTeacherOnly ? '/student-mgmt' : '/classes');
     },
-    [navigate],
+    [navigate, isTeacherOnly],
   );
 
   function handleSectionChange(key: SectionKey) {
@@ -653,10 +560,10 @@ function Dashboard() {
       case 'courses':
         return (
           <Stack>
-            <Courses />
+            <CoursesPanel />
             {/* TermsPanel is a term-MANAGEMENT surface (create/edit/lock kỳ học). Only render it
-                for roles that can actually manage terms (assessment.termCreate = head_teacher/
-                quản lý/GĐĐT) — teachers can read terms elsewhere but here would only see dead,
+                for roles that can actually manage terms (assessment.termCreate = GĐĐT) —
+                teachers can read terms elsewhere but here would only see dead,
                 FORBIDDEN-on-click buttons. */}
             {can(me.roles, me.isSuperAdmin, 'assessment', 'termCreate') &&
               (me.facilityIds[0] ?? (me.isSuperAdmin ? 1 : null)) != null && (
@@ -724,6 +631,10 @@ function Dashboard() {
       // ── Class management ──────────────────────────────────────────────────
       case 'classes':
         return <Workspace navAction={navAction} />;
+
+      // Teacher nav consolidation: Lớp học + Khóa học + Học bạ in one tabbed screen.
+      case 'student-mgmt':
+        return <StudentManagementPanel navAction={navAction} />;
 
       case 'meetings':
         return (
@@ -804,6 +715,10 @@ function Dashboard() {
             <MyPayslipsPanel />
           </Stack>
         );
+
+      // Teacher nav consolidation: Phiếu lương + Chấm công in one tabbed screen.
+      case 'payroll-checkin':
+        return <PayrollCheckinPanel />;
 
       // ── Work Shift & Attendance ──────────────────────────────────────────
       case 'checkin':

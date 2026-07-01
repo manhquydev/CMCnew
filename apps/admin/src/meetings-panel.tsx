@@ -30,9 +30,14 @@ type StatusFilter = 'all' | 'scheduled' | 'done' | 'cancelled';
  * (no single-batch filter). Mirrors MeetingsTab logic but operates facility-wide.
  * Confirms / marks done / cancels via parentMeeting.setStatus.
  */
-export function MeetingsPanel() {
+export function MeetingsPanel({
+  initialFacilityId,
+}: {
+  /** Preselect facility when opened from a known session context (e.g. Lịch 360). */
+  initialFacilityId?: number;
+} = {}) {
   const [facilities, setFacilities] = useState<Facility[]>([]);
-  const [facilityId, setFacilityId] = useState<number | null>(null);
+  const [facilityId, setFacilityId] = useState<number | null>(initialFacilityId ?? null);
   const [meetings, setMeetings] = useState<ParentMeeting[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [loading, setLoading] = useState(false);

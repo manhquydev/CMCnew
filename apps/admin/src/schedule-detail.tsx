@@ -7,7 +7,8 @@
 
 import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
-import { trpc, Chatter, notifyError } from '@cmc/ui';
+import { trpc, useSession, Chatter, notifyError } from '@cmc/ui';
+import { can } from '@cmc/auth/permissions';
 import {
   ActionIcon,
   Badge,
@@ -25,6 +26,8 @@ import { IconArrowLeft, IconExternalLink, IconUser } from '@tabler/icons-react';
 import { AttendanceRoster } from './attendance-roster.js';
 import { StudentDetailPanel } from './student-detail.js';
 import { SessionEvidencePanel } from './session-evidence-panel.js';
+import { GradingPanel } from './grading.js';
+import { MeetingsPanel } from './meetings-panel.js';
 
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
 type Enrollment = Awaited<ReturnType<typeof trpc.enrollment.listByBatch.query>>[number];
@@ -114,10 +117,13 @@ function WorkflowCard({
 }
 
 function SessionWorkflowPanel({ session }: { session: MySession }) {
+  const { me } = useSession();
   const phase = getSessionPhase(session);
   const meta = PHASE_META[phase];
   const attendanceEnabled = phase !== 'before';
   const postClassEnabled = phase === 'post_class';
+  const canGrade = can(me.roles, me.isSuperAdmin, 'grade', 'grade');
+  const canSetMeetingStatus = can(me.roles, me.isSuperAdmin, 'parentMeeting', 'setStatus');
 
   return (
     <Stack gap="md">
@@ -162,6 +168,26 @@ function SessionWorkflowPanel({ session }: { session: MySession }) {
               Dùng panel thật bên dưới để upload ảnh, lưu nhận xét từng học sinh và publish cho PH/HS.
             </Text>
           </WorkflowCard>
+
+          {canGrade && (
+            <WorkflowCard
+              title="Chấm bài"
+              description="Mở sau giờ kết thúc buổi học."
+              enabled={postClassEnabled}
+            >
+              <GradingPanel initialFacilityId={session.facilityId} initialBatchId={session.classBatchId} />
+            </WorkflowCard>
+          )}
+
+          {canSetMeetingStatus && (
+            <WorkflowCard
+              title="Họp PH"
+              description="Mở sau giờ kết thúc buổi học."
+              enabled={postClassEnabled}
+            >
+              <MeetingsPanel initialFacilityId={session.facilityId} />
+            </WorkflowCard>
+          )}
         </SimpleGrid>
       </Stack>
       </Card>

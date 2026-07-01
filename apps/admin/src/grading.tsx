@@ -625,11 +625,18 @@ function ClassGrading({ facilityId, classBatchId }: { facilityId: number; classB
   );
 }
 
-export function GradingPanel() {
+export function GradingPanel({
+  initialFacilityId,
+  initialBatchId,
+}: {
+  /** Preselect facility + class when opened from a known session context (e.g. Lịch 360). */
+  initialFacilityId?: number;
+  initialBatchId?: string;
+} = {}) {
   const [facilities, setFacilities] = useState<Facility[]>([]);
-  const [facilityId, setFacilityId] = useState<number | null>(null);
+  const [facilityId, setFacilityId] = useState<number | null>(initialFacilityId ?? null);
   const [batches, setBatches] = useState<Batch[]>([]);
-  const [batchId, setBatchId] = useState<string | null>(null);
+  const [batchId, setBatchId] = useState<string | null>(initialBatchId ?? null);
   const [loadingFacilities, setLoadingFacilities] = useState(true);
   const [loadingBatches, setLoadingBatches] = useState(true);
 

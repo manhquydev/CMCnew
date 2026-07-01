@@ -66,7 +66,10 @@ export type SectionKey =
   | 'checkin'
   | 'shift-registration'
   | 'facility-network'
-  | 'shift-config';
+  | 'shift-config'
+  // Teacher nav consolidation (Lịch 360) — giao_vien-only aggregate screens
+  | 'student-mgmt'
+  | 'payroll-checkin';
 
 // ─── Nav types ────────────────────────────────────────────────────────────────
 
@@ -366,24 +369,34 @@ export function buildNavGroups({
     return can(roles, isSuperAdmin, gate.module, gate.action);
   }
 
+  // Teacher nav consolidation (Lịch 360): only collapse nav for accounts whose ONLY role is
+  // giao_vien. assessment.termList/checkInOut.punch are also granted to head_teacher/quan_ly/
+  // sale/cskh, so a multi-role account (e.g. giao_vien + head_teacher) must keep the original,
+  // uncollapsed nav to avoid hiding sections those other roles rely on.
+  const isTeacherOnly = roles.length === 1 && roles[0] === 'giao_vien';
+
   const groups: NavGroup[] = [
     {
       groupLabel: 'Giảng dạy',
       items: [
         { key: 'schedule' as const, label: 'Lịch dạy', icon: <IconCalendar {...I()} />, visible: visible('schedule') },
-        { key: 'attendance' as const, label: 'Điểm danh', icon: <IconClipboardCheck {...I()} />, visible: visible('attendance') },
-        { key: 'grading' as const, label: 'Chấm bài', icon: <IconPencil {...I()} />, visible: visible('grading') },
-        { key: 'assessment' as const, label: 'Học bạ', icon: <IconReport {...I()} />, visible: visible('assessment') },
+        // Điểm danh/Chấm bài đã gộp vào "Lịch dạy" (Lịch 360 mở rộng — điểm danh nhúng sẵn trong
+        // schedule-detail, chấm bài + họp PH là WorkflowCard) cho giáo_viên-only.
+        { key: 'attendance' as const, label: 'Điểm danh', icon: <IconClipboardCheck {...I()} />, visible: !isTeacherOnly && visible('attendance') },
+        { key: 'grading' as const, label: 'Chấm bài', icon: <IconPencil {...I()} />, visible: !isTeacherOnly && visible('grading') },
+        { key: 'assessment' as const, label: 'Học bạ', icon: <IconReport {...I()} />, visible: !isTeacherOnly && visible('assessment') },
       ],
     },
     {
       groupLabel: 'Lớp học',
       items: [
-        { key: 'classes' as const, label: 'Lớp học', icon: <IconDoor {...I()} />, visible: visible('classes') },
+        { key: 'classes' as const, label: 'Lớp học', icon: <IconDoor {...I()} />, visible: !isTeacherOnly && visible('classes') },
         // Course catalogue is a shared read-only reference that belongs next to classes, not under
         // "Quản trị" — otherwise a teacher sees a lone "Khóa học" under an Admin header.
-        { key: 'courses' as const, label: 'Khóa học', icon: <IconBook {...I()} />, visible: visible('courses') },
-        { key: 'meetings' as const, label: 'Họp PH', icon: <IconUsers {...I()} />, visible: visible('meetings') },
+        { key: 'courses' as const, label: 'Khóa học', icon: <IconBook {...I()} />, visible: !isTeacherOnly && visible('courses') },
+        // Giáo viên (chỉ role này): 3 mục Lớp học/Khóa học/Học bạ gộp thành 1 màn có tab.
+        { key: 'student-mgmt' as const, label: 'Quản lý học sinh', icon: <IconUsers {...I()} />, visible: isTeacherOnly },
+        { key: 'meetings' as const, label: 'Họp PH', icon: <IconUsers {...I()} />, visible: !isTeacherOnly && visible('meetings') },
         { key: 'levelup' as const, label: 'Duyệt cấp độ', icon: <IconArrowUp {...I()} />, visible: visible('levelup') },
         // Tính năng chứng chỉ tạm tắt (chưa dùng) — đặt visible:false để ẩn khỏi nav; router/panel
         // vẫn còn nguyên, bật lại bằng visible('certificate') khi cần.
@@ -417,13 +430,15 @@ export function buildNavGroups({
         { key: 'hr' as const, label: 'Nhân sự & Lương', icon: <IconId {...I()} />, visible: visible('hr') },
         { key: 'kpi' as const, label: 'Đánh giá KPI', icon: <IconTargetArrow {...I()} />, visible: visible('kpi') },
         { key: 'compensation' as const, label: 'Cơ cấu lương', icon: <IconCurrencyDong {...I()} />, visible: visible('compensation') },
-        { key: 'my-payslips' as const, label: 'Phiếu lương của tôi', icon: <IconWallet {...I()} />, visible: visible('my-payslips') },
+        { key: 'my-payslips' as const, label: 'Phiếu lương của tôi', icon: <IconWallet {...I()} />, visible: !isTeacherOnly && visible('my-payslips') },
+        // Giáo viên (chỉ role này): Phiếu lương + Chấm công gộp thành 1 màn có tab.
+        { key: 'payroll-checkin' as const, label: 'Lương & chấm công', icon: <IconWallet {...I()} />, visible: isTeacherOnly },
       ],
     },
     {
       groupLabel: 'Công ca',
       items: [
-        { key: 'checkin' as const, label: 'Chấm công', icon: <IconClipboardCheck {...I()} />, visible: visible('checkin') },
+        { key: 'checkin' as const, label: 'Chấm công', icon: <IconClipboardCheck {...I()} />, visible: !isTeacherOnly && visible('checkin') },
         { key: 'shift-registration' as const, label: 'Đăng ký ca', icon: <IconCalendar {...I()} />, visible: visible('shift-registration') },
       ],
     },
@@ -469,4 +484,7 @@ export const SECTION_TITLES: Record<SectionKey, string> = {
   'shift-registration': 'Đăng ký ca',
   'facility-network': 'IP WiFi chấm công',
   'shift-config': 'Danh mục ca',
+  // Teacher nav consolidation (Lịch 360)
+  'student-mgmt': 'Quản lý học sinh',
+  'payroll-checkin': 'Lương & chấm công',
 };
