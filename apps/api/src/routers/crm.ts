@@ -33,7 +33,7 @@ function tokenMatches(provided: string, expected: string): boolean {
  * Roles permitted to assign an opportunity to a user other than themselves.
  * A non-manager (sale/cskh/ctv_mkt) creating an opportunity may only credit ownerId = self.
  */
-const CRM_MANAGER_ROLES: Role[] = [Role.quan_ly, Role.giam_doc_kinh_doanh, Role.bgd, Role.super_admin];
+const CRM_MANAGER_ROLES: Role[] = [Role.giam_doc_kinh_doanh, Role.super_admin];
 
 /**
  * Roles that may own an opportunity (carry commission attribution). Drives the
@@ -43,7 +43,6 @@ const CRM_OWNER_ROLES: Role[] = [
   Role.sale,
   Role.cskh,
   Role.ctv_mkt,
-  Role.quan_ly,
   Role.giam_doc_kinh_doanh,
 ];
 
@@ -257,7 +256,7 @@ export const crmRouter = router({
         const contact = await tx.contact.findUniqueOrThrow({ where: { id: input.contactId } });
 
         // A non-manager (sale/cskh/ctv_mkt) may only credit themselves as the opportunity owner.
-        // Managers (quan_ly, giam_doc_kinh_doanh, bgd, super_admin) may credit any user.
+        // Managers (giam_doc_kinh_doanh, super_admin) may credit any user.
         const callerIsManager =
           ctx.session.isSuperAdmin || ctx.session.roles.some((r) => CRM_MANAGER_ROLES.includes(r as Role));
         const resolvedOwnerId = input.ownerId ?? ctx.session.userId;

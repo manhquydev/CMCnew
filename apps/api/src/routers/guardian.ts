@@ -5,7 +5,7 @@ import { logEvent } from '@cmc/audit';
 import { router, requirePermission } from '../trpc.js';
 
 // Parent/student accounts are SYSTEM-WIDE identities (no facility_id) — facilities are linked
-// branches, not silos (docs/specs/facility-model-decision.md). Leadership (bgd/quan_ly, super)
+// branches, not silos (docs/specs/facility-model-decision.md). Leadership (the two directors, super)
 // manages them at the system level; RLS now allows any staff to read these identity rows, while
 // linking a guardian to a student still respects that student's facility (operational scoping).
 export const guardianRouter = router({

@@ -6,52 +6,56 @@ import { logEvent } from '@cmc/audit';
 import { router, requirePermission } from '../trpc.js';
 import { emitStaffNotif } from '../lib/emit-staff-notif.js';
 
-/// Resolve shift group for a user based on their roles.
+/// Resolve shift group for a user based on their position text.
 function resolveShiftGroup(position: string): string {
   if (['sale', 'cskh', 'ctv_mkt'].some((r) => position.includes(r))) return 'KINH_DOANH';
   if (['giao_vien', 'head_teacher'].some((r) => position.includes(r))) return 'GIAO_VIEN';
-  // Fallback for quan_ly, bgd, etc. — they fall into business group
+  // Fallback for quan_ly, bgd, etc. (free-text position, not tied to the Role enum) — business group
   return 'KINH_DOANH';
 }
 
 /// Resolve manager: if EmploymentProfile.managerId is null, default to director by role.
+/// Escalation fallback ("next manager" when the chain runs out) is by shift group — the
+/// KINH_DOANH group falls back to giam_doc_kinh_doanh, the GIAO_VIEN group falls back to
+/// giam_doc_dao_tao. Legacy 'bgd' role is retired; there is no group-agnostic fallback anymore.
 async function resolveManager(
   tx: any, userId: string, roles: string[],
 ): Promise<{ managerId: string | null; nextManagerId: string | null }> {
   const profile = await tx.employmentProfile.findUnique({
     where: { userId },
-    select: { facilityId: true, managerId: true },
+    select: { facilityId: true, managerId: true, position: true },
   });
+  const fallbackDirectorRole = resolveShiftGroup(profile?.position ?? '') === 'GIAO_VIEN'
+    ? 'giam_doc_dao_tao'
+    : 'giam_doc_kinh_doanh';
   if (profile?.managerId) {
-    // Chain: manager is this person, next level is manager's manager (or bgd)
+    // Chain: manager is this person, next level is manager's manager (or the group's director)
     const mgrProfile = await tx.employmentProfile.findUnique({
       where: { userId: profile.managerId },
       select: { managerId: true },
     });
-    // Find a bgd user as fallback
-    const bgd = await tx.appUser.findFirst({
-      where: { isActive: true, roles: { has: 'bgd' }, facilities: { some: { facilityId: profile.facilityId } } },
+    const fallbackDirector = await tx.appUser.findFirst({
+      where: { isActive: true, roles: { has: fallbackDirectorRole }, facilities: { some: { facilityId: profile.facilityId } } },
       select: { id: true },
     });
     return {
       managerId: profile.managerId,
-      nextManagerId: mgrProfile?.managerId ?? bgd?.id ?? null,
+      nextManagerId: mgrProfile?.managerId ?? fallbackDirector?.id ?? null,
     };
   }
   // Auto-resolve by role
   const isSales = roles.some((r) => ['sale', 'cskh', 'ctv_mkt'].includes(r));
-  const isTeacher = roles.some((r) => ['giao_vien', 'head_teacher'].includes(r));
-  const directorRole = isSales ? 'giam_doc_kinh_doanh' : isTeacher ? 'giam_doc_dao_tao' : null;
-  if (!directorRole) return { managerId: null, nextManagerId: null };
+  const isTeacher = roles.some((r) => r === 'giao_vien');
+  const directorRole = isSales ? 'giam_doc_kinh_doanh' : isTeacher ? 'giam_doc_dao_tao' : fallbackDirectorRole;
   const director = await tx.appUser.findFirst({
     where: { isActive: true, roles: { has: directorRole }, facilities: { some: { facilityId: profile?.facilityId } } },
     select: { id: true },
   });
-  const bgd = await tx.appUser.findFirst({
-    where: { isActive: true, roles: { has: 'bgd' }, facilities: { some: { facilityId: profile?.facilityId } } },
+  const fallbackDirector = await tx.appUser.findFirst({
+    where: { isActive: true, roles: { has: fallbackDirectorRole }, facilities: { some: { facilityId: profile?.facilityId } } },
     select: { id: true },
   });
-  return { managerId: director?.id ?? null, nextManagerId: bgd?.id ?? null };
+  return { managerId: director?.id ?? null, nextManagerId: fallbackDirector?.id ?? null };
 }
 
 function hasAnyRole(roles: readonly string[], candidates: string[]): boolean {

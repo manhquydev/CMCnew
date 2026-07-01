@@ -17,13 +17,14 @@ import { NAV_GATES } from '../nav-permissions.js';
 import type { SectionKey } from '../shell.js';
 
 // All non-super_admin staff roles. super_admin bypasses can() entirely (isSuperAdmin=true path).
+// (quan_ly/head_teacher/bgd retired — the two directors giam_doc_kinh_doanh/giam_doc_dao_tao
+// now own everything those roles used to cover.)
 const STAFF_ROLES = [
   'giao_vien',
-  'head_teacher',
-  'quan_ly',
+  'giam_doc_dao_tao',
+  'giam_doc_kinh_doanh',
   'hr',
   'ke_toan',
-  'bgd',
   'sale',
   'cskh',
   'ctv_mkt',
@@ -81,42 +82,44 @@ describe('nav-permissions consistency', () => {
     expect(gate.kind).toBe('permission');
     if (gate.kind === 'permission') {
       expect(can(['cskh'], false, gate.module, gate.action)).toBe(false);
-      // Positive: bgd and quan_ly still can
-      expect(can(['bgd'], false, gate.module, gate.action)).toBe(true);
-      expect(can(['quan_ly'], false, gate.module, gate.action)).toBe(true);
+      // Positive: both directors can (guardian.parentList = [giam_doc_kinh_doanh, giam_doc_dao_tao])
+      expect(can(['giam_doc_kinh_doanh'], false, gate.module, gate.action)).toBe(true);
+      expect(can(['giam_doc_dao_tao'], false, gate.module, gate.action)).toBe(true);
     }
   });
 
-  it('D2: head_teacher and bgd do not see rewards (rewards.giftCreate is quan_ly only)', () => {
+  it('D2: giao_vien and giam_doc_dao_tao do not see rewards (rewards.giftCreate is giam_doc_kinh_doanh only)', () => {
     const gate = NAV_GATES.rewards;
     expect(gate.kind).toBe('permission');
     if (gate.kind === 'permission') {
-      expect(can(['head_teacher'], false, gate.module, gate.action)).toBe(false);
-      expect(can(['bgd'], false, gate.module, gate.action)).toBe(false);
-      // Positive: quan_ly still can
-      expect(can(['quan_ly'], false, gate.module, gate.action)).toBe(true);
+      expect(can(['giao_vien'], false, gate.module, gate.action)).toBe(false);
+      expect(can(['giam_doc_dao_tao'], false, gate.module, gate.action)).toBe(false);
+      // Positive: giam_doc_kinh_doanh still can
+      expect(can(['giam_doc_kinh_doanh'], false, gate.module, gate.action)).toBe(true);
     }
   });
 
-  it('D3: head_teacher, bgd, quan_ly do not see kpi (payroll.kpiList is hr/ke_toan only)', () => {
+  it('D3: sale, cskh, giao_vien do not see kpi; both directors + hr/ke_toan do (payroll.kpiList)', () => {
     const gate = NAV_GATES.kpi;
     expect(gate.kind).toBe('permission');
     if (gate.kind === 'permission') {
-      expect(can(['head_teacher'], false, gate.module, gate.action)).toBe(false);
-      expect(can(['bgd'], false, gate.module, gate.action)).toBe(false);
-      expect(can(['quan_ly'], false, gate.module, gate.action)).toBe(false);
-      // Positive: hr and ke_toan still can
+      expect(can(['sale'], false, gate.module, gate.action)).toBe(false);
+      expect(can(['cskh'], false, gate.module, gate.action)).toBe(false);
+      expect(can(['giao_vien'], false, gate.module, gate.action)).toBe(false);
+      // Positive: hr, ke_toan, and both directors can (payroll.kpiList grants all four)
       expect(can(['hr'], false, gate.module, gate.action)).toBe(true);
       expect(can(['ke_toan'], false, gate.module, gate.action)).toBe(true);
+      expect(can(['giam_doc_kinh_doanh'], false, gate.module, gate.action)).toBe(true);
+      expect(can(['giam_doc_dao_tao'], false, gate.module, gate.action)).toBe(true);
     }
   });
 
-  it('D4: org is gated by user.create — only super_admin + directors; quan_ly/bgd/hr/giao_vien excluded', () => {
+  it('D4: org is gated by user.create — only super_admin + directors; hr/giao_vien excluded', () => {
     const gate = NAV_GATES.org;
     expect(gate.kind).toBe('permission');
     if (gate.kind === 'permission') {
-      // Formerly-granted / non-eligible staff roles must NOT reach org via the registry.
-      for (const role of ['quan_ly', 'bgd', 'hr', 'giao_vien'] as StaffRole[]) {
+      // Non-eligible staff roles must NOT reach org via the registry.
+      for (const role of ['hr', 'giao_vien'] as StaffRole[]) {
         expect(can([role], false, gate.module, gate.action), `role=${role} should not see org`).toBe(false);
       }
       // Directors can create users within their scope → they (and super_admin via bypass) see org.

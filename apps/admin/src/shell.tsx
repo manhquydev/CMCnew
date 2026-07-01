@@ -370,8 +370,8 @@ export function buildNavGroups({
   }
 
   // Teacher nav consolidation (Lịch 360): only collapse nav for accounts whose ONLY role is
-  // giao_vien. assessment.termList/checkInOut.punch are also granted to head_teacher/quan_ly/
-  // sale/cskh, so a multi-role account (e.g. giao_vien + head_teacher) must keep the original,
+  // giao_vien. assessment.termList/checkInOut.punch are also granted to giam_doc_dao_tao/
+  // sale/cskh, so a multi-role account (e.g. giao_vien + giam_doc_dao_tao) must keep the original,
   // uncollapsed nav to avoid hiding sections those other roles rely on.
   const isTeacherOnly = roles.length === 1 && roles[0] === 'giao_vien';
 

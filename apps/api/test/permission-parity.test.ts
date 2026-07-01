@@ -62,23 +62,21 @@ describe('permission registry parity', () => {
     }
     expect(drift, `Permission drift detected:\n${drift.join('\n')}`).toHaveLength(0);
   });
+
+  it('quan_ly/head_teacher/bgd never appear in any registry entry (retired roles)', () => {
+    const leakage: string[] = [];
+    for (const [mod, actions] of Object.entries(PERMISSIONS)) {
+      for (const [action, roles] of Object.entries(actions)) {
+        for (const retired of ['quan_ly', 'head_teacher', 'bgd']) {
+          if ((roles as string[]).includes(retired)) leakage.push(`${mod}.${action} still has ${retired}`);
+        }
+      }
+    }
+    expect(leakage, `Retired role leaked into registry:\n${leakage.join('\n')}`).toHaveLength(0);
+  });
 });
 
 // ── Named invariant tests (document intentional design decisions) ──────────────────────────────
-
-describe('head_teacher class/schedule access', () => {
-  it('head_teacher may create classes and build timetables', () => {
-    expect(PERMISSIONS['classBatch']!['create']).toContain('head_teacher');
-    expect(PERMISSIONS['schedule']!['addSlot']).toContain('head_teacher');
-    expect(PERMISSIONS['schedule']!['generateSessions']).toContain('head_teacher');
-  });
-
-  it('head_teacher cannot change class status/cancel/reopen (financial impact)', () => {
-    expect(PERMISSIONS['classBatch']!['setStatus']).not.toContain('head_teacher');
-    expect(PERMISSIONS['classBatch']!['cancel']).not.toContain('head_teacher');
-    expect(PERMISSIONS['classBatch']!['reopen']).not.toContain('head_teacher');
-  });
-});
 
 describe('ctv_mkt CRM access (O1 only)', () => {
   it('ctv_mkt may read/create opportunities and resolve owner context only', () => {
@@ -129,19 +127,16 @@ describe('Business Director (giam_doc_kinh_doanh) permissions', () => {
     expect(PERMISSIONS['afterSale']!['create']).toContain(KD);
     expect(PERMISSIONS['afterSale']!['transition']).toContain(KD);
     expect(PERMISSIONS['afterSale']!['assign']).toContain(KD);
-    // setStudentLifecycle stays quan_ly-only (financial lifecycle)
-    expect(PERMISSIONS['afterSale']!['setStudentLifecycle']).not.toContain(KD);
+    // setStudentLifecycle moves fully to KD (quan_ly retired — sole financial-lifecycle owner)
+    expect(PERMISSIONS['afterSale']!['setStudentLifecycle']).toContain(KD);
   });
 
-  it('has read-only finance visibility (list only, no write)', () => {
-    expect(PERMISSIONS['finance']!['receiptList']).toContain(KD);
-    expect(PERMISSIONS['finance']!['priceList']).toContain(KD);
-    expect(PERMISSIONS['finance']!['voucherList']).toContain(KD);
-    // Write actions stay ke_toan/quan_ly
-    const writeActions = ['receiptCreate', 'receiptApprove', 'receiptMarkSent',
-      'receiptReconcile', 'receiptCancel', 'priceCreate', 'voucherCreate'];
-    for (const a of writeActions) {
-      expect(PERMISSIONS['finance']![a], `finance.${a} must not include ${KD}`).not.toContain(KD);
+  it('has finance write access alongside ke_toan (quan_ly retired — KD is the compensating oversight)', () => {
+    const financeActions = ['receiptList', 'priceList', 'voucherList', 'receiptCreate',
+      'receiptApprove', 'receiptMarkSent', 'receiptReconcile', 'receiptCancel',
+      'priceCreate', 'voucherCreate'];
+    for (const a of financeActions) {
+      expect(PERMISSIONS['finance']![a], `finance.${a} must include ${KD}`).toContain(KD);
     }
   });
 
@@ -211,10 +206,11 @@ describe('Education Director (giam_doc_dao_tao) permissions', () => {
     expect(PERMISSIONS['user']!['listTeachers']).toContain(GD);
   });
 
-  it('does not appear in any KD/finance/CRM module', () => {
+  it('does not appear in KD/finance/CRM modules, except crm.testGrade (teaching oversight)', () => {
     const bizModules = ['crm', 'afterSale', 'rewards'];
     for (const mod of bizModules) {
       for (const [action, roles] of Object.entries(PERMISSIONS[mod] ?? {})) {
+        if (mod === 'crm' && action === 'testGrade') continue; // GD retains teaching-oversight grading
         expect(roles as string[], `${mod}.${action} must not include ${GD}`).not.toContain(GD);
       }
     }

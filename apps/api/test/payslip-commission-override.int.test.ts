@@ -82,12 +82,12 @@ describe('payslipOverrideVariablePay — tree-manager commission correction', ()
     });
   });
 
-  // quan_ly has tree-authority over sale staff (canOverrideKpi: quan_ly > non-management).
+  // giam_doc_kinh_doanh has tree-authority over sale staff (canOverrideKpi: directors > non-management).
   const managerCaller = () =>
     staffCaller({
       userId: managerId,
-      roles: [Role.quan_ly],
-      primaryRole: Role.quan_ly,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
       isSuperAdmin: false,
       facilityIds: [FAC],
     });
@@ -136,8 +136,8 @@ describe('payslipOverrideVariablePay — tree-manager commission correction', ()
     // Actor whose userId == target → always blocked by canOverrideKpi's self-guard.
     const selfCaller = await staffCaller({
       userId: saleId,
-      roles: [Role.quan_ly],
-      primaryRole: Role.quan_ly,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
       isSuperAdmin: false,
       facilityIds: [FAC],
     });

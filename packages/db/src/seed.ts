@@ -112,9 +112,9 @@ async function seedFull(email: string, password: string): Promise<void> {
   // to run the business end-to-end. Idempotent. All share SEED_SUPERADMIN_PASSWORD
   // for a simple first login; change per-user in the admin app after launch. ──────
   const STAFF: Array<{ email: string; name: string; role: Role }> = [
-    { email: 'quanly@cmc.local', name: 'Quản Lý Cơ Sở', role: Role.quan_ly },
-    { email: 'bgd@cmc.local', name: 'Ban Giám Đốc', role: Role.bgd },
-    { email: 'headteacher@cmc.local', name: 'Trưởng Bộ Môn', role: Role.head_teacher },
+    { email: 'quanly@cmc.local', name: 'Quản Lý Cơ Sở', role: Role.giam_doc_kinh_doanh },
+    { email: 'bgd@cmc.local', name: 'Ban Giám Đốc', role: Role.giam_doc_kinh_doanh },
+    { email: 'headteacher@cmc.local', name: 'Trưởng Bộ Môn', role: Role.giam_doc_dao_tao },
     { email: 'giaovien@cmc.local', name: 'Giáo Viên', role: Role.giao_vien },
     { email: 'ketoan@cmc.local', name: 'Kế Toán', role: Role.ke_toan },
     { email: 'hr@cmc.local', name: 'Nhân Sự (HR)', role: Role.hr },

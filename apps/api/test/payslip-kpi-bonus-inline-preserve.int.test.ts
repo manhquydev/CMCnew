@@ -133,8 +133,8 @@ describe('payslipOverrideVariablePay — inline kpiScore KPI bonus preserved', (
     // Override only the variablePay (commission). Manager has tree-authority over sale.
     const mgr = await staffCaller({
       userId: managerId,
-      roles: [Role.quan_ly],
-      primaryRole: Role.quan_ly,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
       isSuperAdmin: false,
       facilityIds: [FAC],
     });

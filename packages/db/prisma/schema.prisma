@@ -12,19 +12,18 @@ datasource db {
 }
 
 /// Business roles. Facility scope is enforced via RLS, not via role.
+/// quan_ly/head_teacher/bgd retired 2026-07 (RBAC role consolidation) — absorbed by the two
+/// director roles below.
 enum Role {
   super_admin
-  quan_ly
-  head_teacher
   giao_vien
   ke_toan
   hr
   sale
   cskh
   ctv_mkt
-  bgd
-  giam_doc_kinh_doanh // Business Director — delegates sale/cskh/ctv_mkt team creation
-  giam_doc_dao_tao // Education Director — delegates giao_vien/head_teacher team creation
+  giam_doc_kinh_doanh // Business Director — delegates sale/cskh/ctv_mkt/ke_toan/hr team creation
+  giam_doc_dao_tao // Education Director — delegates giao_vien team creation
 }
 
 /// The 3 CMC programs. Global (not facility-scoped).

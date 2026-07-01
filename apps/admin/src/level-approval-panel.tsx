@@ -12,7 +12,7 @@ const TH_STYLE: React.CSSProperties = {
 
 type Pending = Awaited<ReturnType<typeof trpc.levelProgress.listPending.query>>[number];
 
-// head_teacher queue: approve/reject pending level-up proposals. Approve writes Student.level.
+// giam_doc_dao_tao queue: approve/reject pending level-up proposals. Approve writes Student.level.
 export function LevelApprovalPanel() {
   const [rows, setRows] = useState<Pending[] | null>(null);
   const [reason, setReason] = useState<Record<string, string>>({});

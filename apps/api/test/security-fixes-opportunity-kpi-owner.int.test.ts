@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Role } from '@cmc/auth';
-import { staffCaller, staffSession, withRls, SUPER, uniq } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
 import type { ApiContext } from '../src/context.js';
 import { appRouter } from '../src/routers/index.js';
 
@@ -16,7 +15,7 @@ import { appRouter } from '../src/routers/index.js';
  *    was counted → doanh_so was understated for sent/reconciled receipts.
  *
  * 3. opportunityCreate ownerId: a non-manager (sale/cskh/ctv_mkt) may only
- *    credit ownerId = self. Managers (quan_ly+) may assign to any user.
+ *    credit ownerId = self. Managers (giam_doc_kinh_doanh) may assign to any user.
  */
 
 // ─── Shared fixtures ────────────────────────────────────────────────────────
@@ -313,8 +312,8 @@ describe('Fix #3 — opportunityCreate: non-manager cannot assign to another use
             email: uniq('fix3-mgr@cmc.test'),
             displayName: 'Fix3 Manager',
             passwordHash: 'dummy',
-            primaryRole: 'quan_ly',
-            roles: ['quan_ly'],
+            primaryRole: 'giam_doc_kinh_doanh',
+            roles: ['giam_doc_kinh_doanh'],
             isActive: true,
             facilities: { create: [{ facilityId: FACILITY }] },
           },
@@ -378,8 +377,8 @@ describe('Fix #3 — opportunityCreate: non-manager cannot assign to another use
     expect(opp.ownerId).toBe(saleUserId);
   });
 
-  it('manager (quan_ly) can assign ownerId to another user', async () => {
-    const mgrCaller = callerAs(managerUserId, ['quan_ly']);
+  it('manager (giam_doc_kinh_doanh) can assign ownerId to another user', async () => {
+    const mgrCaller = callerAs(managerUserId, ['giam_doc_kinh_doanh']);
 
     const opp = await mgrCaller.crm.opportunityCreate({ contactId, studentName: 'Fix3 Child Mgr', ownerId: saleUserId });
     cleanup.oppIds.push(opp.id);

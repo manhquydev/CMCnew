@@ -176,8 +176,8 @@ describe('student.detail — aggregate + RLS isolation', () => {
 
   it('RLS: FAC_B scoped caller cannot see a FAC_A student (returns NOT_FOUND)', async () => {
     const caller = await staffCaller({
-      roles: [Role.quan_ly],
-      primaryRole: Role.quan_ly,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
       isSuperAdmin: false,
       facilityIds: [FAC_B],
     });
@@ -187,8 +187,8 @@ describe('student.detail — aggregate + RLS isolation', () => {
 
   it('RLS: FAC_A scoped caller can see FAC_A student', async () => {
     const caller = await staffCaller({
-      roles: [Role.quan_ly],
-      primaryRole: Role.quan_ly,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
       isSuperAdmin: false,
       facilityIds: [FAC_A],
     });

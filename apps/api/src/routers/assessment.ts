@@ -109,7 +109,7 @@ export const assessmentRouter = router({
     ),
 
   // Lock a term: blocks any further FinalGrade upserts for this periodKey.
-  // Only quan_ly / head_teacher may lock (same gate as termCreate/termUpdate).
+  // Only giam_doc_dao_tao may lock (same gate as termCreate/termUpdate).
   termLock: requirePermission('assessment', 'termLock')
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>

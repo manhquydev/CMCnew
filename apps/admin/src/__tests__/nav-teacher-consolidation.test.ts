@@ -57,8 +57,8 @@ describe('teacher nav consolidation', () => {
     }
   });
 
-  it('a multi-role account (giao_vien + head_teacher) keeps the original, uncollapsed nav', () => {
-    const roles = ['giao_vien', 'head_teacher'];
+  it('a multi-role account (giao_vien + giam_doc_dao_tao) keeps the original, uncollapsed nav', () => {
+    const roles = ['giao_vien', 'giam_doc_dao_tao'];
     const keys = keysOf(roles);
 
     // Must NOT collapse — a multi-role account is not giao_vien-only.
@@ -73,8 +73,8 @@ describe('teacher nav consolidation', () => {
   it.each([
     ['giam_doc_dao_tao'],
     ['giam_doc_kinh_doanh'],
-    ['head_teacher'],
-    ['quan_ly'],
+    ['hr'],
+    ['sale'],
   ])('%s nav is unchanged by the teacher consolidation', (role) => {
     const keys = keysOf([role]);
 

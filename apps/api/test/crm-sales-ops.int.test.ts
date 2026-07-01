@@ -56,7 +56,12 @@ describe('CRM sales-ops — assignment log + attribution', () => {
   }
 
   const managerCaller = () =>
-    staffCaller({ roles: [Role.quan_ly], primaryRole: Role.quan_ly, isSuperAdmin: false, facilityIds: [FACILITY] });
+    staffCaller({
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
+      isSuperAdmin: false,
+      facilityIds: [FACILITY],
+    });
   const saleCaller = () =>
     staffCaller({ roles: [Role.sale], primaryRole: Role.sale, isSuperAdmin: false, facilityIds: [FACILITY] });
 

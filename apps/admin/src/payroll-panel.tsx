@@ -322,7 +322,7 @@ function ComputeForm({
 }
 
 // ─── Commission Override Modal ────────────────────────────────────────────────
-// Shows only on draft payslips; visible to quan_ly / head_teacher / bgd / super.
+// Shows only on draft payslips; visible to giam_doc_kinh_doanh / giam_doc_dao_tao / super.
 // The backend re-enforces tree-authority so a UI bypass is harmless but the
 // button is hidden for unrelated roles to avoid confusing error messages.
 
@@ -440,7 +440,7 @@ function StaffDetailDrawer({
   // Roles that may attempt commission override; backend re-enforces tree-authority.
   const canOverride =
     me.isSuperAdmin ||
-    me.roles.some((r) => ['quan_ly', 'head_teacher', 'bgd'].includes(r));
+    me.roles.some((r) => ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'].includes(r));
 
   const [payslips, setPayslips] = useState<PayslipRow[]>([]);
   const [loading, setLoading] = useState(false);

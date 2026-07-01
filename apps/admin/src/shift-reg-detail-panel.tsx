@@ -62,7 +62,7 @@ export function ShiftRegDetailPanel({ regId, onBack }: { regId: string; onBack: 
       .then((groups: ShiftGroup[]) => {
         // Find group matching user's role
         const isSales = me.roles.some((r: string) => ['sale', 'cskh', 'ctv_mkt'].includes(r));
-        const isTeacher = me.roles.some((r: string) => ['giao_vien', 'head_teacher'].includes(r));
+        const isTeacher = me.roles.some((r: string) => ['giao_vien'].includes(r));
         const targetCode = isSales ? 'KINH_DOANH' : isTeacher ? 'GIAO_VIEN' : 'KINH_DOANH';
         const g = groups.find((g: ShiftGroup) => g.code === targetCode) ?? groups[0];
         setGroup(g ?? null);

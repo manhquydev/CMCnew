@@ -31,12 +31,12 @@ export function CheckInPanel() {
 
   const fid = me.facilityIds[0];
   // Mirrors checkInOut.punch/todayStatus's permission list — a manager-only role
-  // (quan_ly etc.) is never in it, so checkIP/todayStatus always 403 for them.
+  // is never in it, so checkIP/todayStatus always 403 for them.
   const canPunch = me.isSuperAdmin || me.roles.some((r) =>
-    ['giao_vien', 'head_teacher', 'sale', 'cskh'].includes(r),
+    ['giao_vien', 'sale', 'cskh'].includes(r),
   );
   const canApproveManual = me.isSuperAdmin || me.roles.some((r) =>
-    ['quan_ly', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'].includes(r),
+    ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'].includes(r),
   );
   const loadStatus = useCallback(() => {
     if (!fid) return;

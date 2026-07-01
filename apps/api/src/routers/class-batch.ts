@@ -214,13 +214,13 @@ export const classBatchRouter = router({
           body: `Lý do hủy: ${input.reason} (huỷ ${cancelled.count} buổi chưa diễn ra${meetingNote})`,
           actorId: ctx.session.userId,
         });
-        // Notify quan_ly of this facility that the class was cancelled.
+        // Notify giam_doc_dao_tao of this facility (classBatch.cancel owner) that the class was cancelled.
         const managers = await tx.userFacility.findMany({
           where: { facilityId: batch.facilityId },
           select: { userId: true, user: { select: { roles: true } } },
         });
         const managerIds = managers
-          .filter((uf) => uf.user.roles.includes('quan_ly'))
+          .filter((uf) => uf.user.roles.includes('giam_doc_dao_tao'))
           .map((uf) => uf.userId);
         // emitStaffNotif persists rows inside the tx and returns a push fn.
         // Push is called outside withRls so SSE fires only after the tx commits.

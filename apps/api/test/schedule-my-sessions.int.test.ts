@@ -4,7 +4,7 @@ import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
 
 // Invariant: schedule.mySessions cross-class agenda.
 // - giao_vien sees only their own sessions within the facility + date range.
-// - quan_ly sees all facility sessions (no teacher filter unless explicitly passed).
+// - giam_doc_dao_tao sees all facility sessions (no teacher filter unless explicitly passed).
 // - Date-range filter is respected on both sides of the range.
 // - No cross-facility leak: querying facilityId=A never returns rows from facilityId=B.
 describe('schedule.mySessions — cross-class agenda authz + filtering', () => {
@@ -138,11 +138,11 @@ describe('schedule.mySessions — cross-class agenda authz + filtering', () => {
     expect(rows[0].batch.code).toBeTruthy();
   });
 
-  it('quan_ly sees all sessions in the facility when no teacherId filter', async () => {
+  it('giam_doc_dao_tao sees all sessions in the facility when no teacherId filter', async () => {
     const caller = await staffCaller({
       userId: teacherAId, // any valid user; role determines behavior
-      roles: [Role.quan_ly],
-      primaryRole: Role.quan_ly,
+      roles: [Role.giam_doc_dao_tao],
+      primaryRole: Role.giam_doc_dao_tao,
       isSuperAdmin: false,
       facilityIds: [FAC_A],
     });
@@ -176,11 +176,11 @@ describe('schedule.mySessions — cross-class agenda authz + filtering', () => {
     expect(rows.map((r) => r.id)).toEqual([sessionIds[1]]);
   });
 
-  it('no cross-facility leak: quan_ly of FAC_A cannot see FAC_B sessions via mySessions', async () => {
+  it('no cross-facility leak: giam_doc_dao_tao of FAC_A cannot see FAC_B sessions via mySessions', async () => {
     const caller = await staffCaller({
       userId: teacherAId,
-      roles: [Role.quan_ly],
-      primaryRole: Role.quan_ly,
+      roles: [Role.giam_doc_dao_tao],
+      primaryRole: Role.giam_doc_dao_tao,
       isSuperAdmin: false,
       facilityIds: [FAC_A],
     });

@@ -236,7 +236,7 @@ function EditTermModal({
 /**
  * Manages AcademicTerm records for a facility. Terms define the date window used by
  * computeFinalGrade to scope grade/attendance aggregation to the correct period.
- * Requires quan_ly or head_teacher role (backend enforces; super_admin also passes).
+ * Requires giam_doc_dao_tao role (backend enforces; super_admin also passes).
  */
 export function TermsPanel({ facilityId }: { facilityId: number }) {
   const [terms, setTerms] = useState<TermRow[]>([]);

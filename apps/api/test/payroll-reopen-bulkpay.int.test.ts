@@ -403,8 +403,8 @@ describe('payroll reopen + bulk-pay + commission-override deep tests', () => {
     it('override commission: variablePay changes, KPI bonus preserved, net recomputed', async () => {
       const managerCaller = staffCaller({
         userId: managerId,
-        roles: [Role.quan_ly],
-        primaryRole: Role.quan_ly,
+        roles: [Role.giam_doc_kinh_doanh],
+        primaryRole: Role.giam_doc_kinh_doanh,
         isSuperAdmin: false,
         facilityIds: [FAC],
       });
@@ -470,8 +470,8 @@ describe('payroll reopen + bulk-pay + commission-override deep tests', () => {
     it('override on finalized slip is CONFLICT (must reopen first)', async () => {
       const managerCaller = staffCaller({
         userId: managerId,
-        roles: [Role.quan_ly],
-        primaryRole: Role.quan_ly,
+        roles: [Role.giam_doc_kinh_doanh],
+        primaryRole: Role.giam_doc_kinh_doanh,
         isSuperAdmin: false,
         facilityIds: [FAC],
       });
@@ -524,7 +524,6 @@ describe('payroll reopen + bulk-pay + commission-override deep tests', () => {
         tx.payslip.findUniqueOrThrow({ where: { id: correctSlipId } }),
       );
       expect(finalized1.status).toBe('finalized');
-      const workdays1 = finalized1.workdays;
       const net1 = finalized1.netIncome;
 
       // Reopen
@@ -572,7 +571,8 @@ describe('payroll reopen + bulk-pay + commission-override deep tests', () => {
       const finalizeLog2 = logs.find(
         (l) =>
           l.body?.includes('Chốt phiếu lương') &&
-          l.createdAt > reopenLog?.createdAt!,
+          !!reopenLog &&
+          l.createdAt > reopenLog.createdAt,
       );
 
       expect(finalizeLog1).toBeDefined();

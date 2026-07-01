@@ -28,15 +28,15 @@ test.beforeAll(async () => {
         email: managerEmail,
         displayName: `E2E Manager ${suffix}`,
         passwordHash: 'unused',
-        primaryRole: Role.quan_ly,
-        roles: [Role.quan_ly],
+        primaryRole: Role.giam_doc_kinh_doanh,
+        roles: [Role.giam_doc_kinh_doanh],
         isActive: true,
         facilities: { create: [{ facilityId: FACILITY }] },
       },
     }),
   );
   await withRls(SUPER, (tx) =>
-    tx.employmentProfile.create({ data: { facilityId: FACILITY, userId: manager.id, position: 'quan_ly' } }),
+    tx.employmentProfile.create({ data: { facilityId: FACILITY, userId: manager.id, position: 'giam_doc_kinh_doanh' } }),
   );
 
   const staff = await withRls(SUPER, (tx) =>

@@ -60,7 +60,7 @@ export function FacilityNetworkPanel() {
     } catch (e) { notifyError(e, 'Xóa IP thất bại'); }
   }
 
-  if (!me.isSuperAdmin && !me.roles.includes('quan_ly')) {
+  if (!me.isSuperAdmin && !me.roles.includes('giam_doc_kinh_doanh')) {
     return <Text c="dimmed">Bạn không có quyền cấu hình IP</Text>;
   }
 

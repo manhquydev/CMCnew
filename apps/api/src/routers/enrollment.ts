@@ -106,13 +106,13 @@ export const enrollmentRouter = router({
           type: 'created',
           actorId: ctx.session.userId,
         });
-        // Notify quan_ly + head_teacher of this facility about the new enrollment.
+        // Notify both directors of this facility about the new enrollment.
         const facilityUsers = await tx.userFacility.findMany({
           where: { facilityId: input.facilityId },
           select: { userId: true, user: { select: { roles: true } } },
         });
         const notifyIds = facilityUsers
-          .filter((uf) => uf.user.roles.includes('quan_ly') || uf.user.roles.includes('head_teacher'))
+          .filter((uf) => uf.user.roles.includes('giam_doc_kinh_doanh') || uf.user.roles.includes('giam_doc_dao_tao'))
           .map((uf) => uf.userId);
         const pushNotifs = await emitStaffNotif(tx, {
           recipientIds: notifyIds,

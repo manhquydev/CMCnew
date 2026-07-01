@@ -4,28 +4,31 @@ import { staffCaller, withRls, SUPER, uniq, superAdminUserId } from './helpers.j
 
 // Invariant (decision 0011, P05): KPI phiếu đánh giá workflow draft→submitted→confirmed→approved.
 // Điểm cuối = weightedKpi(criterionScores × policy weights). Mỗi bước phải có record_event.
-// authz: chỉ chính chủ tự nộp; manager xác nhận; BGD phê duyệt (≠ confirmer); quản_ly không approve.
+// authz (post role-consolidation): chỉ chính chủ tự nộp; kpiEvalConfirm/kpiEvalApprove đều
+// chỉ dành cho 2 giám đốc (giam_doc_kinh_doanh / giam_doc_dao_tao) — không còn tầng "quản_ly"
+// trung gian. Tách trách nhiệm: người xác nhận (confirm) không được là người phê duyệt
+// (approve) cùng phiếu, và không ai tự duyệt phiếu của chính mình.
 describe('KPI evaluation workflow (P05 — phiếu đánh giá)', () => {
   const FACILITY = 1;
   const PERIOD = '2099-07'; // Kỳ test cô lập, không đụng kỳ test khác
 
   let saleId: string;     // nhân sự bị đánh giá
-  let managerId: string;  // quản_ly (N+1 — confirm)
-  let bgdId: string;      // bgd (N+2 — approve)
+  let managerId: string;  // giam_doc_kinh_doanh (director — confirm)
+  let eduDirId: string;      // giam_doc_dao_tao (director — approve)
 
   beforeAll(async () => {
-    // Dùng superAdmin làm BGD actor
-    bgdId = await superAdminUserId();
+    // Dùng superAdmin làm approve-director actor (giam_doc_dao_tao)
+    eduDirId = await superAdminUserId();
 
-    // Tạo user quản_ly để làm confirmer
+    // Tạo user giam_doc_kinh_doanh để làm confirmer
     const mgr = await withRls(SUPER, (tx) =>
       tx.appUser.create({
         data: {
           email: uniq('kpi-eval-mgr@cmc.test'),
           displayName: 'KPI Eval Manager',
           passwordHash: 'dummy',
-          primaryRole: 'quan_ly',
-          roles: ['quan_ly'],
+          primaryRole: 'giam_doc_kinh_doanh',
+          roles: ['giam_doc_kinh_doanh'],
           isActive: true,
           facilities: { create: [{ facilityId: FACILITY }] },
         },
@@ -72,16 +75,16 @@ describe('KPI evaluation workflow (P05 — phiếu đánh giá)', () => {
   const managerCaller = () =>
     staffCaller({
       userId: managerId,
-      roles: [Role.quan_ly],
-      primaryRole: Role.quan_ly,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
       isSuperAdmin: false,
       facilityIds: [FACILITY],
     });
-  const bgdCaller = () =>
+  const eduDirCaller = () =>
     staffCaller({
-      userId: bgdId,
-      roles: [Role.bgd],
-      primaryRole: Role.bgd,
+      userId: eduDirId,
+      roles: [Role.giam_doc_dao_tao],
+      primaryRole: Role.giam_doc_dao_tao,
       isSuperAdmin: false,
       facilityIds: [FACILITY],
     });
@@ -141,7 +144,7 @@ describe('KPI evaluation workflow (P05 — phiếu đánh giá)', () => {
     expect(row.submittedAt).not.toBeNull();
   });
 
-  it('Quản lý xác nhận phiếu → status=confirmed', async () => {
+  it('Giám đốc (giam_doc_kinh_doanh) xác nhận phiếu → status=confirmed', async () => {
     const mgr = await managerCaller();
     const row = await mgr.payroll.kpiEvalConfirm({
       userId: saleId,
@@ -152,11 +155,11 @@ describe('KPI evaluation workflow (P05 — phiếu đánh giá)', () => {
     expect(row.confirmedAt).not.toBeNull();
   });
 
-  it('BGD phê duyệt phiếu → status=approved, autoScore=76 (per spec formula)', async () => {
-    // BGD khác với managerId → thoả điều kiện tách trách nhiệm
-    // Dùng superAdmin (bgdId) — nhưng ta cần gọi với role bgd.
-    // Super admin passes requireRole(bgd) check vì isSuperAdmin=true.
-    const su = await hrCaller(); // super passes bgd gate
+  it('Giám đốc (giam_doc_dao_tao) phê duyệt phiếu → status=approved, autoScore=76 (per spec formula)', async () => {
+    // eduDirId (giam_doc_dao_tao actor) khác với managerId (giam_doc_kinh_doanh confirmer) → thoả điều kiện tách trách nhiệm.
+    // Dùng superAdmin (eduDirId) — nhưng ta cần gọi với role giam_doc_dao_tao.
+    // Super admin passes the director role-gate vì isSuperAdmin=true.
+    const su = await hrCaller(); // super passes the director-role gate
     const row = await su.payroll.kpiEvalApprove({
       userId: saleId,
       periodKey: PERIOD,
@@ -237,7 +240,7 @@ describe('KPI evaluation workflow (P05 — phiếu đánh giá)', () => {
     }
   });
 
-  it('Giao viên không thể confirm phiếu (FORBIDDEN — cần quan_ly+)', async () => {
+  it('Giao viên không thể confirm phiếu (FORBIDDEN — cần giám đốc: giam_doc_kinh_doanh/giam_doc_dao_tao)', async () => {
     const teacherCaller = await staffCaller({
       userId: saleId, // bất kỳ user, quan trọng là role
       roles: [Role.giao_vien],
@@ -250,16 +253,21 @@ describe('KPI evaluation workflow (P05 — phiếu đánh giá)', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
-  it('Quản lý không thể approve (FORBIDDEN — cần bgd)', async () => {
-    const mgr = await managerCaller();
+  // NOTE: post role-consolidation, kpiEvalConfirm and kpiEvalApprove share the exact same
+  // role set (both directors) — there is no longer a mid-tier role that can confirm but not
+  // approve. That scenario is retired; this test now covers the general case of a non-director
+  // actor (sale) attempting to approve, which must fail at the permission gate regardless of
+  // the KPI sheet's current status.
+  it('Nhân sự (không phải giám đốc) không thể approve (FORBIDDEN — cần giam_doc_kinh_doanh/giam_doc_dao_tao)', async () => {
+    const sale = await saleCaller();
     await expect(
-      mgr.payroll.kpiEvalApprove({ userId: saleId, periodKey: PERIOD }),
+      sale.payroll.kpiEvalApprove({ userId: saleId, periodKey: PERIOD }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('Tự xác nhận phiếu của chính mình → FORBIDDEN (tách trách nhiệm)', async () => {
-    // managerId là quan_ly, có quyền kpiEvalConfirm. Tạo phiếu cho chính managerId, manager tự nộp,
-    // rồi cố tự xác nhận phiếu của mình → phải bị chặn dù role có quyền.
+    // managerId là giam_doc_kinh_doanh, có quyền kpiEvalConfirm. Tạo phiếu cho chính managerId,
+    // manager tự nộp, rồi cố tự xác nhận phiếu của mình → phải bị chặn dù role có quyền.
     const PERIOD_SELF = '2099-11';
     const su = await hrCaller();
     await su.payroll.kpiEvalStart({ userId: managerId, facilityId: FACILITY, periodKey: PERIOD_SELF, block: 'sales' });
@@ -275,22 +283,23 @@ describe('KPI evaluation workflow (P05 — phiếu đánh giá)', () => {
   });
 
   it('Tự duyệt phiếu của chính mình → FORBIDDEN (tách trách nhiệm)', async () => {
-    // bgd có quyền kpiEvalApprove. Tạo phiếu cho chính bgdId, bgd tự nộp, quản lý xác nhận (≠ subject),
-    // rồi bgd cố tự duyệt phiếu của mình → bị chặn bởi self-guard (trước cả check confirmer≠approver).
+    // eduDirId (giam_doc_dao_tao) có quyền kpiEvalApprove. Tạo phiếu cho chính eduDirId, eduDir tự nộp,
+    // giam_doc_kinh_doanh (managerId) xác nhận (≠ subject), rồi eduDir cố tự duyệt phiếu của mình
+    // → bị chặn bởi self-guard (trước cả check confirmer≠approver).
     const PERIOD_SELF = '2099-12';
     const su = await hrCaller();
-    await su.payroll.kpiEvalStart({ userId: bgdId, facilityId: FACILITY, periodKey: PERIOD_SELF, block: 'sales' });
-    const bgd = await bgdCaller();
-    await bgd.payroll.kpiEvalSubmit({
+    await su.payroll.kpiEvalStart({ userId: eduDirId, facilityId: FACILITY, periodKey: PERIOD_SELF, block: 'sales' });
+    const eduDir = await eduDirCaller();
+    await eduDir.payroll.kpiEvalSubmit({
       periodKey: PERIOD_SELF,
       scores: [{ key: 'doanh_so', score: 80 }, { key: 'tuan_thu', score: 70 }, { key: 'khac', score: 60 }],
     });
     const mgr = await managerCaller();
-    await mgr.payroll.kpiEvalConfirm({ userId: bgdId, periodKey: PERIOD_SELF });
+    await mgr.payroll.kpiEvalConfirm({ userId: eduDirId, periodKey: PERIOD_SELF });
     await expect(
-      bgd.payroll.kpiEvalApprove({ userId: bgdId, periodKey: PERIOD_SELF }),
+      eduDir.payroll.kpiEvalApprove({ userId: eduDirId, periodKey: PERIOD_SELF }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    await withRls(SUPER, (tx) => tx.kpiScore.deleteMany({ where: { userId: bgdId, periodKey: PERIOD_SELF } }));
+    await withRls(SUPER, (tx) => tx.kpiScore.deleteMany({ where: { userId: eduDirId, periodKey: PERIOD_SELF } }));
   });
 
   // ─── Gating ───────────────────────────────────────────────────────────────────

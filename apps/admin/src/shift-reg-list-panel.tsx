@@ -49,9 +49,9 @@ export function ShiftRegListPanel({ onSelect }: { onSelect: (id: string) => void
   useEffect(() => { load(); }, [load]);
 
   const canApprove = me.isSuperAdmin || me.roles.some((r) =>
-    ['quan_ly', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'bgd'].includes(r));
+    ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'].includes(r));
   const canCreate = me.isSuperAdmin || me.roles.some((r) =>
-    ['giao_vien', 'head_teacher', 'sale', 'cskh'].includes(r));
+    ['giao_vien', 'sale', 'cskh'].includes(r));
 
   async function doApprove(id: string) {
     try {

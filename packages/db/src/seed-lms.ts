@@ -20,8 +20,8 @@ async function ensureTeacher(email: string, displayName: string, facilityId: num
       email,
       displayName,
       passwordHash: await hashPassword(TEACHER_PW),
-      roles: [Role.giao_vien, Role.head_teacher],
-      primaryRole: Role.head_teacher,
+      roles: [Role.giao_vien, Role.giam_doc_dao_tao],
+      primaryRole: Role.giam_doc_dao_tao,
       facilities: { create: { facilityId } },
     },
   });
@@ -35,8 +35,8 @@ async function ensureLeader(email: string, displayName: string, facilityId: numb
       email,
       displayName,
       passwordHash: await hashPassword(TEACHER_PW),
-      roles: [Role.quan_ly],
-      primaryRole: Role.quan_ly,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
       facilities: { create: { facilityId } },
     },
   });
@@ -238,7 +238,7 @@ async function main(): Promise<void> {
   const cs2 = await prisma.facility.findUniqueOrThrow({ where: { code: 'CS2' } });
 
   const teacher = await ensureTeacher('gv@cmc.local', 'Cô Lan (GV)', hq.id);
-  // Leadership account (quan_ly) — verifies system-wide parent/identity management without super.
+  // Leadership account (giam_doc_kinh_doanh) — verifies system-wide parent/identity management without super.
   await ensureLeader('ld@cmc.local', 'Trưởng cơ sở (QL)', hq.id);
   await seedBadges(hq.id);
   await seedBadges(cs2.id);

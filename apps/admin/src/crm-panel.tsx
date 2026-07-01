@@ -143,7 +143,7 @@ export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
   const [oppsError, setOppsError] = useState<string | null>(null);
   const [testsLoading, setTestsLoading] = useState(true);
   const { me } = useSession();
-  const canGrade = me.isSuperAdmin || me.roles.some((r) => ['giao_vien', 'head_teacher', 'quan_ly'].includes(r));
+  const canGrade = me.isSuperAdmin || me.roles.some((r) => ['giao_vien', 'giam_doc_dao_tao'].includes(r));
 
   const [gradeTarget, setGradeTarget] = useState<TestAppt | null>(null);
   const [gradeScore, setGradeScore] = useState<number | string>('');

@@ -33,16 +33,15 @@ export const userRouter = router({
     ),
   ),
 
-  // Assignee picker for the CSKH assign workflow. Returns active staff whose primary role is
-  // cskh or quan_ly — the only roles eligible to own an after-sale case — within the caller's
-  // facility. RLS (app_user_facility_roster) enforces the facility boundary automatically;
-  // the roles filter here prevents directors from appearing in the dropdown as case owners.
+  // Assignee picker for the CSKH assign workflow. Returns active cskh/giam_doc_kinh_doanh staff
+  // — the roles eligible to own an after-sale case — within the caller's facility. RLS
+  // (app_user_facility_roster) enforces the facility boundary automatically.
   listAssignableForAfterSale: requirePermission('user', 'listAssignableForAfterSale').query(({ ctx }) =>
     withRls(rlsContextOf(ctx.session), (tx) =>
       tx.appUser.findMany({
         where: {
           isActive: true,
-          roles: { hasSome: [Role.cskh, Role.quan_ly] },
+          roles: { hasSome: [Role.cskh, Role.giam_doc_kinh_doanh] },
         },
         orderBy: { displayName: 'asc' },
         select: { id: true, displayName: true },
@@ -51,7 +50,7 @@ export const userRouter = router({
   ),
 
   // Teacher picker for scheduling. RLS (app_user_facility_roster) scopes this to staff
-  // sharing a facility with the caller — a quan_ly cannot enumerate teachers elsewhere.
+  // sharing a facility with the caller.
   listTeachers: requirePermission('user', 'listTeachers')
     .input(z.object({ facilityId: z.number().int().positive().optional() }).optional())
     .query(({ ctx, input }) =>
@@ -314,17 +313,14 @@ export const userRouter = router({
 // Human-readable Vietnamese role names for staff-facing email. Unknown roles fall back to the raw key.
 const ROLE_LABELS: Partial<Record<Role, string>> = {
   [Role.super_admin]: 'Quản trị hệ thống',
-  [Role.quan_ly]: 'Quản lý cơ sở',
   [Role.giam_doc_kinh_doanh]: 'Giám đốc Kinh doanh',
   [Role.giam_doc_dao_tao]: 'Giám đốc Đào tạo',
-  [Role.head_teacher]: 'Trưởng bộ môn',
   [Role.giao_vien]: 'Giáo viên',
   [Role.ke_toan]: 'Kế toán',
   [Role.hr]: 'Nhân sự',
   [Role.sale]: 'Tư vấn tuyển sinh',
   [Role.cskh]: 'Chăm sóc khách hàng',
   [Role.ctv_mkt]: 'Cộng tác viên Marketing',
-  [Role.bgd]: 'Ban giám đốc',
 };
 
 // ERP login URL for the welcome email's CTA. Mirrors the SSO route's erpOrigin() default.

@@ -889,7 +889,7 @@ function RoomsManager({
 
 export function Workspace({ navAction }: { navAction: NavAction | null }) {
   const { me } = useSession();
-  const canManageClass = me.isSuperAdmin || me.roles.includes('quan_ly');
+  const canManageClass = me.isSuperAdmin || me.roles.includes('giam_doc_dao_tao');
   // The teacher roster is only used by the (manager-gated) schedule editor; user.listTeachers is
   // permission-gated, so only fetch it for roles that may read it — otherwise non-managers (e.g.
   // giáo viên viewing their classes) hit "Không tải được danh sách giáo viên" FORBIDDEN.

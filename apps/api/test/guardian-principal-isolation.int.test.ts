@@ -11,7 +11,7 @@
  *   G3 lmsCaller(P) đọc dữ liệu con người khác (S3) → bị chặn (rỗng theo RLS)
  *   G4 xuyên facility: P link S1@fac1 + S2@fac2 → thấy cả hai; S4 vẫn bị chặn
  *   G5 link/unlink: loginParent re-resolve tập con → {S1,S2,S3}→{S1,S2}
- *   G6 role-gate: giao_vien → FORBIDDEN trên guardian.parentList/link; bgd → được
+ *   G6 role-gate: giao_vien → FORBIDDEN trên guardian.parentList/link; giam_doc_kinh_doanh → được
  *
  * QUAN TRỌNG: nếu G3 không rỗng (PH đọc được dữ liệu con người khác) → đây là
  * defect bảo mật thật. Không sửa test cho pass, báo lại controller.
@@ -116,7 +116,7 @@ beforeAll(async () => {
     });
   });
 
-  // Link using guardian router (role-gate: need bgd/quan_ly/super)
+  // Link using guardian router (role-gate: need giam_doc_kinh_doanh/giam_doc_dao_tao/super)
   await admin.guardian.link({ parentAccountId: parentAId, studentId: s1Id, relation: GuardianRelation.guardian });
   await admin.guardian.link({ parentAccountId: parentAId, studentId: s2Id, relation: GuardianRelation.guardian });
   await admin.guardian.link({ parentAccountId: parentBId, studentId: s3Id, relation: GuardianRelation.guardian });
@@ -531,7 +531,7 @@ describe('G5 — link P→S3 then unlink: loginParent resolver reflects DB chang
 });
 
 // ── G6: role gate ─────────────────────────────────────────────────────────────
-describe('G6 — role gate: giao_vien → FORBIDDEN; bgd → allowed', () => {
+describe('G6 — role gate: giao_vien → FORBIDDEN; giam_doc_kinh_doanh → allowed', () => {
   const teacher = () =>
     staffCaller({
       isSuperAdmin: false,
@@ -540,12 +540,12 @@ describe('G6 — role gate: giao_vien → FORBIDDEN; bgd → allowed', () => {
       primaryRole: Role.giao_vien,
     });
 
-  const bgd = () =>
+  const bizDirector = () =>
     staffCaller({
       isSuperAdmin: false,
       facilityIds: [FAC1],
-      roles: [Role.bgd],
-      primaryRole: Role.bgd,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
     });
 
   it('giao_vien guardian.parentList → FORBIDDEN', async () => {
@@ -562,14 +562,14 @@ describe('G6 — role gate: giao_vien → FORBIDDEN; bgd → allowed', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
-  it('bgd guardian.parentList → OK (returns array)', async () => {
-    const result = await (await bgd()).guardian.parentList();
+  it('giam_doc_kinh_doanh guardian.parentList → OK (returns array)', async () => {
+    const result = await (await bizDirector()).guardian.parentList();
     expect(Array.isArray(result)).toBe(true);
   });
 
-  it('bgd guardian.link (idempotent re-link P→S1) → OK', async () => {
+  it('giam_doc_kinh_doanh guardian.link (idempotent re-link P→S1) → OK', async () => {
     // Already linked (idempotent upsert), so this just updates relation and returns the row.
-    const result = await (await bgd()).guardian.link({
+    const result = await (await bizDirector()).guardian.link({
       parentAccountId: parentAId,
       studentId: s1Id,
       relation: GuardianRelation.guardian,

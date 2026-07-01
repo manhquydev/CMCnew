@@ -58,8 +58,8 @@ describe('work shift registration + punch attendance hardening', () => {
   const createdNetworkIds: string[] = [];
 
   beforeAll(async () => {
-    const manager = await staff(Role.quan_ly);
-    const otherManager = await staff(Role.quan_ly);
+    const manager = await staff(Role.giam_doc_kinh_doanh);
+    const otherManager = await staff(Role.giam_doc_kinh_doanh);
     const sale = await staff(Role.sale, manager.id);
     const peerSale = await staff(Role.sale, otherManager.id);
     const orphanSale = await staff(Role.sale);
@@ -121,7 +121,7 @@ describe('work shift registration + punch attendance hardening', () => {
 
   it('scopes shift registrations to owner, assigned manager, or HR/super-admin', async () => {
     const employee = await caller({ userId: saleId, roles: [Role.sale], primaryRole: Role.sale, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
-    const manager = await caller({ userId: managerId, roles: [Role.quan_ly], primaryRole: Role.quan_ly, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
+    const manager = await caller({ userId: managerId, roles: [Role.giam_doc_kinh_doanh], primaryRole: Role.giam_doc_kinh_doanh, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
     const peer = await caller({ userId: peerSaleId, roles: [Role.sale], primaryRole: Role.sale, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
 
     const reg = await employee.shiftRegistration.create({ facilityId: FACILITY_ID, fromDate: dateString(1), toDate: dateString(1) });
@@ -168,7 +168,7 @@ describe('work shift registration + punch attendance hardening', () => {
   });
 
   it('blocks unresolved-manager approval and supersedes only overlapping approved registrations', async () => {
-    const manager = await caller({ userId: managerId, roles: [Role.quan_ly], primaryRole: Role.quan_ly, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
+    const manager = await caller({ userId: managerId, roles: [Role.giam_doc_kinh_doanh], primaryRole: Role.giam_doc_kinh_doanh, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
     const group = await withRls(SUPER, (tx) => tx.shiftGroup.findFirstOrThrow({ where: { facilityId: FACILITY_ID, code: 'KINH_DOANH' } }));
 
     const unresolved = await withRls(SUPER, (tx) =>
@@ -213,8 +213,8 @@ describe('work shift registration + punch attendance hardening', () => {
 
   it('queues outside-IP punches for direct manager approval and scopes history', async () => {
     const employee = await caller({ userId: saleId, roles: [Role.sale], primaryRole: Role.sale, isSuperAdmin: false, facilityIds: [FACILITY_ID] }, '203.0.113.44');
-    const manager = await caller({ userId: managerId, roles: [Role.quan_ly], primaryRole: Role.quan_ly, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
-    const otherManager = await caller({ userId: otherManagerId, roles: [Role.quan_ly], primaryRole: Role.quan_ly, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
+    const manager = await caller({ userId: managerId, roles: [Role.giam_doc_kinh_doanh], primaryRole: Role.giam_doc_kinh_doanh, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
+    const otherManager = await caller({ userId: otherManagerId, roles: [Role.giam_doc_kinh_doanh], primaryRole: Role.giam_doc_kinh_doanh, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
     const peer = await caller({ userId: peerSaleId, roles: [Role.sale], primaryRole: Role.sale, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
 
     const punch = await employee.checkInOut.punch();
@@ -230,7 +230,7 @@ describe('work shift registration + punch attendance hardening', () => {
   });
 
   it('allows center manager to configure facility WiFi IP ranges through API', async () => {
-    const manager = await caller({ userId: managerId, roles: [Role.quan_ly], primaryRole: Role.quan_ly, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
+    const manager = await caller({ userId: managerId, roles: [Role.giam_doc_kinh_doanh], primaryRole: Role.giam_doc_kinh_doanh, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
     const created = await manager.facilityNetwork.create({
       facilityId: FACILITY_ID,
       ipAddress: `10.${process.pid % 200}.${Math.floor(performance.now()) % 200}.0/24`,

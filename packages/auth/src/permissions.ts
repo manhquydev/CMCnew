@@ -12,66 +12,67 @@
 
 export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   assessment: {
-    template: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
-    termList: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
-    termCreate: ['head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
-    termUpdate: ['head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
-    termLock: ['head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
-    termUnlock: ['head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
-    upsertQualitative: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
-    computeFinalGrade: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
+    template: ['giao_vien', 'giam_doc_dao_tao'],
+    termList: ['giao_vien', 'giam_doc_dao_tao'],
+    termCreate: ['giam_doc_dao_tao'],
+    termUpdate: ['giam_doc_dao_tao'],
+    termLock: ['giam_doc_dao_tao'],
+    termUnlock: ['giam_doc_dao_tao'],
+    upsertQualitative: ['giao_vien', 'giam_doc_dao_tao'],
+    computeFinalGrade: ['giao_vien', 'giam_doc_dao_tao'],
   },
 
   // Business Director oversees CSKH team; write access (create/transition/assign) lets
-  // them step in or reassign cases. setStudentLifecycle remains quan_ly-only (financial impact).
+  // them step in or reassign cases. setStudentLifecycle moves to giam_doc_kinh_doanh
+  // (quan_ly removed — this is the sole financial-lifecycle owner now).
   afterSale: {
-    list: ['cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
-    create: ['cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
-    transition: ['cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
-    assign: ['cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
-    setStudentLifecycle: ['quan_ly'],
+    list: ['cskh', 'giam_doc_kinh_doanh'],
+    create: ['cskh', 'giam_doc_kinh_doanh'],
+    transition: ['cskh', 'giam_doc_kinh_doanh'],
+    assign: ['cskh', 'giam_doc_kinh_doanh'],
+    setStudentLifecycle: ['giam_doc_kinh_doanh'],
   },
 
   attendance: {
-    mark: ['giao_vien', 'quan_ly', 'giam_doc_dao_tao'],
+    mark: ['giao_vien', 'giam_doc_dao_tao'],
   },
 
   // Education Director owns curriculum; course.create/archive moved off quan_ly-only.
   course: {
-    create: ['quan_ly', 'giam_doc_dao_tao'],
-    archive: ['quan_ly', 'giam_doc_dao_tao'],
+    create: ['giam_doc_dao_tao'],
+    archive: ['giam_doc_dao_tao'],
   },
 
   badge: {
-    list: ['quan_ly', 'head_teacher', 'giao_vien'],
-    create: ['quan_ly'],
-    archive: ['quan_ly'],
-    grant: ['giao_vien', 'head_teacher', 'quan_ly'],
+    list: ['giao_vien', 'giam_doc_dao_tao'],
+    create: ['giam_doc_dao_tao'],
+    archive: ['giam_doc_dao_tao'],
+    grant: ['giao_vien', 'giam_doc_dao_tao'],
   },
 
   // Education Director can open/close classes and manage their lifecycle.
   classBatch: {
-    create: ['quan_ly', 'head_teacher', 'giam_doc_dao_tao'],
-    setStatus: ['quan_ly', 'giam_doc_dao_tao'],
-    cancel: ['quan_ly', 'giam_doc_dao_tao'],
-    reopen: ['quan_ly', 'giam_doc_dao_tao'],
+    create: ['giam_doc_dao_tao'],
+    setStatus: ['giam_doc_dao_tao'],
+    cancel: ['giam_doc_dao_tao'],
+    reopen: ['giam_doc_dao_tao'],
   },
 
   dashboard: {
-    summary: ['bgd', 'quan_ly', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    summary: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
 
   exercise: {
-    create: ['giao_vien', 'quan_ly'],
-    publish: ['giao_vien', 'quan_ly'],
+    create: ['giao_vien', 'giam_doc_dao_tao'],
+    publish: ['giao_vien', 'giam_doc_dao_tao'],
   },
 
   sessionEvidence: {
-    commentTemplate: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
-    listByClass: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
-    detailForStaff: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
-    upsertDraft: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
-    publish: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
+    commentTemplate: ['giao_vien', 'giam_doc_dao_tao'],
+    listByClass: ['giao_vien', 'giam_doc_dao_tao'],
+    detailForStaff: ['giao_vien', 'giam_doc_dao_tao'],
+    upsertDraft: ['giao_vien', 'giam_doc_dao_tao'],
+    publish: ['giao_vien', 'giam_doc_dao_tao'],
   },
 
   // compensation.list / defaults / create are super_admin-only (enforced via superAdminProcedure,
@@ -84,29 +85,29 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   },
 
   // Business Director runs the KD team; full CRM access so they can work or oversee deals.
-  // testGrade stays with teaching roles only (no KD director in the classroom).
+  // testGrade moves to teaching-only + giam_doc_dao_tao oversight (no KD director in the classroom).
   crm: {
-    contactList: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
-    contactCreate: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
-    opportunityList: ['sale', 'cskh', 'quan_ly', 'ctv_mkt', 'giam_doc_kinh_doanh'],
-    opportunityGet: ['sale', 'cskh', 'quan_ly', 'ctv_mkt', 'giam_doc_kinh_doanh'],
+    contactList: ['sale', 'cskh', 'giam_doc_kinh_doanh'],
+    contactCreate: ['sale', 'cskh', 'giam_doc_kinh_doanh'],
+    opportunityList: ['sale', 'cskh', 'ctv_mkt', 'giam_doc_kinh_doanh'],
+    opportunityGet: ['sale', 'cskh', 'ctv_mkt', 'giam_doc_kinh_doanh'],
     // Owner picker / name resolution: anyone who can view the pipeline can read the staff list.
-    assignableOwners: ['sale', 'cskh', 'quan_ly', 'ctv_mkt', 'giam_doc_kinh_doanh'],
-    opportunityCreate: ['sale', 'cskh', 'quan_ly', 'ctv_mkt', 'giam_doc_kinh_doanh'],
-    opportunityTransition: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
-    opportunityMarkLost: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
-    opportunityReopen: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
-    // Đổi người phụ trách là hành vi quản lý → chỉ quản lý/giám đốc KD (khớp các entry CRM khác, không có bgd).
-    opportunityReassign: ['quan_ly', 'giam_doc_kinh_doanh'],
-    assignmentHistory: ['sale', 'cskh', 'quan_ly', 'ctv_mkt', 'giam_doc_kinh_doanh'],
-    testList: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
-    testCreate: ['sale', 'cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
-    testGrade: ['giao_vien', 'head_teacher', 'quan_ly'],
+    assignableOwners: ['sale', 'cskh', 'ctv_mkt', 'giam_doc_kinh_doanh'],
+    opportunityCreate: ['sale', 'cskh', 'ctv_mkt', 'giam_doc_kinh_doanh'],
+    opportunityTransition: ['sale', 'cskh', 'giam_doc_kinh_doanh'],
+    opportunityMarkLost: ['sale', 'cskh', 'giam_doc_kinh_doanh'],
+    opportunityReopen: ['sale', 'cskh', 'giam_doc_kinh_doanh'],
+    // Đổi người phụ trách là hành vi quản lý → giám đốc KD (quan_ly removed).
+    opportunityReassign: ['giam_doc_kinh_doanh'],
+    assignmentHistory: ['sale', 'cskh', 'ctv_mkt', 'giam_doc_kinh_doanh'],
+    testList: ['sale', 'cskh', 'giam_doc_kinh_doanh'],
+    testCreate: ['sale', 'cskh', 'giam_doc_kinh_doanh'],
+    testGrade: ['giao_vien', 'giam_doc_dao_tao'],
   },
 
   enrollment: {
-    enroll: ['quan_ly', 'sale'],
-    complete: ['quan_ly'],
+    enroll: ['sale', 'giam_doc_kinh_doanh'],
+    complete: ['giam_doc_dao_tao'],
   },
 
   // facility.update / facility.create are super_admin-only (enforced via superAdminProcedure).
@@ -115,49 +116,51 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     create: ['super_admin'],
   },
 
-  // Business Director has read access to finance (revenue visibility). Write actions
-  // (create / approve / reconcile / cancel) stay with ke_toan / quan_ly.
+  // Business Director now also holds write access on pricing/vouchers/receipts (quan_ly removed —
+  // KD director is the compensating oversight for finance write actions previously dual-owned by
+  // quan_ly + ke_toan). Accepted trade-off at <10-person scale (see plan brainstorm report).
   finance: {
-    priceCreate: ['quan_ly', 'ke_toan'],
-    priceList: ['quan_ly', 'ke_toan', 'giam_doc_kinh_doanh'],
-    voucherCreate: ['quan_ly', 'ke_toan'],
-    voucherList: ['quan_ly', 'ke_toan', 'giam_doc_kinh_doanh'],
-    receiptList: ['ke_toan', 'quan_ly', 'giam_doc_kinh_doanh'],
-    receiptCreate: ['ke_toan', 'quan_ly'],
-    receiptApprove: ['ke_toan', 'quan_ly'],
-    receiptMarkSent: ['ke_toan', 'quan_ly'],
-    receiptReconcile: ['ke_toan', 'quan_ly'],
-    receiptCancel: ['ke_toan', 'quan_ly'],
+    priceCreate: ['ke_toan', 'giam_doc_kinh_doanh'],
+    priceList: ['ke_toan', 'giam_doc_kinh_doanh'],
+    voucherCreate: ['ke_toan', 'giam_doc_kinh_doanh'],
+    voucherList: ['ke_toan', 'giam_doc_kinh_doanh'],
+    receiptList: ['ke_toan', 'giam_doc_kinh_doanh'],
+    receiptCreate: ['ke_toan', 'giam_doc_kinh_doanh'],
+    receiptApprove: ['ke_toan', 'giam_doc_kinh_doanh'],
+    receiptMarkSent: ['ke_toan', 'giam_doc_kinh_doanh'],
+    receiptReconcile: ['ke_toan', 'giam_doc_kinh_doanh'],
+    receiptCancel: ['ke_toan', 'giam_doc_kinh_doanh'],
   },
 
   certificate: {
-    list: ['head_teacher', 'quan_ly', 'giao_vien', 'giam_doc_dao_tao'],
-    issue: ['head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
+    list: ['giao_vien', 'giam_doc_dao_tao'],
+    issue: ['giam_doc_dao_tao'],
   },
 
   grade: {
-    grade: ['giao_vien', 'quan_ly', 'giam_doc_dao_tao'],
-    publish: ['giao_vien', 'quan_ly', 'giam_doc_dao_tao'],
+    grade: ['giao_vien', 'giam_doc_dao_tao'],
+    publish: ['giao_vien', 'giam_doc_dao_tao'],
   },
 
   levelProgress: {
-    propose: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
-    listPending: ['head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
-    decide: ['head_teacher', 'giam_doc_dao_tao'],
+    propose: ['giao_vien', 'giam_doc_dao_tao'],
+    listPending: ['giam_doc_dao_tao'],
+    decide: ['giam_doc_dao_tao'],
   },
 
+  // Guardian/parent management moves to both directors (bgd + quan_ly removed).
   guardian: {
-    parentList: ['bgd', 'quan_ly'],
-    parentCreate: ['bgd', 'quan_ly'],
-    listForStudent: ['bgd', 'quan_ly'],
-    link: ['bgd', 'quan_ly'],
-    unlink: ['bgd', 'quan_ly'],
+    parentList: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    parentCreate: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    listForStudent: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    link: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    unlink: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
 
   // parentMeeting.runReminders / runCadence are super_admin-only (superAdminProcedure).
   parentMeeting: {
-    setStatus: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
-    setSchedule: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
+    setStatus: ['giao_vien', 'giam_doc_dao_tao'],
+    setSchedule: ['giao_vien', 'giam_doc_dao_tao'],
     runReminders: ['super_admin'],
     runCadence: ['super_admin'],
   },
@@ -178,14 +181,15 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     listByStaff: ['hr', 'ke_toan'],
     payslipBulkPay: ['hr', 'ke_toan'],
     payslipReopen: ['hr', 'ke_toan'],
-    // KPI authority in the 3-heads org: the two directors are the executive board. They confirm and
-    // approve KPI (legacy 'bgd' is not seeded in prod bootstrap, so without this nobody could approve),
-    // and can load the KPI panel (kpiList/kpiEvalGet). Separation of duties still holds — kpiEvalApprove
-    // blocks the person who confirmed, so a director cannot both confirm and approve the same sheet.
-    // Data prep (start/autoPrefill/setAuto) stays with hr/ke_toan.
+    // KPI authority in the 3-heads org: the two directors are the executive board. They confirm
+    // and approve KPI (legacy 'bgd'/'quan_ly' removed — the two directors are the only confirm/
+    // approve authority now), and can load the KPI panel (kpiList/kpiEvalGet). Separation of
+    // duties still holds — kpiEvalApprove blocks the person who confirmed, so a director cannot
+    // both confirm and approve the same sheet. Data prep (start/autoPrefill/setAuto) stays with
+    // hr/ke_toan.
     kpiEvalStart: ['hr', 'ke_toan'],
-    kpiEvalConfirm: ['quan_ly', 'bgd', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
-    kpiEvalApprove: ['bgd', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    kpiEvalConfirm: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    kpiEvalApprove: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     kpiEvalGet: ['hr', 'ke_toan', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     kpiList: ['hr', 'ke_toan', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     kpiAutoPrefill: ['hr', 'ke_toan'],
@@ -194,32 +198,32 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   },
 
   rewards: {
-    giftCreate: ['quan_ly', 'giam_doc_kinh_doanh'],
-    review: ['quan_ly', 'giam_doc_kinh_doanh'],
+    giftCreate: ['giam_doc_kinh_doanh'],
+    review: ['giam_doc_kinh_doanh'],
   },
 
   room: {
-    create: ['quan_ly'],
-    update: ['quan_ly'],
-    archive: ['quan_ly'],
+    create: ['giam_doc_dao_tao'],
+    update: ['giam_doc_dao_tao'],
+    archive: ['giam_doc_dao_tao'],
   },
 
   schedule: {
-    addSlot: ['quan_ly', 'head_teacher', 'giam_doc_dao_tao'],
-    generateSessions: ['quan_ly', 'head_teacher', 'giam_doc_dao_tao'],
+    addSlot: ['giam_doc_dao_tao'],
+    generateSessions: ['giam_doc_dao_tao'],
   },
 
   student: {
     // student.create is gated to superAdminProcedure (break-glass only); not in registry.
     // Normal students are created atomically at receipt.approve.
-    update: ['quan_ly', 'sale'],
-    // LMS password reset: operations manager and both directors (account-level action with security impact).
-    resetLmsPassword: ['quan_ly', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    update: ['sale', 'giam_doc_kinh_doanh'],
+    // LMS password reset: both directors (account-level action with security impact).
+    resetLmsPassword: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
 
   submission: {
-    listByExercise: ['giao_vien', 'quan_ly'],
-    layerForGrading: ['giao_vien', 'quan_ly'],
+    listByExercise: ['giao_vien', 'giam_doc_dao_tao'],
+    layerForGrading: ['giao_vien', 'giam_doc_dao_tao'],
   },
 
   // user.list / create are delegated to directors as well as super_admin (delegated-create guard
@@ -228,11 +232,11 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   // setRoles / setFacilities / setActive remain super_admin-only for F0 (superAdminProcedure).
   user: {
     list: ['super_admin', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
-    listTeachers: ['quan_ly', 'giam_doc_dao_tao'],
-    // Narrowly-scoped picker for the CSKH assign dropdown: returns only active cskh/quan_ly
-    // staff within the caller's facility. Gated to roles that can also call afterSale.assign
+    listTeachers: ['giam_doc_dao_tao'],
+    // Narrowly-scoped picker for the CSKH assign dropdown: returns only active cskh staff
+    // within the caller's facility. Gated to roles that can also call afterSale.assign
     // so the dropdown never appears for roles that cannot perform the assignment.
-    listAssignableForAfterSale: ['cskh', 'quan_ly', 'giam_doc_kinh_doanh'],
+    listAssignableForAfterSale: ['cskh', 'giam_doc_kinh_doanh'],
     create: ['super_admin', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     setRoles: ['super_admin'],
     setFacilities: ['super_admin'],
@@ -245,22 +249,19 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
 
   // ── Work Shift & Attendance ──────────────────────────────────────────────
   shiftRegistration: {
-    list: ['giao_vien', 'head_teacher', 'sale', 'cskh', 'quan_ly',
-           'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'hr'],
-    get: ['giao_vien', 'head_teacher', 'sale', 'cskh', 'quan_ly',
-          'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'hr'],
-    create: ['giao_vien', 'head_teacher', 'sale', 'cskh'],
-    updateEntry: ['giao_vien', 'head_teacher', 'sale', 'cskh'],
-    submit: ['giao_vien', 'head_teacher', 'sale', 'cskh'],
-    withdraw: ['giao_vien', 'head_teacher', 'sale', 'cskh'],
-    approve: ['quan_ly', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'bgd'],
-    reject: ['quan_ly', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'bgd'],
-    registeredInMonth: ['giao_vien', 'head_teacher', 'sale', 'cskh', 'hr'],
+    list: ['giao_vien', 'sale', 'cskh', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'hr'],
+    get: ['giao_vien', 'sale', 'cskh', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'hr'],
+    create: ['giao_vien', 'sale', 'cskh'],
+    updateEntry: ['giao_vien', 'sale', 'cskh'],
+    submit: ['giao_vien', 'sale', 'cskh'],
+    withdraw: ['giao_vien', 'sale', 'cskh'],
+    approve: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    reject: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    registeredInMonth: ['giao_vien', 'sale', 'cskh', 'hr'],
   },
 
   shiftConfig: {
-    list: ['giao_vien', 'head_teacher', 'sale', 'cskh', 'quan_ly',
-           'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    list: ['giao_vien', 'sale', 'cskh', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     create: ['super_admin'],
     update: ['super_admin'],
     archive: ['super_admin'],
@@ -268,19 +269,18 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   },
 
   checkInOut: {
-    punch: ['giao_vien', 'head_teacher', 'sale', 'cskh'],
-    todayStatus: ['giao_vien', 'head_teacher', 'sale', 'cskh'],
-    history: ['giao_vien', 'head_teacher', 'sale', 'cskh', 'quan_ly',
-              'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'hr'],
-    monthlyReport: ['quan_ly', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'hr', 'ke_toan'],
-    pendingManual: ['quan_ly', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
-    approveManual: ['quan_ly', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    punch: ['giao_vien', 'sale', 'cskh'],
+    todayStatus: ['giao_vien', 'sale', 'cskh'],
+    history: ['giao_vien', 'sale', 'cskh', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'hr'],
+    monthlyReport: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'hr', 'ke_toan'],
+    pendingManual: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    approveManual: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
 
   facilityNetwork: {
-    list: ['super_admin', 'quan_ly'],
-    create: ['super_admin', 'quan_ly'],
-    delete: ['super_admin', 'quan_ly'],
+    list: ['super_admin', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    create: ['super_admin', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    delete: ['super_admin', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
 };
 
@@ -291,8 +291,8 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
  * elevate an account to director or super_admin level.
  */
 export const DIRECTOR_ROLE_GRANTS: Partial<Record<string, string[]>> = {
-  giam_doc_kinh_doanh: ['sale', 'cskh', 'ctv_mkt'],
-  giam_doc_dao_tao: ['giao_vien', 'head_teacher'],
+  giam_doc_kinh_doanh: ['sale', 'cskh', 'ctv_mkt', 'ke_toan', 'hr'],
+  giam_doc_dao_tao: ['giao_vien'],
 };
 
 /**

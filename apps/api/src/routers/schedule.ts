@@ -87,7 +87,7 @@ export const scheduleRouter = router({
     ),
 
   // Lịch giảng dạy đa lớp — cross-class agenda cho giáo viên và quản lý.
-  // giao_vien defaults to own sessions; quan_ly / head_teacher / super may view all facility or filter by teacherId.
+  // giao_vien defaults to own sessions; giam_doc_dao_tao / super may view all facility or filter by teacherId.
   mySessions: protectedProcedure
     .input(
       z.object({
@@ -102,7 +102,7 @@ export const scheduleRouter = router({
         const { session } = ctx;
         const isManager =
           session.isSuperAdmin ||
-          session.roles.some((r) => ['quan_ly', 'head_teacher'].includes(r));
+          session.roles.some((r) => r === 'giam_doc_dao_tao');
         // Managers may pass an explicit teacherId or omit to see all; giao_vien always own only.
         const teacherFilter = isManager ? input.teacherId : session.userId;
 
