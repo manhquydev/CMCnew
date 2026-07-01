@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { notifyError, notifyInfo, notifySuccess } from '@cmc/ui';
 import {
   AppShell,
   Group,
@@ -146,9 +147,9 @@ export function ShowcaseView() {
   const handleRedeem = (gift: any) => {
     if (stars >= gift.stars) {
       setStars(prev => prev - gift.stars);
-      alert(`Đổi quà "${gift.name}" thành công! Hệ thống sẽ gửi thông báo duyệt đến phụ huynh.`);
+      notifySuccess(`Đổi quà "${gift.name}" thành công! Hệ thống sẽ gửi thông báo duyệt đến phụ huynh.`, 'Đổi quà thành công');
     } else {
-      alert('Bạn không đủ sao để đổi món quà này!');
+      notifyError('Bạn không đủ sao để đổi món quà này!', 'Không đủ sao');
     }
   };
 
@@ -192,7 +193,7 @@ export function ShowcaseView() {
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </ActionIcon>
-            <img src="/brand/cmc-logo.jpg" alt="CMC EDU Logo" style={{ height: 36, borderRadius: 8 }} />
+            <img src="brand/cmc-logo.jpg" alt="CMC EDU Logo" style={{ height: 36, borderRadius: 8 }} />
             <Stack gap={0}>
               <Text fw={900} size="lg" style={{ color: 'var(--cmc-brand-ink)', letterSpacing: '-0.02em', lineHeight: 1.1, fontFamily: 'var(--cmc-font-bubble)' }}>
                 CMC EDU
@@ -482,12 +483,12 @@ export function ShowcaseView() {
             </Stack>
           ) : activeTab === 'climb' ? (
             /* Redesigned interactive Climb View Beanstalk */
-            <div className="climb-root" style={{ borderRadius: 'var(--cmc-radius-kid-lg)', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.4)', background: '#C2E9FB' }}>
+            <div className="climb-root" style={{ borderRadius: 'var(--cmc-radius-kid-lg)', border: '1px solid rgba(255,255,255,0.4)', background: '#C2E9FB' }}>
               <div className="climb-bg" style={{ background: 'linear-gradient(180deg, rgba(90, 182, 255, 0.6) 0%, rgba(194, 233, 251, 0.7) 100%)' }} />
               <div className="climb-scene" style={{ height: 1800 }}>
                 {/* HUD inside scene */}
                 <div className="climb-hud" style={{ background: 'rgba(255,255,255,0.2)', borderBottom: 'none' }}>
-                  <img className="climb-hud__logo" src="/brand/cmc-logo.jpg" alt="CMC" style={{ height: 26, borderRadius: 5 }} />
+                  <img className="climb-hud__logo" src="brand/cmc-logo.jpg" alt="CMC" style={{ height: 26, borderRadius: 5 }} />
                   <span className="climb-hud__spacer" />
                   <span className="climb-chip climb-chip--gold">⭐ {stars}</span>
                   <span className="climb-chip">🏔 {studentStats.doneCount}/{climbNodes.length} bậc</span>
@@ -941,7 +942,7 @@ export function ShowcaseView() {
                 onClick={() => {
                   setModalOpened(false);
                   if (selectedCloud.state !== 'done') {
-                    alert('Bắt đầu làm bài thi/bài tập mẫu của học viên!');
+                    notifyInfo('Bắt đầu làm bài thi/bài tập mẫu của học viên!', 'Demo');
                   }
                 }}
               >

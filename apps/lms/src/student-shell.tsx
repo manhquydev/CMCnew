@@ -113,7 +113,7 @@ export function StudentShell({ principal }: StudentShellProps) {
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </ActionIcon>
-            <img src="/brand/cmc-logo.jpg" alt="CMC EDU Logo" style={{ height: 32, borderRadius: 6 }} />
+            <img src="brand/cmc-logo.jpg" alt="CMC EDU Logo" style={{ height: 32, borderRadius: 6 }} />
             <Text
               fw={800}
               size="md"
@@ -140,7 +140,7 @@ export function StudentShell({ principal }: StudentShellProps) {
               size="xs"
               radius="xl"
               component="a"
-              href="/showcase"
+              href="showcase"
               target="_blank"
               style={{ fontWeight: 800, border: 'none', boxShadow: '0 4px 10px rgba(255, 159, 10, 0.25)' }}
             >

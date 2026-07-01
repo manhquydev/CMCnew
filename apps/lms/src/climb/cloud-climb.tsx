@@ -12,9 +12,9 @@ export type ProgramKey = 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE';
 
 /** Per-program branding: label + public asset + official marketing accent color. */
 export const PROGRAM_META: Record<ProgramKey, { label: string; sub: string; img: string; accent: string }> = {
-  BLACK_HOLE: { label: 'BlackHole', sub: 'Tư duy', img: '/brand/program-black-hole.png', accent: '#7950F2' },
-  BRIGHT_IG: { label: 'BRIGHT I.G', sub: 'Trí tuệ', img: '/brand/program-bright-ig.png', accent: '#1B98E0' },
-  UCREA: { label: 'UCREA', sub: 'Sáng tạo', img: '/brand/program-ucrea.png', accent: '#FF7B2E' },
+  BLACK_HOLE: { label: 'BlackHole', sub: 'Tư duy', img: 'brand/program-black-hole.png', accent: '#7950F2' },
+  BRIGHT_IG: { label: 'BRIGHT I.G', sub: 'Trí tuệ', img: 'brand/program-bright-ig.png', accent: '#1B98E0' },
+  UCREA: { label: 'UCREA', sub: 'Sáng tạo', img: 'brand/program-ucrea.png', accent: '#FF7B2E' },
 };
 
 /** Vertical rhythm of the beanstalk (matches the cungcontuhoc journey: nodes climb upward). */
@@ -51,7 +51,7 @@ export function ClayCloudSVG({ className }: { className?: string }) {
 export function ClimbHud({ stars, climbed, total }: { stars: number; climbed: number; total: number }) {
   return (
     <div className="climb-hud">
-      <img className="climb-hud__logo" src="/brand/cmc-logo.jpg" alt="CMC" />
+      <img className="climb-hud__logo" src="brand/cmc-logo.jpg" alt="CMC" />
       <span className="climb-hud__spacer" />
       <span className="climb-chip climb-chip--gold">
         <IconStar size={16} fill="currentColor" stroke={1.5} /> {stars}

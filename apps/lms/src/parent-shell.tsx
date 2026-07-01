@@ -79,7 +79,7 @@ export function ParentShell({ principal }: ParentShellProps) {
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </ActionIcon>
-            <img src="/brand/cmc-logo.jpg" alt="CMC EDU Logo" style={{ height: 32, borderRadius: 6 }} />
+            <img src="brand/cmc-logo.jpg" alt="CMC EDU Logo" style={{ height: 32, borderRadius: 6 }} />
             <Text
               fw={800}
               size="md"

@@ -13,7 +13,7 @@ function Router() {
 }
 
 export function App() {
-  const isShowcase = window.location.pathname === '/showcase' || window.location.hash === '#showcase';
+  const isShowcase = window.location.pathname.endsWith('/showcase') || window.location.hash === '#showcase';
   if (isShowcase) {
     return <ShowcaseView />;
   }

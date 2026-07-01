@@ -185,6 +185,12 @@ importers:
       '@cmc/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@fontsource-variable/fredoka':
+        specifier: ^5.2.10
+        version: 5.2.10
+      '@fontsource-variable/quicksand':
+        specifier: ^5.2.10
+        version: 5.2.10
       '@mantine/core':
         specifier: ^7.15.2
         version: 7.17.8(@mantine/hooks@7.17.8(react@19.2.7))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -1006,6 +1012,12 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
+
+  '@fontsource-variable/fredoka@5.2.10':
+    resolution: {integrity: sha512-W25a41EivYh8111C9x34ShRg+2kKGXnefg1Z9Zax5E0jOgOtGXn7UhoqVBvNLrJnWGv3hy8New0UiKDc/cYzPg==}
+
+  '@fontsource-variable/quicksand@5.2.10':
+    resolution: {integrity: sha512-1uzkzGDwWgtFnxquAXuD7fZV9wHkALb49UPzRXxGTVeeLsNrGnIU0O/pcz6m1U7RDtpHz2qx77JhCpKaq7FrUg==}
 
   '@hono/node-server@1.19.14':
     resolution: {integrity: sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw==}
@@ -3525,6 +3537,10 @@ snapshots:
       tabbable: 6.5.0
 
   '@floating-ui/utils@0.2.11': {}
+
+  '@fontsource-variable/fredoka@5.2.10': {}
+
+  '@fontsource-variable/quicksand@5.2.10': {}
 
   '@hono/node-server@1.19.14(hono@4.12.27)':
     dependencies:

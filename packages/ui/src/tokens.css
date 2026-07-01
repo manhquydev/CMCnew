@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&family=Quicksand:wght@300..700&display=swap');
+/* Fredoka/Quicksand are self-hosted by the LMS app (apps/lms/src/main.tsx) — this shared
+   file stays font-agnostic so admin/teaching don't pull in kid-oriented type or network calls. */
 
 /* CMCnew Design Tokens — Apple-inspired minimalism adapted for ERP density.
    Single source of truth for color, spacing, type, and elevation across all 3 apps.
@@ -171,8 +172,8 @@
   --cmc-radius-kid-lg:    32px;
   --cmc-radius-kid-xl:    48px;
   
-  --cmc-font-bubble:      'Fredoka', system-ui, -apple-system, sans-serif;
-  --cmc-font-friendly:    'Quicksand', system-ui, -apple-system, sans-serif;
+  --cmc-font-bubble:      'Fredoka Variable', system-ui, -apple-system, sans-serif;
+  --cmc-font-friendly:    'Quicksand Variable', system-ui, -apple-system, sans-serif;
 
   --cmc-gradient-sky:     linear-gradient(180deg, #E0F2FE 0%, #BAE6FD 100%);
   --cmc-gradient-bubble:  linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%);

@@ -16,7 +16,7 @@ export const CMC_BRAND = {
   websiteUrl: 'https://cmcvn.edu.vn',
   facebook: 'https://www.facebook.com/share/14fVk5g2DiT/',
   zalo: 'https://zaloapp.com/qr/p/1boqvt2eg3ndl',
-  logo: '/brand/cmc-logo.jpg',
+  logo: 'brand/cmc-logo.jpg',
 } as const;
 
 /** Compact, friendly footer for public LMS surfaces (login). Real contact info only.

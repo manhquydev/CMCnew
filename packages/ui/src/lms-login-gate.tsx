@@ -12,6 +12,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+import { IconLock, IconMail, IconKey, IconUserCircle } from '@tabler/icons-react';
 import { trpc } from './client.js';
 import { CMC_BRAND, LmsFooter } from './lms-brand.js';
 
@@ -134,7 +135,6 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
   if (principal === null) {
     return (
       <div style={{ display: 'flex', minHeight: '100vh', width: '100vw', overflow: 'hidden' }}>
-        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
         <style dangerouslySetInnerHTML={{ __html: `
           .login-split-left {
             display: flex !important;
@@ -151,7 +151,7 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
           className="login-split-left"
           style={{
             flex: '1 1 55%',
-            backgroundImage: 'linear-gradient(to right, rgba(0, 113, 227, 0.85) 0%, rgba(0, 113, 227, 0.45) 100%), url(/brand/lms-login-bg.png)',
+            backgroundImage: 'linear-gradient(to right, rgba(0, 113, 227, 0.85) 0%, rgba(0, 113, 227, 0.45) 100%), url(brand/lms-login-bg.png)',
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             display: 'flex',
@@ -293,7 +293,7 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
                     onChange={(e) => setParentEmail(e.currentTarget.value)}
                     required
                     placeholder="phuhuynh@example.com"
-                    leftSection={<span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--cmc-text-muted)' }}>mail</span>}
+                    leftSection={<IconMail size={18} stroke={1.5} color="var(--cmc-text-muted)" />}
                     styles={{
                       input: { height: '44px', borderRadius: '8px' },
                       label: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' }
@@ -342,7 +342,7 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
                     maxLength={6}
                     required
                     placeholder="Nhập mã OTP 6 chữ số vừa nhận được"
-                    leftSection={<span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--cmc-text-muted)' }}>key</span>}
+                    leftSection={<IconKey size={18} stroke={1.5} color="var(--cmc-text-muted)" />}
                     styles={{
                       input: { height: '44px', borderRadius: '8px' },
                       label: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' }
@@ -397,7 +397,7 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
                     onChange={(e) => setIdField(e.currentTarget.value)}
                     required
                     placeholder="Mã số học sinh (ví dụ: TEST-001)"
-                    leftSection={<span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--cmc-text-muted)' }}>face</span>}
+                    leftSection={<IconUserCircle size={18} stroke={1.5} color="var(--cmc-text-muted)" />}
                     styles={{
                       input: { height: '44px', borderRadius: '8px' },
                       label: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' }
@@ -409,7 +409,7 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
                     onChange={(e) => setPassword(e.currentTarget.value)}
                     required
                     placeholder="Nhập mật khẩu"
-                    leftSection={<span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--cmc-text-muted)' }}>lock</span>}
+                    leftSection={<IconLock size={18} stroke={1.5} color="var(--cmc-text-muted)" />}
                     styles={{
                       input: { height: '44px', borderRadius: '8px' },
                       label: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' }
