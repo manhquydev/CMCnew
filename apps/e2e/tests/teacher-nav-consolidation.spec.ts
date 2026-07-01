@@ -21,7 +21,10 @@ async function login(page: import('@playwright/test').Page) {
 test.describe('teacher nav consolidation', () => {
   test('giao_vien sees the 3 consolidated sections, not the 9 originals', async ({ page }) => {
     await login(page);
-    const navLink = (label: string) => page.locator('nav a').filter({ hasText: label });
+    // Anchored exact-text match — plain `hasText` substring matching would false-match e.g.
+    // the hidden label "Chấm công" against the visible aggregate label "Lương & chấm công".
+    const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const navLink = (label: string) => page.locator('nav a').filter({ hasText: new RegExp(`^${escapeRegExp(label)}$`) });
 
     await expect(navLink('Lịch dạy')).toBeVisible();
     await expect(navLink('Quản lý học sinh')).toBeVisible();
