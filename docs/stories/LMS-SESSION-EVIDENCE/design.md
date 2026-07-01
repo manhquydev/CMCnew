@@ -14,11 +14,12 @@ Rules already enforced:
 - The first slot is created in the same DB transaction as the class.
 - Facility-scoping of room/teacher refs is enforced at the API layer: `assertSlotRefsInFacility` (apps/api/src/lib/slot-refs-guard.ts) rejects cross-facility/inactive/fabricated room+teacher refs in `classBatch.create.initialSlot` and `schedule.addSlot`, inside the same transaction (not just the UI).
 - The DB FK on schedule_slot.room_id/teacher_id is still deferred (no @relation yet, unlike class_session); the app guard is the current enforcement layer.
-- Attendance continues to use the existing real attendance surface; post-class LMS cards are UI placeholders.
+- Attendance continues to use the existing real attendance surface.
+- Post-class LMS evidence now uses persisted drafts, photo refs, structured comments, publish status, and LMS read APIs.
 
 ## Domain Model
 
-Future persisted evidence:
+Persisted evidence:
 
 - `SessionEvidence`: one draft/published learning diary per `ClassSession`.
 - `SessionEvidencePhoto`: image refs attached to a session diary.
@@ -39,17 +40,21 @@ Rules:
 - Session detail: system derives phase from schedule time.
 - Attendance: opens from 15 minutes before start through the session.
 - Post-class workflow: opens after session end.
-- Future staff query: list class sessions with evidence summary.
-- Staff command: upsert draft evidence.
-- Staff command: upsert per-student comments.
+- Staff query: list class sessions with evidence summary.
+- Staff command: upsert draft evidence with summary, photos, and per-student comments.
 - Staff command: publish evidence.
-- LMS query: list published evidence for `studentId`.
+- LMS query: list/detail published evidence for owned `studentId`.
 
 ## Interface Contract
 
 Implemented tRPC:
 
 - `classBatch.create({ facilityId, courseId, name, startDate?, endDate?, capacity?, initialSlot? })`
+
+Implemented file routes:
+
+- `POST /upload/session-photo` — staff session only; stores local content-addressed JPEG/PNG/WebP refs via `SESSION_PHOTO_STORE_DIR` or `.data/session-photos`.
+- `GET /files/session-photo/:ref` — authorizes staff/LMS visibility before reading the local file.
 
 Implemented `initialSlot` shape:
 
@@ -59,18 +64,14 @@ Implemented `initialSlot` shape:
 - `roomId?: uuid`
 - `teacherId?: uuid`
 
-Future proposed tRPC:
+Implemented tRPC:
 
 - `sessionEvidence.listByClass({ classBatchId })`
 - `sessionEvidence.detailForStaff({ classSessionId })`
 - `sessionEvidence.upsertDraft({ classSessionId, summary, internalNote, photos, comments })`
 - `sessionEvidence.publish({ classSessionId })`
 - `sessionEvidence.listForPrincipal({ studentId })`
-
-Proposed file routes:
-
-- `POST /upload/session-photo`
-- `GET /files/session-photo/:ref`
+- `sessionEvidence.detailForPrincipal({ sessionEvidenceId, studentId })`
 
 ## Data Model
 
@@ -89,14 +90,14 @@ Retention:
 ## UI / Platform Impact
 
 - Admin class workspace: create-class modal includes first weekly lesson slot.
-- Admin schedule detail: Session 360 workflow panel shows current lesson phase and post-class placeholders.
+- Admin schedule detail: Session 360 workflow panel keeps phase cards and renders the real evidence editor for photos, structured comments, draft save, and LMS publish.
 - Admin `/grading`: remains focused on exercise grading in the current slice.
-- LMS: add `Buổi học` view/card under student shell.
+- LMS: `Buổi học` tab added for student and parent shells; parent view is scoped to selected child.
 
 ## Observability
 
 - Audit log on class creation and first schedule slot creation.
-- Future audit log on evidence create/update/publish.
+- Audit log on evidence draft update and publish.
 - Trace high-risk proof through Harness story.
 
 ## Alternatives Considered

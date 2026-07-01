@@ -66,6 +66,14 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     publish: ['giao_vien', 'quan_ly'],
   },
 
+  sessionEvidence: {
+    commentTemplate: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
+    listByClass: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
+    detailForStaff: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
+    upsertDraft: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
+    publish: ['giao_vien', 'head_teacher', 'quan_ly', 'giam_doc_dao_tao'],
+  },
+
   // compensation.list / defaults / create are super_admin-only (enforced via superAdminProcedure,
   // not requirePermission). They appear here for a complete audit map.
   compensation: {
@@ -233,6 +241,46 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     // HR + the two directors may view; the endpoint additionally requires the caller to share a
     // facility with the target (record_event for `user` is facility_id NULL, so RLS can't scope it).
     viewActivity: ['hr', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+  },
+
+  // ── Work Shift & Attendance ──────────────────────────────────────────────
+  shiftRegistration: {
+    list: ['giao_vien', 'head_teacher', 'sale', 'cskh', 'quan_ly',
+           'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'hr'],
+    get: ['giao_vien', 'head_teacher', 'sale', 'cskh', 'quan_ly',
+          'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'hr'],
+    create: ['giao_vien', 'head_teacher', 'sale', 'cskh'],
+    updateEntry: ['giao_vien', 'head_teacher', 'sale', 'cskh'],
+    submit: ['giao_vien', 'head_teacher', 'sale', 'cskh'],
+    withdraw: ['giao_vien', 'head_teacher', 'sale', 'cskh'],
+    approve: ['quan_ly', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'bgd'],
+    reject: ['quan_ly', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'bgd'],
+    registeredInMonth: ['giao_vien', 'head_teacher', 'sale', 'cskh', 'hr'],
+  },
+
+  shiftConfig: {
+    list: ['giao_vien', 'head_teacher', 'sale', 'cskh', 'quan_ly',
+           'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    create: ['super_admin'],
+    update: ['super_admin'],
+    archive: ['super_admin'],
+    createTemplate: ['super_admin'],
+  },
+
+  checkInOut: {
+    punch: ['giao_vien', 'head_teacher', 'sale', 'cskh'],
+    todayStatus: ['giao_vien', 'head_teacher', 'sale', 'cskh'],
+    history: ['giao_vien', 'head_teacher', 'sale', 'cskh', 'quan_ly',
+              'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'hr'],
+    monthlyReport: ['quan_ly', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'hr', 'ke_toan'],
+    pendingManual: ['quan_ly', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    approveManual: ['quan_ly', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+  },
+
+  facilityNetwork: {
+    list: ['super_admin', 'quan_ly'],
+    create: ['super_admin', 'quan_ly'],
+    delete: ['super_admin', 'quan_ly'],
   },
 };
 

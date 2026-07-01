@@ -23,8 +23,8 @@ enum Role {
   cskh
   ctv_mkt
   bgd
-  giam_doc_kinh_doanh  // Business Director — delegates sale/cskh/ctv_mkt team creation
-  giam_doc_dao_tao     // Education Director — delegates giao_vien/head_teacher team creation
+  giam_doc_kinh_doanh // Business Director — delegates sale/cskh/ctv_mkt team creation
+  giam_doc_dao_tao // Education Director — delegates giao_vien/head_teacher team creation
 }
 
 /// The 3 CMC programs. Global (not facility-scoped).
@@ -57,6 +57,11 @@ enum SessionStatus {
   cancelled
 }
 
+enum SessionEvidenceStatus {
+  draft
+  published
+}
+
 enum EnrollmentStatus {
   active
   completed
@@ -83,11 +88,11 @@ enum RecordEventType {
 
 /// A training center (cơ sở). Tenancy boundary — RLS isolates rows by facility.
 model Facility {
-  id        Int            @id @default(autoincrement())
-  code      String         @unique
-  name      String
-  timezone  String         @default("Asia/Ho_Chi_Minh")
-  address   String?
+  id                 Int                 @id @default(autoincrement())
+  code               String              @unique
+  name               String
+  timezone           String              @default("Asia/Ho_Chi_Minh")
+  address            String?
   isActive           Boolean             @default(true) @map("is_active")
   createdAt          DateTime            @default(now()) @map("created_at")
   users              UserFacility[]
@@ -98,21 +103,23 @@ model Facility {
 
 /// A staff/admin account. Students & parents get their own models in later phases.
 model AppUser {
-  id           String         @id @default(uuid()) @db.Uuid
-  email        String         @unique
-  phone        String?
-  displayName  String         @map("display_name")
-  passwordHash String         @map("password_hash")
-  roles        Role[]
-  primaryRole  Role           @map("primary_role")
-  isActive     Boolean        @default(true) @map("is_active")
+  id                       String              @id @default(uuid()) @db.Uuid
+  email                    String              @unique
+  phone                    String?
+  displayName              String              @map("display_name")
+  passwordHash             String              @map("password_hash")
+  roles                    Role[]
+  primaryRole              Role                @map("primary_role")
+  isActive                 Boolean             @default(true) @map("is_active")
   /// Bumped on deactivate / role / facility change → invalidates outstanding JWTs.
-  tokenVersion        Int                  @default(0) @map("token_version")
-  createdAt           DateTime             @default(now()) @map("created_at")
-  facilities          UserFacility[]
-  staffNotifications  StaffNotification[]
+  tokenVersion             Int                 @default(0) @map("token_version")
+  createdAt                DateTime            @default(now()) @map("created_at")
+  facilities               UserFacility[]
+  staffNotifications       StaffNotification[]
   /// Sessions where this user is the assigned teacher.
-  classSessions       ClassSession[]       @relation("SessionTeacher")
+  classSessions            ClassSession[]      @relation("SessionTeacher")
+  sessionEvidenceCreated   SessionEvidence[]   @relation("SessionEvidenceCreatedBy")
+  sessionEvidencePublished SessionEvidence[]   @relation("SessionEvidencePublishedBy")
 
   @@map("app_user")
 }
@@ -136,13 +143,13 @@ model UserFacility {
 
 /// Course catalog — GLOBAL (dùng chung mọi cơ sở). No facility_id, no RLS.
 model Course {
-  id          String       @id @default(uuid()) @db.Uuid
-  code        String       @unique
+  id          String        @id @default(uuid()) @db.Uuid
+  code        String        @unique
   name        String
   program     Program
   description String?
-  archivedAt  DateTime?    @map("archived_at")
-  createdAt   DateTime     @default(now()) @map("created_at")
+  archivedAt  DateTime?     @map("archived_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
   batches     ClassBatch[]
   prices      CoursePrice[]
   receipts    Receipt[]
@@ -152,34 +159,35 @@ model Course {
 
 /// Học sinh — facility-scoped.
 model Student {
-  id          String           @id @default(uuid()) @db.Uuid
-  facilityId  Int              @map("facility_id")
-  studentCode String           @map("student_code")
-  fullName    String           @map("full_name")
-  dateOfBirth DateTime?        @map("date_of_birth") @db.Date
-  program     Program
-  level       String? // mô hình level chốt ở Phase 2
-  lifecycle   StudentLifecycle @default(admitted)
-  archivedAt  DateTime?        @map("archived_at")
-  createdAt   DateTime         @default(now()) @map("created_at")
+  id                     String                  @id @default(uuid()) @db.Uuid
+  facilityId             Int                     @map("facility_id")
+  studentCode            String                  @map("student_code")
+  fullName               String                  @map("full_name")
+  dateOfBirth            DateTime?               @map("date_of_birth") @db.Date
+  program                Program
+  level                  String? // mô hình level chốt ở Phase 2
+  lifecycle              StudentLifecycle        @default(admitted)
+  archivedAt             DateTime?               @map("archived_at")
+  createdAt              DateTime                @default(now()) @map("created_at")
   /// Set only when THIS receipt atomically created this student at approve time.
   /// Null for pre-existing students (seed, dedupe-matched, manually created before F1).
   /// Never set on dedupe-match (reuse): provenance tracks who CREATED, not who paid.
-  createdByReceiptId String?  @map("created_by_receipt_id") @db.Uuid
-  createdByReceipt   Receipt? @relation("StudentProvenance", fields: [createdByReceiptId], references: [id], onDelete: SetNull)
-  enrollments Enrollment[]
-  account         StudentAccount?
-  guardians       Guardian[]
-  submissions     Submission[]
-  starTransactions StarTransaction[]
-  rewards         Reward[]
+  createdByReceiptId     String?                 @map("created_by_receipt_id") @db.Uuid
+  createdByReceipt       Receipt?                @relation("StudentProvenance", fields: [createdByReceiptId], references: [id], onDelete: SetNull)
+  enrollments            Enrollment[]
+  account                StudentAccount?
+  guardians              Guardian[]
+  submissions            Submission[]
+  starTransactions       StarTransaction[]
+  rewards                Reward[]
   qualitativeAssessments QualitativeAssessment[]
-  finalGrades     FinalGrade[]
-  badges          StudentBadge[]
-  levelProgresses LevelProgress[]
-  receipts        Receipt[] @relation("ReceiptStudent")
-  afterSaleCases  AfterSaleCase[]
-  certificates    Certificate[]
+  finalGrades            FinalGrade[]
+  badges                 StudentBadge[]
+  levelProgresses        LevelProgress[]
+  receipts               Receipt[]               @relation("ReceiptStudent")
+  afterSaleCases         AfterSaleCase[]
+  certificates           Certificate[]
+  sessionComments        SessionStudentComment[]
 
   // studentCode is unique per facility — derived from receipt counter (HS-YYYY-NNNN ← PT-YYYY-NNNN),
   // so two facilities will produce the same code independently. Same pattern as ClassBatch + Receipt.
@@ -192,24 +200,24 @@ model Student {
 /// Lớp/khóa cụ thể — facility-scoped. Mã B-YYYY-NNNN (sinh nguyên tử).
 /// code is unique per facility, not globally — two facilities can both have B-2026-0001.
 model ClassBatch {
-  id         String         @id @default(uuid()) @db.Uuid
-  facilityId Int            @map("facility_id")
-  code       String
-  courseId   String         @map("course_id") @db.Uuid
-  course     Course         @relation(fields: [courseId], references: [id])
-  name       String
-  startDate  DateTime?      @map("start_date") @db.Date
-  endDate    DateTime?      @map("end_date") @db.Date
-  capacity   Int?
-  status     ClassStatus    @default(planned)
-  archivedAt DateTime?      @map("archived_at")
-  createdAt  DateTime       @default(now()) @map("created_at")
-  slots      ScheduleSlot[]
-  sessions   ClassSession[]
-  enrollments Enrollment[]
-  exercises  Exercise[]
+  id             String          @id @default(uuid()) @db.Uuid
+  facilityId     Int             @map("facility_id")
+  code           String
+  courseId       String          @map("course_id") @db.Uuid
+  course         Course          @relation(fields: [courseId], references: [id])
+  name           String
+  startDate      DateTime?       @map("start_date") @db.Date
+  endDate        DateTime?       @map("end_date") @db.Date
+  capacity       Int?
+  status         ClassStatus     @default(planned)
+  archivedAt     DateTime?       @map("archived_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  slots          ScheduleSlot[]
+  sessions       ClassSession[]
+  enrollments    Enrollment[]
+  exercises      Exercise[]
   parentMeetings ParentMeeting[]
-  receipts   Receipt[] @relation("ReceiptBatch")
+  receipts       Receipt[]       @relation("ReceiptBatch")
 
   @@unique([facilityId, code]) // codes are unique per facility; counters are keyed (facilityId, year)
   @@index([facilityId])
@@ -225,20 +233,20 @@ enum ParentMeetingStatus {
 }
 
 model ParentMeeting {
-  id           String              @id @default(uuid()) @db.Uuid
-  facilityId   Int                 @map("facility_id")
-  classBatchId String              @map("class_batch_id") @db.Uuid
-  batch        ClassBatch          @relation(fields: [classBatchId], references: [id], onDelete: Cascade)
-  title        String
-  scheduledAt  DateTime            @map("scheduled_at")
-  location     String?
-  note         String?
-  status       ParentMeetingStatus @default(scheduled)
+  id            String              @id @default(uuid()) @db.Uuid
+  facilityId    Int                 @map("facility_id")
+  classBatchId  String              @map("class_batch_id") @db.Uuid
+  batch         ClassBatch          @relation(fields: [classBatchId], references: [id], onDelete: Cascade)
+  title         String
+  scheduledAt   DateTime            @map("scheduled_at")
+  location      String?
+  note          String?
+  status        ParentMeetingStatus @default(scheduled)
   timeConfirmed Boolean             @default(false) @map("time_confirmed")
-  remindedAt   DateTime?           @map("reminded_at")
-  createdById  String?             @map("created_by_id") @db.Uuid
-  createdAt    DateTime            @default(now()) @map("created_at")
-  archivedAt   DateTime?           @map("archived_at")
+  remindedAt    DateTime?           @map("reminded_at")
+  createdById   String?             @map("created_by_id") @db.Uuid
+  createdAt     DateTime            @default(now()) @map("created_at")
+  archivedAt    DateTime?           @map("archived_at")
 
   @@unique([classBatchId, scheduledAt]) // auto-cadence idempotency: re-running generation never duplicates
   @@index([facilityId])
@@ -284,22 +292,23 @@ model ScheduleSlot {
 
 /// Buổi học cụ thể — sinh từ slot, hoặc buổi bù.
 model ClassSession {
-  id           String        @id @default(uuid()) @db.Uuid
-  facilityId   Int           @map("facility_id")
-  classBatchId String        @map("class_batch_id") @db.Uuid
-  batch        ClassBatch    @relation(fields: [classBatchId], references: [id], onDelete: Cascade)
-  sessionDate  DateTime      @map("session_date") @db.Date
-  startTime    String        @map("start_time")
-  endTime      String        @map("end_time")
-  roomId       String?       @map("room_id") @db.Uuid
-  room         Room?         @relation(fields: [roomId], references: [id], onDelete: SetNull)
-  teacherId    String?       @map("teacher_id") @db.Uuid
-  teacher      AppUser?      @relation("SessionTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
-  status       SessionStatus @default(planned)
-  isMakeup     Boolean       @default(false) @map("is_makeup")
-  archivedAt   DateTime?     @map("archived_at")
-  createdAt    DateTime      @default(now()) @map("created_at")
+  id           String           @id @default(uuid()) @db.Uuid
+  facilityId   Int              @map("facility_id")
+  classBatchId String           @map("class_batch_id") @db.Uuid
+  batch        ClassBatch       @relation(fields: [classBatchId], references: [id], onDelete: Cascade)
+  sessionDate  DateTime         @map("session_date") @db.Date
+  startTime    String           @map("start_time")
+  endTime      String           @map("end_time")
+  roomId       String?          @map("room_id") @db.Uuid
+  room         Room?            @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  teacherId    String?          @map("teacher_id") @db.Uuid
+  teacher      AppUser?         @relation("SessionTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
+  status       SessionStatus    @default(planned)
+  isMakeup     Boolean          @default(false) @map("is_makeup")
+  archivedAt   DateTime?        @map("archived_at")
+  createdAt    DateTime         @default(now()) @map("created_at")
   attendances  Attendance[]
+  evidence     SessionEvidence?
 
   @@unique([classBatchId, sessionDate, startTime])
   @@index([facilityId])
@@ -309,21 +318,21 @@ model ClassSession {
 
 /// Ghi danh học sinh vào lớp.
 model Enrollment {
-  id            String           @id @default(uuid()) @db.Uuid
-  facilityId    Int              @map("facility_id")
-  classBatchId  String           @map("class_batch_id") @db.Uuid
-  batch         ClassBatch       @relation(fields: [classBatchId], references: [id], onDelete: Cascade)
-  studentId     String           @map("student_id") @db.Uuid
-  student       Student          @relation(fields: [studentId], references: [id])
-  status        EnrollmentStatus @default(active)
-  opportunityId String?          @map("opportunity_id") // truy vết CRM (Phase 3)
+  id                 String           @id @default(uuid()) @db.Uuid
+  facilityId         Int              @map("facility_id")
+  classBatchId       String           @map("class_batch_id") @db.Uuid
+  batch              ClassBatch       @relation(fields: [classBatchId], references: [id], onDelete: Cascade)
+  studentId          String           @map("student_id") @db.Uuid
+  student            Student          @relation(fields: [studentId], references: [id])
+  status             EnrollmentStatus @default(active)
+  opportunityId      String?          @map("opportunity_id") // truy vết CRM (Phase 3)
   /// Set when receipt.approve created this enrollment atomically. Used for rollback scoping
   /// in receiptCancel: only enrollments with this receipt's id are wound down.
-  createdByReceiptId String?     @map("created_by_receipt_id") @db.Uuid
-  createdByReceipt   Receipt?    @relation("EnrollmentProvenance", fields: [createdByReceiptId], references: [id], onDelete: SetNull)
-  archivedAt    DateTime?        @map("archived_at")
-  createdAt     DateTime         @default(now()) @map("created_at")
-  attendances   Attendance[]
+  createdByReceiptId String?          @map("created_by_receipt_id") @db.Uuid
+  createdByReceipt   Receipt?         @relation("EnrollmentProvenance", fields: [createdByReceiptId], references: [id], onDelete: SetNull)
+  archivedAt         DateTime?        @map("archived_at")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  attendances        Attendance[]
 
   @@unique([classBatchId, studentId])
   @@index([facilityId])
@@ -351,6 +360,63 @@ model Attendance {
   @@index([facilityId])
   @@index([enrollmentId])
   @@map("attendance")
+}
+
+/// Learning diary evidence for one concrete class session. Draft is staff-only;
+/// published is visible in LMS to enrolled/owned students.
+model SessionEvidence {
+  id             String                  @id @default(uuid()) @db.Uuid
+  facilityId     Int                     @map("facility_id")
+  classSessionId String                  @unique @map("class_session_id") @db.Uuid
+  classSession   ClassSession            @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  summary        String?
+  internalNote   String?                 @map("internal_note")
+  status         SessionEvidenceStatus   @default(draft)
+  publishedAt    DateTime?               @map("published_at")
+  publishedById  String?                 @map("published_by_id") @db.Uuid
+  publishedBy    AppUser?                @relation("SessionEvidencePublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
+  createdById    String?                 @map("created_by_id") @db.Uuid
+  createdBy      AppUser?                @relation("SessionEvidenceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  archivedAt     DateTime?               @map("archived_at")
+  createdAt      DateTime                @default(now()) @map("created_at")
+  updatedAt      DateTime                @updatedAt @map("updated_at")
+  photos         SessionEvidencePhoto[]
+  comments       SessionStudentComment[]
+
+  @@index([facilityId, publishedAt])
+  @@index([status])
+  @@map("session_evidence")
+}
+
+model SessionEvidencePhoto {
+  id                String          @id @default(uuid()) @db.Uuid
+  sessionEvidenceId String          @map("session_evidence_id") @db.Uuid
+  sessionEvidence   SessionEvidence @relation(fields: [sessionEvidenceId], references: [id], onDelete: Cascade)
+  photoRef          String          @map("photo_ref")
+  sortOrder         Int             @default(0) @map("sort_order")
+  createdAt         DateTime        @default(now()) @map("created_at")
+
+  @@index([sessionEvidenceId])
+  @@index([photoRef])
+  @@map("session_evidence_photo")
+}
+
+model SessionStudentComment {
+  id                String          @id @default(uuid()) @db.Uuid
+  sessionEvidenceId String          @map("session_evidence_id") @db.Uuid
+  sessionEvidence   SessionEvidence @relation(fields: [sessionEvidenceId], references: [id], onDelete: Cascade)
+  studentId         String          @map("student_id") @db.Uuid
+  student           Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  participation     String?
+  strength          String?
+  needsImprovement  String?         @map("needs_improvement")
+  teacherNote       String?         @map("teacher_note")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  @@unique([sessionEvidenceId, studentId])
+  @@index([studentId])
+  @@map("session_student_comment")
 }
 
 /// Bộ đếm sinh mã lớp nguyên tử theo (cơ sở, năm).
@@ -450,19 +516,19 @@ enum GuardianRelation {
 
 /// Tài khoản đăng nhập của phụ huynh (login chính phía LMS). Định danh riêng, không phải AppUser.
 model ParentAccount {
-  id           String     @id @default(uuid()) @db.Uuid
-  email        String?    @unique
-  phone        String?    @unique
-  displayName  String     @map("display_name")
+  id                 String     @id @default(uuid()) @db.Uuid
+  email              String?    @unique
+  phone              String?    @unique
+  displayName        String     @map("display_name")
   /// Nullable: phụ huynh đăng nhập passwordless bằng OTP email; mật khẩu chỉ còn cho tài khoản cũ.
-  passwordHash String?    @map("password_hash")
-  isActive     Boolean    @default(true) @map("is_active")
+  passwordHash       String?    @map("password_hash")
+  isActive           Boolean    @default(true) @map("is_active")
   /// Bump khi khóa tài khoản / đổi quyền → vô hiệu JWT đang phát hành.
-  tokenVersion Int        @default(0) @map("token_version")
+  tokenVersion       Int        @default(0) @map("token_version")
   /// Phụ huynh có nhận email thông báo (digest/nhắc lịch) không. Email giao dịch luôn gửi.
-  emailNotifications Boolean @default(true) @map("email_notifications")
-  createdAt    DateTime   @default(now()) @map("created_at")
-  guardians    Guardian[]
+  emailNotifications Boolean    @default(true) @map("email_notifications")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  guardians          Guardian[]
 
   @@map("parent_account")
 }
@@ -981,10 +1047,10 @@ model Receipt {
   cancelReason             String?       @map("cancel_reason")
   createdAt                DateTime      @default(now()) @map("created_at")
   /// New-student provisioning fields (F1). Only populated when this receipt creates a new student.
-  parentPhone              String?       @map("parent_phone")   // dedupe key via ParentAccount.phone
-  parentName               String?       @map("parent_name")    // display name for ParentAccount
-  parentEmail              String?       @map("parent_email")   // captured at intake; enables OTP login + lms_account_ready notification
-  studentName              String?       @map("student_name")   // Student creation + multi-child disambiguation
+  parentPhone              String?       @map("parent_phone") // dedupe key via ParentAccount.phone
+  parentName               String?       @map("parent_name") // display name for ParentAccount
+  parentEmail              String?       @map("parent_email") // captured at intake; enables OTP login + lms_account_ready notification
+  studentName              String?       @map("student_name") // Student creation + multi-child disambiguation
   studentDob               DateTime?     @map("student_dob") @db.Date
   /// Optional: which class to enroll the student into at approve. Null = payment only, no class yet.
   classBatchId             String?       @map("class_batch_id") @db.Uuid
@@ -1055,22 +1121,22 @@ model Contact {
 /// Cơ hội bán hàng — facility-scoped. 1 opp = 1 HS/SĐT (nhiều con cùng SĐT → nhiều opp, phân biệt
 /// studentName). lost = closedAt + lostReason; won = stage O5_ENROLLED + closedAt + nối enrollment.
 model Opportunity {
-  id          String           @id @default(uuid()) @db.Uuid
-  facilityId  Int              @map("facility_id")
-  contactId   String           @map("contact_id") @db.Uuid
+  id          String                  @id @default(uuid()) @db.Uuid
+  facilityId  Int                     @map("facility_id")
+  contactId   String                  @map("contact_id") @db.Uuid
   // Restrict: xóa Contact KHÔNG được cuốn theo opportunity (giữ lịch sử hoa hồng/won-lost).
-  contact     Contact          @relation(fields: [contactId], references: [id], onDelete: Restrict)
-  studentName String?          @map("student_name")
+  contact     Contact                 @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  studentName String?                 @map("student_name")
   program     Program?
-  stage       OpportunityStage @default(O1_LEAD)
+  stage       OpportunityStage        @default(O1_LEAD)
   /// Sales consultant (CVTV) credited with this opportunity — source of commission attribution
   /// (docs/specs/payroll-v2-commission-design.md). Flows onto the receipt's soldById at approve.
-  ownerId     String?          @map("owner_id") @db.Uuid
-  lostReason  LostReason?      @map("lost_reason")
-  lostNote    String?          @map("lost_note") // ghi chú tự do kèm lý do mất (đặc biệt khi = other)
-  closedAt    DateTime?        @map("closed_at")
-  archivedAt  DateTime?        @map("archived_at")
-  createdAt   DateTime         @default(now()) @map("created_at")
+  ownerId     String?                 @map("owner_id") @db.Uuid
+  lostReason  LostReason?             @map("lost_reason")
+  lostNote    String?                 @map("lost_note") // ghi chú tự do kèm lý do mất (đặc biệt khi = other)
+  closedAt    DateTime?               @map("closed_at")
+  archivedAt  DateTime?               @map("archived_at")
+  createdAt   DateTime                @default(now()) @map("created_at")
   tests       TestAppointment[]
   receipts    Receipt[]
   assignments OpportunityAssignment[]
@@ -1188,6 +1254,10 @@ enum StaffNotifEvent {
   receipt_pending_approval
   kpi_pending_review
   chatter_note
+  shift_reg_submitted
+  shift_reg_approved
+  shift_reg_rejected
+  manual_punch_pending
 }
 
 model StaffNotification {
@@ -1211,17 +1281,17 @@ model StaffNotification {
 /// Chứng chỉ — cấp TAY bởi head_teacher/quan_ly (LMS là nền làm bài tập, không tự cấp bằng;
 /// duyệt level-up KHÔNG sinh chứng chỉ). Facility-scoped; render bản in HTML tại /files/certificate/:id.
 model Certificate {
-  id          String    @id @default(uuid()) @db.Uuid
-  facilityId  Int       @map("facility_id")
-  studentId   String    @map("student_id") @db.Uuid
-  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  program     Program
-  level       String?
-  title       String
-  issuedById  String?   @map("issued_by_id") @db.Uuid
-  issuedAt    DateTime  @default(now()) @map("issued_at")
-  archivedAt  DateTime? @map("archived_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  id         String    @id @default(uuid()) @db.Uuid
+  facilityId Int       @map("facility_id")
+  studentId  String    @map("student_id") @db.Uuid
+  student    Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  program    Program
+  level      String?
+  title      String
+  issuedById String?   @map("issued_by_id") @db.Uuid
+  issuedAt   DateTime  @default(now()) @map("issued_at")
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
 
   @@index([facilityId])
   @@index([studentId])
@@ -1250,11 +1320,16 @@ model EmploymentProfile {
   /// Callio (Phonenet) extension number — maps this user to their call records for KPI calls
   /// (decision 0010). Null = not on the dialer; call metrics resolve 0 for them.
   callioExt  String?   @map("callio_ext")
+  /// Direct manager (reports-to). Null = auto-resolve by role: sale/cskh/ctv_mkt → giam_doc_kinh_doanh,
+  /// giao_vien/head_teacher → giam_doc_dao_tao. Next-level = bgd or manager.managerId chain.
+  /// Loose UUID reference (no FK — follows codebase pattern for AppUser refs like soldById).
+  managerId  String?   @map("manager_id") @db.Uuid
   startedAt  DateTime? @map("started_at") @db.Date
   archivedAt DateTime? @map("archived_at")
   createdAt  DateTime  @default(now()) @map("created_at")
 
   @@index([facilityId])
+  @@index([managerId])
   @@map("employment_profile")
 }
 
@@ -1288,19 +1363,19 @@ enum KpiStatus {
 /// minh bạch. Facility-scoped RLS. Payslip đọc finalScore khi tính (thay vì HR gõ tay).
 /// P05: mở rộng thành phiếu đánh giá (Odoo-style) với workflow draft→submitted→confirmed→approved.
 model KpiScore {
-  id             String    @id @default(uuid()) @db.Uuid
-  facilityId     Int       @map("facility_id")
-  userId         String    @map("user_id") @db.Uuid
-  periodKey      String    @map("period_key") // YYYY-MM
-  block          String // 'training' | 'sales' — quyết định KPI band áp dụng
-  autoScore      Float     @map("auto_score") // 0..100 tính từ dữ liệu
-  autoBreakdown  Json?     @map("auto_breakdown") // [{ criterion, weight, score }]
-  overrideScore  Float?    @map("override_score") // cấp trên chỉnh (0..100); null = dùng auto
-  overrideReason String?   @map("override_reason")
-  overriddenById String?   @map("overridden_by_id") @db.Uuid
-  overriddenAt   DateTime? @map("overridden_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
+  id              String    @id @default(uuid()) @db.Uuid
+  facilityId      Int       @map("facility_id")
+  userId          String    @map("user_id") @db.Uuid
+  periodKey       String    @map("period_key") // YYYY-MM
+  block           String // 'training' | 'sales' — quyết định KPI band áp dụng
+  autoScore       Float     @map("auto_score") // 0..100 tính từ dữ liệu
+  autoBreakdown   Json?     @map("auto_breakdown") // [{ criterion, weight, score }]
+  overrideScore   Float?    @map("override_score") // cấp trên chỉnh (0..100); null = dùng auto
+  overrideReason  String?   @map("override_reason")
+  overriddenById  String?   @map("overridden_by_id") @db.Uuid
+  overriddenAt    DateTime? @map("overridden_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
   // P05 workflow fields — phiếu đánh giá KPI kiểu Odoo
   status          KpiStatus @default(draft)
   criterionScores Json?     @map("criterion_scores") // [{key, score}] — điểm từng tiêu chí
@@ -1388,4 +1463,173 @@ model Payslip {
   @@unique([userId, periodKey])
   @@index([facilityId, periodKey])
   @@map("payslip")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 6 — Work Shift Registration + Attendance. Staff-facing shift scheduling
+// and punch-based check-in/check-out with IP validation.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Trạng thái phiếu đăng ký ca: draft → submitted → approved. cancelled là terminal.
+enum ShiftRegStatus {
+  draft
+  submitted
+  approved
+  cancelled
+}
+
+/// Loại ca trong phiếu: đi làm hoặc nghỉ phép (tích hợp chung 1 luồng).
+enum ShiftEntryType {
+  work
+  leave
+}
+
+/// Nhóm ca làm việc (vd: KINH_DOANH, GIAO_VIEN). selectionMode = SINGLE | MULTIPLE.
+/// Facility-scoped để mỗi cơ sở có thể cấu hình nhóm ca riêng.
+model ShiftGroup {
+  id            String    @id @default(uuid()) @db.Uuid
+  facilityId    Int       @map("facility_id")
+  code          String /// "KINH_DOANH", "GIAO_VIEN"
+  name          String /// "Kinh doanh", "Giáo viên"
+  selectionMode String    @map("selection_mode") /// "SINGLE" | "MULTIPLE"
+  description   String?
+  sortOrder     Int       @default(0) @map("sort_order")
+  archivedAt    DateTime? @map("archived_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  templates     ShiftTemplate[]
+  registrations ShiftRegistration[]
+
+  @@unique([facilityId, code])
+  @@index([facilityId])
+  @@map("shift_group")
+}
+
+/// Mẫu ca trong nhóm (vd: Ca sáng 08:00-12:00). startTime/endTime dạng "HH:mm".
+model ShiftTemplate {
+  id           String     @id @default(uuid()) @db.Uuid
+  facilityId   Int        @map("facility_id")
+  shiftGroupId String     @map("shift_group_id") @db.Uuid
+  shiftGroup   ShiftGroup @relation(fields: [shiftGroupId], references: [id], onDelete: Cascade)
+  code         String /// "CA_SANG", "CA_CHIEU", "CA_TOI"
+  name         String /// "Ca sáng", "Ca chiều", "Ca tối"
+  startTime    String     @map("start_time") /// "08:00"
+  endTime      String     @map("end_time") /// "12:00"
+  hours        Float      @default(0) /// Tổng giờ ca (8.0 cho KD, 4.0 cho GV)
+  color        String? /// Mã màu hiển thị (hex)
+  sortOrder    Int        @default(0) @map("sort_order")
+  archivedAt   DateTime?  @map("archived_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  registrationEntries ShiftRegistrationEntry[]
+  timePunches         TimePunch[]
+
+  @@unique([shiftGroupId, code]) /// Mã ca duy nhất trong nhóm
+  @@unique([shiftGroupId, startTime]) /// Không trùng giờ trong cùng nhóm
+  @@index([facilityId])
+  @@index([shiftGroupId])
+  @@map("shift_template")
+}
+
+/// Phiếu đăng ký ca (1 phiếu = 1 nhân viên, 1 khoảng thời gian).
+/// Workflow: draft → submitted → approved. Khi phiếu mới APPROVED, phiếu cũ bị cancelled
+/// (supersededById trỏ đến phiếu mới).
+model ShiftRegistration {
+  id             String         @id @default(uuid()) @db.Uuid
+  facilityId     Int            @map("facility_id")
+  code           String?        @map("code") /// SR-YYYY-NNNN (sinh khi submit)
+  userId         String         @map("user_id") @db.Uuid
+  fromDate       DateTime       @map("from_date") @db.Date
+  toDate         DateTime       @map("to_date") @db.Date
+  status         ShiftRegStatus @default(draft)
+  shiftGroupId   String         @map("shift_group_id") @db.Uuid
+  shiftGroup     ShiftGroup     @relation(fields: [shiftGroupId], references: [id])
+  /// Manager info — frozen at submit
+  managerId      String?        @map("manager_id") @db.Uuid
+  nextManagerId  String?        @map("next_manager_id") @db.Uuid
+  /// Audit trail
+  submittedAt    DateTime?      @map("submitted_at")
+  submittedById  String?        @map("submitted_by_id") @db.Uuid
+  approvedAt     DateTime?      @map("approved_at")
+  approvedById   String?        @map("approved_by_id") @db.Uuid
+  rejectReason   String?        @map("reject_reason")
+  /// Supersede chain
+  supersededById String?        @map("superseded_by_id") @db.Uuid /// Phiếu thay thế
+  supersededAt   DateTime?      @map("superseded_at")
+  archivedAt     DateTime?      @map("archived_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  entries ShiftRegistrationEntry[]
+
+  @@unique([facilityId, code])
+  @@index([facilityId, userId])
+  @@index([facilityId, status])
+  @@index([userId, fromDate, toDate])
+  @@map("shift_registration")
+}
+
+/// Một dòng đăng ký = 1 ngày + 1 ca + type (work|leave). Flat structure.
+model ShiftRegistrationEntry {
+  id              String            @id @default(uuid()) @db.Uuid
+  registrationId  String            @map("registration_id") @db.Uuid
+  registration    ShiftRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  date            DateTime          @db.Date
+  shiftTemplateId String            @map("shift_template_id") @db.Uuid
+  shiftTemplate   ShiftTemplate     @relation(fields: [shiftTemplateId], references: [id])
+  type            ShiftEntryType    @default(work)
+  hours           Float             @default(0) /// Giờ ca này (copy từ ShiftTemplate để audit)
+  createdAt       DateTime          @default(now()) @map("created_at")
+
+  @@unique([registrationId, date, shiftTemplateId]) /// Mỗi ca chỉ chọn 1 lần/ngày/phiếu
+  @@index([registrationId])
+  @@index([date])
+  @@map("shift_registration_entry")
+}
+
+/// Bản ghi chấm công — mỗi lần bấm nút = 1 punch. Cuối ngày: punch sớm nhất = check-in,
+/// muộn nhất = check-out. ShiftTemplate FK optional (null nếu punch không map vào ca đã đăng ký).
+model TimePunch {
+  id              String         @id @default(uuid()) @db.Uuid
+  facilityId      Int            @map("facility_id")
+  userId          String         @map("user_id") @db.Uuid
+  timestamp       DateTime       @default(now())
+  ipAddress       String         @map("ip_address")
+  userAgent       String?        @map("user_agent")
+  method          String         @default("ip") /// "ip" | "manual" — cách chấm công
+  shiftTemplateId String?        @map("shift_template_id") @db.Uuid
+  shiftTemplate   ShiftTemplate? @relation(fields: [shiftTemplateId], references: [id])
+  /// Manual attendance approval
+  approvedById    String?        @map("approved_by_id") @db.Uuid
+  approvedAt      DateTime?      @map("approved_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  @@index([facilityId, userId, timestamp])
+  @@index([userId, timestamp])
+  @@index([shiftTemplateId])
+  @@map("time_punch")
+}
+
+/// Cấu hình IP cho check-in theo cơ sở. Hỗ trợ CIDR range (vd: 192.168.1.0/24).
+model FacilityNetwork {
+  id         String    @id @default(uuid()) @db.Uuid
+  facilityId Int       @map("facility_id")
+  ipAddress  String    @map("ip_address") /// "192.168.1.0/24" hoặc "152.42.167.189"
+  label      String? /// "WiFi VP chính"
+  isActive   Boolean   @default(true) @map("is_active")
+  archivedAt DateTime? @map("archived_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@unique([facilityId, ipAddress])
+  @@index([facilityId])
+  @@map("facility_network")
+}
+
+/// Bộ đếm sinh mã phiếu đăng ký ca nguyên tử theo (cơ sở, năm).
+model ShiftCodeCounter {
+  facilityId Int @map("facility_id")
+  year       Int
+  lastSeq    Int @default(0) @map("last_seq")
+
+  @@id([facilityId, year])
+  @@map("shift_code_counter")
 }

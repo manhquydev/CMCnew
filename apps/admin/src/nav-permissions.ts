@@ -98,4 +98,10 @@ export const NAV_GATES: Record<SectionKey, NavGate> = {
   //   D3 fix: head_teacher/bgd/quan_ly previously appeared in nav but kpiList is hr/ke_toan-only;
   //   those roles can confirm/approve (kpiEvalConfirm/kpiEvalApprove) but cannot load the list rows.
   kpi:          { kind: 'permission', module: 'payroll', action: 'kpiList' },
+
+  // ── Work Shift & Attendance ────────────────────────────────────────────
+  checkin:              { kind: 'permission', module: 'checkInOut', action: 'punch' },
+  'shift-registration': { kind: 'permission', module: 'shiftRegistration', action: 'list' },
+  'facility-network':  { kind: 'permission', module: 'facilityNetwork', action: 'list' },
+  'shift-config':      { kind: 'superAdmin' },
 };

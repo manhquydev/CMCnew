@@ -30,6 +30,11 @@ import { payrollRouter } from './payroll.js';
 import { parentMeetingRouter } from './parent-meeting.js';
 import { compensationRouter } from './compensation.js';
 import { staffNotifRouter } from './staff-notif.js';
+import { sessionEvidenceRouter } from './session-evidence.js';
+import { shiftConfigRouter } from './shift-config.js';
+import { shiftRegistrationRouter } from './shift-registration.js';
+import { checkInOutRouter } from './check-in-out.js';
+import { facilityNetworkRouter } from './facility-ip.js';
 
 export const appRouter = router({
   health: publicProcedure.query(() => ({ ok: true, ts: new Date().toISOString() })),
@@ -64,6 +69,11 @@ export const appRouter = router({
   parentMeeting: parentMeetingRouter,
   compensation: compensationRouter,
   staffNotif: staffNotifRouter,
+  sessionEvidence: sessionEvidenceRouter,
+  shiftConfig: shiftConfigRouter,
+  shiftRegistration: shiftRegistrationRouter,
+  checkInOut: checkInOutRouter,
+  facilityNetwork: facilityNetworkRouter,
 });
 
 export type AppRouter = typeof appRouter;

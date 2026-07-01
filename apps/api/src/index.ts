@@ -9,7 +9,7 @@ import { cors } from 'hono/cors';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { streamSSE } from 'hono/streaming';
 import { trpcServer } from '@hono/trpc-server';
-import { resolveLmsSession, resolveSession, rlsContextOf, lmsRlsContextOf, mintStaffSession } from '@cmc/auth';
+import { resolveLmsSession, resolveSession, rlsContextOf, lmsRlsContextOf, mintStaffSession, can } from '@cmc/auth';
 import { ssoConfigFromEnv, buildAuthUrl, redeemCode } from './lib/sso.js';
 import { withRls } from '@cmc/db';
 import { appRouter } from './routers/index.js';
@@ -17,6 +17,7 @@ import { createContext, COOKIE_NAME, LMS_COOKIE_NAME } from './context.js';
 import { onNotification } from './events.js';
 import { onStaffNotification } from './staff-notification.js';
 import { putPdf, readPdf, pdfExists, PdfStoreError, MAX_PDF_BYTES } from './services/pdf-store.js';
+import { putSessionPhoto, readSessionPhoto, PhotoStoreError, MAX_SESSION_PHOTO_BYTES } from './services/photo-store.js';
 import { renderReceiptHtml } from './services/receipt-html.js';
 import { runParentMeetingReminders } from './services/parent-meeting-reminder.js';
 import { generateParentMeetings } from './services/parent-meeting-cadence.js';
@@ -67,6 +68,61 @@ app.post('/upload/exercise-pdf', async (c) => {
   } catch (e) {
     if (e instanceof PdfStoreError) return c.text(e.message, 400);
     throw e;
+  }
+});
+
+// Upload session evidence photos. Read access is intentionally NOT handled here;
+// session photos must be served only after the published evidence ownership check.
+// Gated to the same roles as sessionEvidence.upsertDraft (unlike exercise-pdf, a student
+// photo is more sensitive than a worksheet — restrict who can write blobs at all, not
+// only who can later link them).
+app.post('/upload/session-photo', async (c) => {
+  const token = getCookie(c, COOKIE_NAME);
+  const session = token ? await resolveSession(token) : null;
+  if (!session) return c.text('unauthorized', 401);
+  if (!can(session.roles, session.isSuperAdmin, 'sessionEvidence', 'upsertDraft')) {
+    return c.text('forbidden', 403);
+  }
+  const body = await c.req.arrayBuffer();
+  if (body.byteLength > MAX_SESSION_PHOTO_BYTES) return c.text('file too large', 413);
+  try {
+    const ref = await putSessionPhoto(Buffer.from(body));
+    return c.json({ ref });
+  } catch (e) {
+    if (e instanceof PhotoStoreError) return c.text(e.message, 400);
+    throw e;
+  }
+});
+
+app.get('/files/session-photo/:ref', async (c) => {
+  const staffTok = getCookie(c, COOKIE_NAME);
+  const lmsTok = getCookie(c, LMS_COOKIE_NAME);
+  const staff = staffTok ? await resolveSession(staffTok) : null;
+  const lms = !staff && lmsTok ? await resolveLmsSession(lmsTok) : null;
+  if (!staff && !lms) return c.text('unauthorized', 401);
+
+  const ref = c.req.param('ref');
+  const rlsCtx = staff ? rlsContextOf(staff) : lmsRlsContextOf(lms!);
+  const visible = await withRls(rlsCtx, (tx) =>
+    tx.sessionEvidencePhoto.findFirst({
+      where: {
+        photoRef: ref,
+        sessionEvidence: staff
+          ? { archivedAt: null }
+          : { status: 'published', publishedAt: { not: null }, archivedAt: null },
+      },
+      select: { id: true },
+    }),
+  );
+  if (!visible) return c.text('forbidden', 403);
+
+  try {
+    const { buffer, contentType } = await readSessionPhoto(ref);
+    c.header('Content-Type', contentType);
+    c.header('Cache-Control', 'private, max-age=3600');
+    return c.body(buffer as unknown as ArrayBuffer);
+  } catch {
+    return c.text('not found', 404);
   }
 });
 

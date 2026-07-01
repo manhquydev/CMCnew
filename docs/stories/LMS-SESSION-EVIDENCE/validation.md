@@ -48,6 +48,35 @@ pnpm --filter @cmc/api lint
 
 ## Acceptance Evidence
 
+Full evidence implementation on 2026-06-30:
+
+- Added `SessionEvidence`, `SessionEvidencePhoto`, `SessionStudentComment`, and `SessionEvidenceStatus` schema/migration with staff/LMS RLS.
+- Added `sessionEvidence` tRPC router: `commentTemplate`, `listByClass`, `detailForStaff`, `upsertDraft`, `publish`, `listForPrincipal`, `detailForPrincipal`.
+- Added staff-only `POST /upload/session-photo` and authorized `GET /files/session-photo/:ref`.
+- Admin Session 360 now uses real evidence editor: upload photos, structured template comments, save draft, publish LMS.
+- LMS student and parent shells now include `Buổi học`; parent view filters by selected child.
+- `pnpm --filter @cmc/db generate` passed.
+- `pnpm --filter @cmc/db migrate` passed after recovering a pre-existing failed local `20260630140000_work_shift_rls` attempt.
+- `pnpm --filter @cmc/api typecheck` passed.
+- `pnpm --filter @cmc/admin typecheck` passed.
+- `pnpm --filter @cmc/lms typecheck` passed.
+- `pnpm --filter @cmc/db typecheck` passed.
+- `pnpm --filter @cmc/ui typecheck` passed.
+- `pnpm --filter @cmc/api exec vitest run test/session-photo-store.test.ts` passed: 4 tests.
+- `pnpm --filter @cmc/api exec vitest run --config vitest.integration.config.ts test/session-evidence-publish-to-lms.int.test.ts` passed: 2 tests.
+- `pnpm --filter @cmc/api exec vitest run test/permission-parity.test.ts` passed: 25 tests.
+- Integration proof covers staff publish, draft hidden from LMS, own-child comments only, cross-student detail blocked, and cross-facility staff write blocked.
+
+Browser E2E proof added on 2026-06-30:
+
+- Added `apps/e2e/tests/session-evidence-publish.spec.ts`.
+- Test seeds isolated course/class/session/student/parent fixture.
+- Admin browser publishes real uploaded image + structured comment through Session 360 UI.
+- Student browser logs in with generated LMS account and sees `Buổi học` summary/comment.
+- Parent browser uses an authenticated parent LMS session and sees the same `Buổi học` summary/comment for the child.
+- `pnpm --filter @cmc/e2e exec playwright test tests/session-evidence-publish.spec.ts` passed: 1 test.
+- Follow-up typechecks passed: `@cmc/admin`, `@cmc/lms`, `@cmc/ui`.
+
 Partial vertical slice implemented on 2026-06-30:
 
 - `pnpm --filter @cmc/api typecheck` passed.
@@ -74,8 +103,10 @@ Review fix on 2026-06-30 (facility-scoping guard):
 - DB FK on schedule_slot deferred (schema.prisma mid-flight with uncommitted shift-registration feature).
 
 
-Still pending for full LMS evidence story:
+Upload seam progress on 2026-06-30:
 
-- Persisted session photo/comment models.
-- LMS parent/student visible session evidence route.
-- E2E publish-to-LMS flow.
+- Added `photo-store.ts` for local content-addressed session photos with JPEG/PNG/WebP magic-byte validation, 8MB cap, sha256 refs, and ref path traversal guard.
+- Added staff-only `POST /upload/session-photo` and shared `uploadSessionPhoto` client helper.
+- `pnpm --filter @cmc/api exec vitest run test/session-photo-store.test.ts` passed: 4 tests.
+- `pnpm --filter @cmc/api typecheck`, `pnpm --filter @cmc/admin typecheck`, and `pnpm --filter @cmc/ui typecheck` passed.
+- `GET /files/session-photo/:ref` completed after published evidence ownership could authorize before file existence.

@@ -53,6 +53,11 @@ import { MeetingsPanel } from './meetings-panel';
 import { LevelApprovalPanel } from './level-approval-panel';
 import { CertificatePanel } from './certificate-panel';
 import { MyPayslipsPanel } from './my-payslips-panel';
+import { CheckInPanel } from './checkin-panel';
+import { ShiftRegListPanel } from './shift-reg-list-panel';
+import { ShiftRegDetailPanel } from './shift-reg-detail-panel';
+import { FacilityNetworkPanel } from './facility-network-panel';
+import { ShiftConfigPanel } from './shift-config-panel';
 import { Workspace, type NavAction } from './class-workspace';
 
 import { Shell, buildNavGroups, SECTION_TITLES, type SectionKey } from './shell';
@@ -576,7 +581,19 @@ const ALL_SECTION_KEYS = new Set<string>([
   // 'certificate' intentionally omitted: the feature is hidden from nav (shell.tsx visible:false),
   // so #certificate is not a reachable hash route either. Re-add when the feature is re-enabled.
   'classes', 'meetings', 'levelup', 'my-payslips',
+  'checkin', 'shift-registration', 'facility-network', 'shift-config',
 ]);
+
+// ─── Work Shift Section ──────────────────────────────────────────────────────
+
+function ShiftRegSection() {
+  const [selectedRegId, setSelectedRegId] = useState<string | null>(null);
+
+  if (selectedRegId) {
+    return <ShiftRegDetailPanel regId={selectedRegId} onBack={() => setSelectedRegId(null)} />;
+  }
+  return <ShiftRegListPanel onSelect={(id) => setSelectedRegId(id)} />;
+}
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
@@ -785,6 +802,34 @@ function Dashboard() {
           <Stack>
             <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Phiếu lương của tôi</Text>
             <MyPayslipsPanel />
+          </Stack>
+        );
+
+      // ── Work Shift & Attendance ──────────────────────────────────────────
+      case 'checkin':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Chấm công</Text>
+            <CheckInPanel />
+          </Stack>
+        );
+
+      case 'shift-registration':
+        return <ShiftRegSection />;
+
+      case 'facility-network':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">IP WiFi chấm công</Text>
+            <FacilityNetworkPanel />
+          </Stack>
+        );
+
+      case 'shift-config':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Danh mục ca</Text>
+            <ShiftConfigPanel />
           </Stack>
         );
 

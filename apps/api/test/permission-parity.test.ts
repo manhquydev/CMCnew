@@ -81,9 +81,11 @@ describe('head_teacher class/schedule access', () => {
 });
 
 describe('ctv_mkt CRM access (O1 only)', () => {
-  it('ctv_mkt may read and create opportunities only', () => {
-    expect(PERMISSIONS['crm']!['opportunityList']).toContain('ctv_mkt');
-    expect(PERMISSIONS['crm']!['opportunityCreate']).toContain('ctv_mkt');
+  it('ctv_mkt may read/create opportunities and resolve owner context only', () => {
+    const allowed = ['opportunityList', 'opportunityGet', 'opportunityCreate', 'assignableOwners', 'assignmentHistory'];
+    for (const action of allowed) {
+      expect(PERMISSIONS['crm']![action], `ctv_mkt must have crm.${action}`).toContain('ctv_mkt');
+    }
   });
 
   it('ctv_mkt cannot transition, mark lost, reopen, or manage tests/contacts', () => {
@@ -111,7 +113,8 @@ describe('Business Director (giam_doc_kinh_doanh) permissions', () => {
 
   it('has full CRM access to run the KD team', () => {
     const crmActions = ['contactList', 'contactCreate', 'opportunityList', 'opportunityCreate',
-      'opportunityTransition', 'opportunityMarkLost', 'opportunityReopen', 'testList', 'testCreate'];
+      'opportunityGet', 'assignableOwners', 'opportunityTransition', 'opportunityMarkLost',
+      'opportunityReopen', 'opportunityReassign', 'assignmentHistory', 'testList', 'testCreate'];
     for (const a of crmActions) {
       expect(PERMISSIONS['crm']![a], `crm.${a} must include ${KD}`).toContain(KD);
     }
