@@ -1,10 +1,43 @@
 # Architecture
 
-No application stack is selected yet.
+> **Note:** The generic template below predates the actual implementation. For the
+> live architecture, see [codebase-summary.md](codebase-summary.md). This document
+> preserves the original layering template for reference and adds module-specific
+> architecture for new subsystems below.
 
-No application code exists yet. This document defines generic architecture
-questions and boundary rules that future implementation should adapt after a
-user-provided spec and stack decision exist.
+## Work Shift Registration & Attendance
+
+A four-module subsystem for scheduling and tracking staff work time.
+
+### Modules
+
+| Module | Router | Purpose |
+|--------|--------|---------|
+| ShiftConfig | `shift-config.ts` | Shift group catalog (KINH_DOANH / GIAO_VIEN) with templates. Two default groups: KD has SINGLE selection with 3x 8h shifts; GV has MULTIPLE selection with 3x 4h shifts. |
+| ShiftRegistration | `shift-registration.ts` | Timesheet requests. Workflow: Draft -> Submitted -> Approved. Supports work/leave types. Manager chain resolved from EmploymentProfile.managerId or auto-resolved by role. Supersede chain replaces older approved registrations. |
+| CheckInOut | `check-in-out.ts` | Punch-based attendance. Earliest punch = check-in, latest = check-out. Penalty: 500d/min late, 1000d/min early leave. IP validated against FacilityNetwork CIDR rules. |
+| FacilityNetwork | `facility-ip.ts` | IP whitelist per facility (supports CIDR ranges) for check-in validation. |
+
+### Schema
+
+6 new models in `packages/db/prisma/schema.prisma`: `ShiftGroup`, `ShiftTemplate`, `ShiftRegistration`, `ShiftRegistrationEntry`, `TimePunch`, `FacilityNetwork`, plus `ShiftCodeCounter` (atomic sequence for SR-YYYY-NNNN codes).
+
+### Data flow
+
+```text
+Staff submits ShiftRegistration (Draft)
+  -> auto-resolve shift group + manager chain
+  -> submit -> Submitted
+  -> manager approves -> Approved (supersedes old registration)
+  -> daily punch (TimePunch) validated against FacilityNetwork
+  -> penalty computed at end-of-day (late min * 500 + early min * 1000)
+```
+
+### Key invariants
+
+- ShiftRegistration supersede: approving a new registration auto-cancels the previous one for the same user/date range.
+- SINGLE / MULTIPLE selection mode enforced per shift group (KD staff picks one shift per day, GV can pick multiple).
+- IP validation is a soft gate: punches outside whitelist are recorded but flagged.
 
 ## Discovery Before Shape
 

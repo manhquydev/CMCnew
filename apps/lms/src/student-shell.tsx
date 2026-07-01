@@ -17,6 +17,7 @@ import {
   IconTrophy,
   IconGift,
   IconBook2,
+  IconPhoto,
 } from '@tabler/icons-react';
 import { NotificationCenter, useLmsSession, type LmsPrincipal } from '@cmc/ui';
 import { StudentView, type StudentTab } from './student-view';
@@ -29,6 +30,7 @@ const STUDENT_NAV: {
     group: 'HỌC TẬP',
     items: [
       { tab: 'courses', label: 'Khóa học', icon: <IconBook2 size={18} stroke={1.5} /> },
+      { tab: 'sessions', label: 'Buổi học', icon: <IconPhoto size={18} stroke={1.5} /> },
       { tab: 'exercises', label: 'Bài tập', icon: <IconClipboard size={18} stroke={1.5} /> },
       { tab: 'results', label: 'Kết quả học', icon: <IconChartBar size={18} stroke={1.5} /> },
     ],
@@ -59,7 +61,7 @@ interface StudentShellProps {
 }
 
 const ALL_STUDENT_TABS = new Set<string>([
-  'overview', 'courses', 'exercises', 'results', 'gradebook', 'badges', 'ranking', 'rewards',
+  'overview', 'courses', 'exercises', 'results', 'gradebook', 'badges', 'ranking', 'rewards', 'sessions',
 ]);
 
 export function StudentShell({ principal }: StudentShellProps) {
@@ -97,13 +99,13 @@ export function StudentShell({ principal }: StudentShellProps) {
         }}
       >
         <Group h="100%" px="lg" justify="space-between">
-          <Group gap={0}>
+          <Group gap="xs">
             <ActionIcon
               variant="subtle"
               hiddenFrom="sm"
               onClick={() => setMobileOpened((o) => !o)}
               aria-label="Mở menu"
-              mr={8}
+              mr={4}
             >
               <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <line x1="3" y1="6" x2="21" y2="6" />
@@ -111,12 +113,13 @@ export function StudentShell({ principal }: StudentShellProps) {
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </ActionIcon>
+            <img src="/brand/cmc-logo.jpg" alt="CMC EDU Logo" style={{ height: 32, borderRadius: 6 }} />
             <Text
-              fw={700}
+              fw={800}
               size="md"
-              style={{ color: 'var(--cmc-brand)', letterSpacing: '-0.01em' }}
+              style={{ color: 'var(--cmc-brand-ink)', letterSpacing: '-0.01em', fontFamily: 'var(--cmc-font-bubble)' }}
             >
-              CMC
+              CMC EDU
             </Text>
             <Text
               size="sm"
@@ -131,6 +134,18 @@ export function StudentShell({ principal }: StudentShellProps) {
             </Text>
           </Group>
           <Group gap="sm">
+            <Button
+              variant="gradient"
+              gradient={{ from: 'orange', to: 'yellow', deg: 60 }}
+              size="xs"
+              radius="xl"
+              component="a"
+              href="/showcase"
+              target="_blank"
+              style={{ fontWeight: 800, border: 'none', boxShadow: '0 4px 10px rgba(255, 159, 10, 0.25)' }}
+            >
+              Trải nghiệm UI mới 🚀
+            </Button>
             <NotificationCenter pulse={notificationPulse} />
             <Button variant="subtle" size="xs" color="gray" onClick={logout}>Đăng xuất</Button>
           </Group>
@@ -203,10 +218,13 @@ export function StudentShell({ principal }: StudentShellProps) {
 function navlinkStyles(isActive: boolean) {
   return {
     root: {
-      borderRadius: 10,
-      color: isActive ? 'var(--cmc-brand-hover)' : 'var(--cmc-text)',
+      borderRadius: 'var(--cmc-radius-kid)',
+      color: isActive ? 'var(--cmc-brand-ink)' : 'var(--cmc-text-2)',
       backgroundColor: isActive ? 'var(--cmc-brand-muted)' : 'transparent',
-      fontWeight: isActive ? 500 : 400,
+      fontWeight: isActive ? 700 : 500,
+      transition: 'all 0.15s ease',
+      padding: '8px 12px',
+      margin: '2px 0',
     },
   };
 }

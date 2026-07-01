@@ -29,10 +29,11 @@ import {
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconCircleCheck, IconClock, IconPencil, IconAlertCircle } from '@tabler/icons-react';
+import { IconCircleCheck, IconClock, IconPencil, IconAlertCircle, IconStar, IconBook2, IconGift, IconTrophy } from '@tabler/icons-react';
 import { ClimbView } from './climb-view';
+import { SessionEvidenceTab } from './session-evidence-tab';
 
-export type StudentTab = 'overview' | 'exercises' | 'results' | 'gradebook' | 'badges' | 'ranking' | 'rewards' | 'courses';
+export type StudentTab = 'overview' | 'exercises' | 'results' | 'gradebook' | 'badges' | 'ranking' | 'rewards' | 'courses' | 'sessions';
 
 type Exercise = Awaited<ReturnType<typeof trpc.exercise.listForPrincipal.query>>[number];
 type Submission = Awaited<ReturnType<typeof trpc.submission.mine.query>>[number];
@@ -689,60 +690,70 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
   const stars = balance ?? 0;
 
   return (
-    <Stack>
-      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-        <Text size="sm" c="dimmed" mb={4}>Số sao hiện có</Text>
-        <Text size="xl" fw={700} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-warn-text)' }}>
-          {stars} sao
+    <Stack gap="xl">
+      <Card className="cmc-clay-card" p="xl">
+        <Group gap="xs" align="center" mb={4}>
+          <Text size="xs" fw={800} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--cmc-font-friendly)' }}>Số sao hiện có của con</Text>
+          <IconStar size={16} fill="#f59e0b" color="#d97706" />
+        </Group>
+        <Text size="38px" fw={900} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-warn-text)', fontFamily: 'var(--cmc-font-bubble)' }}>
+          {stars} <Text span size="lg" fw={700} c="dimmed">sao</Text>
         </Text>
       </Card>
 
       {msg && (
-        <Alert color="green" withCloseButton onClose={() => setMsg('')}>
+        <Alert color="green" withCloseButton onClose={() => setMsg('')} radius="lg">
           {msg}
         </Alert>
       )}
       {redeemErr && (
-        <Alert color="red" withCloseButton onClose={() => setRedeemErr('')}>
+        <Alert color="red" withCloseButton onClose={() => setRedeemErr('')} radius="lg">
           {redeemErr}
         </Alert>
       )}
 
       {gifts.length === 0 ? (
-        <Card radius="lg" style={{ border: '1px solid var(--cmc-border)' }} p="xl">
-          <Text c="dimmed">Chưa có quà nào.</Text>
+        <Card className="cmc-clay-card" p="xl">
+          <Text c="dimmed" style={{ fontFamily: 'var(--cmc-font-friendly)', fontWeight: 600 }}>Chưa có quà nào trong cửa hàng đổi thưởng.</Text>
         </Card>
       ) : (
-        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }}>
+        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} gap="xl">
           {gifts.map((g) => {
             const outOfStock = g.stock === 0;
             const notEnough = stars < g.starsRequired;
             const disabled = outOfStock || notEnough || redeemingId !== null;
             return (
-              <Card key={g.id} radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+              <Card
+                key={g.id}
+                className="cmc-clay-card"
+                p="xl"
+              >
                 <Stack gap="xs" h="100%">
-                  <Text fw={600}>{g.name}</Text>
+                  <Group gap="xs" align="center">
+                    <IconGift size={22} color="var(--cmc-brand)" style={{ filter: 'drop-shadow(0 2px 4px rgba(0, 113, 227, 0.15))' }} />
+                    <Text fw={800} size="md" style={{ color: '#1C3D5A', fontFamily: 'var(--cmc-font-bubble)' }}>{g.name}</Text>
+                  </Group>
                   {g.description && (
-                    <Text size="sm" c="dimmed" lineClamp={2}>
+                    <Text size="xs" c="dimmed" lineClamp={2} style={{ fontFamily: 'var(--cmc-font-friendly)', fontWeight: 500 }}>
                       {g.description}
                     </Text>
                   )}
-                  <Group gap="xs">
-                    <Badge color="yellow" variant="light" radius="xl">{g.starsRequired} sao</Badge>
-                    <Badge color={outOfStock ? 'red' : 'gray'} variant="light" radius="xl">
+                  <Group gap="xs" mt="xs">
+                    <Badge color="yellow" variant="light" radius="xl" size="sm" style={{ fontFamily: 'var(--cmc-font-bubble)' }}>{g.starsRequired} sao</Badge>
+                    <Badge color={outOfStock ? 'red' : 'gray'} variant="light" radius="xl" size="sm" style={{ fontFamily: 'var(--cmc-font-friendly)' }}>
                       {giftStockLabel(g.stock)}
                     </Badge>
                   </Group>
                   <Button
+                    className="cmc-clay-btn"
                     mt="auto"
-                    size="xs"
-                    variant="filled"
-                    radius={9999}
+                    size="sm"
                     onClick={() => redeem(g)}
                     loading={redeemingId === g.id}
                     disabled={disabled}
+                    style={{ height: 38 }}
                   >
-                    {outOfStock ? 'Hết hàng' : notEnough ? 'Không đủ sao' : 'Đổi'}
+                    {outOfStock ? 'Hết hàng' : notEnough ? 'Không đủ sao' : 'Đổi quà ngay'}
                   </Button>
                 </Stack>
               </Card>
@@ -788,27 +799,36 @@ function OverviewTab({ principal, refreshKey }: { principal: LmsPrincipal; refre
   const graded = submissions.filter((s) => s.status === 'graded' && s.grade?.isPublished).length;
 
   return (
-    <Stack>
-      <Title order={2} style={{ color: 'var(--cmc-text)', fontSize: 22, fontWeight: 600 }}>
-        Xin chào, {principal.displayName}
+    <Stack gap="xl">
+      <Title order={2} style={{ color: 'var(--cmc-text)', fontSize: 24, fontWeight: 800 }}>
+        Xin chào con yêu, {principal.displayName}! 👋
       </Title>
-      <SimpleGrid cols={{ base: 1, sm: 3 }}>
-        <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-          <Text size="sm" c="dimmed" mb={4}>Số sao tích lũy</Text>
-          <Text size="xl" fw={700} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-warn-text)' }}>
-            {balance ?? 0}
+      <SimpleGrid cols={{ base: 1, sm: 3 }} gap="xl">
+        <Card className="cmc-clay-card" p="xl">
+          <Group justify="space-between" align="center" mb="xs">
+            <Text size="xs" fw={800} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--cmc-font-friendly)' }}>Số sao tích lũy</Text>
+            <IconStar size={24} fill="#f59e0b" color="#d97706" />
+          </Group>
+          <Text size="38px" fw={900} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-warn-text)', fontFamily: 'var(--cmc-font-bubble)' }}>
+            {balance ?? 0} <Text span size="lg" fw={700} c="dimmed">sao</Text>
           </Text>
         </Card>
-        <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-          <Text size="sm" c="dimmed" mb={4}>Tổng bài tập</Text>
-          <Text size="xl" fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {exercises.length}
+        <Card className="cmc-clay-card" p="xl">
+          <Group justify="space-between" align="center" mb="xs">
+            <Text size="xs" fw={800} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--cmc-font-friendly)' }}>Tổng bài tập</Text>
+            <IconBook2 size={24} color="var(--cmc-brand)" />
+          </Group>
+          <Text size="38px" fw={900} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-brand)', fontFamily: 'var(--cmc-font-bubble)' }}>
+            {exercises.length} <Text span size="lg" fw={700} c="dimmed">bài</Text>
           </Text>
         </Card>
-        <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-          <Text size="sm" c="dimmed" mb={4}>Đã nộp / Đã chấm</Text>
-          <Text size="xl" fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {submitted} / {graded}
+        <Card className="cmc-clay-card" p="xl">
+          <Group justify="space-between" align="center" mb="xs">
+            <Text size="xs" fw={800} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--cmc-font-friendly)' }}>Đã nộp / Đã chấm</Text>
+            <IconCircleCheck size={24} color="var(--cmc-ok-text)" />
+          </Group>
+          <Text size="38px" fw={900} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-ok-text)', fontFamily: 'var(--cmc-font-bubble)' }}>
+            {submitted} <Text span size="xl" fw={700} c="dimmed">/</Text> {graded}
           </Text>
         </Card>
       </SimpleGrid>
@@ -887,6 +907,12 @@ export function StudentView({ principal, activeTab, onTabChange: _onTabChange, o
         return <RewardsTab refreshKey={refreshKey} />;
       case 'courses':
         return <CoursesTab refreshKey={refreshKey} />;
+      case 'sessions':
+        return principal.studentIds[0] ? (
+          <SessionEvidenceTab studentId={principal.studentIds[0]} refreshKey={refreshKey} />
+        ) : (
+          <Text c="dimmed">Không có học sinh liên kết.</Text>
+        );
       default:
         return <ExercisesTab refreshKey={refreshKey} />;
     }

@@ -19,12 +19,12 @@ import {
   Stack,
   Table,
   Text,
-  Textarea,
   Title,
 } from '@mantine/core';
 import { IconArrowLeft, IconExternalLink, IconUser } from '@tabler/icons-react';
 import { AttendanceRoster } from './attendance-roster.js';
 import { StudentDetailPanel } from './student-detail.js';
+import { SessionEvidencePanel } from './session-evidence-panel.js';
 
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
 type Enrollment = Awaited<ReturnType<typeof trpc.enrollment.listByBatch.query>>[number];
@@ -120,7 +120,8 @@ function SessionWorkflowPanel({ session }: { session: MySession }) {
   const postClassEnabled = phase === 'post_class';
 
   return (
-    <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
+    <Stack gap="md">
+      <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
       <Stack gap="md">
         <Group justify="space-between" align="flex-start">
           <div>
@@ -153,30 +154,20 @@ function SessionWorkflowPanel({ session }: { session: MySession }) {
           </WorkflowCard>
 
           <WorkflowCard
-            title="Nhận xét theo form"
-            description="Mock trước; form template sẽ thay thế nội dung tự do."
+            title="Ảnh & nhận xét LMS"
+            description="Mở sau giờ kết thúc buổi học."
             enabled={postClassEnabled}
           >
-            <Textarea
-              size="xs"
-              minRows={2}
-              defaultValue="Mức độ tham gia: Tốt. Kỹ năng nổi bật: quan sát và trình bày. Cần rèn: hoàn thiện sản phẩm đúng thời gian."
-            />
-          </WorkflowCard>
-
-          <WorkflowCard
-            title="Ảnh lớp và publish PH"
-            description="Ảnh là bằng chứng cả lớp; nhận xét là riêng từng học sinh."
-            enabled={postClassEnabled}
-          >
-            <Group gap="xs">
-              <Button size="xs" variant="light">Upload ảnh lớp</Button>
-              <Button size="xs" color="teal">Publish LMS</Button>
-            </Group>
+            <Text size="xs" c="dimmed">
+              Dùng panel thật bên dưới để upload ảnh, lưu nhận xét từng học sinh và publish cho PH/HS.
+            </Text>
           </WorkflowCard>
         </SimpleGrid>
       </Stack>
-    </Card>
+      </Card>
+
+      <SessionEvidencePanel classSessionId={session.id} enabled={postClassEnabled} />
+    </Stack>
   );
 }
 

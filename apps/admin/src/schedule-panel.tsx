@@ -167,6 +167,7 @@ export function SchedulePanel({ goToClass, onOpenSession }: SchedulePanelProps) 
                 {rows.map((s) => (
                   <Table.Tr
                     key={s.id}
+                    data-testid={`schedule-session-${s.id}`}
                     style={{ cursor: 'pointer' }}
                     onClick={() => onOpenSession(s)}
                   >

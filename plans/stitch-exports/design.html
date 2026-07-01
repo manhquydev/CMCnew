@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+
+<html class="light" lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CMC EDU - Đăng nhập</title>
+<!-- Fonts & Icons -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-container": "#6b3900",
+                    "on-error-container": "#93000a",
+                    "on-primary-fixed": "#001b3f",
+                    "primary": "#0059b5",
+                    "outline": "#717785",
+                    "on-secondary": "#ffffff",
+                    "surface-container-low": "#f2f4f7",
+                    "surface-bright": "#f7f9fc",
+                    "on-tertiary-container": "#f1ffec",
+                    "surface-dim": "#d8dadd",
+                    "primary-container": "#0071e3",
+                    "on-error": "#ffffff",
+                    "secondary-container": "#fc9d41",
+                    "inverse-surface": "#2d3133",
+                    "primary-fixed-dim": "#abc7ff",
+                    "on-tertiary-fixed": "#002107",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-container": "#fcfbff",
+                    "on-surface-variant": "#414753",
+                    "surface-container-lowest": "#ffffff",
+                    "on-surface": "#191c1e",
+                    "on-secondary-fixed-variant": "#6d3a00",
+                    "secondary-fixed-dim": "#ffb77a",
+                    "surface-container-high": "#e6e8eb",
+                    "on-background": "#191c1e",
+                    "tertiary-fixed": "#72fe88",
+                    "background": "#f7f9fc",
+                    "tertiary-container": "#008633",
+                    "error-container": "#ffdad6",
+                    "inverse-primary": "#abc7ff",
+                    "on-primary-fixed-variant": "#00458f",
+                    "surface": "#f7f9fc",
+                    "error": "#ba1a1a",
+                    "secondary-fixed": "#ffdcc2",
+                    "secondary": "#8f4e00",
+                    "on-primary": "#ffffff",
+                    "outline-variant": "#c1c6d6",
+                    "tertiary": "#006a26",
+                    "surface-container": "#eceef1",
+                    "inverse-on-surface": "#eff1f4",
+                    "surface-tint": "#005cbb",
+                    "primary-fixed": "#d7e2ff",
+                    "on-tertiary-fixed-variant": "#00531c",
+                    "tertiary-fixed-dim": "#53e16f",
+                    "surface-variant": "#e0e3e6",
+                    "surface-container-highest": "#e0e3e6",
+                    "on-secondary-fixed": "#2e1500"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "1.5rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "gutter": "24px",
+                    "md": "24px",
+                    "container-max": "1200px",
+                    "base": "8px",
+                    "xs": "4px",
+                    "xl": "80px",
+                    "sm": "12px",
+                    "lg": "48px"
+            },
+            "fontFamily": {
+                    "label-lg": ["Plus Jakarta Sans"],
+                    "headline-lg-mobile": ["Plus Jakarta Sans"],
+                    "button": ["Plus Jakarta Sans"],
+                    "headline-lg": ["Plus Jakarta Sans"],
+                    "headline-xl": ["Plus Jakarta Sans"],
+                    "body-md": ["Plus Jakarta Sans"]
+            },
+            "fontSize": {
+                    "label-lg": ["14px", {"lineHeight": "1.2", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                    "headline-lg-mobile": ["28px", {"lineHeight": "1.3", "fontWeight": "700"}],
+                    "button": ["18px", {"lineHeight": "1", "fontWeight": "600"}],
+                    "headline-lg": ["32px", {"lineHeight": "1.3", "fontWeight": "700"}],
+                    "headline-xl": ["48px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "800"}],
+                    "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+        .mesh-bg {
+            background-color: #f7f9fc;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(0, 89, 181, 0.1) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(252, 157, 65, 0.1) 0px, transparent 50%);
+        }
+        .tab-active {
+            position: relative;
+        }
+        .tab-active::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 24px;
+            height: 4px;
+            background-color: #0059b5;
+            border-radius: 999px;
+        }
+    </style>
+</head>
+<body class="bg-background font-body-md text-on-surface overflow-x-hidden min-h-screen mesh-bg">
+<!-- Top Navigation Anchor (Manual Filter: Suppress Nav for Login, but use Brand Anchor styles for Logo) -->
+<header class="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-gutter h-16 max-w-container-max mx-auto bg-transparent">
+<div class="flex items-center gap-base">
+<span class="material-symbols-outlined text-primary text-3xl" style="font-variation-settings: 'FILL' 1;">school</span>
+<span class="text-headline-lg font-headline-lg font-extrabold text-primary tracking-tight">CMC EDU</span>
+</div>
+</header>
+<main class="flex flex-col md:flex-row min-h-screen pt-16 md:pt-0">
+<!-- Visual/Hero Section -->
+<section class="relative w-full md:w-1/2 min-h-[40vh] md:min-h-screen flex items-center justify-center p-md overflow-hidden">
+<div class="absolute inset-0 z-0">
+<img alt="Hero background" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida/AP1WRLv5mEEFCMVjxc1x0EAYZEI7kATOwyPmXinPuWX6gNPGK_Gqik8rZSLSC9vCIubMp7R9bZiuk-3npYWu6evKHfdRRislj_dBOyPOEyN6_2j6PXm53CglRTZVEjljgLz8IRJKLYPsO6dDLquqNv2eSdtAMSiHZAYJBR3FwN3qPIs4onK1cRoGfFfvPYoBbY8d1LYMHFurtqdy4TWPPq12z5YBFVy2FV3NNFpdEiEpnMcQ7Y2DZM6Q4qO6e1o"/>
+<div class="absolute inset-0 bg-primary/20 backdrop-blur-[2px]"></div>
+</div>
+<div class="relative z-10 text-center md:text-left px-gutter max-w-lg">
+<h1 class="text-white font-headline-xl text-headline-xl drop-shadow-2xl mb-sm leading-tight">
+                    Tò mò là khởi nguồn của trí tuệ
+                </h1>
+<p class="text-white/90 text-label-lg font-label-lg bg-black/20 backdrop-blur-md inline-block px-4 py-2 rounded-lg">
+                    Hành trình kiến tạo tương lai cho bé yêu
+                </p>
+</div>
+</section>
+<!-- Login Form Section -->
+<section class="w-full md:w-1/2 flex items-center justify-center p-gutter md:p-xl">
+<div class="w-full max-w-md glass-card rounded-xl p-lg shadow-xl relative overflow-hidden">
+<!-- Inner Branding -->
+<div class="mb-lg">
+<h2 class="font-headline-lg text-headline-lg text-on-surface mb-xs">Chào mừng bạn!</h2>
+<p class="text-on-surface-variant font-body-md">Hãy chọn tài khoản để bắt đầu học tập.</p>
+</div>
+<!-- Tabs -->
+<div class="flex gap-lg border-b border-outline-variant mb-lg">
+<button class="pb-base font-label-lg text-label-lg transition-all text-primary tab-active" id="btn-parent" onclick="switchTab('parent')">
+                        Phụ huynh
+                    </button>
+<button class="pb-base font-label-lg text-label-lg transition-all text-on-surface-variant opacity-60" id="btn-student" onclick="switchTab('student')">
+                        Học sinh
+                    </button>
+</div>
+<!-- Form Container -->
+<div class="relative" id="login-forms">
+<!-- Parent Form -->
+<form class="space-y-base transition-all duration-300 opacity-100 transform translate-x-0" id="form-parent">
+<div class="space-y-xs">
+<label class="font-label-lg text-label-lg text-on-surface-variant ml-1">Email</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">mail</span>
+<input class="w-full h-14 pl-12 pr-4 bg-primary/5 border-2 border-transparent focus:border-primary focus:ring-0 rounded-lg outline-none transition-all placeholder:text-outline-variant" placeholder="email@example.com" type="email"/>
+</div>
+</div>
+<div class="pt-sm">
+<button class="w-full h-14 bg-primary text-on-primary font-button text-button rounded-lg shadow-lg hover:bg-primary-container active:scale-95 transition-all flex items-center justify-center gap-base" type="submit">
+                                Đăng nhập
+                                <span class="material-symbols-outlined">arrow_forward</span>
+</button>
+</div>
+</form>
+<!-- Student Form (Hidden by default) -->
+<form class="space-y-base hidden transition-all duration-300 opacity-0 transform translate-x-8" id="form-student">
+<div class="space-y-xs">
+<label class="font-label-lg text-label-lg text-on-surface-variant ml-1">Tên đăng nhập</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">face</span>
+<input class="w-full h-14 pl-12 pr-4 bg-primary/5 border-2 border-transparent focus:border-primary focus:ring-0 rounded-lg outline-none transition-all placeholder:text-outline-variant" placeholder="Biệt danh của con" type="text"/>
+</div>
+</div>
+<div class="space-y-xs">
+<label class="font-label-lg text-label-lg text-on-surface-variant ml-1">Mật khẩu</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">lock</span>
+<input class="w-full h-14 pl-12 pr-4 bg-primary/5 border-2 border-transparent focus:border-primary focus:ring-0 rounded-lg outline-none transition-all placeholder:text-outline-variant" placeholder="••••••••" type="password"/>
+</div>
+</div>
+<div class="pt-sm">
+<button class="w-full h-14 bg-secondary-container text-on-secondary-container font-button text-button rounded-lg shadow-lg hover:bg-secondary-fixed active:scale-95 transition-all flex items-center justify-center gap-base" type="submit">
+                                Bắt đầu học thôi!
+                                <span class="material-symbols-outlined">rocket_launch</span>
+</button>
+</div>
+</form>
+</div>
+<!-- Links -->
+<div class="mt-lg flex flex-col gap-base items-center">
+<a class="text-label-lg font-label-lg text-primary hover:underline" href="#">Quên mật khẩu?</a>
+<p class="text-on-surface-variant text-label-lg font-label-lg">
+                        Chưa có tài khoản? <a class="text-secondary font-bold hover:underline" href="#">Đăng ký ngay</a>
+</p>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer Anchor Logic -->
+<footer class="w-full px-gutter py-lg max-w-container-max mx-auto flex flex-col md:flex-row justify-between items-center gap-base">
+<p class="text-body-md font-body-md text-on-surface-variant">© 2024 CMC EDU. Safe &amp; Encouraging Learning.</p>
+<div class="flex gap-md flex-wrap justify-center">
+<a class="text-label-lg font-label-lg text-on-surface-variant hover:text-primary transition-colors" href="#">Privacy Policy</a>
+<a class="text-label-lg font-label-lg text-on-surface-variant hover:text-primary transition-colors" href="#">Terms of Service</a>
+<a class="text-label-lg font-label-lg text-on-surface-variant hover:text-primary transition-colors" href="#">Support</a>
+</div>
+</footer>
+<!-- Scripts for UI Interactions -->
+<script>
+        function switchTab(type) {
+            const btnParent = document.getElementById('btn-parent');
+            const btnStudent = document.getElementById('btn-student');
+            const formParent = document.getElementById('form-parent');
+            const formStudent = document.getElementById('form-student');
+
+            if (type === 'parent') {
+                btnParent.classList.add('text-primary', 'tab-active');
+                btnParent.classList.remove('text-on-surface-variant', 'opacity-60');
+                
+                btnStudent.classList.remove('text-primary', 'tab-active');
+                btnStudent.classList.add('text-on-surface-variant', 'opacity-60');
+
+                formStudent.classList.add('hidden', 'opacity-0', 'translate-x-8');
+                formParent.classList.remove('hidden');
+                setTimeout(() => {
+                    formParent.classList.remove('opacity-0', 'translate-x-8');
+                    formParent.classList.add('opacity-100', 'translate-x-0');
+                }, 50);
+            } else {
+                btnStudent.classList.add('text-primary', 'tab-active');
+                btnStudent.classList.remove('text-on-surface-variant', 'opacity-60');
+                
+                btnParent.classList.remove('text-primary', 'tab-active');
+                btnParent.classList.add('text-on-surface-variant', 'opacity-60');
+
+                formParent.classList.add('hidden', 'opacity-0', 'translate-x-8');
+                formStudent.classList.remove('hidden');
+                setTimeout(() => {
+                    formStudent.classList.remove('opacity-0', 'translate-x-8');
+                    formStudent.classList.add('opacity-100', 'translate-x-0');
+                }, 50);
+            }
+        }
+    </script>
+</body></html>

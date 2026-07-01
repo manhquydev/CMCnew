@@ -168,6 +168,13 @@ importers:
         version: 2.1.9(@types/node@22.20.0)
 
   apps/e2e:
+    dependencies:
+      '@cmc/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@cmc/db':
+        specifier: workspace:*
+        version: link:../../packages/db
     devDependencies:
       '@playwright/test':
         specifier: ^1.49.0

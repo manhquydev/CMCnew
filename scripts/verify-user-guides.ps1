@@ -66,16 +66,16 @@ foreach ($ref in $refs) {
   }
 }
 
-$assetRefs = $refs |
+$assetRefs = @($refs |
   Where-Object { $_ -match '^assets/user-guides/.+\.(png|svg)$' } |
   ForEach-Object { Split-Path $_ -Leaf } |
-  Sort-Object -Unique
+  Sort-Object -Unique)
 
 $assetDir = Join-Path $guideDir 'assets/user-guides'
 $assetFiles = Get-ChildItem $assetDir -File | Where-Object { $_.Extension -in @('.png', '.svg') } | Sort-Object Name
-$assetFileNames = $assetFiles | ForEach-Object { $_.Name }
+$assetFileNames = @($assetFiles | ForEach-Object { $_.Name })
 
-$orphanFiles = $assetFileNames | Where-Object { $_ -notin $assetRefs }
+$orphanFiles = @($assetFileNames | Where-Object { $_ -notin $assetRefs })
 if ($orphanFiles.Count -gt 0) {
   throw "Unreferenced guide asset(s): $($orphanFiles -join ', ')"
 }

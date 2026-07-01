@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@300..700&family=Quicksand:wght@300..700&display=swap');
+
 /* CMCnew Design Tokens — Apple-inspired minimalism adapted for ERP density.
    Single source of truth for color, spacing, type, and elevation across all 3 apps.
    Import via: import '@cmc/ui/tokens.css' */
@@ -163,6 +165,31 @@
   --cmc-form-group-title:var(--cmc-text-md);     /* section heading 17px                    */
   --cmc-notebook-active: var(--cmc-brand);       /* active notebook tab underline           */
   --cmc-chatter-w:       340px;                  /* right-rail activity log width           */
+
+  /* ─── Playful / Kid-friendly Theme Extensions ─────────────────────────── */
+  --cmc-radius-kid:       18px;
+  --cmc-radius-kid-lg:    32px;
+  --cmc-radius-kid-xl:    48px;
+  
+  --cmc-font-bubble:      'Fredoka', system-ui, -apple-system, sans-serif;
+  --cmc-font-friendly:    'Quicksand', system-ui, -apple-system, sans-serif;
+
+  --cmc-gradient-sky:     linear-gradient(180deg, #E0F2FE 0%, #BAE6FD 100%);
+  --cmc-gradient-bubble:  linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%);
+  --cmc-gradient-card:    linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%);
+  --cmc-gradient-clay-orange: linear-gradient(135deg, #FF7B2E 0%, #FFA875 100%);
+  --cmc-gradient-clay-purple: linear-gradient(135deg, #7950F2 0%, #A78BFA 100%);
+  
+  /* Multi-layer shadow stacks for squishy 3D clay look */
+  --cmc-clay-shadow:       inset -8px -8px 16px rgba(15, 32, 66, 0.05), inset 8px 8px 16px rgba(255, 255, 255, 0.9), 0 12px 28px rgba(15, 32, 66, 0.08);
+  --cmc-clay-shadow-hover: inset -6px -6px 12px rgba(15, 32, 66, 0.04), inset 6px 6px 12px rgba(255, 255, 255, 0.95), 0 20px 40px rgba(15, 32, 66, 0.14);
+  
+  --cmc-clay-btn-shadow:   inset -4px -4px 8px rgba(0, 0, 0, 0.15), inset 4px 4px 8px rgba(255, 255, 255, 0.25), 0 8px 16px rgba(15, 32, 66, 0.16);
+  --cmc-clay-btn-shadow-active: inset -2px -2px 4px rgba(0, 0, 0, 0.2), inset 2px 2px 4px rgba(255, 255, 255, 0.25), 0 3px 8px rgba(15, 32, 66, 0.12);
+  
+  --cmc-kid-shadow:       var(--cmc-clay-shadow);
+  --cmc-kid-shadow-hover: var(--cmc-clay-shadow-hover);
+  --cmc-kid-border-gradient: linear-gradient(135deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.2));
 }
 
 /* ─── Base Reset ──────────────────────────────────────────────────────────── */
@@ -193,4 +220,62 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* LMS scoped typography overrides for kid/parent friendliness */
+.lms-app-root {
+  font-family: var(--cmc-font-friendly) !important;
+}
+.lms-app-root h1,
+.lms-app-root h2,
+.lms-app-root h3,
+.lms-app-root h4,
+.lms-app-root h5,
+.lms-app-root h6,
+.lms-app-root .mantine-Title-root,
+.lms-app-root .cmc-title {
+  font-family: var(--cmc-font-bubble) !important;
+  letter-spacing: 0.02em;
+}
+
+/* Tactile Claymorphism Utilities */
+.cmc-clay-card {
+  background: var(--cmc-gradient-card) !important;
+  border: 2px solid rgba(255, 255, 255, 0.75) !important;
+  border-radius: var(--cmc-radius-kid-lg) !important;
+  box-shadow: var(--cmc-clay-shadow) !important;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease !important;
+}
+.cmc-clay-card:hover {
+  transform: translateY(-5px) scale(1.02) !important;
+  box-shadow: var(--cmc-clay-shadow-hover) !important;
+}
+.cmc-clay-card:active {
+  transform: scale(0.98) !important;
+}
+
+.cmc-clay-btn {
+  background: linear-gradient(135deg, var(--cmc-brand) 0%, var(--cmc-brand-hover) 100%) !important;
+  color: #ffffff !important;
+  border: 2px solid rgba(255, 255, 255, 0.35) !important;
+  border-radius: 24px !important;
+  box-shadow: var(--cmc-clay-btn-shadow) !important;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease !important;
+  cursor: pointer !important;
+  font-weight: 800 !important;
+}
+.cmc-clay-btn:hover {
+  transform: scale(1.06) rotate(1deg) !important;
+}
+.cmc-clay-btn:active {
+  transform: scale(0.92) !important;
+  box-shadow: var(--cmc-clay-btn-shadow-active) !important;
+}
+.cmc-clay-btn:disabled {
+  background: #e2e8f0 !important;
+  color: #94a3b8 !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  cursor: not-allowed !important;
+  transform: none !important;
 }

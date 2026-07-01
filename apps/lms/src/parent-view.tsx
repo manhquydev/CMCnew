@@ -22,9 +22,10 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { IconCircleCheck, IconClock, IconCircleX, IconAlertCircle } from '@tabler/icons-react';
+import { IconCircleCheck, IconClock, IconCircleX, IconAlertCircle, IconStar } from '@tabler/icons-react';
+import { SessionEvidenceTab } from './session-evidence-tab';
 
-export type ParentTab = 'overview' | 'gradebook' | 'notifications' | 'rewards';
+export type ParentTab = 'overview' | 'sessions' | 'gradebook' | 'notifications' | 'rewards';
 
 type Submission = Awaited<ReturnType<typeof trpc.submission.forStudent.query>>[number];
 type Gradebook = Awaited<ReturnType<typeof trpc.assessment.gradebook.query>>;
@@ -116,19 +117,19 @@ function LevelHistoryCard({ childId, refreshKey }: { childId: string; refreshKey
   if (!rows || rows.length === 0) return null;
 
   return (
-    <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-      <Text size="sm" fw={600} mb="sm" style={{ color: 'var(--cmc-text-2)' }}>
-        Tiến trình cấp độ
+    <Card className="cmc-clay-card" p="xl">
+      <Text size="sm" fw={800} mb="sm" style={{ color: 'var(--cmc-text-2)', fontFamily: 'var(--cmc-font-bubble)' }}>
+        Tiến trình cấp độ của con
       </Text>
       <Stack gap="xs">
         {rows.map((r) => (
           <Group key={r.id} gap="xs">
-            <Badge variant="light" radius="xl">{r.fromLevel ?? '—'} → {r.toLevel}</Badge>
-            <Badge size="sm" color={LEVEL_STATUS[r.status]?.color} variant="light" radius="xl">
+            <Badge variant="light" radius="xl" size="md" style={{ fontFamily: 'var(--cmc-font-bubble)' }}>{r.fromLevel ?? '—'} → {r.toLevel}</Badge>
+            <Badge size="sm" color={LEVEL_STATUS[r.status]?.color} variant="light" radius="xl" style={{ fontFamily: 'var(--cmc-font-friendly)', fontWeight: 700 }}>
               {LEVEL_STATUS[r.status]?.label ?? r.status}
             </Badge>
             {r.reason && (
-              <Text size="sm" c="dimmed">{r.reason}</Text>
+              <Text size="sm" c="dimmed" style={{ fontFamily: 'var(--cmc-font-friendly)', fontWeight: 500 }}>{r.reason}</Text>
             )}
           </Group>
         ))}
@@ -368,24 +369,34 @@ function ChildDashboard({
     ).length;
 
     return (
-      <Stack>
+      <Stack gap="xl">
         <Group grow>
-          <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-            <Text size="sm" c="dimmed" mb={4}>Sao tích lũy</Text>
-            <Text size="xl" fw={700} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-warn-text)' }}>
-              {balance ?? 0}
+          <Card className="cmc-clay-card" p="xl">
+            <Group justify="space-between" align="center" mb="xs">
+              <Text size="xs" fw={800} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--cmc-font-friendly)' }}>Sao tích lũy của con</Text>
+              <IconStar size={20} fill="#f59e0b" color="#d97706" />
+            </Group>
+            <Text size="32px" fw={900} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-warn-text)', fontFamily: 'var(--cmc-font-bubble)' }}>
+              {balance ?? 0} <Text span size="sm" fw={700} c="dimmed">sao</Text>
             </Text>
           </Card>
-          <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-            <Text size="sm" c="dimmed" mb={4}>Đã nộp / Đã chấm</Text>
-            <Text size="xl" fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>
-              {submitted} / {graded}
+          <Card className="cmc-clay-card" p="xl">
+            <Group justify="space-between" align="center" mb="xs">
+              <Text size="xs" fw={800} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--cmc-font-friendly)' }}>Đã nộp / Đã chấm</Text>
+              <IconCircleCheck size={20} color="var(--cmc-ok-text)" />
+            </Group>
+            <Text size="32px" fw={900} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-ok-text)', fontFamily: 'var(--cmc-font-bubble)' }}>
+              {submitted} <Text span size="md" fw={700} c="dimmed">/</Text> {graded}
             </Text>
           </Card>
         </Group>
         <LevelHistoryCard childId={childId} refreshKey={refreshKey} />
       </Stack>
     );
+  }
+
+  if (tab === 'sessions') {
+    return <SessionEvidenceTab studentId={childId} refreshKey={refreshKey} />;
   }
 
   // ── Học bạ ────────────────────────────────────────────────────────────────
@@ -573,19 +584,22 @@ function ChildDashboard({
   // ── Phần thưởng ───────────────────────────────────────────────────────────
   if (tab === 'rewards') {
     return (
-      <Stack>
-        <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-          <Text size="sm" c="dimmed" mb={4}>Sao tích lũy</Text>
-          <Text size="xl" fw={700} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-warn-text)' }}>
-            {balance ?? 0}
+      <Stack gap="xl">
+        <Card className="cmc-clay-card" p="xl">
+          <Group gap="xs" align="center" mb={4}>
+            <Text size="xs" fw={800} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--cmc-font-friendly)' }}>Sao tích lũy của con</Text>
+            <IconStar size={16} fill="#f59e0b" color="#d97706" />
+          </Group>
+          <Text size="32px" fw={900} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-warn-text)', fontFamily: 'var(--cmc-font-bubble)' }}>
+            {balance ?? 0} <Text span size="sm" fw={700} c="dimmed">sao</Text>
           </Text>
         </Card>
-        <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-          <Text size="sm" fw={600} mb="sm" style={{ color: 'var(--cmc-text-2)' }}>Huy hiệu</Text>
+        <Card className="cmc-clay-card" p="xl">
+          <Text size="sm" fw={800} mb="md" style={{ color: 'var(--cmc-text-2)', fontFamily: 'var(--cmc-font-bubble)' }}>Huy hiệu của con</Text>
           <BadgeShelf studentId={childId} refreshKey={refreshKey} />
         </Card>
-        <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-          <Text size="sm" fw={600} mb="sm" style={{ color: 'var(--cmc-text-2)' }}>Bảng xếp hạng</Text>
+        <Card className="cmc-clay-card" p="xl">
+          <Text size="sm" fw={800} mb="md" style={{ color: 'var(--cmc-text-2)', fontFamily: 'var(--cmc-font-bubble)' }}>Bảng xếp hạng lớp học</Text>
           <Leaderboard studentId={childId} refreshKey={refreshKey} />
         </Card>
       </Stack>

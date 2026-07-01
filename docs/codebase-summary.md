@@ -48,7 +48,7 @@ Two workspace roots (`pnpm-workspace.yaml`): `apps/*` and `packages/*`.
 
 | Package | Responsibility |
 | --- | --- |
-| `@cmc/db` | Prisma schema (**53 models**, ~62 migrations), client, seeds, RLS verify scripts. |
+| `@cmc/db` | Prisma schema (**60 models**, ~62 migrations), client, seeds, RLS verify scripts. |
 | `@cmc/auth` | JWT sessions, `Role` enum, and the central **PERMISSIONS registry** (`./permissions` subpath, browser-safe). |
 | `@cmc/audit` | Audit-log write helpers (product records, distinct from app logs). |
 | `@cmc/ui` | Shared React components, tRPC client, design tokens (`tokens.css`), notify/validators conventions. |
@@ -72,7 +72,8 @@ routes. This is the anti-"chắp vá" (anti-patchwork) rule from the charter.
 - `routers/` — ~40 feature routers (`index.ts` composes the app router). One
   file per feature: `auth`, `student`, `enrollment`, `schedule`, `finance`,
   `payroll`, `grade`, `assessment`, `crm`, `aftersale`, `rewards`, `badge`,
-  `certificate`, `parent-meeting`, `notification`, `staff-notif`, `dashboard`, …
+  `certificate`, `parent-meeting`, `notification`, `staff-notif`, `dashboard`,
+  `shift-config`, `shift-registration`, `check-in-out`, `facility-ip`, …
 - `class-batch.ts` can create a class and its first weekly `ScheduleSlot` in one
   transaction through optional `initialSlot`; staff can add more slots later in
   the class schedule tab.

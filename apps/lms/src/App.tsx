@@ -1,6 +1,7 @@
 import { LmsLoginGate, useLmsSession } from '@cmc/ui';
 import { StudentShell } from './student-shell';
 import { ParentShell } from './parent-shell';
+import { ShowcaseView } from './showcase-view';
 
 function Router() {
   const { principal } = useLmsSession();
@@ -12,9 +13,15 @@ function Router() {
 }
 
 export function App() {
+  const isShowcase = window.location.pathname === '/showcase' || window.location.hash === '#showcase';
+  if (isShowcase) {
+    return <ShowcaseView />;
+  }
+
   return (
     <LmsLoginGate>
       <Router />
     </LmsLoginGate>
   );
 }
+

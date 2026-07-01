@@ -133,150 +133,316 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
 
   if (principal === null) {
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          background:
-            'linear-gradient(180deg,#0071E3 0%,#3f8fe8 30%,rgba(120,170,235,0.86) 60%,rgba(190,215,245,0.55) 100%), url(/brand/login-bg.jpg) center bottom / cover no-repeat, #0071E3',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '32px 16px',
-        }}
-      >
-        <Stack align="center" gap="lg" w="100%" maw={420}>
-          {/* Brand header */}
-          <Stack align="center" gap={6}>
-            <img
-              src={CMC_BRAND.logo}
-              alt={CMC_BRAND.name}
-              style={{ height: 56, borderRadius: 12, background: '#fff', padding: '6px 10px', boxShadow: '0 8px 24px rgba(0,0,0,0.18)' }}
+      <div style={{ display: 'flex', minHeight: '100vh', width: '100vw', overflow: 'hidden' }}>
+        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+        <style dangerouslySetInnerHTML={{ __html: `
+          .login-split-left {
+            display: flex !important;
+          }
+          @media (max-width: 900px) {
+            .login-split-left { display: none !important; }
+            .login-split-right { flex: 1 1 100% !important; padding: 24px 16px !important; }
+            .login-mobile-logo { display: flex !important; }
+          }
+        `}} />
+
+        {/* Left Column - Graphic/Branding (Hidden on mobile) */}
+        <div
+          className="login-split-left"
+          style={{
+            flex: '1 1 55%',
+            backgroundImage: 'linear-gradient(to right, rgba(0, 113, 227, 0.85) 0%, rgba(0, 113, 227, 0.45) 100%), url(/brand/lms-login-bg.png)',
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            padding: '48px',
+            position: 'relative',
+          }}
+        >
+          {/* Logo and Brand Name */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <img 
+              src={CMC_BRAND.logo} 
+              alt={CMC_BRAND.name} 
+              style={{ height: 38, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }} 
             />
-            <Title order={1} size="h3" ta="center" style={{ color: '#fff' }}>
-              Học tập cùng {CMC_BRAND.name}
-            </Title>
-            <Text ta="center" size="sm" style={{ color: 'rgba(255,255,255,0.92)' }}>
-              {CMC_BRAND.tagline}
+            <Text fw={800} size="xl" style={{ letterSpacing: '-0.02em', color: '#fff' }}>
+              {CMC_BRAND.name}
+            </Text>
+          </div>
+
+          {/* Central Slogan */}
+          <Stack gap="xs" style={{ maxWidth: '520px' }}>
+            <Text fw={900} style={{ fontSize: '42px', lineHeight: 1.2, color: '#fff', letterSpacing: '-0.02em', textShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
+              Tò mò là khởi nguồn<br />
+              của <span style={{ color: '#FFE066' }}>trí tuệ.</span>
+            </Text>
+            <Text size="md" style={{ color: 'rgba(255, 255, 255, 0.9)', marginTop: '12px', lineHeight: 1.6, textShadow: '0 1px 4px rgba(0,0,0,0.15)' }}>
+              Học viện phát triển Tư duy & Năng lực số CMC.<br />
+              Hệ thống LMS quản lý học tập cá nhân hóa giúp phụ huynh đồng hành và tiếp sức cho con leo tầng mây tri thức.
             </Text>
           </Stack>
 
-          <Paper withBorder shadow="md" p="xl" radius="lg" w="100%">
-          <SegmentedControl
-            fullWidth
-            mb="xs"
-            value={mode}
-            onChange={handleModeChange}
-            data={[
-              { value: 'parent', label: 'Phụ huynh' },
-              { value: 'student', label: 'Học sinh' },
-            ]}
-          />
-          <Text size="xs" c="dimmed" ta="center" mb="md">
-            {mode === 'parent'
-              ? 'Phụ huynh đăng nhập bằng email để theo dõi việc học của con.'
-              : 'Học sinh dùng mã đăng nhập và mật khẩu thầy cô đã cấp.'}
+          {/* Footer Copyright */}
+          <Text size="xs" style={{ color: 'rgba(255, 255, 255, 0.6)' }}>
+            &copy; {new Date().getFullYear()} {CMC_BRAND.name} · {CMC_BRAND.tagline}
           </Text>
+        </div>
 
-          {/* ── Phụ huynh: OTP hai bước ── */}
-          {mode === 'parent' && otpStep === 'request' && (
-            <form onSubmit={onOtpRequest}>
-              <Stack>
-                <TextInput
-                  label="Email phụ huynh"
-                  type="email"
-                  value={parentEmail}
-                  onChange={(e) => setParentEmail(e.currentTarget.value)}
-                  required
-                />
-                {otpError && (
-                  <Text c="red" size="sm">
-                    {otpError}
-                  </Text>
-                )}
-                <Button type="submit" loading={busy} fullWidth>
-                  Gửi mã đăng nhập
-                </Button>
-              </Stack>
-            </form>
-          )}
+        {/* Right Column - Navigation & Form */}
+        <div
+          className="login-split-right"
+          style={{
+            flex: '1 1 45%',
+            backgroundColor: '#F8FAFC',
+            backgroundImage: 'radial-gradient(at 0% 0%, rgba(0, 113, 227, 0.05) 0px, transparent 50%), radial-gradient(at 100% 100%, rgba(255, 159, 10, 0.05) 0px, transparent 50%)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '32px 48px',
+            overflowY: 'auto',
+          }}
+        >
+          {/* Header Navigation for Mobile / Quick Links */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', maxWidth: '420px', alignItems: 'center' }}>
+            <div style={{ display: 'none', alignItems: 'center', gap: '8px' }} className="login-mobile-logo">
+              <img 
+                src={CMC_BRAND.logo} 
+                alt={CMC_BRAND.name} 
+                style={{ height: 32, borderRadius: 6 }} 
+              />
+              <Text fw={800} size="md" style={{ color: 'var(--cmc-text)' }}>{CMC_BRAND.name}</Text>
+            </div>
+            <div style={{ display: 'flex', gap: '16px', marginLeft: 'auto' }}>
+              <Anchor href={CMC_BRAND.websiteUrl} target="_blank" size="xs" fw={600} c="dimmed">
+                Trang chủ CMC
+              </Anchor>
+            </div>
+          </div>
 
-          {/* ── Phụ huynh: nhập mã OTP ── */}
-          {mode === 'parent' && otpStep === 'verify' && (
-            <form onSubmit={onOtpVerify}>
-              <Stack>
-                <Text size="sm" c="dimmed">
-                  Mã đã gửi đến: <strong>{parentEmail}</strong>
-                </Text>
-                {devHint && (
-                  <Text size="xs" c="orange">
-                    Mã (dev): {devHint}
-                  </Text>
-                )}
-                <TextInput
-                  label="Mã đăng nhập"
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.currentTarget.value)}
-                  maxLength={6}
-                  required
-                />
-                {otpError && (
-                  <Text c="red" size="sm">
-                    {otpError}
-                  </Text>
-                )}
-                <Button type="submit" loading={busy} fullWidth>
-                  Xác nhận
-                </Button>
-                <Anchor
-                  component="button"
-                  type="button"
-                  size="sm"
-                  ta="center"
-                  onClick={() => {
-                    setOtpStep('request');
-                    setOtpCode('');
-                    setDevHint('');
-                    setOtpError('');
-                  }}
-                >
-                  Đổi email
-                </Anchor>
-              </Stack>
-            </form>
-          )}
+          {/* Form Container Card */}
+          <Paper
+            withBorder
+            shadow="md"
+            p="xl"
+            radius="lg"
+            w="100%"
+            maw={420}
+            style={{
+              background: 'rgba(255, 255, 255, 0.8)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255, 255, 255, 0.4)',
+              boxShadow: '0 8px 32px rgba(0, 113, 227, 0.06)',
+              marginTop: 'auto',
+              marginBottom: 'auto',
+            }}
+          >
+            {/* Header Title for LMS Login */}
+            <Stack align="center" gap={4} mb="xl">
+              <Title order={1} size="h3" ta="center" style={{ color: 'var(--cmc-text)', fontWeight: 800 }}>
+                Học tập cùng {CMC_BRAND.name}
+              </Title>
+              <Text ta="center" size="xs" c="dimmed">
+                Chào mừng bạn! Hãy đăng nhập để bắt đầu học tập.
+              </Text>
+            </Stack>
 
-          {/* ── Học sinh: mã + mật khẩu (không thay đổi) ── */}
-          {mode === 'student' && (
-            <form onSubmit={onStudentSubmit}>
-              <Stack>
-                <TextInput
-                  label="Mã đăng nhập"
-                  value={idField}
-                  onChange={(e) => setIdField(e.currentTarget.value)}
-                  required
-                />
-                <PasswordInput
-                  label="Mật khẩu"
-                  value={password}
-                  onChange={(e) => setPassword(e.currentTarget.value)}
-                  required
-                />
-                {studentError && (
-                  <Text c="red" size="sm">
-                    {studentError}
+            <SegmentedControl
+              fullWidth
+              mb="md"
+              value={mode}
+              onChange={handleModeChange}
+              data={[
+                { value: 'parent', label: 'Phụ huynh' },
+                { value: 'student', label: 'Học sinh' },
+              ]}
+              styles={{
+                root: {
+                  backgroundColor: 'rgba(0, 113, 227, 0.05)',
+                  borderRadius: '10px',
+                  padding: '3px',
+                },
+                indicator: {
+                  backgroundColor: mode === 'parent' ? 'var(--cmc-brand)' : '#fc9d41', // Blue for parent, warm orange for student
+                  borderRadius: '8px',
+                },
+                label: {
+                  fontWeight: 700,
+                  fontSize: '13px',
+                }
+              }}
+            />
+            <Text size="xs" c="dimmed" ta="center" mb="lg">
+              {mode === 'parent'
+                ? 'Phụ huynh đăng nhập bằng email để theo dõi việc học của con.'
+                : 'Học sinh dùng mã đăng nhập và mật khẩu thầy cô đã cấp.'}
+            </Text>
+
+            {/* ── Phụ huynh: OTP hai bước ── */}
+            {mode === 'parent' && otpStep === 'request' && (
+              <form onSubmit={onOtpRequest}>
+                <Stack gap="md">
+                  <TextInput
+                    label="Email phụ huynh"
+                    type="email"
+                    value={parentEmail}
+                    onChange={(e) => setParentEmail(e.currentTarget.value)}
+                    required
+                    placeholder="phuhuynh@example.com"
+                    leftSection={<span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--cmc-text-muted)' }}>mail</span>}
+                    styles={{
+                      input: { height: '44px', borderRadius: '8px' },
+                      label: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' }
+                    }}
+                  />
+                  {otpError && (
+                    <Text c="red" size="sm">
+                      {otpError}
+                    </Text>
+                  )}
+                  <Button
+                    type="submit"
+                    loading={busy}
+                    fullWidth
+                    style={{
+                      height: '44px',
+                      borderRadius: '8px',
+                      backgroundColor: 'var(--cmc-brand)',
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      boxShadow: '0 4px 12px rgba(0, 113, 227, 0.2)'
+                    }}
+                  >
+                    Gửi mã đăng nhập
+                  </Button>
+                </Stack>
+              </form>
+            )}
+
+            {/* ── Phụ huynh: nhập mã OTP ── */}
+            {mode === 'parent' && otpStep === 'verify' && (
+              <form onSubmit={onOtpVerify}>
+                <Stack gap="md">
+                  <Text size="sm" c="dimmed">
+                    Mã đã gửi đến: <strong>{parentEmail}</strong>
                   </Text>
-                )}
-                <Button type="submit" loading={busy} fullWidth>
-                  Đăng nhập
-                </Button>
-              </Stack>
-            </form>
-          )}
+                  {devHint && (
+                    <Text size="xs" c="orange">
+                      Mã (dev): {devHint}
+                    </Text>
+                  )}
+                  <TextInput
+                    label="Mã đăng nhập"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.currentTarget.value)}
+                    maxLength={6}
+                    required
+                    placeholder="Nhập mã OTP 6 chữ số vừa nhận được"
+                    leftSection={<span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--cmc-text-muted)' }}>key</span>}
+                    styles={{
+                      input: { height: '44px', borderRadius: '8px' },
+                      label: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' }
+                    }}
+                  />
+                  {otpError && (
+                    <Text c="red" size="sm">
+                      {otpError}
+                    </Text>
+                  )}
+                  <Button
+                    type="submit"
+                    loading={busy}
+                    fullWidth
+                    style={{
+                      height: '44px',
+                      borderRadius: '8px',
+                      backgroundColor: 'var(--cmc-brand)',
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      boxShadow: '0 4px 12px rgba(0, 113, 227, 0.2)'
+                    }}
+                  >
+                    Xác nhận
+                  </Button>
+                  <Anchor
+                    component="button"
+                    type="button"
+                    size="xs"
+                    ta="center"
+                    onClick={() => {
+                      setOtpStep('request');
+                      setOtpCode('');
+                      setDevHint('');
+                      setOtpError('');
+                    }}
+                    style={{ display: 'inline-block', padding: '8px 16px', marginTop: '4px' }}
+                  >
+                    Đổi email
+                  </Anchor>
+                </Stack>
+              </form>
+            )}
+
+            {/* ── Học sinh: mã + mật khẩu ── */}
+            {mode === 'student' && (
+              <form onSubmit={onStudentSubmit}>
+                <Stack gap="md">
+                  <TextInput
+                    label="Mã đăng nhập"
+                    value={idField}
+                    onChange={(e) => setIdField(e.currentTarget.value)}
+                    required
+                    placeholder="Mã số học sinh (ví dụ: TEST-001)"
+                    leftSection={<span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--cmc-text-muted)' }}>face</span>}
+                    styles={{
+                      input: { height: '44px', borderRadius: '8px' },
+                      label: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' }
+                    }}
+                  />
+                  <PasswordInput
+                    label="Mật khẩu"
+                    value={password}
+                    onChange={(e) => setPassword(e.currentTarget.value)}
+                    required
+                    placeholder="Nhập mật khẩu"
+                    leftSection={<span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--cmc-text-muted)' }}>lock</span>}
+                    styles={{
+                      input: { height: '44px', borderRadius: '8px' },
+                      label: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' }
+                    }}
+                  />
+                  {studentError && (
+                    <Text c="red" size="sm">
+                      {studentError}
+                    </Text>
+                  )}
+                  <Button
+                    type="submit"
+                    loading={busy}
+                    fullWidth
+                    style={{
+                      height: '44px',
+                      borderRadius: '8px',
+                      backgroundColor: '#fc9d41', // Warm orange for student
+                      color: 'var(--cmc-text)', // Fix contrast from 2.1:1 to 8.3:1
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      boxShadow: '0 4px 12px rgba(252, 157, 65, 0.2)'
+                    }}
+                  >
+                    Đăng nhập
+                  </Button>
+                </Stack>
+              </form>
+            )}
           </Paper>
 
           <LmsFooter />
-        </Stack>
+        </div>
       </div>
     );
   }

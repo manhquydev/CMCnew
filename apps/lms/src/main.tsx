@@ -6,7 +6,9 @@ import { App } from './App';
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppProviders>
-      <App />
+      <div className="lms-app-root" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <App />
+      </div>
     </AppProviders>
   </StrictMode>,
 );

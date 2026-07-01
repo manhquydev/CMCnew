@@ -14,7 +14,9 @@ import {
   IconBuilding,
   IconCalendar,
   IconCertificate,
-  IconClipboardCheck,
+    IconClipboardCheck,
+  IconAdjustments,
+  IconWifi,
   IconCurrencyDong,
   IconDoor,
   IconGift,
@@ -60,7 +62,11 @@ export type SectionKey =
   | 'hr'
   | 'kpi'
   | 'compensation'
-  | 'my-payslips';
+  | 'my-payslips'
+  | 'checkin'
+  | 'shift-registration'
+  | 'facility-network'
+  | 'shift-config';
 
 // ─── Nav types ────────────────────────────────────────────────────────────────
 
@@ -415,10 +421,19 @@ export function buildNavGroups({
       ],
     },
     {
+      groupLabel: 'Công ca',
+      items: [
+        { key: 'checkin' as const, label: 'Chấm công', icon: <IconClipboardCheck {...I()} />, visible: visible('checkin') },
+        { key: 'shift-registration' as const, label: 'Đăng ký ca', icon: <IconCalendar {...I()} />, visible: visible('shift-registration') },
+      ],
+    },
+    {
       groupLabel: 'Quản trị',
       items: [
         { key: 'overview' as const, label: 'Tổng quan', icon: <IconLayoutDashboard {...I()} />, visible: visible('overview') },
         { key: 'org' as const, label: 'Cơ sở & Users', icon: <IconBuilding {...I()} />, visible: visible('org') },
+        { key: 'facility-network' as const, label: 'IP WiFi chấm công', icon: <IconWifi {...I()} />, visible: visible('facility-network') },
+        { key: 'shift-config' as const, label: 'Danh mục ca', icon: <IconAdjustments {...I()} />, visible: visible('shift-config') },
       ],
     },
   ];
@@ -450,4 +465,8 @@ export const SECTION_TITLES: Record<SectionKey, string> = {
   levelup: 'Duyệt cấp độ',
   certificate: 'Chứng chỉ',
   'my-payslips': 'Phiếu lương của tôi',
+  checkin: 'Chấm công',
+  'shift-registration': 'Đăng ký ca',
+  'facility-network': 'IP WiFi chấm công',
+  'shift-config': 'Danh mục ca',
 };
