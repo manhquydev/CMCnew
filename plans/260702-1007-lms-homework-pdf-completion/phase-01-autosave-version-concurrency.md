@@ -1,5 +1,7 @@
 # Phase 01 — Autosave + version optimistic concurrency
 
+Status: completed 2026-07-02 for code + TS/API validation. Browser/tablet manual two-tab check not run in this slice.
+
 Closes gaps #1 (no autosave) and #5 (Submission.version unused). Combined because both edit `submission.save` — one phase avoids a double-edit / merge conflict.
 
 ## Context links
@@ -46,13 +48,26 @@ Concurrency: use Prisma `updateMany` with `{ where: { ...key, version: input.ver
 6. Error handler branches on tRPC error code: `CONFLICT` → toast + reload-layer action; `FORBIDDEN` (open-gate) → set an `autosaveFrozen` flag that halts the debounce loop, retains local strokes in state, and shows the "bài đã đóng" message.
 
 ## Todo list
-- [ ] add version to submissionSelect
-- [ ] version-guarded update in save
-- [ ] expose version to client (myLayer or mine)
-- [ ] debounced autosave + flush on close/beforeunload
-- [ ] conflict UX (CONFLICT → reload)
-- [ ] FORBIDDEN-mid-edit UX: freeze autosave loop, keep local strokes, "bài đã đóng" message
-- [ ] manual: two-tab stale-write test
+- [x] add version to submissionSelect
+- [x] version-guarded update in save
+- [x] expose version to client (myLayer or mine)
+- [x] debounced autosave + flush on close/beforeunload
+- [x] conflict UX (CONFLICT → reload)
+- [x] FORBIDDEN-mid-edit UX: freeze autosave loop, keep local strokes, "bài đã đóng" message
+- [ ] manual: two-tab stale-write test (browser/tablet only — code-level race covered by code review fix below)
+
+## Code review fixes 2026-07-02
+
+- Two-tab first-save race: concurrent `create` on the unique(exerciseId,studentId) constraint now catches Prisma P2002 and maps to the same CONFLICT response as a stale version, instead of leaking a raw 500-shaped error (submission.ts).
+- Double-flush on normal modal close: the `beforeunload` effect's cleanup no longer force-flushes unconditionally on every `opened` transition (which fired a redundant save + exercise-open DB check on every close, since `handleClose` already flushes explicitly) — cleanup now only flushes when there's actually unsaved work (student-view.tsx).
+
+## Evidence 2026-07-02
+
+- `pnpm --filter @cmc/api typecheck` PASS.
+- `pnpm --filter @cmc/lms typecheck` PASS.
+- `pnpm --filter @cmc/api exec vitest run test/lms-security-invariants.int.test.ts test/lms-full-lifecycle-e2e.int.test.ts` PASS: 2 files, 14 tests.
+- Inline TS proof: draft create version=1, guarded update version=2, stale version=1 save returns `CONFLICT`.
+- GitNexus: `ExerciseModal` upstream impact LOW / 0 direct graph callers. `submissionRouter` property not indexed as symbol; `submission.save`/`myLayer` caller scan used instead.
 
 ## Success Criteria
 - Drawing survives modal close without manual save.
