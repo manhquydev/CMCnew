@@ -1,7 +1,7 @@
 ---
 title: "Role-flows completion: commission chain + attendance-payroll + HR onboarding + CRM hygiene"
 description: "Close the money-chain (commission attribution, attendance penalties into payslip) and people-chain (full HR onboarding record, delegated shift approval, CRM contact hygiene) gaps across sale / giáo viên / 2 directors."
-status: in_progress
+status: completed
 priority: P1
 effort: 4-5d
 branch: develop
@@ -35,7 +35,7 @@ Required durable artifacts (checkpoints, NOT code):
 | P3 | Commission chain: perm + opp→draft-receipt button + opportunityId pass-through + auto-O5 on approve | completed | [phase-03-commission-chain.md](phase-03-commission-chain.md) |
 | P4 | Attendance→payroll: Payslip deduction column (C1) + post-tax penalty aggregated in assembleSlipData (C2) + override + ICT bucketing + monthlyReport server-side aggregate + history UI + withdraw + notif + delegated approver w/ director bypass (M1) | completed | [phase-04-attendance-payroll.md](phase-04-attendance-payroll.md) |
 | P5 | CRM hygiene: contact directory + dup-phone warning + sale afterSale perm | completed | [phase-05-crm-hygiene.md](phase-05-crm-hygiene.md) |
-| P6 | Validation: parity snapshot + int + e2e + 4 decisions + DEBT + harness trace | pending | [phase-06-validation.md](phase-06-validation.md) |
+| P6 | Validation: parity snapshot + int + e2e + 4 decisions + DEBT + harness trace | completed | [phase-06-validation.md](phase-06-validation.md) |
 
 ## Dependency graph
 

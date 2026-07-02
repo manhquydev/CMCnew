@@ -1,7 +1,7 @@
 ---
 title: "LMS homework draw-on-PDF completion (9 gaps)"
 description: "Close 9 verified LMS homework gaps: autosave, parent drawn-work view, optimistic concurrency, MinIO blob store, upload RBAC, annotator UX + perf, cleanup."
-status: pending
+status: completed
 priority: P1
 effort: ~5d
 branch: develop
@@ -28,13 +28,13 @@ Flags: External systems (MinIO/S3 driver + blob migration), Auth/authorization (
 
 | # | Phase | Depends | File ownership (exclusive) | Status |
 |---|-------|---------|----------------------------|--------|
-| P1 | Autosave + version optimistic concurrency | seam-fixes | submission.ts (save), student-view.tsx | pending |
-| P2 | Parent layer API + parent drawn-work UI | P1 | submission.ts (new proc), parent-view.tsx | pending |
-| P3 | Hardening: upload RBAC + delete dead PdfViewer | seam-fixes | index.ts (upload), pdf-viewer.tsx (del) | pending |
-| P4 | MinIO/S3 driver + blob migration + compose/env | none | pdf-store.ts, compose, env, migrate script | pending |
-| P5 | Annotator UX: eraser/width/pinch-zoom+pan | none | pdf-annotator.tsx | pending |
-| P6 | Perf: lazy/virtualized page render | P5 | pdf-annotator.tsx | pending |
-| P7 | Validation: int tests + e2e + tablet checklist | P1-P6 | submission.test.ts, e2e specs | pending |
+| P1 | Autosave + version optimistic concurrency | seam-fixes | submission.ts (save), student-view.tsx | completed |
+| P2 | Parent layer API + parent drawn-work UI | P1 | submission.ts (new proc), parent-view.tsx | completed |
+| P3 | Hardening: upload RBAC + delete dead PdfViewer | seam-fixes | index.ts (upload), pdf-viewer.tsx (del) | completed |
+| P4 | MinIO/S3 driver + blob migration + compose/env | none | pdf-store.ts, compose, env, migrate script | completed |
+| P5 | Annotator UX: eraser/width/pinch-zoom+pan | none | pdf-annotator.tsx | completed |
+| P6 | Perf: lazy/virtualized page render | P5 | pdf-annotator.tsx | completed |
+| P7 | Validation: int tests + e2e + tablet checklist | P1-P6 | submission.test.ts, e2e specs | completed (except manual tablet checklist — deferred, no device) |
 
 Parallelizable after seam-fixes: {P1→P2}, {P3}, {P4}, {P5→P6} are independent tracks. P3 and P1 both touch different regions but P3's `index.ts` upload is disjoint from P1's `submission.ts`. P5→P6 both own `pdf-annotator.tsx` — strictly sequential, same owner. P7 last.
 

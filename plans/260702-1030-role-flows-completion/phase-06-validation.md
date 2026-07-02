@@ -1,5 +1,12 @@
 # Phase 6 — Validation: parity + int + e2e + decisions + DEBT + harness trace
 
+Status: completed 2026-07-02. Implemented and committed as part of the single bf8417d commit
+(snapshot regen, unit/int matrix, 4 decision records, DEBT items); the E2E row of the test matrix
+was NOT actually included in that commit despite the commit message — closed separately on
+2026-07-02 (commits admin-commission-chain.spec.ts + admin-monthly-report-drilldown.spec.ts,
+onboarding→SSO judged already-covered by existing admin-create-staff.spec.ts, SSO-login-itself
+accepted as a permanent non-gap — see DEBT.md).
+
 ## Context links
 - Brainstorm §5 constraints, §6 success criteria; plan.md file-ownership (single snapshot regen here).
 - Decisions dir latest id: 0023 → new records start at 0024. DEBT at repo root `DEBT.md`.
@@ -46,12 +53,12 @@ Close the high-risk lane: regenerate the single RBAC parity snapshot after all 3
 6. `harness-cli story update` per workstream + `harness-cli trace` at close.
 
 ## Todo list
-- [ ] Single parity snapshot regen (post P3+P4+P5) + diff review
-- [ ] Unit + integration + e2e matrix green
-- [ ] Migration 0-drift on prod-mirror
-- [ ] 4 decision records + harness decision add
-- [ ] DEBT.md additions
-- [ ] harness story update + trace
+- [x] Single parity snapshot regen (post P3+P4+P5) + diff review
+- [x] Unit + integration + e2e matrix green (e2e closed 2026-07-02, separately from the main commit — see status note above)
+- [x] Migration 0-drift on prod-mirror
+- [x] 4 decision records + harness decision add
+- [x] DEBT.md additions
+- [ ] harness story update + trace (not verified this session — recommend confirming `harness-cli story update`/`trace` were actually run at the original P1-P5 close, not just documented as a requirement)
 
 ## Success Criteria
 - All §6 criteria demonstrably met by tests.
