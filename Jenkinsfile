@@ -21,7 +21,7 @@ pipeline {
         checkout scm
         script {
           catchError(buildResult: null, stageResult: 'UNSTABLE') {
-            publishChecks name: 'CMCnew CI', title: 'Build in progress', summary: 'Jenkins build running', status: 'IN_PROGRESS', credentialsId: 'github-token'
+            publishChecks name: 'CMCnew CI', title: 'Build in progress', summary: 'Jenkins build running', status: 'IN_PROGRESS'
           }
         }
       }
@@ -93,18 +93,18 @@ pipeline {
   post {
     success {
       catchError(buildResult: null, stageResult: 'UNSTABLE') {
-        publishChecks name: 'CMCnew CI', title: 'Build passed', summary: 'Lint/typecheck/integration/deploy succeeded', conclusion: 'SUCCESS', credentialsId: 'github-token'
+        publishChecks name: 'CMCnew CI', title: 'Build passed', summary: 'Lint/typecheck/integration/deploy succeeded', conclusion: 'SUCCESS'
       }
     }
     failure {
       echo 'Pipeline FAILED — app stack left at previous state (compose did not switch traffic on a failed build).'
       catchError(buildResult: null, stageResult: 'UNSTABLE') {
-        publishChecks name: 'CMCnew CI', title: 'Build failed', summary: 'See Jenkins console output', conclusion: 'FAILURE', credentialsId: 'github-token'
+        publishChecks name: 'CMCnew CI', title: 'Build failed', summary: 'See Jenkins console output', conclusion: 'FAILURE'
       }
     }
     unstable {
       catchError(buildResult: null, stageResult: 'UNSTABLE') {
-        publishChecks name: 'CMCnew CI', title: 'Build unstable', summary: 'See Jenkins console output', conclusion: 'NEUTRAL', credentialsId: 'github-token'
+        publishChecks name: 'CMCnew CI', title: 'Build unstable', summary: 'See Jenkins console output', conclusion: 'NEUTRAL'
       }
     }
     always  { cleanWs() }
