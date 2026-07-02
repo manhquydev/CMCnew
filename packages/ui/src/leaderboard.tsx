@@ -92,7 +92,6 @@ export function Leaderboard({ studentId, refreshKey = 0 }: { studentId: string; 
         const rank1 = b.entries.find((e) => e.rank === 1);
         const rank2 = b.entries.find((e) => e.rank === 2);
         const rank3 = b.entries.find((e) => e.rank === 3);
-        const listEntries = b.entries.filter((e) => e.rank > 3 || !rank1 || !rank2 || !rank3);
 
         return (
           <Card
@@ -211,7 +210,6 @@ export function Leaderboard({ studentId, refreshKey = 0 }: { studentId: string; 
               </Table.Thead>
               <Table.Tbody>
                 {b.entries.map((e) => {
-                  const isTop3 = e.rank <= 3;
                   return (
                     <Table.Tr
                       key={e.rank}

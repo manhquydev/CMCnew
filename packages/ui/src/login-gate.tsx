@@ -11,7 +11,6 @@ import {
   Text,
   TextInput,
   Title,
-  Box,
   Group,
 } from '@mantine/core';
 import { trpc, API_URL } from './client.js';
