@@ -538,6 +538,7 @@ enum RewardStatus {
   pending
   approved
   rejected
+  delivered
 }
 
 enum GuardianRelation {

@@ -225,6 +225,11 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   rewards: {
     giftCreate: ['giam_doc_kinh_doanh'],
     review: ['giam_doc_kinh_doanh'],
+    giftUpdate: ['giam_doc_kinh_doanh'],
+    giftArchive: ['giam_doc_kinh_doanh'],
+    stockAdjust: ['giam_doc_kinh_doanh'],
+    starAdjust: ['giam_doc_kinh_doanh'],
+    markDelivered: ['giam_doc_kinh_doanh'],
   },
 
   room: {
