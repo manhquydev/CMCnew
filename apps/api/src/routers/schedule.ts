@@ -1,11 +1,13 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
-import { rlsContextOf } from '@cmc/auth';
-import { logEvent } from '@cmc/audit';
+import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
+import { logEvent, diffChanges } from '@cmc/audit';
 import { enumerateSessions, detectConflicts, type SessionLike } from '@cmc/domain-academic';
-import { router, protectedProcedure, requirePermission } from '../trpc.js';
+import { router, protectedProcedure, requirePermission, lmsProcedure } from '../trpc.js';
 import { assertSlotRefsInFacility } from '../lib/slot-refs-guard.js';
+import { recomputeCurriculumMapping } from '../services/curriculum-recompute.js';
+import { DOW_LABEL } from '../lib/day-of-week-label.js';
 
 const dateKey = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -226,15 +228,265 @@ export const scheduleRouter = router({
           })),
           skipDuplicates: true,
         });
+
+        // Recompute the curriculum-unit mapping for the WHOLE batch (not just the new
+        // sessions) — re-running after a slot is added at an earlier weekday must not leave
+        // stale unit assignments on the older sessions.
+        const curriculumMap = await recomputeCurriculumMapping(tx, input.classBatchId, batch.courseId);
+        const curriculumSummary = curriculumMap
+          ? ` | Map curriculum: ${curriculumMap.mappedCount} buổi, ${curriculumMap.overflowCount} buổi dư (null), ${curriculumMap.uncoveredUnits} unit chưa phủ`
+          : '';
+
         await logEvent(tx, {
           facilityId: batch.facilityId,
           entityType: 'class_batch',
           entityId: input.classBatchId,
           type: 'updated',
-          body: `Sinh lịch: tạo ${fresh.length} buổi (bỏ qua ${candidates.length - fresh.length} đã có)`,
+          body: `Sinh lịch: tạo ${fresh.length} buổi (bỏ qua ${candidates.length - fresh.length} đã có)${curriculumSummary}`,
           actorId: ctx.session.userId,
         });
         return { created: fresh.length, skipped: candidates.length - fresh.length };
+      }),
+    ),
+
+  // Sửa khung lịch (thứ/giờ/phòng/GV); tùy chọn áp dụng cho buổi tương lai chưa hủy của
+  // CHÍNH lớp này (batch-scoped — red-team #5). Đổi thứ/giờ → recompute curriculum (Phase 3).
+  editSlot: requirePermission('schedule', 'editSlot')
+    .input(
+      z.object({
+        slotId: z.string().uuid(),
+        dayOfWeek: z.number().int().min(0).max(6).optional(),
+        startTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+        endTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+        roomId: z.string().uuid().nullable().optional(),
+        teacherId: z.string().uuid().nullable().optional(),
+        applyToFuture: z.boolean().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const before = await tx.scheduleSlot.findUniqueOrThrow({ where: { id: input.slotId } });
+        const next = {
+          dayOfWeek: input.dayOfWeek ?? before.dayOfWeek,
+          startTime: input.startTime ?? before.startTime,
+          endTime: input.endTime ?? before.endTime,
+          roomId: input.roomId !== undefined ? input.roomId : before.roomId,
+          teacherId: input.teacherId !== undefined ? input.teacherId : before.teacherId,
+        };
+        if (next.startTime >= next.endTime) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Giờ bắt đầu phải trước giờ kết thúc' });
+        }
+        const batch = await tx.classBatch.findUniqueOrThrow({
+          where: { id: before.classBatchId },
+          select: { id: true, facilityId: true, courseId: true },
+        });
+        await assertSlotRefsInFacility(tx, batch.facilityId, {
+          roomId: next.roomId ?? undefined,
+          teacherId: next.teacherId ?? undefined,
+        });
+
+        const reordered = next.dayOfWeek !== before.dayOfWeek || next.startTime !== before.startTime;
+        let movedCount = 0;
+
+        if (input.applyToFuture) {
+          const today = new Date(new Date().toISOString().slice(0, 10));
+          // Match on the slot's OLD (dayOfWeek, startTime) — a session has no slotId FK, so
+          // this is the only way to identify "buổi thuộc slot này" among the batch's sessions.
+          // getUTCDay matches enumerateSessions' convention (avoids ICT/UTC weekday drift).
+          const candidates = await tx.classSession.findMany({
+            where: {
+              classBatchId: batch.id,
+              status: { not: 'cancelled' },
+              sessionDate: { gte: today },
+              startTime: before.startTime,
+            },
+          });
+          const matching = candidates.filter((s) => s.sessionDate.getUTCDay() === before.dayOfWeek);
+
+          if (matching.length > 0) {
+            const dayDelta = next.dayOfWeek - before.dayOfWeek;
+            const proposed = matching.map((s) => {
+              const d = new Date(s.sessionDate);
+              d.setUTCDate(d.getUTCDate() + dayDelta);
+              return { id: s.id, sessionDate: d, sessionDateKey: dateKey(d) };
+            });
+            const matchingIds = new Set(matching.map((s) => s.id));
+
+            // (b) unique-key collision — the new (sessionDate,startTime) must not already
+            // belong to a different session in this batch (red-team #6: avoid raw P2002).
+            const batchSessions = await tx.classSession.findMany({
+              where: { classBatchId: batch.id, id: { notIn: [...matchingIds] } },
+              select: { sessionDate: true, startTime: true },
+            });
+            const takenKeys = new Set(batchSessions.map((s) => `${dateKey(s.sessionDate)}|${s.startTime}`));
+            for (const p of proposed) {
+              if (takenKeys.has(`${p.sessionDateKey}|${next.startTime}`)) {
+                throw new TRPCError({
+                  code: 'CONFLICT',
+                  message: `Trùng buổi đã có trong lớp: ${p.sessionDateKey} ${next.startTime}`,
+                });
+              }
+            }
+
+            // (a) room/teacher conflict — other batches' sessions in the same facility/window,
+            // excluding the sessions being moved (they don't conflict with themselves).
+            const windowDates = proposed.map((p) => p.sessionDate);
+            const windowMin = windowDates.reduce((a, b) => (a < b ? a : b));
+            const windowMax = windowDates.reduce((a, b) => (a > b ? a : b));
+            const facilitySessions = await tx.classSession.findMany({
+              where: {
+                facilityId: batch.facilityId,
+                status: { not: 'cancelled' },
+                sessionDate: { gte: windowMin, lte: windowMax },
+                id: { notIn: [...matchingIds] },
+              },
+              select: { sessionDate: true, startTime: true, endTime: true, roomId: true, teacherId: true },
+            });
+            const conflicts = detectConflicts(
+              proposed.map((p) => ({
+                sessionDate: p.sessionDateKey,
+                startTime: next.startTime,
+                endTime: next.endTime,
+                roomId: next.roomId ?? null,
+                teacherId: next.teacherId ?? null,
+              })),
+              facilitySessions.map<SessionLike>((s) => ({
+                sessionDate: dateKey(s.sessionDate),
+                startTime: s.startTime,
+                endTime: s.endTime,
+                roomId: s.roomId,
+                teacherId: s.teacherId,
+              })),
+            );
+            if (conflicts.length > 0) {
+              throw new TRPCError({
+                code: 'CONFLICT',
+                message: `Trùng lịch (${conflicts.length}) khi áp dụng buổi tương lai`,
+              });
+            }
+
+            for (const p of proposed) {
+              await tx.classSession.update({
+                where: { id: p.id },
+                data: {
+                  sessionDate: p.sessionDate,
+                  startTime: next.startTime,
+                  endTime: next.endTime,
+                  roomId: next.roomId,
+                  teacherId: next.teacherId,
+                },
+              });
+            }
+            movedCount = proposed.length;
+          }
+        }
+
+        const updatedSlot = await tx.scheduleSlot.update({
+          where: { id: input.slotId },
+          data: {
+            dayOfWeek: next.dayOfWeek,
+            startTime: next.startTime,
+            endTime: next.endTime,
+            roomId: next.roomId,
+            teacherId: next.teacherId,
+          },
+        });
+
+        const changes = diffChanges(before, updatedSlot, [
+          'dayOfWeek',
+          'startTime',
+          'endTime',
+          'roomId',
+          'teacherId',
+        ]);
+        const futureNote = input.applyToFuture ? `Áp dụng cho ${movedCount} buổi tương lai` : undefined;
+        if (changes.length > 0 || movedCount > 0) {
+          await logEvent(tx, {
+            facilityId: batch.facilityId,
+            entityType: 'class_batch',
+            entityId: batch.id,
+            type: 'updated',
+            changes: changes.length > 0 ? changes : undefined,
+            body: futureNote,
+            actorId: ctx.session.userId,
+          });
+        }
+
+        // Reorder (day/time changed) with sessions actually moved → the curriculum-unit
+        // mapping's chronological order may have shifted; recompute the whole batch.
+        if (reordered && movedCount > 0) {
+          await recomputeCurriculumMapping(tx, batch.id, batch.courseId);
+        }
+
+        return { slot: updatedSlot, movedSessions: movedCount };
+      }),
+    ),
+
+  // LMS-facing: buổi học của (các) HS mà principal sở hữu, kèm nội dung curriculum theo
+  // buổi (chủ đề/nội dung/tư duy/assessment). curriculumUnit null-safe — buổi chưa map vẫn
+  // hiển thị (chỉ thiếu phần nội dung khung). Không cần permission registry — lmsProcedure
+  // gates by principal ownership, không phải theo role nhân viên.
+  sessionsForStudent: lmsProcedure
+    .input(z.object({ studentId: z.string().uuid().optional() }).optional())
+    .query(({ ctx, input }) =>
+      withRls(lmsRlsContextOf(ctx.lms), async (tx) => {
+        const studentIds = input?.studentId ? [input.studentId] : ctx.lms.studentIds;
+        for (const id of studentIds) {
+          if (!ctx.lms.studentIds.includes(id)) {
+            throw new TRPCError({ code: 'FORBIDDEN', message: 'Không có quyền xem học sinh này' });
+          }
+        }
+        return tx.classSession.findMany({
+          where: {
+            status: { not: 'cancelled' },
+            batch: { enrollments: { some: { studentId: { in: studentIds }, archivedAt: null } } },
+          },
+          select: {
+            id: true,
+            sessionDate: true,
+            startTime: true,
+            endTime: true,
+            status: true,
+            batch: { select: { id: true, code: true, name: true } },
+            curriculumUnit: {
+              select: {
+                unitCode: true,
+                unitType: true,
+                theme: true,
+                content: true,
+                thinkingGoal: true,
+                assessment: true,
+              },
+            },
+          },
+          orderBy: [{ sessionDate: 'asc' }, { startTime: 'asc' }],
+        });
+      }),
+    ),
+
+  // Xóa khung lịch (soft-archive) — buổi đã sinh từ khung này KHÔNG bị xóa (giữ audit/điểm danh).
+  removeSlot: requirePermission('schedule', 'removeSlot')
+    .input(z.object({ slotId: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const slot = await tx.scheduleSlot.findUniqueOrThrow({ where: { id: input.slotId } });
+        const batch = await tx.classBatch.findUniqueOrThrow({
+          where: { id: slot.classBatchId },
+          select: { facilityId: true },
+        });
+        const archived = await tx.scheduleSlot.update({
+          where: { id: input.slotId },
+          data: { archivedAt: new Date() },
+        });
+        await logEvent(tx, {
+          facilityId: batch.facilityId,
+          entityType: 'class_batch',
+          entityId: slot.classBatchId,
+          type: 'updated',
+          body: `Xóa khung lịch: ${DOW_LABEL[slot.dayOfWeek]} ${slot.startTime}-${slot.endTime} (buổi đã sinh vẫn giữ nguyên)`,
+          actorId: ctx.session.userId,
+        });
+        return archived;
       }),
     ),
 });

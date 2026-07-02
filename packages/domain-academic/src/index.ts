@@ -8,7 +8,10 @@ export {
 export {
   enumerateSessions,
   detectConflicts,
+  assignUnitsToSessions,
   type SlotInput,
   type SessionLike,
   type Conflict,
+  type ExpandableUnit,
+  type AssignUnitsResult,
 } from './schedule.js';

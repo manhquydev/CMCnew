@@ -9,9 +9,21 @@ const program = z.nativeEnum(Program);
 // Course is a GLOBAL catalog (no facility) → audit events carry facilityId: null.
 export const courseRouter = router({
   list: protectedProcedure.query(({ ctx }) =>
-    withRls(rlsContextOf(ctx.session), (tx) =>
-      tx.course.findMany({ where: { archivedAt: null }, orderBy: { code: 'asc' } }),
-    ),
+    withRls(rlsContextOf(ctx.session), async (tx) => {
+      const courses = await tx.course.findMany({
+        where: { archivedAt: null },
+        orderBy: { code: 'asc' },
+        include: { _count: { select: { units: true } } },
+      });
+      // Total curriculum sessions per course = Σ unit.sessions — one grouped query avoids N+1.
+      const sums = await tx.curriculumUnit.groupBy({ by: ['courseId'], _sum: { sessions: true } });
+      const totalByCourse = new Map(sums.map((s) => [s.courseId, s._sum.sessions ?? 0]));
+      return courses.map(({ _count, ...course }) => ({
+        ...course,
+        unitCount: _count.units,
+        totalSessions: totalByCourse.get(course.id) ?? 0,
+      }));
+    }),
   ),
 
   create: requirePermission('course', 'create')

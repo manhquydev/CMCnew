@@ -53,6 +53,7 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   // Education Director can open/close classes and manage their lifecycle.
   classBatch: {
     create: ['giam_doc_dao_tao'],
+    update: ['giam_doc_dao_tao'],
     setStatus: ['giam_doc_dao_tao'],
     cancel: ['giam_doc_dao_tao'],
     reopen: ['giam_doc_dao_tao'],
@@ -214,6 +215,8 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   schedule: {
     addSlot: ['giam_doc_dao_tao'],
     generateSessions: ['giam_doc_dao_tao'],
+    editSlot: ['giam_doc_dao_tao'],
+    removeSlot: ['giam_doc_dao_tao'],
   },
 
   student: {

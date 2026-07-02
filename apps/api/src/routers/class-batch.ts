@@ -3,14 +3,45 @@ import { TRPCError } from '@trpc/server';
 import { withRls, ClassStatus } from '@cmc/db';
 import type { Prisma } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
-import { logEvent, logStatusChange, addFollower } from '@cmc/audit';
+import { logEvent, logStatusChange, addFollower, diffChanges } from '@cmc/audit';
 import { router, protectedProcedure, requirePermission } from '../trpc.js';
 import { nextBatchCode } from '../services/batch-code.js';
 import { emitStaffNotif } from '../lib/emit-staff-notif.js';
 import { assertSlotRefsInFacility } from '../lib/slot-refs-guard.js';
+import { DOW_LABEL } from '../lib/day-of-week-label.js';
 
 const ENTITY = 'class_batch';
 const TERMINAL_STATUSES: ClassStatus[] = ['closed', 'cancelled'];
+
+const slotSchema = z
+  .object({
+    dayOfWeek: z.number().int().min(0).max(6),
+    startTime: z.string().regex(/^\d{2}:\d{2}$/),
+    endTime: z.string().regex(/^\d{2}:\d{2}$/),
+    roomId: z.string().uuid().optional(),
+    teacherId: z.string().uuid().optional(),
+  })
+  .refine((v) => v.startTime < v.endTime, {
+    message: 'Giờ bắt đầu phải trước giờ kết thúc',
+    path: ['endTime'],
+  });
+type SlotInputShape = z.infer<typeof slotSchema>;
+
+/** Reject two slots with the same (dayOfWeek, startTime) — createMany's skipDuplicates would
+ * otherwise drop one silently, and detectConflicts doesn't catch it (no room/teacher overlap). */
+function assertNoDuplicateSlots(slots: SlotInputShape[]): void {
+  const seen = new Set<string>();
+  for (const s of slots) {
+    const key = `${s.dayOfWeek}|${s.startTime}`;
+    if (seen.has(key)) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `Trùng khung lịch: ${DOW_LABEL[s.dayOfWeek]} ${s.startTime}`,
+      });
+    }
+    seen.add(key);
+  }
+}
 
 /** Soft-cancel future scheduled parent meetings for a class batch. Returns cancelled count. */
 async function cancelFutureParentMeetings(
@@ -67,16 +98,10 @@ export const classBatchRouter = router({
         startDate: z.string().date().optional(),
         endDate: z.string().date().optional(),
         capacity: z.number().int().positive().optional(),
-        initialSlot: z.object({
-          dayOfWeek: z.number().int().min(0).max(6),
-          startTime: z.string().regex(/^\d{2}:\d{2}$/),
-          endTime: z.string().regex(/^\d{2}:\d{2}$/),
-          roomId: z.string().uuid().optional(),
-          teacherId: z.string().uuid().optional(),
-        }).refine((v) => v.startTime < v.endTime, {
-          message: 'Giờ bắt đầu phải trước giờ kết thúc',
-          path: ['endTime'],
-        }).optional(),
+        // slots is the current shape (0..n weekly slots); initialSlot is kept for backward
+        // compatibility with older clients and normalized into slots below.
+        initialSlot: slotSchema.optional(),
+        slots: z.array(slotSchema).optional(),
       }).refine((v) => !v.startDate || !v.endDate || v.startDate <= v.endDate, {
         message: 'Ngày khai giảng phải trước ngày kết thúc',
         path: ['endDate'],
@@ -84,6 +109,9 @@ export const classBatchRouter = router({
     )
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
+        const slots: SlotInputShape[] = input.slots ?? (input.initialSlot ? [input.initialSlot] : []);
+        assertNoDuplicateSlots(slots);
+
         const year = input.startDate
           ? new Date(input.startDate).getUTCFullYear()
           : new Date().getUTCFullYear();
@@ -100,21 +128,21 @@ export const classBatchRouter = router({
             status: 'planned',
           },
         });
-        if (input.initialSlot) {
+        for (const slot of slots) {
           // Facility-membership guard: schedule_slot has no DB FK on room_id /
           // teacher_id, so the app layer must reject cross-facility or fabricated
           // refs before the slot is created (design.md "scoped to facility" is
           // UI-only; the API is the trust boundary).
-          await assertSlotRefsInFacility(tx, batch.facilityId, input.initialSlot);
+          await assertSlotRefsInFacility(tx, batch.facilityId, slot);
           await tx.scheduleSlot.create({
             data: {
               facilityId: batch.facilityId,
               classBatchId: batch.id,
-              dayOfWeek: input.initialSlot.dayOfWeek,
-              startTime: input.initialSlot.startTime,
-              endTime: input.initialSlot.endTime,
-              roomId: input.initialSlot.roomId ?? null,
-              teacherId: input.initialSlot.teacherId ?? null,
+              dayOfWeek: slot.dayOfWeek,
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+              roomId: slot.roomId ?? null,
+              teacherId: slot.teacherId ?? null,
             },
           });
         }
@@ -125,17 +153,69 @@ export const classBatchRouter = router({
           type: 'created',
           actorId: ctx.session.userId,
         });
-        if (input.initialSlot) {
+        if (slots.length > 0) {
+          const listing = slots.map((s) => `${DOW_LABEL[s.dayOfWeek]} ${s.startTime}-${s.endTime}`).join('; ');
           await logEvent(tx, {
             facilityId: batch.facilityId,
             entityType: ENTITY,
             entityId: batch.id,
             type: 'updated',
-            body: `Khung lịch đầu tiên: thứ ${input.initialSlot.dayOfWeek} ${input.initialSlot.startTime}-${input.initialSlot.endTime}`,
+            body: `Khung lịch (${slots.length}): ${listing}`,
             actorId: ctx.session.userId,
           });
         }
         await addFollower(tx, ENTITY, batch.id, ctx.session.userId);
+        return batch;
+      }),
+    ),
+
+  update: requirePermission('classBatch', 'update')
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string().min(1).optional(),
+        startDate: z.string().date().optional(),
+        endDate: z.string().date().optional(),
+        capacity: z.number().int().positive().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const before = await tx.classBatch.findUniqueOrThrow({ where: { id: input.id } });
+        const batch = await tx.classBatch.update({
+          where: { id: input.id },
+          data: {
+            ...(input.name !== undefined ? { name: input.name } : {}),
+            ...(input.startDate !== undefined ? { startDate: new Date(input.startDate) } : {}),
+            ...(input.endDate !== undefined ? { endDate: new Date(input.endDate) } : {}),
+            ...(input.capacity !== undefined ? { capacity: input.capacity } : {}),
+          },
+        });
+        // Compare primitive snapshots (not raw Prisma Date objects) — two separate Date
+        // instances for the same instant are never === to each other, which would make
+        // diffChanges report a false "change" on every update even when nothing moved.
+        const snapshot = (b: typeof before) => ({
+          name: b.name,
+          startDate: b.startDate ? b.startDate.toISOString().slice(0, 10) : null,
+          endDate: b.endDate ? b.endDate.toISOString().slice(0, 10) : null,
+          capacity: b.capacity,
+        });
+        const changes = diffChanges(snapshot(before), snapshot(batch), [
+          'name',
+          'startDate',
+          'endDate',
+          'capacity',
+        ]);
+        if (changes.length > 0) {
+          await logEvent(tx, {
+            facilityId: batch.facilityId,
+            entityType: ENTITY,
+            entityId: batch.id,
+            type: 'updated',
+            changes,
+            actorId: ctx.session.userId,
+          });
+        }
         return batch;
       }),
     ),

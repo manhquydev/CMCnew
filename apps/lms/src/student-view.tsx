@@ -29,11 +29,12 @@ import {
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconCircleCheck, IconClock, IconPencil, IconAlertCircle, IconStar, IconBook2, IconGift, IconTrophy } from '@tabler/icons-react';
+import { IconCircleCheck, IconClock, IconPencil, IconAlertCircle, IconStar, IconBook2, IconGift } from '@tabler/icons-react';
 import { ClimbView } from './climb-view';
 import { SessionEvidenceTab } from './session-evidence-tab';
+import { CurriculumSessionsTab } from './curriculum-sessions-tab';
 
-export type StudentTab = 'overview' | 'exercises' | 'results' | 'gradebook' | 'badges' | 'ranking' | 'rewards' | 'courses' | 'sessions';
+export type StudentTab = 'overview' | 'exercises' | 'results' | 'gradebook' | 'badges' | 'ranking' | 'rewards' | 'courses' | 'sessions' | 'schedule';
 
 type Exercise = Awaited<ReturnType<typeof trpc.exercise.listForPrincipal.query>>[number];
 type Submission = Awaited<ReturnType<typeof trpc.submission.mine.query>>[number];
@@ -910,6 +911,12 @@ export function StudentView({ principal, activeTab, onTabChange: _onTabChange, o
       case 'sessions':
         return principal.studentIds[0] ? (
           <SessionEvidenceTab studentId={principal.studentIds[0]} refreshKey={refreshKey} />
+        ) : (
+          <Text c="dimmed">Không có học sinh liên kết.</Text>
+        );
+      case 'schedule':
+        return principal.studentIds[0] ? (
+          <CurriculumSessionsTab studentId={principal.studentIds[0]} refreshKey={refreshKey} />
         ) : (
           <Text c="dimmed">Không có học sinh liên kết.</Text>
         );

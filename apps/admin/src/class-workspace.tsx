@@ -6,12 +6,13 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dayjs from 'dayjs';
-import { trpc, Chatter, notifyError, useSession } from '@cmc/ui';
+import { trpc, Chatter, notifyError, notifySuccess, useSession } from '@cmc/ui';
 import { can } from '@cmc/auth/permissions';
 import {
   Badge,
   Button,
   Card,
+  Checkbox,
   Grid,
   Group,
   Loader,
@@ -67,6 +68,17 @@ export interface NavAction {
 
 // ─── CreateClassModal ─────────────────────────────────────────────────────────
 
+interface SlotRow {
+  key: number;
+  day: string;
+  start: string;
+  end: string;
+  roomId: string | null;
+  teacherId: string | null;
+}
+type CurriculumPreview = Awaited<ReturnType<typeof trpc.curriculum.listByCourse.query>>;
+const newSlotRow = (key: number): SlotRow => ({ key, day: '1', start: '18:00', end: '19:30', roomId: null, teacherId: null });
+
 function CreateClassModal({
   facilityId,
   courses,
@@ -86,21 +98,57 @@ function CreateClassModal({
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [capacity, setCapacity] = useState<number | string>('');
-  const [slotDay, setSlotDay] = useState<string | null>('1');
-  const [slotStart, setSlotStart] = useState('18:00');
-  const [slotEnd, setSlotEnd] = useState('19:30');
-  const [slotRoomId, setSlotRoomId] = useState<string | null>(null);
-  const [slotTeacherId, setSlotTeacherId] = useState<string | null>(null);
+  // Multiple weekly slots (nhiều thứ/tuần). Sent as `slots[]`; server rejects duplicate (thứ,giờ).
+  const [slots, setSlots] = useState<SlotRow[]>([newSlotRow(0)]);
+  const slotKey = useRef(1);
+  const [preview, setPreview] = useState<CurriculumPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
-  async function create() {
-    if (!courseId || !name) {
-      setErr('Chọn khóa học và nhập tên lớp');
+  // Fetch the hard-coded curriculum framework for the chosen course (read-only preview).
+  useEffect(() => {
+    if (!courseId) {
+      setPreview(null);
       return;
     }
-    if (!slotDay || !slotStart || !slotEnd) {
-      setErr('Nhập lịch học đầu tiên của lớp');
+    let live = true;
+    trpc.curriculum.listByCourse
+      .query({ courseId })
+      .then((r) => live && setPreview(r))
+      .catch(() => live && setPreview(null));
+    return () => {
+      live = false;
+    };
+  }, [courseId]);
+
+  function updateSlot(key: number, patch: Partial<SlotRow>) {
+    setSlots((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  }
+  function addSlot() {
+    setSlots((rows) => [...rows, newSlotRow(slotKey.current++)]);
+  }
+  function removeSlot(key: number) {
+    setSlots((rows) => (rows.length > 1 ? rows.filter((r) => r.key !== key) : rows));
+  }
+
+  function reset() {
+    setName('');
+    setCourseId(null);
+    setStartDate(null);
+    setEndDate(null);
+    setCapacity('');
+    setSlots([newSlotRow(0)]);
+    slotKey.current = 1;
+    setPreview(null);
+  }
+
+  async function create() {
+    if (!courseId || !name) {
+      setErr('Chọn khung chương trình và nhập tên lớp');
+      return;
+    }
+    if (slots.some((s) => !s.day || !s.start || !s.end)) {
+      setErr('Mỗi khung lịch cần thứ + giờ bắt đầu/kết thúc');
       return;
     }
     setBusy(true);
@@ -113,25 +161,16 @@ function CreateClassModal({
         startDate: toApiDate(startDate),
         endDate: toApiDate(endDate),
         capacity: typeof capacity === 'number' ? capacity : undefined,
-        initialSlot: {
-          dayOfWeek: Number(slotDay),
-          startTime: slotStart,
-          endTime: slotEnd,
-          roomId: slotRoomId ?? undefined,
-          teacherId: slotTeacherId ?? undefined,
-        },
+        slots: slots.map((s) => ({
+          dayOfWeek: Number(s.day),
+          startTime: s.start,
+          endTime: s.end,
+          roomId: s.roomId ?? undefined,
+          teacherId: s.teacherId ?? undefined,
+        })),
       });
       close();
-      setName('');
-      setCourseId(null);
-      setStartDate(null);
-      setEndDate(null);
-      setCapacity('');
-      setSlotDay('1');
-      setSlotStart('18:00');
-      setSlotEnd('19:30');
-      setSlotRoomId(null);
-      setSlotTeacherId(null);
+      reset();
       onCreated();
     } catch (e) {
       setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
@@ -145,15 +184,38 @@ function CreateClassModal({
       <Button size="xs" onClick={open}>
         + Tạo lớp
       </Button>
-      <Modal opened={opened} onClose={close} title="Tạo lớp học">
+      <Modal opened={opened} onClose={close} title="Tạo lớp học" size="lg">
         <Stack>
           <Select
-            label="Khóa học"
-            placeholder={courses.length ? 'Chọn khóa' : 'Chưa có khóa học (tạo ở Khóa học)'}
-            data={courses.map((c) => ({ value: c.id, label: `${c.code} — ${c.name} (${c.program})` }))}
+            label="Khung chương trình (khóa cứng)"
+            placeholder={courses.length ? 'Chọn chương trình → level' : 'Chưa có khung (chạy seed:curriculum)'}
+            searchable
+            data={courses.map((c) => ({
+              value: c.id,
+              label: `${c.code} — ${c.name}${c.unitCount ? ` · ${c.unitCount} unit / ${c.totalSessions} buổi` : ''}`,
+            }))}
             value={courseId}
             onChange={setCourseId}
           />
+          {preview && preview.unitCount > 0 && (
+            <Card withBorder bg="var(--mantine-color-gray-0)">
+              <Text fw={600} size="sm" mb={4}>
+                Khung khóa cứng: {preview.unitCount} unit · {preview.totalSessions} buổi (không sửa được)
+              </Text>
+              <Table striped fz="xs">
+                <Table.Tbody>
+                  {preview.units.map((u, i) => (
+                    <Table.Tr key={u.id}>
+                      <Table.Td w={28}>{i + 1}</Table.Td>
+                      <Table.Td>{u.theme}</Table.Td>
+                      <Table.Td w={70}>{u.unitType === 'REVIEW' ? 'Ôn/Thi' : 'Bài học'}</Table.Td>
+                      <Table.Td w={54}>{u.sessions} buổi</Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Card>
+          )}
           <TextInput label="Tên lớp" value={name} onChange={(e) => setName(e.currentTarget.value)} />
           <Group grow>
             <DateInput label="Khai giảng" value={startDate} onChange={setStartDate} valueFormat="DD/MM/YYYY" clearable />
@@ -161,48 +223,135 @@ function CreateClassModal({
           </Group>
           <NumberInput label="Sĩ số tối đa (tùy chọn)" value={capacity} onChange={setCapacity} min={1} />
           <Card withBorder>
-            <Stack gap="xs">
-              <Text fw={600} size="sm">Khung giờ buổi học đầu tiên</Text>
-              <Text size="xs" c="dimmed">
-                Hệ thống dùng khung này để sinh buổi học theo lịch. Có thể thêm khung khác trong tab Lịch sau khi tạo lớp.
-              </Text>
-              <Group align="flex-end">
-                <Select
-                  label="Thứ"
-                  w={110}
-                  data={DOW.map((l, i) => ({ value: String(i), label: l }))}
-                  value={slotDay}
-                  onChange={setSlotDay}
-                />
-                <TextInput label="Bắt đầu" w={110} value={slotStart} onChange={(e) => setSlotStart(e.currentTarget.value)} />
-                <TextInput label="Kết thúc" w={110} value={slotEnd} onChange={(e) => setSlotEnd(e.currentTarget.value)} />
-              </Group>
-              <Group grow>
-                <Select
-                  label="Phòng"
-                  clearable
-                  placeholder={rooms.length ? 'Chọn phòng' : 'Chưa có phòng'}
-                  data={rooms.map((r) => ({ value: r.id, label: `${r.code} — ${r.name}` }))}
-                  value={slotRoomId}
-                  onChange={setSlotRoomId}
-                />
-                <Select
-                  label="Giáo viên"
-                  clearable
-                  searchable
-                  placeholder={teachers.length ? 'Chọn GV' : 'Chưa có GV'}
-                  data={teachers.map((t) => ({ value: t.id, label: t.displayName }))}
-                  value={slotTeacherId}
-                  onChange={setSlotTeacherId}
-                />
-              </Group>
+            <Group justify="space-between" mb="xs">
+              <Text fw={600} size="sm">Khung giờ trong tuần</Text>
+              <Button size="xs" variant="light" onClick={addSlot}>+ Thêm thứ</Button>
+            </Group>
+            <Text size="xs" c="dimmed" mb="sm">
+              Nhiều thứ/tuần đều được. Gán phòng/GV để hệ thống chặn cứng trùng lịch khi sinh buổi.
+            </Text>
+            <Stack gap="sm">
+              {slots.map((s) => (
+                <Group key={s.key} align="flex-end" wrap="nowrap">
+                  <Select
+                    label="Thứ" w={90}
+                    data={DOW.map((l, i) => ({ value: String(i), label: l }))}
+                    value={s.day} onChange={(v) => updateSlot(s.key, { day: v ?? '1' })}
+                  />
+                  <TextInput label="Bắt đầu" w={80} value={s.start} onChange={(e) => updateSlot(s.key, { start: e.currentTarget.value })} />
+                  <TextInput label="Kết thúc" w={80} value={s.end} onChange={(e) => updateSlot(s.key, { end: e.currentTarget.value })} />
+                  <Select
+                    label="Phòng" w={120} clearable
+                    placeholder={rooms.length ? 'Phòng' : '—'}
+                    data={rooms.map((r) => ({ value: r.id, label: r.code }))}
+                    value={s.roomId} onChange={(v) => updateSlot(s.key, { roomId: v })}
+                  />
+                  <Select
+                    label="GV" w={140} clearable searchable
+                    placeholder={teachers.length ? 'GV' : '—'}
+                    data={teachers.map((t) => ({ value: t.id, label: t.displayName }))}
+                    value={s.teacherId} onChange={(v) => updateSlot(s.key, { teacherId: v })}
+                  />
+                  <Button
+                    size="xs" color="red" variant="subtle" px={8}
+                    disabled={slots.length === 1}
+                    onClick={() => removeSlot(s.key)}
+                  >✕</Button>
+                </Group>
+              ))}
             </Stack>
           </Card>
           {err && <Text c="red" size="sm">{err}</Text>}
-          <Button onClick={create} loading={busy}>Tạo</Button>
+          <Button onClick={create} loading={busy}>Tạo lớp (1 click)</Button>
         </Stack>
       </Modal>
     </>
+  );
+}
+
+// ─── Slot edit/remove ─────────────────────────────────────────────────────────
+
+type Slot = Awaited<ReturnType<typeof trpc.schedule.listSlots.query>>[number];
+
+function SlotEditModal({
+  slot,
+  rooms,
+  teachers,
+  onClose,
+  onSaved,
+}: {
+  slot: Slot;
+  rooms: Room[];
+  teachers: Teacher[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [day, setDay] = useState<string | null>(String(slot.dayOfWeek));
+  const [start, setStart] = useState(slot.startTime);
+  const [end, setEnd] = useState(slot.endTime);
+  const [roomId, setRoomId] = useState<string | null>(slot.roomId);
+  const [teacherId, setTeacherId] = useState<string | null>(slot.teacherId);
+  const [applyToFuture, setApplyToFuture] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function save() {
+    setBusy(true);
+    setErr('');
+    try {
+      const r = await trpc.schedule.editSlot.mutate({
+        slotId: slot.id,
+        dayOfWeek: Number(day),
+        startTime: start,
+        endTime: end,
+        roomId: roomId,
+        teacherId: teacherId,
+        applyToFuture,
+      });
+      notifySuccess(
+        applyToFuture ? `Đã cập nhật khung + ${r.movedSessions} buổi tương lai` : 'Đã cập nhật khung lịch',
+      );
+      onSaved();
+      onClose();
+    } catch (e) {
+      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal opened onClose={onClose} title="Sửa khung lịch">
+      <Stack>
+        <Group align="flex-end">
+          <Select label="Thứ" w={100} data={DOW.map((l, i) => ({ value: String(i), label: l }))} value={day} onChange={setDay} />
+          <TextInput label="Bắt đầu" w={90} value={start} onChange={(e) => setStart(e.currentTarget.value)} />
+          <TextInput label="Kết thúc" w={90} value={end} onChange={(e) => setEnd(e.currentTarget.value)} />
+        </Group>
+        <Group grow>
+          <Select
+            label="Phòng" clearable
+            data={rooms.map((r) => ({ value: r.id, label: `${r.code} — ${r.name}` }))}
+            value={roomId} onChange={setRoomId}
+          />
+          <Select
+            label="Giáo viên" clearable searchable
+            data={teachers.map((t) => ({ value: t.id, label: t.displayName }))}
+            value={teacherId} onChange={setTeacherId}
+          />
+        </Group>
+        <Checkbox
+          label="Áp dụng cho các buổi tương lai chưa hủy của lớp này"
+          checked={applyToFuture}
+          onChange={(e) => setApplyToFuture(e.currentTarget.checked)}
+        />
+        <Text size="xs" c="dimmed">
+          Buổi đã qua giữ nguyên. Hệ thống chặn nếu trùng phòng/GV hoặc trùng buổi đã có.
+        </Text>
+        {err && <Text c="red" size="sm">{err}</Text>}
+        <Button onClick={save} loading={busy}>Lưu</Button>
+      </Stack>
+    </Modal>
   );
 }
 
@@ -221,6 +370,9 @@ function ScheduleTab({
 }) {
   const { me } = useSession();
   const canAddSlot = can(me.roles, me.isSuperAdmin, 'schedule', 'addSlot');
+  const canEditSlot = can(me.roles, me.isSuperAdmin, 'schedule', 'editSlot');
+  const canRemoveSlot = can(me.roles, me.isSuperAdmin, 'schedule', 'removeSlot');
+  const [editing, setEditing] = useState<Slot | null>(null);
   const [slots, setSlots] = useState<Awaited<ReturnType<typeof trpc.schedule.listSlots.query>>>([]);
   const [day, setDay] = useState<string | null>('1');
   const [start, setStart] = useState('18:00');
@@ -279,6 +431,19 @@ function ScheduleTab({
     }
   }
 
+  async function removeSlot(slot: Slot) {
+    if (!window.confirm(`Xóa khung ${DOW[slot.dayOfWeek]} ${slot.startTime}-${slot.endTime}? Buổi đã sinh vẫn giữ nguyên.`)) return;
+    try {
+      await trpc.schedule.removeSlot.mutate({ slotId: slot.id });
+      notifySuccess('Đã xóa khung lịch');
+      load();
+    } catch (e) {
+      notifyError(e, 'Xóa khung lịch thất bại');
+    }
+  }
+
+  const showActions = canEditSlot || canRemoveSlot;
+
   return (
     <Stack>
       <Card withBorder>
@@ -322,6 +487,7 @@ function ScheduleTab({
                 <Table.Th>Giờ</Table.Th>
                 <Table.Th>Phòng</Table.Th>
                 <Table.Th>Giáo viên</Table.Th>
+                {showActions && <Table.Th>Thao tác</Table.Th>}
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -331,12 +497,33 @@ function ScheduleTab({
                   <Table.Td>{s.startTime} - {s.endTime}</Table.Td>
                   <Table.Td>{roomLabel(s.roomId)}</Table.Td>
                   <Table.Td>{teacherLabel(s.teacherId)}</Table.Td>
+                  {showActions && (
+                    <Table.Td>
+                      <Group gap={6}>
+                        {canEditSlot && (
+                          <Button size="compact-xs" variant="light" onClick={() => setEditing(s)}>Sửa</Button>
+                        )}
+                        {canRemoveSlot && (
+                          <Button size="compact-xs" variant="light" color="red" onClick={() => removeSlot(s)}>Xóa</Button>
+                        )}
+                      </Group>
+                    </Table.Td>
+                  )}
                 </Table.Tr>
               ))}
             </Table.Tbody>
           </Table>
         )}
       </Card>
+      {editing && (
+        <SlotEditModal
+          slot={editing}
+          rooms={rooms}
+          teachers={teachers}
+          onClose={() => setEditing(null)}
+          onSaved={load}
+        />
+      )}
       {canAddSlot && (
         <Card withBorder>
           <Text fw={600} mb="xs">Sinh buổi học</Text>

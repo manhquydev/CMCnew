@@ -3,6 +3,15 @@ import type { Prisma } from '@prisma/client';
 
 export * from '@prisma/client';
 export { hashPassword, verifyPassword } from './password.js';
+export {
+  seedCurriculum,
+  parseCsv,
+  parseCurriculumRows,
+  courseCode,
+  defaultCsvPath,
+  type CurriculumRow,
+  type SeedCurriculumResult,
+} from './seed-curriculum.js';
 
 type PrismaTx = Prisma.TransactionClient;
 

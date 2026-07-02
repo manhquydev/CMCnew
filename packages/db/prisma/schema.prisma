@@ -33,6 +33,12 @@ enum Program {
   BLACK_HOLE
 }
 
+/// A curriculum unit is either a teaching unit or a review/exam unit.
+enum UnitType {
+  LESSON
+  REVIEW
+}
+
 enum StudentLifecycle {
   admitted
   active
@@ -142,18 +148,43 @@ model UserFacility {
 
 /// Course catalog — GLOBAL (dùng chung mọi cơ sở). No facility_id, no RLS.
 model Course {
-  id          String        @id @default(uuid()) @db.Uuid
-  code        String        @unique
+  id          String           @id @default(uuid()) @db.Uuid
+  code        String           @unique
   name        String
   program     Program
+  levelCode   String?          @map("level_code")
   description String?
-  archivedAt  DateTime?     @map("archived_at")
-  createdAt   DateTime      @default(now()) @map("created_at")
+  archivedAt  DateTime?        @map("archived_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
   batches     ClassBatch[]
   prices      CoursePrice[]
   receipts    Receipt[]
+  units       CurriculumUnit[]
 
   @@map("course")
+}
+
+/// Hard-coded curriculum framework unit — global (not facility-scoped), seeded from
+/// curriculum_units_seed.csv. One unit expands into `sessions` real ClassSessions when a class runs.
+/// No RLS: readable app-wide via GRANT like `course`; any future mutation MUST gate at the app layer.
+model CurriculumUnit {
+  id            String         @id @default(uuid()) @db.Uuid
+  courseId      String         @map("course_id") @db.Uuid
+  course        Course         @relation(fields: [courseId], references: [id])
+  unitCode      String         @unique @map("unit_code")
+  seqInLevel    Int            @map("seq_in_level")
+  orderGlobal   Int            @map("order_global")
+  unitType      UnitType       @map("unit_type")
+  assessment    String?
+  theme         String
+  content       String?
+  thinkingGoal  String?        @map("thinking_goal")
+  sessions      Int
+  createdAt     DateTime       @default(now()) @map("created_at")
+  classSessions ClassSession[]
+
+  @@index([courseId, orderGlobal])
+  @@map("curriculum_unit")
 }
 
 /// Học sinh — facility-scoped.
@@ -302,12 +333,14 @@ model ClassSession {
   room         Room?            @relation(fields: [roomId], references: [id], onDelete: SetNull)
   teacherId    String?          @map("teacher_id") @db.Uuid
   teacher      AppUser?         @relation("SessionTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
-  status       SessionStatus    @default(planned)
-  isMakeup     Boolean          @default(false) @map("is_makeup")
-  archivedAt   DateTime?        @map("archived_at")
-  createdAt    DateTime         @default(now()) @map("created_at")
-  attendances  Attendance[]
-  evidence     SessionEvidence?
+  status           SessionStatus    @default(planned)
+  isMakeup         Boolean          @default(false) @map("is_makeup")
+  curriculumUnitId String?          @map("curriculum_unit_id") @db.Uuid
+  curriculumUnit   CurriculumUnit?  @relation(fields: [curriculumUnitId], references: [id], onDelete: SetNull)
+  archivedAt       DateTime?        @map("archived_at")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  attendances      Attendance[]
+  evidence         SessionEvidence?
 
   @@unique([classBatchId, sessionDate, startTime])
   @@index([facilityId])

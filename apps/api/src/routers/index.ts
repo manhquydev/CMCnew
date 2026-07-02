@@ -3,6 +3,7 @@ import { authRouter } from './auth.js';
 import { facilityRouter } from './facility.js';
 import { userRouter } from './user.js';
 import { courseRouter } from './course.js';
+import { curriculumRouter } from './curriculum.js';
 import { roomRouter } from './room.js';
 import { studentRouter } from './student.js';
 import { classBatchRouter } from './class-batch.js';
@@ -43,6 +44,7 @@ export const appRouter = router({
   facility: facilityRouter,
   user: userRouter,
   course: courseRouter,
+  curriculum: curriculumRouter,
   room: roomRouter,
   student: studentRouter,
   classBatch: classBatchRouter,

@@ -9,14 +9,27 @@ const prisma = new PrismaClient({
 async function main(): Promise<void> {
   const hq = await prisma.facility.findUniqueOrThrow({ where: { code: 'HQ' } });
 
-  const courses: { code: string; name: string; program: Program }[] = [
-    { code: 'UCREA-01', name: 'UCREA — Khơi nguồn sáng tạo', program: 'UCREA' },
-    { code: 'BIG-01', name: 'Bright I.G — Tư duy trung cấp', program: 'BRIGHT_IG' },
-    { code: 'BH-01', name: 'Black Hole — Lập luận nâng cao', program: 'BLACK_HOLE' },
-  ];
-  for (const c of courses) {
-    await prisma.course.upsert({ where: { code: c.code }, update: {}, create: c });
-  }
+  // Per-level demo course — matches the hard-coded curriculum family from seed:curriculum.
+  // Upserted defensively so seed-demo runs standalone; seed:curriculum fills the full set.
+  const demoCourse = await prisma.course.upsert({
+    where: { code: 'UCREA-L1' },
+    update: {},
+    create: { code: 'UCREA-L1', name: 'UCREA — Level L1', program: 'UCREA', levelCode: 'L1' },
+  });
+
+  // Black Hole has no curriculum framework — keep its single generic course.
+  await prisma.course.upsert({
+    where: { code: 'BH-01' },
+    update: {},
+    create: { code: 'BH-01', name: 'Black Hole — Lập luận nâng cao', program: 'BLACK_HOLE' },
+  });
+
+  // Retire the legacy generic UCREA/Bright courses so the class wizard shows only the
+  // per-level family. Soft-archive (not delete): any existing binding stays FK-valid.
+  await prisma.course.updateMany({
+    where: { code: { in: ['UCREA-01', 'BIG-01'] }, archivedAt: null },
+    data: { archivedAt: new Date() },
+  });
 
   for (const code of ['P101', 'P102']) {
     await prisma.room.upsert({
@@ -75,18 +88,17 @@ async function main(): Promise<void> {
 
   // ── Class batch + this-week sessions + enrollments ─────────────────────────
   // Needed so the schedule (Lịch dạy) has lesson rows to open the connected Session Detail.
-  const ucrea = await prisma.course.findUniqueOrThrow({ where: { code: 'UCREA-01' } });
   const room = await prisma.room.findUniqueOrThrow({
     where: { facilityId_code: { facilityId: hq.id, code: 'P101' } },
   });
 
   const batch = await prisma.classBatch.upsert({
     where: { facilityId_code: { facilityId: hq.id, code: 'B-DEMO-001' } },
-    update: {},
+    update: { courseId: demoCourse.id }, // rebind any pre-existing demo batch off the legacy course
     create: {
       facilityId: hq.id,
       code: 'B-DEMO-001',
-      courseId: ucrea.id,
+      courseId: demoCourse.id,
       name: 'UCREA Sáng tạo — lớp demo',
       status: 'running',
     },
@@ -159,7 +171,7 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    `✓ Demo seed: ${courses.length} khóa, 2 phòng, ${students.length} học sinh, ${templateCount} grading template mới, ` +
+    `✓ Demo seed: UCREA-L1 + BH-01 khóa, 2 phòng, ${students.length} học sinh, ${templateCount} grading template mới, ` +
       `1 lớp (${batch.code}), ${sessionCount} buổi học tuần này, ${enrollCount} ghi danh @ ${hq.code}`,
   );
 }

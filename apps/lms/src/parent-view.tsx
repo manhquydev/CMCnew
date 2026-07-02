@@ -24,8 +24,9 @@ import {
 } from '@mantine/core';
 import { IconCircleCheck, IconClock, IconCircleX, IconAlertCircle, IconStar } from '@tabler/icons-react';
 import { SessionEvidenceTab } from './session-evidence-tab';
+import { CurriculumSessionsTab } from './curriculum-sessions-tab';
 
-export type ParentTab = 'overview' | 'sessions' | 'gradebook' | 'notifications' | 'rewards';
+export type ParentTab = 'overview' | 'schedule' | 'sessions' | 'gradebook' | 'notifications' | 'rewards';
 
 type Submission = Awaited<ReturnType<typeof trpc.submission.forStudent.query>>[number];
 type Gradebook = Awaited<ReturnType<typeof trpc.assessment.gradebook.query>>;
@@ -393,6 +394,10 @@ function ChildDashboard({
         <LevelHistoryCard childId={childId} refreshKey={refreshKey} />
       </Stack>
     );
+  }
+
+  if (tab === 'schedule') {
+    return <CurriculumSessionsTab studentId={childId} refreshKey={refreshKey} />;
   }
 
   if (tab === 'sessions') {
