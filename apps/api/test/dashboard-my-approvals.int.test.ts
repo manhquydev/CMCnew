@@ -203,10 +203,11 @@ describe('dashboard.myApprovals — approval-inbox aggregate', () => {
       const eduItems = await (await eduDirCaller()).dashboard.myApprovals({ facilityId: FACILITY });
       expect(eduItems.some((i) => i.domain === 'shiftRegistration' && i.id === kdRegId)).toBe(false);
 
-      // Even another giam_doc_kinh_doanh who is NOT the assigned manager must not see it —
-      // mirrors visibleRegistrationWhere's manager/nextManager scoping.
+      // Another giam_doc_kinh_doanh who is NOT the assigned manager DOES still see it — decision
+      // 0027's director-role bypass (dashboard.ts shiftRegistrationPendingItems) lets BOTH
+      // directors approve all registrations in their domain, not just their own assigned ones.
       const otherBizItems = await (await otherBizDirCaller()).dashboard.myApprovals({ facilityId: FACILITY });
-      expect(otherBizItems.some((i) => i.domain === 'shiftRegistration' && i.id === kdRegId)).toBe(false);
+      expect(otherBizItems.some((i) => i.domain === 'shiftRegistration' && i.id === kdRegId)).toBe(true);
     });
 
     it('GIAO_VIEN group registration appears only for giam_doc_dao_tao', async () => {
