@@ -2,10 +2,17 @@
 # Authoritative file for the live VPS (erp.cmcvn.edu.vn + hoc.cmcvn.edu.vn).
 # The sibling docker-compose.prod.yml stays the single-origin HTTP file for local prod-like runs.
 #
+# TLS: canonical strategy is a self-signed origin SAN cert behind Cloudflare "Full" mode,
+# self-provisioned by scripts/ensure-origin-cert.sh on every deploy (no manual pre-step).
+# See docs/decisions/0029-canonical-origin-tls-self-signed-behind-cloudflare.md.
+# Real Let's Encrypt is kept as a documented ALTERNATE path (Cloudflare "Full (strict)" only):
+# run scripts/prod-tls-bootstrap.sh once, then start this stack with `--profile le` so the
+# certbot renewal service runs. Default deploys (no --profile le) leave certbot dormant.
+#
 # Deploy (from repo root on the server):
 #   cp .env.production.example .env.production && edit it   (or use scripts/gen-prod-env.sh)
-#   # 1. one-time TLS cert (port 80 free):
-#   bash scripts/prod-tls-bootstrap.sh
+#   # 1. origin cert — self-signed (default, no pre-step) or LE alternate:
+#   #    bash scripts/prod-tls-bootstrap.sh   (LE alternate only, port 80 free, then add --profile le below)
 #   # 2. db up → migrate → seed (super_admin + 2 directors) → all services:
 #   docker compose -f docker/docker-compose.prod.tls.yml --env-file .env.production up -d postgres
 #   docker compose -f docker/docker-compose.prod.tls.yml --env-file .env.production --profile migrate run --rm api-migrate
@@ -29,10 +36,21 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 1g
+        reservations:
+          memory: 512m
     restart: unless-stopped
 
+  # Rate limiter is currently in-process (apps/api/src/lib/rate-limit.ts), REDIS_URL is
+  # declared-but-unused — this is a placeholder ceiling, not tuned against real traffic.
+  # Re-review maxmemory/policy the first time redis is actually wired up.
   redis:
     image: redis:7-alpine
+    command: ['redis-server', '--maxmemory', '200mb', '--maxmemory-policy', 'allkeys-lru']
     volumes:
       - redisdata:/data
     healthcheck:
@@ -40,6 +58,11 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256m
     restart: unless-stopped
 
   api:
@@ -89,6 +112,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 1g
+        reservations:
+          memory: 384m
     restart: unless-stopped
 
   api-migrate:
@@ -104,6 +134,11 @@ services:
         condition: service_healthy
     command: ['pnpm', '--filter', '@cmc/db', 'migrate']
     profiles: ['migrate']
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 768m
     restart: 'no'
 
   api-seed:
@@ -122,6 +157,11 @@ services:
         condition: service_healthy
     command: ['pnpm', '--filter', '@cmc/db', 'seed']
     profiles: ['seed']
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 768m
     restart: 'no'
 
   # Admin SPA — served at the root of erp.cmcvn.edu.vn.
@@ -131,6 +171,11 @@ services:
       dockerfile: apps/admin/Dockerfile
       args:
         VITE_API_URL: /api
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128m
     restart: unless-stopped
 
   # LMS SPA — served at the ROOT of hoc.cmcvn.edu.vn (base path /, not /lms/).
@@ -141,6 +186,11 @@ services:
       args:
         VITE_API_URL:  /api
         VITE_BASE_URL: /
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128m
     restart: unless-stopped
 
   # Nginx reverse proxy — terminates TLS for both domains.
@@ -162,10 +212,19 @@ services:
         condition: service_started
       lms:
         condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128m
+        reservations:
+          memory: 32m
     restart: unless-stopped
 
-  # Certbot — renews the SAN cert every 12h (webroot challenge, no downtime) and
-  # reloads nginx. Initial cert is obtained out-of-band by scripts/prod-tls-bootstrap.sh.
+  # Certbot — ALTERNATE-path renewal only (real Let's Encrypt cert obtained out-of-band by
+  # scripts/prod-tls-bootstrap.sh). Meaningless for the canonical 10y self-signed cert, so it's
+  # gated behind the `le` profile: dormant on default deploys, one fewer idle container.
+  # Start explicitly with `--profile le` only when running the LE alternate path.
   certbot:
     image: certbot/certbot
     volumes:
@@ -173,6 +232,12 @@ services:
       - certbot_www:/var/www/certbot
     entrypoint: /bin/sh
     command: ['-c', 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done']
+    profiles: ['le']
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128m
     restart: unless-stopped
 
 volumes:
