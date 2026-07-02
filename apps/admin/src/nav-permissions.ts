@@ -108,4 +108,16 @@ export const NAV_GATES: Record<SectionKey, NavGate> = {
   // placeholder so NAV_GATES stays a complete Record<SectionKey, NavGate> for the type checker.
   'student-mgmt':     { kind: 'open' },
   'payroll-checkin':  { kind: 'open' },
+
+  // ── Executive Cockpit (Phase 3) ─────────────────────────────────────────
+  // Aggregate screen visible ONLY to giam_doc_kinh_doanh-only accounts (replaces 'overview').
+  // Same placeholder pattern as student-mgmt/payroll-checkin above — real visibility lives in
+  // buildNavGroups() (shell.tsx, isBizDirectorOnly), not here.
+  'biz-director-cockpit': { kind: 'open' },
+
+  // ── Executive Cockpit (Phase 4) ─────────────────────────────────────────
+  // Aggregate screen visible ONLY to giam_doc_dao_tao-only accounts (replaces 'overview').
+  // Same placeholder pattern as biz-director-cockpit above — real visibility lives in
+  // buildNavGroups() (shell.tsx, isEduDirectorOnly), not here.
+  'edu-director-cockpit': { kind: 'open' },
 };

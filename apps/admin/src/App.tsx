@@ -34,6 +34,8 @@ import { DesignShowcase } from './design-showcase';
 import { CoursesPanel } from './courses-panel';
 import { StudentManagementPanel } from './student-management-panel';
 import { PayrollCheckinPanel } from './payroll-checkin-panel';
+import { BizDirectorCockpitPanel } from './biz-director-cockpit-panel';
+import { EduDirectorCockpitPanel } from './edu-director-cockpit-panel';
 
 // Panels — admin-native
 import { GuardiansPanel } from './guardians-panel';
@@ -92,6 +94,12 @@ function defaultSection(me: Session): SectionKey {
   if (me.roles.includes('ke_toan')) return 'finance';
   if (me.roles.includes('hr')) return 'hr';
   if (me.roles.includes('cskh')) return 'cskh';
+  // Biz-director-only lands on the Executive Cockpit (replaces 'overview' for this persona —
+  // mirrors the isBizDirectorOnly strict single-role check in shell.tsx/buildNavGroups()).
+  if (me.roles.length === 1 && me.roles[0] === 'giam_doc_kinh_doanh') return 'biz-director-cockpit';
+  // Edu-director-only lands on its own Executive Cockpit — mirrors the isEduDirectorOnly strict
+  // single-role check in shell.tsx/buildNavGroups().
+  if (me.roles.length === 1 && me.roles[0] === 'giam_doc_dao_tao') return 'edu-director-cockpit';
   // Exec roles can see the dashboard (dashboard.summary); land them there. Any other role
   // falls back to an always-open section so the landing never 403s.
   if (me.roles.includes('giam_doc_kinh_doanh') || me.roles.includes('giam_doc_dao_tao'))
@@ -486,6 +494,7 @@ const ALL_SECTION_KEYS = new Set<string>([
   'classes', 'meetings', 'levelup', 'my-payslips',
   'checkin', 'shift-registration', 'facility-network', 'shift-config',
   'student-mgmt', 'payroll-checkin',
+  'biz-director-cockpit', 'edu-director-cockpit',
 ]);
 
 // ─── Work Shift Section ──────────────────────────────────────────────────────
@@ -556,6 +565,19 @@ function Dashboard() {
       // ── Admin / Settings ──────────────────────────────────────────────────
       case 'overview':
         return <OverviewPanel />;
+
+      // Executive Cockpit (Phase 3): giam_doc_kinh_doanh-only landing — summary widget +
+      // approval-inbox widget. KPI items route to the full 'kpi' panel (see
+      // biz-director-cockpit-panel.tsx for why: the aggregate item lacks the composite
+      // userId+periodKey key kpiEvalConfirm/kpiEvalApprove require).
+      case 'biz-director-cockpit':
+        return <BizDirectorCockpitPanel onNavigateToKpi={() => handleSectionChange('kpi')} />;
+
+      // Executive Cockpit (Phase 4): giam_doc_dao_tao-only landing — summary widget +
+      // approval-inbox widget. KPI items route to the full 'kpi' panel, same resolution as
+      // biz-director-cockpit-panel.tsx (see edu-director-cockpit-panel.tsx for why).
+      case 'edu-director-cockpit':
+        return <EduDirectorCockpitPanel onNavigateToKpi={() => handleSectionChange('kpi')} />;
 
       case 'courses':
         return (

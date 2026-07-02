@@ -61,6 +61,9 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   dashboard: {
     summary: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
+    // Approval-inbox aggregate — role-aware "pending my approval" list (dashboard.ts:myApprovals).
+    // Same role set as summary; both directors get their own inbox contents inside the handler.
+    myApprovals: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
 
   exercise: {
     create: ['giao_vien', 'giam_doc_dao_tao'],

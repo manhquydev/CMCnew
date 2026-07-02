@@ -145,10 +145,11 @@ describe('nav-permissions consistency', () => {
 
     // Every declared-open section should be in our known list — fail if something new is open
     // without deliberate intent. Update this list when a new open section is added.
-    // student-mgmt/payroll-checkin are 'open' placeholders only to satisfy the Record<SectionKey,
-    // NavGate> completeness check — real visibility for these two is decided in buildNavGroups()
-    // (shell.tsx), gated on isTeacherOnly, not on this NAV_GATES entry.
-    const expectedOpen: SectionKey[] = ['schedule', 'classes', 'courses', 'my-payslips', 'student-mgmt', 'payroll-checkin'];
+    // student-mgmt/payroll-checkin/biz-director-cockpit/edu-director-cockpit are 'open'
+    // placeholders only to satisfy the Record<SectionKey, NavGate> completeness check — real
+    // visibility for these is decided in buildNavGroups() (shell.tsx), gated on
+    // isTeacherOnly/isBizDirectorOnly/isEduDirectorOnly, not on this NAV_GATES entry.
+    const expectedOpen: SectionKey[] = ['schedule', 'classes', 'courses', 'my-payslips', 'student-mgmt', 'payroll-checkin', 'biz-director-cockpit', 'edu-director-cockpit'];
     expect(openSections.sort()).toEqual(expectedOpen.sort());
   });
 });

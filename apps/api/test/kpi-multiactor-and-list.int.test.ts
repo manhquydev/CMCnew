@@ -651,7 +651,7 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
       const su = await staffCaller();
 
       // Create draft KPI for saleNoData
-      await su.payroll.kpiEvalStart({
+      const kpiRow = await su.payroll.kpiEvalStart({
         userId: saleNoDataId,
         facilityId: FACILITY_1,
         periodKey: PERIOD_NODATA,
@@ -676,7 +676,7 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
       const su = await staffCaller();
 
       // Create draft KPI for teacherNoData
-      await su.payroll.kpiEvalStart({
+      const kpiRow = await su.payroll.kpiEvalStart({
         userId: teacherNoDataId,
         facilityId: FACILITY_1,
         periodKey: PERIOD_NODATA,

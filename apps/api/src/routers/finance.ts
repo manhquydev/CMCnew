@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { withRls, hashPassword, type Program } from '@cmc/db';
+import { withRls, hashPassword, type Program, type Prisma } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import {
@@ -34,6 +34,42 @@ async function tiersFor(
     select: { years: true, percent: true },
   });
   return rows.length ? rows : DEFAULT_DISCOUNT_TIERS;
+}
+
+/** Shape consumed by dashboard.myApprovals — mirrors the type in payroll.ts (structurally
+ *  compatible; not re-exported to avoid a cross-router import for a single type alias). */
+type ApprovalInboxItem = {
+  domain: string;
+  id: string;
+  title: string;
+  submittedAt: Date;
+  actionKey: string;
+};
+
+/** Approval-inbox source: draft receipts awaiting ke_toan/giam_doc_kinh_doanh approval
+ *  (receiptApprove, :272 — expects status 'draft'). */
+export async function receiptPendingItems(
+  tx: Prisma.TransactionClient,
+  facilityId: number,
+): Promise<ApprovalInboxItem[]> {
+  const rows = await tx.receipt.findMany({
+    where: { facilityId, status: 'draft' },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      netAmount: true,
+      createdAt: true,
+      studentName: true,
+      student: { select: { fullName: true } },
+    },
+  });
+  return rows.map((r) => ({
+    domain: 'receipt',
+    id: r.id,
+    title: `Phiếu thu ${r.netAmount.toLocaleString('vi-VN')}đ — ${r.student?.fullName ?? r.studentName ?? 'học sinh mới'}`,
+    submittedAt: r.createdAt,
+    actionKey: 'finance.receiptApprove',
+  }));
 }
 
 export const financeRouter = router({

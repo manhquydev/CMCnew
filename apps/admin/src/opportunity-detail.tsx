@@ -13,6 +13,9 @@ import {
   notifyError,
   notifySuccess,
   useSession,
+  DataTable,
+  EmptyState,
+  type DataTableColumn,
 } from '@cmc/ui';
 import {
   ActionIcon,
@@ -24,6 +27,7 @@ import {
   Group,
   Loader,
   Modal,
+  NumberInput,
   Select,
   SimpleGrid,
   Stack,
@@ -33,7 +37,7 @@ import {
   Title,
 } from '@mantine/core';
 import { DateTimePicker } from '@mantine/dates';
-import { IconArrowLeft } from '@tabler/icons-react';
+import { IconArrowLeft, IconCalendarStats } from '@tabler/icons-react';
 import {
   STAGES,
   LOST_REASON_OPTIONS,
@@ -48,6 +52,13 @@ import {
 type OppDetail = Awaited<ReturnType<typeof trpc.crm.opportunityGet.query>>;
 type Owner = Awaited<ReturnType<typeof trpc.crm.assignableOwners.query>>[number];
 type AssignmentLog = Awaited<ReturnType<typeof trpc.crm.assignmentHistory.query>>[number];
+type TestAppt = Awaited<ReturnType<typeof trpc.crm.testList.query>>[number];
+
+function testStatus(t: TestAppt): { label: string; tone: ReturnType<typeof statusOf>['tone'] } {
+  if (t.status === 'done') return { label: 'Đã test', tone: 'active' };
+  if (t.status === 'no_show') return { label: 'Vắng', tone: 'rejected' };
+  return { label: 'Đã đặt', tone: 'inactive' };
+}
 
 const PROGRAM_LABEL: Record<string, string> = {
   UCREA: 'UCREA',
@@ -156,11 +167,15 @@ export function OpportunityDetailPanel({
   // Mirror the server gate exactly (no hand-kept role list): only roles that hold
   // crm.opportunityReassign see the button; the mutation re-checks server-side regardless.
   const canReassign = can(me.roles, me.isSuperAdmin, 'crm', 'opportunityReassign');
+  // KHÔNG đổi: giữ nguyên danh sách role được phép chấm test (đồng bộ với crm.testGrade gate).
+  const canGrade = me.isSuperAdmin || me.roles.some((r) => ['giao_vien', 'giam_doc_dao_tao'].includes(r));
 
   const [opp, setOpp] = useState<OppDetail | null>(null);
   const [owners, setOwners] = useState<Owner[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tests, setTests] = useState<TestAppt[]>([]);
+  const [testsLoading, setTestsLoading] = useState(true);
 
   const [reassignOpen, setReassignOpen] = useState(false);
   const [reassignToOwnerId, setReassignToOwnerId] = useState<string | null>(null);
@@ -170,6 +185,9 @@ export function OpportunityDetailPanel({
   const [lostNote, setLostNote] = useState('');
   const [testOpen, setTestOpen] = useState(false);
   const [testAt, setTestAt] = useState<Date | null>(null);
+  const [gradeTarget, setGradeTarget] = useState<TestAppt | null>(null);
+  const [gradeScore, setGradeScore] = useState<number | string>('');
+  const [gradeResult, setGradeResult] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -182,11 +200,21 @@ export function OpportunityDetailPanel({
           .query({ facilityId: o.facilityId })
           .then(setOwners)
           .catch(() => setOwners([]));
+        setTestsLoading(true);
+        // Same crm.testList call as before (facility-scoped, no server-side opp filter);
+        // only the rendering location moved — filtered to this opportunity client-side below.
+        await trpc.crm.testList
+          .query({ facilityId: o.facilityId })
+          .then(setTests)
+          .catch((e) => notifyError(e, 'Không tải được lịch test'))
+          .finally(() => setTestsLoading(false));
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Không tải được cơ hội'))
       .finally(() => setLoading(false));
   }, [oppId]);
   useEffect(load, [load]);
+
+  const oppTests = useMemo(() => tests.filter((t) => t.opportunityId === oppId), [tests, oppId]);
 
   // Refresh the record after any write, and let the parent list refresh too.
   const refresh = useCallback(() => {
@@ -195,6 +223,20 @@ export function OpportunityDetailPanel({
   }, [load, onChanged]);
 
   const ownerName = useMemo(() => makeOwnerName(owners), [owners]);
+
+  async function doGrade() {
+    if (!gradeTarget || typeof gradeScore !== 'number') return;
+    try {
+      await trpc.crm.testGrade.mutate({ id: gradeTarget.id, score: gradeScore, result: gradeResult.trim() || undefined });
+      notifySuccess('Đã chấm test (cơ hội tự lên O4)');
+      setGradeTarget(null);
+      setGradeScore('');
+      setGradeResult('');
+      refresh();
+    } catch (e) {
+      notifyError(e, 'Chấm test thất bại');
+    }
+  }
 
   async function pickStage(stage: string) {
     if (!opp) return;
@@ -301,6 +343,37 @@ export function OpportunityDetailPanel({
     .filter((o) => o.id !== opp.ownerId)
     .map((o) => ({ value: o.id, label: `${o.displayName} · ${o.primaryRole}` }));
 
+  const testColumns: DataTableColumn<TestAppt>[] = [
+    { key: 'type', header: 'Loại', width: 100, render: (t) => (t.type === 'entrance' ? 'Đầu vào' : 'Định kỳ') },
+    {
+      key: 'when',
+      header: 'Lịch',
+      sortValue: (t) => t.scheduledAt,
+      render: (t) => new Date(t.scheduledAt).toLocaleString('vi-VN'),
+    },
+    {
+      key: 'status',
+      header: 'Trạng thái',
+      width: 120,
+      render: (t) => {
+        const ts = testStatus(t);
+        return <StatusBadge status={ts.label} label={ts.label} tone={ts.tone} />;
+      },
+    },
+    { key: 'score', header: 'Điểm', width: 70, render: (t) => t.score ?? '—' },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      render: (t) =>
+        t.status === 'scheduled' && canGrade ? (
+          <Button size="compact-xs" variant="light" onClick={() => setGradeTarget(t)}>
+            Chấm
+          </Button>
+        ) : null,
+    },
+  ];
+
   return (
     <Stack>
       {/* Header: back + title + status + record actions */}
@@ -375,6 +448,22 @@ export function OpportunityDetailPanel({
       <Divider label="Lịch sử phân bổ" labelPosition="left" />
       <AssignmentHistoryBlock opportunityId={opp.id} ownerName={ownerName} />
 
+      <Divider label="Lịch test" labelPosition="left" />
+      <DataTable
+        data={oppTests}
+        columns={testColumns}
+        getRowKey={(t) => t.id}
+        loading={testsLoading}
+        pageSize={10}
+        emptyState={
+          <EmptyState
+            icon={<IconCalendarStats size={28} stroke={1.5} />}
+            title="Chưa có lịch test"
+            description="Bấm “Đặt test” ở trên để đặt lịch test đầu vào cho cơ hội này."
+          />
+        }
+      />
+
       <Divider label="Nhật ký hoạt động" labelPosition="left" />
       <Chatter entityType="opportunity" entityId={opp.id} />
 
@@ -439,6 +528,21 @@ export function OpportunityDetailPanel({
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setTestOpen(false)}>Đóng</Button>
             <Button disabled={!testAt} onClick={scheduleTest}>Đặt lịch</Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal opened={!!gradeTarget} onClose={() => setGradeTarget(null)} title="Chấm test">
+        <Stack>
+          <NumberInput label="Điểm" min={0} max={10} step={0.5} value={gradeScore} onChange={setGradeScore} />
+          <TextInput label="Kết quả (tùy chọn)" placeholder="đạt / chưa đạt" value={gradeResult} onChange={(e) => setGradeResult(e.currentTarget.value)} />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setGradeTarget(null)}>
+              Đóng
+            </Button>
+            <Button disabled={typeof gradeScore !== 'number'} onClick={doGrade}>
+              Lưu điểm
+            </Button>
           </Group>
         </Stack>
       </Modal>

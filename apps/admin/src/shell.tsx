@@ -69,7 +69,11 @@ export type SectionKey =
   | 'shift-config'
   // Teacher nav consolidation (Lịch 360) — giao_vien-only aggregate screens
   | 'student-mgmt'
-  | 'payroll-checkin';
+  | 'payroll-checkin'
+  // Executive Cockpit (Phase 3) — giam_doc_kinh_doanh-only aggregate screen
+  | 'biz-director-cockpit'
+  // Executive Cockpit (Phase 4) — giam_doc_dao_tao-only aggregate screen
+  | 'edu-director-cockpit';
 
 // ─── Nav types ────────────────────────────────────────────────────────────────
 
@@ -375,6 +379,23 @@ export function buildNavGroups({
   // uncollapsed nav to avoid hiding sections those other roles rely on.
   const isTeacherOnly = roles.length === 1 && roles[0] === 'giao_vien';
 
+  // Executive Cockpit (Phase 3): only collapse 'overview' into the cockpit for accounts whose
+  // ONLY role is giam_doc_kinh_doanh. Several gates GĐKD holds (crm/finance/cskh/rewards/kpi/
+  // shift-registration) are also granted to other roles, so a multi-role account (e.g.
+  // giam_doc_kinh_doanh + giam_doc_dao_tao) must keep the original, uncollapsed nav — same safety
+  // reasoning as isTeacherOnly above. Unlike teacher-nav, the cockpit does NOT hide the other
+  // direct-access nav items (finance/crm/cskh/rewards/kpi/...) — it is a summary + quick-approve
+  // screen, not a replacement for the detail screens the director still works in.
+  const isBizDirectorOnly = roles.length === 1 && roles[0] === 'giam_doc_kinh_doanh';
+
+  // Executive Cockpit (Phase 4): same reasoning as isBizDirectorOnly above, mirrored for
+  // giam_doc_dao_tao. Several gates GĐĐT holds (attendance/grading/assessment/classes/courses/
+  // meetings/levelup/guardians/kpi/shift-registration) are also granted to other roles
+  // (giao_vien, giam_doc_kinh_doanh), so a multi-role account must keep the original nav.
+  // The cockpit only replaces 'overview' — it does NOT hide the direct-access academic nav
+  // items, since the director still needs to work in those detail screens.
+  const isEduDirectorOnly = roles.length === 1 && roles[0] === 'giam_doc_dao_tao';
+
   const groups: NavGroup[] = [
     {
       groupLabel: 'Giảng dạy',
@@ -445,7 +466,13 @@ export function buildNavGroups({
     {
       groupLabel: 'Quản trị',
       items: [
-        { key: 'overview' as const, label: 'Tổng quan', icon: <IconLayoutDashboard {...I()} />, visible: visible('overview') },
+        { key: 'overview' as const, label: 'Tổng quan', icon: <IconLayoutDashboard {...I()} />, visible: !isBizDirectorOnly && !isEduDirectorOnly && visible('overview') },
+        // GĐ Kinh doanh (chỉ role này): "Tổng quan" thay bằng Executive Cockpit (summary +
+        // hộp duyệt nhanh). Đặt gate 'open' (nav-permissions.ts) vì visibility thật nằm ở đây.
+        { key: 'biz-director-cockpit' as const, label: 'Cockpit điều hành', icon: <IconLayoutDashboard {...I()} />, visible: isBizDirectorOnly },
+        // GĐ Đào tạo (chỉ role này): "Tổng quan" thay bằng Executive Cockpit (summary +
+        // hộp duyệt nhanh). Đặt gate 'open' (nav-permissions.ts) vì visibility thật nằm ở đây.
+        { key: 'edu-director-cockpit' as const, label: 'Cockpit điều hành', icon: <IconLayoutDashboard {...I()} />, visible: isEduDirectorOnly },
         { key: 'org' as const, label: 'Cơ sở & Users', icon: <IconBuilding {...I()} />, visible: visible('org') },
         { key: 'facility-network' as const, label: 'IP WiFi chấm công', icon: <IconWifi {...I()} />, visible: visible('facility-network') },
         { key: 'shift-config' as const, label: 'Danh mục ca', icon: <IconAdjustments {...I()} />, visible: visible('shift-config') },
@@ -487,4 +514,8 @@ export const SECTION_TITLES: Record<SectionKey, string> = {
   // Teacher nav consolidation (Lịch 360)
   'student-mgmt': 'Quản lý học sinh',
   'payroll-checkin': 'Lương & chấm công',
+  // Executive Cockpit (Phase 3)
+  'biz-director-cockpit': 'Cockpit điều hành',
+  // Executive Cockpit (Phase 4)
+  'edu-director-cockpit': 'Cockpit điều hành',
 };

@@ -191,6 +191,73 @@ async function assembleSlipData(
   };
 }
 
+/** Shape consumed by dashboard.myApprovals — every approval-inbox source (across payroll,
+ *  finance, and the reused pending-list queries) normalizes to this. */
+type ApprovalInboxItem = {
+  domain: string;
+  id: string;
+  title: string;
+  submittedAt: Date;
+  actionKey: string;
+};
+
+async function displayNamesFor(tx: Prisma.TransactionClient, userIds: string[]): Promise<Map<string, string>> {
+  if (userIds.length === 0) return new Map();
+  const users = await tx.appUser.findMany({
+    where: { id: { in: [...new Set(userIds)] } },
+    select: { id: true, displayName: true },
+  });
+  return new Map(users.map((u) => [u.id, u.displayName]));
+}
+
+/** Approval-inbox source: KPI sheets submitted and awaiting a director's confirm
+ *  (kpiEvalConfirm, :833). Either director role may act — no self-submit case here since
+ *  kpiEvalSubmit is always the employee's own action. */
+export async function kpiPendingConfirmItems(
+  tx: Prisma.TransactionClient,
+  facilityId: number,
+): Promise<ApprovalInboxItem[]> {
+  const rows = await tx.kpiScore.findMany({
+    where: { facilityId, status: 'submitted' },
+    orderBy: { submittedAt: 'asc' },
+    select: { id: true, userId: true, periodKey: true, submittedAt: true },
+  });
+  if (rows.length === 0) return [];
+  const nameById = await displayNamesFor(tx, rows.map((r) => r.userId));
+  return rows.map((r) => ({
+    domain: 'kpi',
+    id: r.id,
+    title: `Phiếu KPI ${r.periodKey} — ${nameById.get(r.userId) ?? r.userId} (chờ xác nhận)`,
+    submittedAt: r.submittedAt ?? new Date(0),
+    actionKey: 'payroll.kpiEvalConfirm',
+  }));
+}
+
+/** Approval-inbox source: KPI sheets confirmed and awaiting approval (kpiEvalApprove, :870).
+ *  Excludes sheets the caller themselves confirmed — separation of duties, mirrors the
+ *  confirmedById === ctx.session.userId guard inside kpiEvalApprove (:888-890) so the inbox
+ *  never lists an item the caller would be rejected for acting on. */
+export async function kpiPendingApproveItems(
+  tx: Prisma.TransactionClient,
+  facilityId: number,
+  callerId: string,
+): Promise<ApprovalInboxItem[]> {
+  const rows = await tx.kpiScore.findMany({
+    where: { facilityId, status: 'confirmed', confirmedById: { not: callerId } },
+    orderBy: { confirmedAt: 'asc' },
+    select: { id: true, userId: true, periodKey: true, confirmedAt: true },
+  });
+  if (rows.length === 0) return [];
+  const nameById = await displayNamesFor(tx, rows.map((r) => r.userId));
+  return rows.map((r) => ({
+    domain: 'kpi',
+    id: r.id,
+    title: `Phiếu KPI ${r.periodKey} — ${nameById.get(r.userId) ?? r.userId} (chờ duyệt)`,
+    submittedAt: r.confirmedAt ?? new Date(0),
+    actionKey: 'payroll.kpiEvalApprove',
+  }));
+}
+
 export const payrollRouter = router({
   // Facility staff roster (id + name) for picking an employee — RLS-visible to facility staff.
   roster: requirePermission('payroll', 'roster')

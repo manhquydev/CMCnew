@@ -4,7 +4,6 @@ import {
   trpc,
   notifyError,
   notifySuccess,
-  useSession,
   PageHeader,
   DataTable,
   StatusBadge,
@@ -19,8 +18,6 @@ import {
   Button,
   Card,
   Group,
-  Modal,
-  NumberInput,
   ScrollArea,
   Select,
   SimpleGrid,
@@ -30,14 +27,13 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconTargetArrow, IconCalendarStats } from '@tabler/icons-react';
+import { IconTargetArrow } from '@tabler/icons-react';
 import { getDefaultView, getAllowedViews } from './view-defaults';
 import { STAGES, PROGRAMS, statusOf, isClosed, makeOwnerName } from './crm-shared';
 import { OpportunityDetailPanel } from './opportunity-detail';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Opp = Awaited<ReturnType<typeof trpc.crm.opportunityList.query>>[number];
-type TestAppt = Awaited<ReturnType<typeof trpc.crm.testList.query>>[number];
 type Owner = Awaited<ReturnType<typeof trpc.crm.assignableOwners.query>>[number];
 
 const STAGE_LABEL: Record<string, string> = Object.fromEntries(STAGES.map((s) => [s.value, s.label]));
@@ -119,12 +115,6 @@ function OppKanban({
   );
 }
 
-function testStatus(t: TestAppt): { label: string; tone: ReturnType<typeof statusOf>['tone'] } {
-  if (t.status === 'done') return { label: 'Đã test', tone: 'active' };
-  if (t.status === 'no_show') return { label: 'Vắng', tone: 'rejected' };
-  return { label: 'Đã đặt', tone: 'inactive' };
-}
-
 export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
   const navigate = useNavigate();
   const [facilities, setFacilities] = useState<Facility[]>([]);
@@ -138,16 +128,8 @@ export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
   const [medium, setMedium] = useState('');
   const [campaign, setCampaign] = useState('');
   const [busy, setBusy] = useState(false);
-  const [tests, setTests] = useState<TestAppt[]>([]);
   const [oppsLoading, setOppsLoading] = useState(true);
   const [oppsError, setOppsError] = useState<string | null>(null);
-  const [testsLoading, setTestsLoading] = useState(true);
-  const { me } = useSession();
-  const canGrade = me.isSuperAdmin || me.roles.some((r) => ['giao_vien', 'giam_doc_dao_tao'].includes(r));
-
-  const [gradeTarget, setGradeTarget] = useState<TestAppt | null>(null);
-  const [gradeScore, setGradeScore] = useState<number | string>('');
-  const [gradeResult, setGradeResult] = useState('');
   const { view: oppView, setView: setOppView } = useViewSwitcher(
     'crm.opportunity',
     getDefaultView('opportunity'),
@@ -175,32 +157,12 @@ export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
       .finally(() => setOppsLoading(false));
     // Owner names for the pipeline (best-effort; falls back to a short id if unavailable).
     trpc.crm.assignableOwners.query({ facilityId }).then(setOwners).catch(() => setOwners([]));
-    setTestsLoading(true);
-    trpc.crm.testList
-      .query({ facilityId })
-      .then(setTests)
-      .catch((e) => notifyError(e, 'Không tải được lịch test'))
-      .finally(() => setTestsLoading(false));
   }, [facilityId]);
   useEffect(load, [load]);
 
   const ownerName = useMemo(() => makeOwnerName(owners), [owners]);
 
   const openOpp = useCallback((o: Opp) => navigate(`/crm/opportunities/${o.id}`), [navigate]);
-
-  async function doGrade() {
-    if (!gradeTarget || typeof gradeScore !== 'number') return;
-    try {
-      await trpc.crm.testGrade.mutate({ id: gradeTarget.id, score: gradeScore, result: gradeResult.trim() || undefined });
-      notifySuccess('Đã chấm test (cơ hội tự lên O4)');
-      setGradeTarget(null);
-      setGradeScore('');
-      setGradeResult('');
-      load();
-    } catch (e) {
-      notifyError(e, 'Chấm test thất bại');
-    }
-  }
 
   async function createLead() {
     if (!facilityId || !fullName.trim() || !phone.trim()) {
@@ -272,38 +234,6 @@ export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
         const st = statusOf(o);
         return <StatusBadge status={st.label} label={st.label} tone={st.tone} />;
       },
-    },
-  ];
-
-  const testColumns: DataTableColumn<TestAppt>[] = [
-    { key: 'student', header: 'Học sinh', render: (t) => t.studentName || '—' },
-    { key: 'type', header: 'Loại', width: 100, render: (t) => (t.type === 'entrance' ? 'Đầu vào' : 'Định kỳ') },
-    {
-      key: 'when',
-      header: 'Lịch',
-      sortValue: (t) => t.scheduledAt,
-      render: (t) => new Date(t.scheduledAt).toLocaleString('vi-VN'),
-    },
-    {
-      key: 'status',
-      header: 'Trạng thái',
-      width: 120,
-      render: (t) => {
-        const st = testStatus(t);
-        return <StatusBadge status={st.label} label={st.label} tone={st.tone} />;
-      },
-    },
-    { key: 'score', header: 'Điểm', width: 70, render: (t) => t.score ?? '—' },
-    {
-      key: 'actions',
-      header: '',
-      align: 'right',
-      render: (t) =>
-        t.status === 'scheduled' && canGrade ? (
-          <Button size="compact-xs" variant="light" onClick={() => setGradeTarget(t)}>
-            Chấm
-          </Button>
-        ) : null,
     },
   ];
 
@@ -389,39 +319,6 @@ export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
           />
         )}
       </Stack>
-
-      <Stack gap="xs">
-        <Title order={5}>Lịch test</Title>
-        <DataTable
-          data={tests}
-          columns={testColumns}
-          getRowKey={(t) => t.id}
-          loading={testsLoading}
-          pageSize={15}
-          emptyState={
-            <EmptyState
-              icon={<IconCalendarStats size={28} stroke={1.5} />}
-              title="Chưa có lịch test"
-              description="Đặt lịch test cho một cơ hội ở trang chi tiết để hiển thị tại đây."
-            />
-          }
-        />
-      </Stack>
-
-      <Modal opened={!!gradeTarget} onClose={() => setGradeTarget(null)} title="Chấm test">
-        <Stack>
-          <NumberInput label="Điểm" min={0} max={10} step={0.5} value={gradeScore} onChange={setGradeScore} />
-          <TextInput label="Kết quả (tùy chọn)" placeholder="đạt / chưa đạt" value={gradeResult} onChange={(e) => setGradeResult(e.currentTarget.value)} />
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setGradeTarget(null)}>
-              Đóng
-            </Button>
-            <Button disabled={typeof gradeScore !== 'number'} onClick={doGrade}>
-              Lưu điểm
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
     </Stack>
   );
 }
