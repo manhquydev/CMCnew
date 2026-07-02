@@ -29,10 +29,20 @@ still owed.
 
 ## Backend-Ready UI Gaps
 
+- Web-lead inbox: public/integrated lead intake queue remains unbuilt; CRM still relies on
+  direct contact/opportunity creation and current public ingest path. Close when website/ad
+  leads need an operator-reviewed inbox before entering the pipeline.
+- Callio sync: phone/call-center integration remains unbuilt; CRM contact/opportunity phones
+  are local records only. Close before relying on call logs for sales ops attribution.
 - Badge administration: backend exists for badge/star mechanics; admin CRUD/review UI remains deferred.
 - Shift registration withdraw/cancel: shift registration flow supports submit/approve paths; employee withdraw UX remains deferred.
 - Room update/archive: room creation/listing is wired; edit/archive UI remains deferred.
 - Facility network update/archive: network list/create exists; full management UX remains deferred.
+
+## Security / Identity
+
+- [ ] DEBT: Column-level encryption for HR sensitive fields (`nationalId`, `bankAccount`) deferred by decision 0026 -- values are currently stored plaintext and masked server-side for non-privileged readers; audit logs record field names only, not raw values -- close before: real production rebuild or when these fields become required operational data -- opened 2026-07-02 (Plan 3 P6)
+- [ ] DEBT: Microsoft Graph provisioning ADR 0015 remains Proposed-only -- staff onboarding is SSO-only by email, but automatic M365 provisioning/sync is not implemented -- close before: production identity cutover where account creation must be automated -- opened 2026-07-02 (Plan 3 P6)
 
 ## Cleanup Follow-Up
 

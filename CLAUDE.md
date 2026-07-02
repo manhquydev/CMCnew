@@ -22,7 +22,7 @@ imported — read it per lane, as `docs/CONTEXT_RULES.md` prescribes.
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **CMCnew** (5715 symbols, 8453 relationships, 188 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **CMCnew** (5711 symbols, 8449 relationships, 186 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

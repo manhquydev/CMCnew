@@ -125,8 +125,14 @@ export const financeRouter = router({
         code: z.string().min(1),
         percent: z.number().int().min(1).max(100),
         maxUses: z.number().int().positive().default(1),
-        validFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-        validTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        validFrom: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        validTo: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -177,6 +183,21 @@ export const financeRouter = router({
       ),
     ),
 
+  receiptListOwn: requirePermission('finance', 'receiptListOwn')
+    .input(z.object({ opportunityId: z.string().uuid().optional() }).optional())
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.receipt.findMany({
+          where: {
+            collectedById: ctx.session.userId,
+            ...(input?.opportunityId ? { opportunityId: input.opportunityId } : {}),
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 100,
+        }),
+      ),
+    ),
+
   // Create a draft: resolve the price effective at creation date, stack tier + voucher under
   // the 35% cap, and store the computed amounts. The voucher is NOT consumed until approve.
   //
@@ -187,27 +208,29 @@ export const financeRouter = router({
   //                        The receipt is a draft commitment; the student becomes "real" at approve.
   receiptCreate: requirePermission('finance', 'receiptCreate')
     .input(
-      z.object({
-        facilityId: z.number().int().positive(),
-        // Existing-student path: set studentId.
-        studentId: z.string().uuid().optional(),
-        courseId: z.string().uuid(),
-        yearsPrepaid: z.number().int().min(1).max(3),
-        period: z.string().optional(),
-        voucherCode: z.string().optional(),
-        opportunityId: z.string().uuid().optional(),
-        // New-student provisioning fields (F1).
-        parentPhone: z.string().min(1).optional(),
-        parentName: z.string().min(1).optional(),
-        // Optional: captured at intake; enables OTP login + lms_account_ready notification at approve.
-        parentEmail: z.string().email().optional(),
-        studentName: z.string().min(1).optional(),
-        studentDob: z.string().date().optional(),
-        classBatchId: z.string().uuid().optional(),
-      }).refine(
-        (d) => d.studentId || (d.parentPhone && d.studentName),
-        { message: 'Cung cấp studentId (học sinh có sẵn) hoặc parentPhone + studentName (học sinh mới)' },
-      ),
+      z
+        .object({
+          facilityId: z.number().int().positive(),
+          // Existing-student path: set studentId.
+          studentId: z.string().uuid().optional(),
+          courseId: z.string().uuid(),
+          yearsPrepaid: z.number().int().min(1).max(3),
+          period: z.string().optional(),
+          voucherCode: z.string().optional(),
+          opportunityId: z.string().uuid().optional(),
+          // New-student provisioning fields (F1).
+          parentPhone: z.string().min(1).optional(),
+          parentName: z.string().min(1).optional(),
+          // Optional: captured at intake; enables OTP login + lms_account_ready notification at approve.
+          parentEmail: z.string().email().optional(),
+          studentName: z.string().min(1).optional(),
+          studentDob: z.string().date().optional(),
+          classBatchId: z.string().uuid().optional(),
+        })
+        .refine((d) => d.studentId || (d.parentPhone && d.studentName), {
+          message:
+            'Cung cấp studentId (học sinh có sẵn) hoặc parentPhone + studentName (học sinh mới)',
+        }),
     )
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -220,13 +243,21 @@ export const financeRouter = router({
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Khóa học chưa có giá hiệu lực' });
         }
         const gross = grossForYears(annualPrice, input.yearsPrepaid);
-        const tierPercent = tierPercentForYears(input.yearsPrepaid, await tiersFor(tx, input.facilityId));
+        const tierPercent = tierPercentForYears(
+          input.yearsPrepaid,
+          await tiersFor(tx, input.facilityId),
+        );
 
         let voucherId: string | null = null;
         let voucherPercent = 0;
         if (input.voucherCode) {
           const v = await tx.voucher.findFirst({
-            where: { facilityId: input.facilityId, code: input.voucherCode, active: true, archivedAt: null },
+            where: {
+              facilityId: input.facilityId,
+              code: input.voucherCode,
+              active: true,
+              archivedAt: null,
+            },
           });
           if (!v) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Voucher không hợp lệ' });
           // Fail early: reject an out-of-window voucher at create, not as a surprise at approve.
@@ -290,7 +321,10 @@ export const financeRouter = router({
           facilityId: input.facilityId,
         });
         return { receipt, pushNotifs };
-      }).then(({ pushNotifs, receipt }) => { pushNotifs(); return receipt; }),
+      }).then(({ pushNotifs, receipt }) => {
+        pushNotifs();
+        return receipt;
+      }),
     ),
 
   // Approve: ATOMICALLY voucher consume + receipt code + student provisioning + enrollment.
@@ -316,7 +350,10 @@ export const financeRouter = router({
           },
         });
         if (receipt.status !== 'draft') {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Phiếu thu không ở trạng thái nháp' });
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Phiếu thu không ở trạng thái nháp',
+          });
         }
         if (receipt.voucherId) {
           const consumed = await tx.$executeRaw`
@@ -342,10 +379,18 @@ export const financeRouter = router({
         // work (voucher consume, code allocation) is rolled back on throw.
         const claimed = await tx.receipt.updateMany({
           where: { id: input.id, status: 'draft' },
-          data: { status: 'approved', code, approvedById: ctx.session.userId, approvedAt: new Date() },
+          data: {
+            status: 'approved',
+            code,
+            approvedById: ctx.session.userId,
+            approvedAt: new Date(),
+          },
         });
         if (claimed.count === 0) {
-          throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu thu đã được duyệt bởi yêu cầu đồng thời' });
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'Phiếu thu đã được duyệt bởi yêu cầu đồng thời',
+          });
         }
 
         // ── Student provisioning ────────────────────────────────────────────────────
@@ -357,11 +402,22 @@ export const financeRouter = router({
           resolvedStudentId = receipt.studentId;
           // If parent info was also supplied, ensure guardian link exists (idempotent upsert).
           if (receipt.parentPhone) {
-            const parentAcc = await tx.parentAccount.findFirst({ where: { phone: receipt.parentPhone } });
+            const parentAcc = await tx.parentAccount.findFirst({
+              where: { phone: receipt.parentPhone },
+            });
             if (parentAcc) {
               await tx.guardian.upsert({
-                where: { parentAccountId_studentId: { parentAccountId: parentAcc.id, studentId: resolvedStudentId } },
-                create: { facilityId: receipt.facilityId, parentAccountId: parentAcc.id, studentId: resolvedStudentId },
+                where: {
+                  parentAccountId_studentId: {
+                    parentAccountId: parentAcc.id,
+                    studentId: resolvedStudentId,
+                  },
+                },
+                create: {
+                  facilityId: receipt.facilityId,
+                  parentAccountId: parentAcc.id,
+                  studentId: resolvedStudentId,
+                },
                 update: {},
               });
             }
@@ -371,13 +427,16 @@ export const financeRouter = router({
           if (!receipt.parentPhone || !receipt.studentName) {
             throw new TRPCError({
               code: 'BAD_REQUEST',
-              message: 'Phiếu không có studentId hoặc parentPhone+studentName — không thể tạo học sinh',
+              message:
+                'Phiếu không có studentId hoặc parentPhone+studentName — không thể tạo học sinh',
             });
           }
           const program = receipt.course.program as Program;
 
           // Find or create the ParentAccount by phone.
-          let parentAcc = await tx.parentAccount.findFirst({ where: { phone: receipt.parentPhone } });
+          let parentAcc = await tx.parentAccount.findFirst({
+            where: { phone: receipt.parentPhone },
+          });
           if (!parentAcc) {
             parentAcc = await tx.parentAccount.create({
               data: {
@@ -410,7 +469,9 @@ export const financeRouter = router({
           // so we never auto-reuse without a name match.
           const matchedStudent =
             activeGuardians.find(
-              (g) => g.student.fullName.trim().toLowerCase() === receipt.studentName!.trim().toLowerCase(),
+              (g) =>
+                g.student.fullName.trim().toLowerCase() ===
+                receipt.studentName!.trim().toLowerCase(),
             )?.student ?? null;
 
           if (matchedStudent) {
@@ -473,8 +534,17 @@ export const financeRouter = router({
 
           // Ensure Guardian link (idempotent).
           await tx.guardian.upsert({
-            where: { parentAccountId_studentId: { parentAccountId: parentAcc.id, studentId: resolvedStudentId } },
-            create: { facilityId: receipt.facilityId, parentAccountId: parentAcc.id, studentId: resolvedStudentId },
+            where: {
+              parentAccountId_studentId: {
+                parentAccountId: parentAcc.id,
+                studentId: resolvedStudentId,
+              },
+            },
+            create: {
+              facilityId: receipt.facilityId,
+              parentAccountId: parentAcc.id,
+              studentId: resolvedStudentId,
+            },
             update: {},
           });
         }
@@ -485,7 +555,10 @@ export const financeRouter = router({
           select: { lifecycle: true, fullName: true, studentCode: true },
         });
         if (student.lifecycle !== 'active') {
-          await tx.student.update({ where: { id: resolvedStudentId }, data: { lifecycle: 'active' } });
+          await tx.student.update({
+            where: { id: resolvedStudentId },
+            data: { lifecycle: 'active' },
+          });
           await logEvent(tx, {
             facilityId: receipt.facilityId,
             entityType: 'student',
@@ -509,12 +582,17 @@ export const financeRouter = router({
           if (batchForCourseCheck.courseId !== receipt.courseId) {
             throw new TRPCError({
               code: 'BAD_REQUEST',
-              message: 'Lớp học không thuộc khóa học trong phiếu thu (batch.courseId ≠ receipt.courseId)',
+              message:
+                'Lớp học không thuộc khóa học trong phiếu thu (batch.courseId ≠ receipt.courseId)',
             });
           }
 
           const existing = await tx.enrollment.findFirst({
-            where: { classBatchId: receipt.classBatchId, studentId: resolvedStudentId, archivedAt: null },
+            where: {
+              classBatchId: receipt.classBatchId,
+              studentId: resolvedStudentId,
+              archivedAt: null,
+            },
             select: { id: true },
           });
           if (!existing) {
@@ -612,7 +690,14 @@ export const financeRouter = router({
         const opp = receipt.opportunityId
           ? await tx.opportunity.findUnique({
               where: { id: receipt.opportunityId },
-              select: { ownerId: true, stage: true, studentName: true },
+              select: {
+                id: true,
+                ownerId: true,
+                stage: true,
+                studentName: true,
+                closedAt: true,
+                lostReason: true,
+              },
             })
           : null;
 
@@ -629,7 +714,9 @@ export const financeRouter = router({
             select: { fullName: true },
           });
           const oppName = opp.studentName.trim().toLowerCase();
-          const receiptStudentName = (student?.fullName ?? receipt.studentName ?? '').trim().toLowerCase();
+          const receiptStudentName = (student?.fullName ?? receipt.studentName ?? '')
+            .trim()
+            .toLowerCase();
           if (!receiptStudentName || oppName !== receiptStudentName) {
             attributedOpp = null; // unrelated opportunity → no commission credit
             await logEvent(tx, {
@@ -642,10 +729,33 @@ export const financeRouter = router({
             });
           }
         }
+        if (attributedOpp?.closedAt && attributedOpp.lostReason) {
+          attributedOpp = null;
+        }
         const priorCollected = await tx.receipt.count({
-          where: { studentId: resolvedStudentId, id: { not: receipt.id }, status: { in: ['approved', 'sent', 'reconciled'] } },
+          where: {
+            studentId: resolvedStudentId,
+            id: { not: receipt.id },
+            status: { in: ['approved', 'sent', 'reconciled'] },
+          },
         });
-        const kind = attributedOpp?.stage === 'O5_ENROLLED' ? 'new' : priorCollected > 0 ? 'renewal' : 'new';
+        const kind = attributedOpp ? 'new' : priorCollected > 0 ? 'renewal' : 'new';
+
+        if (attributedOpp && attributedOpp.stage !== 'O5_ENROLLED') {
+          await tx.opportunity.update({
+            where: { id: attributedOpp.id },
+            data: { stage: 'O5_ENROLLED', closedAt: new Date(), lostReason: null, lostNote: null },
+          });
+          await logEvent(tx, {
+            facilityId: receipt.facilityId,
+            entityType: 'opportunity',
+            entityId: attributedOpp.id,
+            type: 'status_changed',
+            body: `Cơ hội tự chuyển O5 khi duyệt phiếu ${code}`,
+            changes: [{ field: 'stage', old: attributedOpp.stage, new: 'O5_ENROLLED' }],
+            actorId: ctx.session.userId,
+          });
+        }
 
         // status, code, approvedById, approvedAt were already stamped by the conditional claim above.
         // Only stamp fields that depend on provisioning results.
@@ -705,7 +815,10 @@ export const financeRouter = router({
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const r = await tx.receipt.findUniqueOrThrow({ where: { id: input.id } });
         if (r.status !== 'approved' && r.status !== 'sent') {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Chỉ đối soát phiếu đã duyệt/đã gửi' });
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Chỉ đối soát phiếu đã duyệt/đã gửi',
+          });
         }
         const rec = await tx.receipt.update({
           where: { id: r.id },
@@ -744,7 +857,10 @@ export const financeRouter = router({
         }
 
         // Was this receipt ever approved? (affects voucher refund + student rollback)
-        const wasApproved = receipt.status === 'approved' || receipt.status === 'sent' || receipt.status === 'reconciled';
+        const wasApproved =
+          receipt.status === 'approved' ||
+          receipt.status === 'sent' ||
+          receipt.status === 'reconciled';
 
         const hadConsumed = receipt.voucherId && receipt.status !== 'draft';
         if (hadConsumed) {
@@ -766,6 +882,37 @@ export const financeRouter = router({
           actorId: ctx.session.userId,
         });
 
+        if (wasApproved && receipt.opportunityId) {
+          const opp = await tx.opportunity.findUnique({
+            where: { id: receipt.opportunityId },
+            select: { id: true, stage: true, closedAt: true, lostReason: true },
+          });
+          if (opp?.stage === 'O5_ENROLLED' && opp.closedAt && !opp.lostReason) {
+            const approvedOnOpp = await tx.receipt.count({
+              where: {
+                opportunityId: receipt.opportunityId,
+                id: { not: receipt.id },
+                status: { in: ['approved', 'sent', 'reconciled'] },
+              },
+            });
+            if (approvedOnOpp === 0) {
+              await tx.opportunity.update({
+                where: { id: receipt.opportunityId },
+                data: { stage: 'O4_TESTED', closedAt: null },
+              });
+              await logEvent(tx, {
+                facilityId: cancelled.facilityId,
+                entityType: 'opportunity',
+                entityId: receipt.opportunityId,
+                type: 'status_changed',
+                body: `Cơ hội quay về O4 khi hủy phiếu ${cancelled.code ?? receipt.id}`,
+                changes: [{ field: 'stage', old: 'O5_ENROLLED', new: 'O4_TESTED' }],
+                actorId: ctx.session.userId,
+              });
+            }
+          }
+        }
+
         // ── Student/enrollment rollback (only when receipt was previously approved) ──────
         if (wasApproved && receipt.studentId) {
           // Fetch the enrollments created by this receipt (provenance-scoped).
@@ -775,9 +922,12 @@ export const financeRouter = router({
           });
 
           // Count attendance on those specific enrollments only.
-          const attendanceCount = provEnrollments.length > 0
-            ? await tx.attendance.count({ where: { enrollmentId: { in: provEnrollments.map((e) => e.id) } } })
-            : 0;
+          const attendanceCount =
+            provEnrollments.length > 0
+              ? await tx.attendance.count({
+                  where: { enrollmentId: { in: provEnrollments.map((e) => e.id) } },
+                })
+              : 0;
 
           // Count other approved receipts for this student (excluding the one being cancelled).
           const otherApprovedCount = await tx.receipt.count({

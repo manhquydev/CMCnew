@@ -1,5 +1,7 @@
 # Phase 3 — Commission chain: sale draft receipt from opportunity + auto-O5 on approve
 
+Status: completed 2026-07-02.
+
 ## Context links
 - Brainstorm §2 Mạch tiền, D2; plan.md serialization (P3 permissions.ts edit FIRST of the three).
 - Anchors (verified): `apps/admin/src/finance-panel.tsx:714,727` (receiptCreate calls — no opportunityId); `apps/api/src/routers/finance.ts:198,258` (API accepts opportunityId); `:608-668` (commission attribution + kind + soldById stamp at approve); `apps/admin/src/opportunity-detail.tsx` (host "Tạo phiếu thu" button); `packages/auth/src/permissions.ts:131` (`receiptCreate: ['ke_toan','giam_doc_kinh_doanh']`).
@@ -44,12 +46,19 @@ Wire the commission chain end-to-end: give sale `finance.receiptCreate` (draft-o
 6. Int test (UI-path, no hand-called API): sale login → create draft on O4 opp → director approve → assert soldById=ownerId, kind='new', opp.stage='O5_ENROLLED' AND closedAt set; win-back case → kind='new'; mismatched studentName → attribution dropped + no advance; LOST same-name opp → no auto-won; cancel auto-won receipt → opp reverts to O4 (closedAt cleared); adversarial (N4): renewal receipt + freshly-linked same-name opp → approver UI shows `kind` before approve.
 
 ## Todo list
-- [ ] permissions.ts receiptCreate += sale AND receiptListOwn added (serialized edit #1)
-- [ ] finance.ts receiptListOwn query (collectedById=self, read-only)
-- [ ] finance-panel pass opportunityId (both call sites)
-- [ ] opportunity-detail "Tạo phiếu thu" button + prefill + read-only linked-receipt status
-- [ ] receiptApprove auto-O5 with correct kind ordering + audit
-- [ ] int tests: new / win-back / mismatch-drop / sale-sees-own-receipt-post-approve + denied others'
+- [x] permissions.ts receiptCreate += sale AND receiptListOwn added (serialized edit #1)
+- [x] finance.ts receiptListOwn query (collectedById=self, read-only)
+- [x] finance-panel pass opportunityId (both call sites)
+- [x] opportunity-detail "Tạo phiếu thu" button + prefill + read-only linked-receipt status
+- [x] receiptApprove auto-O5 with correct kind ordering + audit
+- [x] int tests: new / win-back / mismatch-drop / sale-sees-own-receipt-post-approve + denied others'
+
+## Completion evidence
+- `pnpm --filter @cmc/api exec vitest run test/role-flows-commission-chain.int.test.ts test/commission-for-sale-e2e.int.test.ts test/receipt-kind-classification.int.test.ts test/crm-hooks.int.test.ts test/permission-parity.test.ts` — PASS, 5 files / 39 tests.
+- `pnpm --filter @cmc/api typecheck` — PASS.
+- `pnpm --filter @cmc/admin typecheck` — PASS.
+- `pnpm --filter @cmc/api lint` — PASS with pre-existing warnings only (`emit-staff-notif.ts`, `shift-registration.ts`).
+- `pnpm --filter @cmc/admin lint` — PASS with pre-existing warning only (`course-exercise-manager.tsx`).
 
 ## Success Criteria
 - Success criterion §6.1 met: full chain via UI, correct attribution, opp auto→O5.

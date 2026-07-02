@@ -45,13 +45,7 @@ const RECEIPT_PAGE_SIZE = 20;
 
 // ─── Course Price Card ────────────────────────────────────────────────────────
 
-function CoursePriceCard({
-  courses,
-  facilities,
-}: {
-  courses: CourseT[];
-  facilities: Facility[];
-}) {
+function CoursePriceCard({ courses, facilities }: { courses: CourseT[]; facilities: Facility[] }) {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [prices, setPrices] = useState<CoursePrice[]>([]);
   const [priceLoad, setPriceLoad] = useState<'idle' | 'loading' | 'error'>('idle');
@@ -127,7 +121,10 @@ function CoursePriceCard({
             <Select
               label="Cơ sở"
               withAsterisk
-              data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
+              data={facilities.map((f) => ({
+                value: String(f.id),
+                label: `${f.code} — ${f.name}`,
+              }))}
               {...priceForm.getInputProps('facilityId')}
             />
             <Select
@@ -219,7 +216,9 @@ function CoursePriceCard({
                 return (
                   <Table.Tr key={p.id}>
                     <Table.Td>{new Date(p.effectiveFrom).toLocaleDateString('vi-VN')}</Table.Td>
-                    <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(p.amount)}</Table.Td>
+                    <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {vnd(p.amount)}
+                    </Table.Td>
                     <Table.Td>{fac?.code ?? `#${p.facilityId}`}</Table.Td>
                   </Table.Tr>
                 );
@@ -311,7 +310,10 @@ function VoucherCard({ facilities }: { facilities: Facility[] }) {
             <Select
               label="Cơ sở"
               withAsterisk
-              data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
+              data={facilities.map((f) => ({
+                value: String(f.id),
+                label: `${f.code} — ${f.name}`,
+              }))}
               {...form.getInputProps('facilityId')}
             />
             <TextInput
@@ -322,12 +324,31 @@ function VoucherCard({ facilities }: { facilities: Facility[] }) {
             />
           </Group>
           <Group grow align="flex-end">
-            <NumberInput label="Giảm (%)" withAsterisk min={1} max={100} {...form.getInputProps('percent')} />
-            <NumberInput label="Số lượt tối đa" withAsterisk min={1} {...form.getInputProps('maxUses')} />
+            <NumberInput
+              label="Giảm (%)"
+              withAsterisk
+              min={1}
+              max={100}
+              {...form.getInputProps('percent')}
+            />
+            <NumberInput
+              label="Số lượt tối đa"
+              withAsterisk
+              min={1}
+              {...form.getInputProps('maxUses')}
+            />
           </Group>
           <Group grow align="flex-end">
-            <TextInput label="Hiệu lực từ (tùy chọn)" placeholder="YYYY-MM-DD" {...form.getInputProps('validFrom')} />
-            <TextInput label="Hết hạn (tùy chọn)" placeholder="YYYY-MM-DD" {...form.getInputProps('validTo')} />
+            <TextInput
+              label="Hiệu lực từ (tùy chọn)"
+              placeholder="YYYY-MM-DD"
+              {...form.getInputProps('validFrom')}
+            />
+            <TextInput
+              label="Hết hạn (tùy chọn)"
+              placeholder="YYYY-MM-DD"
+              {...form.getInputProps('validTo')}
+            />
           </Group>
           <Group>
             <Button type="submit" loading={busy}>
@@ -360,10 +381,20 @@ function VoucherCard({ facilities }: { facilities: Facility[] }) {
             </Button>
           )}
         </Group>
-        {vLoad === 'loading' && <Text c="dimmed" size="sm">Đang tải...</Text>}
-        {vLoad === 'error' && <Alert color="red" title="Lỗi">{vError}</Alert>}
+        {vLoad === 'loading' && (
+          <Text c="dimmed" size="sm">
+            Đang tải...
+          </Text>
+        )}
+        {vLoad === 'error' && (
+          <Alert color="red" title="Lỗi">
+            {vError}
+          </Alert>
+        )}
         {vLoad === 'idle' && facilityId && vouchers.length === 0 && (
-          <Text c="dimmed" size="sm">Chưa có voucher nào.</Text>
+          <Text c="dimmed" size="sm">
+            Chưa có voucher nào.
+          </Text>
         )}
         {vouchers.length > 0 && (
           <Table striped withTableBorder={false} fz="sm">
@@ -423,7 +454,8 @@ function ReceiptsCard({
   // parent (backend returns it plaintext exactly once; it is also emailed). Shown in a dismissible modal.
   const [cred, setCred] = useState<{ loginCode: string; tempPassword: string } | null>(null);
 
-  const studentName = (id: string | null) => id ? (students.find((s) => s.id === id)?.fullName ?? id.slice(0, 8)) : '—';
+  const studentName = (id: string | null) =>
+    id ? (students.find((s) => s.id === id)?.fullName ?? id.slice(0, 8)) : '—';
   const courseName = (id: string) => courses.find((c) => c.id === id)?.code ?? id.slice(0, 8);
 
   const loadReceipts = useCallback(() => {
@@ -507,11 +539,21 @@ function ReceiptsCard({
       <Modal opened={!!cred} onClose={() => setCred(null)} title="Tài khoản LMS học sinh" centered>
         {cred && (
           <Stack gap="xs">
-            <Text size="sm">Đã tạo tài khoản LMS cho học sinh. Gửi thông tin này cho phụ huynh:</Text>
-            <Text>Mã đăng nhập: <b data-testid="lms-login-code">{cred.loginCode}</b></Text>
-            <Text>Mật khẩu tạm: <b>{cred.tempPassword}</b></Text>
-            <Text size="xs" c="dimmed">Mật khẩu chỉ hiển thị một lần; phụ huynh đổi sau khi đăng nhập.</Text>
-            <Button onClick={() => setCred(null)} mt="sm">Đã ghi nhận</Button>
+            <Text size="sm">
+              Đã tạo tài khoản LMS cho học sinh. Gửi thông tin này cho phụ huynh:
+            </Text>
+            <Text>
+              Mã đăng nhập: <b data-testid="lms-login-code">{cred.loginCode}</b>
+            </Text>
+            <Text>
+              Mật khẩu tạm: <b>{cred.tempPassword}</b>
+            </Text>
+            <Text size="xs" c="dimmed">
+              Mật khẩu chỉ hiển thị một lần; phụ huynh đổi sau khi đăng nhập.
+            </Text>
+            <Button onClick={() => setCred(null)} mt="sm">
+              Đã ghi nhận
+            </Button>
           </Stack>
         )}
       </Modal>
@@ -522,7 +564,10 @@ function ReceiptsCard({
           placeholder="Tất cả"
           data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
           value={filterFacilityId}
-          onChange={(v) => { setFilterFacilityId(v); setPage(1); }}
+          onChange={(v) => {
+            setFilterFacilityId(v);
+            setPage(1);
+          }}
           clearable
           w={220}
         />
@@ -540,16 +585,22 @@ function ReceiptsCard({
       </Group>
 
       {rLoad === 'loading' && (
-        <Text c="dimmed" ta="center" py="xl">Đang tải...</Text>
+        <Text c="dimmed" ta="center" py="xl">
+          Đang tải...
+        </Text>
       )}
       {rLoad === 'error' && (
         <Alert color="red" title="Lỗi tải phiếu thu">
           {rError}
-          <Button size="xs" variant="subtle" mt="sm" onClick={loadReceipts}>Thử lại</Button>
+          <Button size="xs" variant="subtle" mt="sm" onClick={loadReceipts}>
+            Thử lại
+          </Button>
         </Alert>
       )}
       {rLoad === 'ok' && filtered.length === 0 && (
-        <Text c="dimmed" size="sm">Chưa có phiếu thu.</Text>
+        <Text c="dimmed" size="sm">
+          Chưa có phiếu thu.
+        </Text>
       )}
       {rLoad === 'ok' && filtered.length > 0 && (
         <>
@@ -574,23 +625,39 @@ function ReceiptsCard({
                     <Table.Td>{studentName(r.studentId)}</Table.Td>
                     <Table.Td>{courseName(r.courseId)}</Table.Td>
                     <Table.Td>{r.effectiveDiscountPercent}%</Table.Td>
-                    <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(r.netAmount)}</Table.Td>
+                    <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {vnd(r.netAmount)}
+                    </Table.Td>
                     <Table.Td>
                       <Badge color={st.color}>{st.label}</Badge>
                     </Table.Td>
                     <Table.Td>
                       <Group gap={4} justify="flex-end">
-                        <Button size="compact-xs" variant="subtle" color="gray" onClick={() => setDetailTarget(r)}>
+                        <Button
+                          size="compact-xs"
+                          variant="subtle"
+                          color="gray"
+                          onClick={() => setDetailTarget(r)}
+                        >
                           Nhật ký
                         </Button>
                         {r.status === 'draft' && (
-                          <Button size="compact-xs" onClick={() => approve(r.id)}>Duyệt</Button>
+                          <Button size="compact-xs" onClick={() => approve(r.id)}>
+                            Duyệt
+                          </Button>
                         )}
                         {r.status === 'approved' && (
-                          <Button size="compact-xs" variant="light" onClick={() => markSent(r.id)}>Gửi</Button>
+                          <Button size="compact-xs" variant="light" onClick={() => markSent(r.id)}>
+                            Gửi
+                          </Button>
                         )}
                         {(r.status === 'approved' || r.status === 'sent') && (
-                          <Button size="compact-xs" variant="light" color="green" onClick={() => reconcile(r.id)}>
+                          <Button
+                            size="compact-xs"
+                            variant="light"
+                            color="green"
+                            onClick={() => reconcile(r.id)}
+                          >
                             Đối soát
                           </Button>
                         )}
@@ -598,13 +665,20 @@ function ReceiptsCard({
                           <Button
                             size="compact-xs"
                             variant="subtle"
-                            onClick={() => window.open(`${API_URL}/files/receipt/${r.id}`, '_blank', 'noopener')}
+                            onClick={() =>
+                              window.open(`${API_URL}/files/receipt/${r.id}`, '_blank', 'noopener')
+                            }
                           >
                             In
                           </Button>
                         )}
                         {(r.status === 'draft' || r.status === 'approved') && (
-                          <Button size="compact-xs" variant="light" color="red" onClick={() => setCancelTarget(r)}>
+                          <Button
+                            size="compact-xs"
+                            variant="light"
+                            color="red"
+                            onClick={() => setCancelTarget(r)}
+                          >
                             Hủy
                           </Button>
                         )}
@@ -626,8 +700,8 @@ function ReceiptsCard({
       <Modal opened={!!cancelTarget} onClose={() => setCancelTarget(null)} title="Hủy phiếu thu">
         <Stack>
           <Text size="sm">
-            Hủy phiếu {cancelTarget?.code ?? 'nháp'} ({cancelTarget ? vnd(cancelTarget.netAmount) : ''})?
-            Voucher (nếu có) sẽ được hoàn lượt.
+            Hủy phiếu {cancelTarget?.code ?? 'nháp'} (
+            {cancelTarget ? vnd(cancelTarget.netAmount) : ''})? Voucher (nếu có) sẽ được hoàn lượt.
           </Text>
           <Textarea
             label="Lý do hủy"
@@ -637,7 +711,9 @@ function ReceiptsCard({
             onChange={(e) => setCancelReason(e.currentTarget.value)}
           />
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => setCancelTarget(null)}>Đóng</Button>
+            <Button variant="default" onClick={() => setCancelTarget(null)}>
+              Đóng
+            </Button>
             <Button color="red" disabled={!cancelReason.trim()} onClick={doCancel}>
               Xác nhận hủy
             </Button>
@@ -666,11 +742,18 @@ function ReceiptCreateCard({
   courses,
   facilities,
   onCreated,
+  opportunityContext,
 }: {
   students: StudentT[];
   courses: CourseT[];
   facilities: Facility[];
   onCreated: () => void;
+  opportunityContext?: {
+    opportunityId: string;
+    studentName?: string | null;
+    courseId?: string | null;
+    facilityId?: number | null;
+  };
 }) {
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [batches, setBatches] = useState<BatchT[]>([]);
@@ -694,8 +777,20 @@ function ReceiptCreateCard({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    trpc.classBatch.list.query().then(setBatches).catch(() => {});
+    trpc.classBatch.list
+      .query()
+      .then(setBatches)
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!opportunityContext) return;
+    setMode(opportunityContext.courseId ? 'existing' : 'new');
+    setNewFacilityId(opportunityContext.facilityId ? String(opportunityContext.facilityId) : null);
+    setNewCourseId(opportunityContext.courseId ?? null);
+    setCourseId(opportunityContext.courseId ?? null);
+    setStudentName(opportunityContext.studentName ?? '');
+  }, [opportunityContext]);
 
   const filteredBatches = newFacilityId
     ? batches.filter((b) => String(b.facilityId) === newFacilityId)
@@ -718,10 +813,14 @@ function ReceiptCreateCard({
           yearsPrepaid: Number(years),
           period: period.trim() || undefined,
           voucherCode: voucherCode.trim() || undefined,
+          opportunityId: opportunityContext?.opportunityId,
         });
       } else {
         if (!newFacilityId || !newCourseId || !parentPhone.trim() || !studentName.trim()) {
-          notifyError('Vui lòng điền: cơ sở, khóa học, SĐT phụ huynh và tên học sinh.', 'Thiếu thông tin');
+          notifyError(
+            'Vui lòng điền: cơ sở, khóa học, SĐT phụ huynh và tên học sinh.',
+            'Thiếu thông tin',
+          );
           return;
         }
         r = await trpc.finance.receiptCreate.mutate({
@@ -734,16 +833,24 @@ function ReceiptCreateCard({
           studentName: studentName.trim(),
           studentDob: studentDob.trim() || undefined,
           classBatchId: classBatchId ?? undefined,
+          opportunityId: opportunityContext?.opportunityId,
         });
       }
       notifySuccess(
         `Đã tạo phiếu nháp: gốc ${vnd(r.grossAmount)} → giảm ${r.effectiveDiscountPercent}% → còn ${vnd(r.netAmount)}`,
         'Tạo phiếu thu thành công',
       );
-      setStudentId(null); setCourseId(null);
-      setNewFacilityId(null); setNewCourseId(null);
-      setParentPhone(''); setStudentName(''); setStudentDob(''); setClassBatchId(null);
-      setYears('1'); setVoucherCode(''); setPeriod('');
+      setStudentId(null);
+      setCourseId(null);
+      setNewFacilityId(null);
+      setNewCourseId(null);
+      setParentPhone('');
+      setStudentName('');
+      setStudentDob('');
+      setClassBatchId(null);
+      setYears('1');
+      setVoucherCode('');
+      setPeriod('');
       onCreated();
     } catch (e) {
       notifyError(e, 'Tạo phiếu thu thất bại');
@@ -760,10 +867,18 @@ function ReceiptCreateCard({
 
       {/* Mode toggle: existing student vs. new student */}
       <Group mb="sm">
-        <Button size="xs" variant={mode === 'existing' ? 'filled' : 'subtle'} onClick={() => setMode('existing')}>
+        <Button
+          size="xs"
+          variant={mode === 'existing' ? 'filled' : 'subtle'}
+          onClick={() => setMode('existing')}
+        >
           Học sinh hiện có
         </Button>
-        <Button size="xs" variant={mode === 'new' ? 'filled' : 'subtle'} onClick={() => setMode('new')}>
+        <Button
+          size="xs"
+          variant={mode === 'new' ? 'filled' : 'subtle'}
+          onClick={() => setMode('new')}
+        >
           Học sinh mới
         </Button>
       </Group>
@@ -794,9 +909,15 @@ function ReceiptCreateCard({
               label="Cơ sở"
               withAsterisk
               placeholder="Chọn cơ sở"
-              data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
+              data={facilities.map((f) => ({
+                value: String(f.id),
+                label: `${f.code} — ${f.name}`,
+              }))}
               value={newFacilityId}
-              onChange={(v) => { setNewFacilityId(v); setClassBatchId(null); }}
+              onChange={(v) => {
+                setNewFacilityId(v);
+                setClassBatchId(null);
+              }}
             />
             <Select
               label="Khóa học"
@@ -866,7 +987,8 @@ function ReceiptCreateCard({
         />
       </Group>
       <Text size="xs" c="dimmed" mt={6}>
-        Giảm theo số năm cộng voucher, tổng tối đa 35%. Giá lấy theo bảng giá hiệu lực ngày lập phiếu.
+        Giảm theo số năm cộng voucher, tổng tối đa 35%. Giá lấy theo bảng giá hiệu lực ngày lập
+        phiếu.
       </Text>
       <Group mt="md">
         <Button onClick={createDraft} loading={busy}>
@@ -912,12 +1034,7 @@ export function FinancePanel() {
         onCreated={() => setReloadKey((k) => k + 1)}
       />
       {/* key forces ReceiptsCard to re-mount and reload after a new receipt is created */}
-      <ReceiptsCard
-        key={reloadKey}
-        students={students}
-        courses={courses}
-        facilities={facilities}
-      />
+      <ReceiptsCard key={reloadKey} students={students} courses={courses} facilities={facilities} />
     </Stack>
   );
 }

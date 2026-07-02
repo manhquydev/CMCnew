@@ -35,14 +35,26 @@ Surface the existing (unused) contact directory, make phone-dedupe visible befor
 4. Tests: sale can list/create/transition/assign afterSale within facility, denied cross-facility + setStudentLifecycle; dup-phone warning shows existing open opps.
 
 ## Todo list
-- [ ] permissions afterSale += sale AND listAssignableForAfterSale += sale (serialized #3, M7)
-- [ ] contact directory panel (contactList)
-- [ ] createLead dup-phone warning (reuse server dedupe)
-- [ ] tests: afterSale scope + dup warning
+- [x] permissions afterSale += sale AND listAssignableForAfterSale += sale (serialized #3, M7)
+- [x] contact directory panel (contactList)
+- [x] createLead dup-phone warning (reuse server dedupe)
+- [x] tests: afterSale scope + dup warning
 
 ## Success Criteria
 - §6.6 directory searchable by phone/name; creating opp on existing phone warns with open opps.
 - Sale handles afterSale cases within own facility; setStudentLifecycle stays director-only.
+
+## Evidence
+- `packages/auth/src/permissions.ts`: `afterSale.{list,create,transition,assign}` and
+  `user.listAssignableForAfterSale` include `sale`; `setStudentLifecycle` remains director-only.
+- `apps/admin/src/contact-directory-panel.tsx`: searchable contact directory backed by
+  `crm.contactList`.
+- `apps/admin/src/crm-panel.tsx`: non-blocking duplicate-phone warning lists open opportunities
+  from the already-loaded pipeline before create.
+- `pnpm --filter @cmc/admin typecheck` PASS.
+- `pnpm --filter @cmc/api typecheck` PASS.
+- `pnpm --filter @cmc/api exec vitest run test/permission-parity.test.ts test/cskh-assignable-staff.int.test.ts test/role-flows-crm-hygiene.int.test.ts test/aftersale-student-lifecycle.int.test.ts test/crm-sales-ops.int.test.ts`
+  PASS, 5 files / 42 tests.
 
 ## Risk Assessment
 - afterSale grant lets sale over-reach into other facilities' cases — Med×Med. afterSale handlers are facility-scoped; add cross-facility denial test.

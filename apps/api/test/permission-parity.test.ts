@@ -242,3 +242,26 @@ describe('director payroll/KPI authority (3-heads executive board)', () => {
     }
   });
 });
+
+describe('shift registration delegated approval', () => {
+  it('staff roles can call approve/reject; router still enforces assigned approver and self-block', () => {
+    for (const action of ['approve', 'reject']) {
+      for (const role of ['giao_vien', 'sale', 'cskh']) {
+        expect(PERMISSIONS['shiftRegistration']![action], `shiftRegistration.${action} must include ${role}`).toContain(role);
+      }
+    }
+  });
+});
+
+describe('sale afterSale facility-scoped handling', () => {
+  it('sale can operate normal afterSale case flow and assignment picker', () => {
+    for (const action of ['list', 'create', 'transition', 'assign']) {
+      expect(PERMISSIONS['afterSale']![action], `afterSale.${action} must include sale`).toContain('sale');
+    }
+    expect(PERMISSIONS['user']!['listAssignableForAfterSale']).toContain('sale');
+  });
+
+  it('sale cannot change student lifecycle from afterSale', () => {
+    expect(PERMISSIONS['afterSale']!['setStudentLifecycle']).not.toContain('sale');
+  });
+});

@@ -22,6 +22,8 @@ type PayslipRow = {
   netIncome: number | null;
   grossIncome: number | null;
   kpiGrade: string | null;
+  attendanceDeduction?: number | null;
+  attendanceDeductionOverride?: number | null;
 };
 type BulkPayResult = { succeeded: string[]; failed: string[] };
 type PeriodSummary = {
@@ -31,10 +33,38 @@ type PeriodSummary = {
   totalNet: number;
   totalPit: number;
   totalInsurance: number;
+  totalAttendanceDeduction: number;
   draftCount: number;
   finalizedCount: number;
   paidCount: number;
   finalizedNet: number;
+};
+type AttendanceReportDay = {
+  date: string;
+  shiftTemplateId: string;
+  shiftName: string | null;
+  punchCount: number;
+  checkIn: string | Date | null;
+  checkOut: string | Date | null;
+  lateMinutes: number;
+  earlyMinutes: number;
+  penaltyAmount: number;
+};
+type AttendanceReportRow = {
+  userId: string;
+  displayName: string;
+  workdays: number;
+  lateMinutes: number;
+  earlyMinutes: number;
+  penaltyAmount: number;
+  days: AttendanceReportDay[];
+};
+type AttendanceHistoryPunch = {
+  id: string;
+  timestamp: string | Date;
+  method: string;
+  ipAddress: string;
+  shiftTemplateId: string | null;
 };
 type KpiRow = {
   id: string;
@@ -74,6 +104,9 @@ export const payrollApi = trpc.payroll as unknown as {
   payslipOverrideVariablePay: {
     mutate: (i: { userId: string; periodKey: string; amount: number; reason: string }) => Promise<PayslipRow>;
   };
+  payslipOverrideAttendanceDeduction: {
+    mutate: (i: { id: string; amount: number; reason: string }) => Promise<PayslipRow>;
+  };
   kpiList: { query: (i: { facilityId: number; periodKey: string }) => Promise<KpiRow[]> };
   kpiEvalStart: { mutate: (i: { userId: string; facilityId: number; periodKey: string; block: 'training' | 'sales' }) => Promise<unknown> };
   kpiAutoPrefill: { mutate: (i: { userId: string; facilityId: number; periodKey: string }) => Promise<unknown> };
@@ -82,4 +115,9 @@ export const payrollApi = trpc.payroll as unknown as {
   kpiEvalApprove: { mutate: (i: { userId: string; periodKey: string }) => Promise<unknown> };
   kpiOverride: { mutate: (i: { userId: string; periodKey: string; overrideScore: number; reason: string }) => Promise<unknown> };
   kpiEvalGet: { query: (i: { userId: string; periodKey: string }) => Promise<{ row: KpiRow; criteriaConfig: CriterionConfig[] }> };
+};
+
+export const attendanceApi = trpc.checkInOut as unknown as {
+  monthlyReport: { query: (i: { facilityId: number; periodKey: string }) => Promise<{ periodKey: string; rows: AttendanceReportRow[] }> };
+  history: { query: (i: { userId?: string; fromDate: string; toDate: string }) => Promise<AttendanceHistoryPunch[]> };
 };

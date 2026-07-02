@@ -28,6 +28,8 @@ type PayslipRow = {
   netIncome: number | null;
   grossIncome: number | null;
   kpiGrade: string | null;
+  attendanceDeduction?: number | null;
+  attendanceDeductionOverride?: number | null;
 };
 
 type RosterEntry = { id: string; displayName: string; primaryRole: string | null };
@@ -38,6 +40,7 @@ type PeriodSummary = {
   totalNet: number;
   totalPit: number;
   totalInsurance: number;
+  totalAttendanceDeduction: number;
   draftCount: number;
   finalizedCount: number;
   paidCount: number;
@@ -156,6 +159,10 @@ function PeriodSummaryCard({ facilityId }: { facilityId: number }) {
             <Stack gap={2}>
               <Text size="xs" c="dimmed">Bảo hiểm</Text>
               <Text fw={600} style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(summary.totalInsurance)}</Text>
+            </Stack>
+            <Stack gap={2}>
+              <Text size="xs" c="dimmed">Phạt công</Text>
+              <Text fw={600} c="red" style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(summary.totalAttendanceDeduction)}</Text>
             </Stack>
           </Group>
         </Stack>
@@ -393,6 +400,99 @@ function CommissionOverrideModal({
   );
 }
 
+function AttendanceDeductionOverrideModal({
+  slip,
+  opened,
+  onClose,
+  onDone,
+}: {
+  slip: PayslipRow;
+  opened: boolean;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const effective = slip.attendanceDeductionOverride ?? slip.attendanceDeduction ?? 0;
+  const [amount, setAmount] = useState<number | string>(effective);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  function reset() {
+    setAmount(effective);
+    setReason('');
+    setErr('');
+  }
+
+  async function submit() {
+    if (typeof amount !== 'number' || amount < 0) {
+      setErr('Số tiền phải ≥ 0');
+      return;
+    }
+    if (!reason.trim()) {
+      setErr('Nhập lý do điều chỉnh');
+      return;
+    }
+    setErr('');
+    setBusy(true);
+    try {
+      await payrollApi.payslipOverrideAttendanceDeduction.mutate({
+        id: slip.id,
+        amount,
+        reason: reason.trim(),
+      });
+      notifySuccess(`Đã điều chỉnh phạt công kỳ ${slip.periodKey}: ${vnd(amount)}`);
+      reset();
+      onClose();
+      onDone();
+    } catch (e) {
+      notifyError(e, 'Điều chỉnh phạt công thất bại');
+      setErr(e instanceof Error ? e.message : 'Lỗi điều chỉnh');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      opened={opened}
+      onClose={() => { reset(); onClose(); }}
+      title={`Điều chỉnh phạt công — kỳ ${slip.periodKey}`}
+      radius="xl"
+      centered
+    >
+      <Stack gap="sm">
+        {err && <Alert color="red">{err}</Alert>}
+        <Text size="sm" c="dimmed">
+          Phạt gốc từ chấm công: {vnd(slip.attendanceDeduction ?? 0)}. Giá trị override chỉ áp dụng khi phiếu còn nháp.
+        </Text>
+        <NumberInput
+          label="Phạt công áp dụng (VNĐ)"
+          min={0}
+          step={10_000}
+          value={amount}
+          onChange={setAmount}
+          withAsterisk
+        />
+        <TextInput
+          label="Lý do điều chỉnh"
+          placeholder="VD: Xác nhận quên bấm checkout hợp lệ..."
+          value={reason}
+          onChange={(e) => setReason(e.currentTarget.value)}
+          withAsterisk
+        />
+        <Group justify="flex-end" mt="xs">
+          <Button variant="subtle" onClick={() => { reset(); onClose(); }}>
+            Hủy
+          </Button>
+          <Button variant="filled" color="orange" radius={9999} loading={busy} onClick={() => void submit()}>
+            Xác nhận điều chỉnh
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
 // ─── Staff Detail Drawer ──────────────────────────────────────────────────────
 
 function StaffDetailDrawer({
@@ -422,6 +522,7 @@ function StaffDetailDrawer({
   const [showCompute, setShowCompute] = useState(false);
   // Override modal: null = closed; string = periodKey of the draft slip being overridden.
   const [overridePeriodKey, setOverridePeriodKey] = useState<string | null>(null);
+  const [attendanceOverrideSlip, setAttendanceOverrideSlip] = useState<PayslipRow | null>(null);
 
   const loadPayslips = useCallback((id: string) => {
     setLoading(true);
@@ -566,6 +667,7 @@ function StaffDetailDrawer({
                   <Table.Th style={TH_STYLE}>Kỳ</Table.Th>
                   <Table.Th style={TH_STYLE}>Thực lĩnh</Table.Th>
                   <Table.Th style={TH_STYLE}>KPI</Table.Th>
+                  <Table.Th style={TH_STYLE}>Phạt công</Table.Th>
                   <Table.Th style={TH_STYLE}>Trạng thái</Table.Th>
                   <Table.Th style={TH_STYLE}>Thao tác</Table.Th>
                 </Table.Tr>
@@ -593,6 +695,9 @@ function StaffDetailDrawer({
                         {p.kpiGrade ? (
                           <Badge size="xs" variant="dot" color="blue">{p.kpiGrade}</Badge>
                         ) : '—'}
+                      </Table.Td>
+                      <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {vnd(p.attendanceDeductionOverride ?? p.attendanceDeduction ?? 0)}
                       </Table.Td>
                       <Table.Td>
                         <Badge size="sm" variant="light" radius="xl" color={st.color}>
@@ -628,6 +733,16 @@ function StaffDetailDrawer({
                               onClick={() => setOverridePeriodKey(p.periodKey)}
                             >
                               Điều chỉnh HH
+                            </Button>
+                          )}
+                          {p.status === 'draft' && canOverride && (
+                            <Button
+                              size="compact-xs"
+                              variant="subtle"
+                              color="red"
+                              onClick={() => setAttendanceOverrideSlip(p)}
+                            >
+                              Điều chỉnh phạt
                             </Button>
                           )}
                           {/* finalized → paid */}
@@ -687,6 +802,17 @@ function StaffDetailDrawer({
           onDone={() => {
             setOverridePeriodKey(null);
             loadPayslips(staffId);
+          }}
+        />
+      )}
+      {attendanceOverrideSlip && (
+        <AttendanceDeductionOverrideModal
+          slip={attendanceOverrideSlip}
+          opened={!!attendanceOverrideSlip}
+          onClose={() => setAttendanceOverrideSlip(null)}
+          onDone={() => {
+            setAttendanceOverrideSlip(null);
+            if (staffId) loadPayslips(staffId);
           }}
         />
       )}

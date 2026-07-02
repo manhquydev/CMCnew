@@ -53,6 +53,8 @@ type OppDetail = Awaited<ReturnType<typeof trpc.crm.opportunityGet.query>>;
 type Owner = Awaited<ReturnType<typeof trpc.crm.assignableOwners.query>>[number];
 type AssignmentLog = Awaited<ReturnType<typeof trpc.crm.assignmentHistory.query>>[number];
 type TestAppt = Awaited<ReturnType<typeof trpc.crm.testList.query>>[number];
+type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
+type OwnReceipt = Awaited<ReturnType<typeof trpc.finance.receiptListOwn.query>>[number];
 
 function testStatus(t: TestAppt): { label: string; tone: ReturnType<typeof statusOf>['tone'] } {
   if (t.status === 'done') return { label: 'Đã test', tone: 'active' };
@@ -65,14 +67,30 @@ const PROGRAM_LABEL: Record<string, string> = {
   BRIGHT_IG: 'Bright I.G',
   BLACK_HOLE: 'Black Hole',
 };
+const YEARS = [
+  { value: '1', label: '1 năm' },
+  { value: '2', label: '2 năm' },
+  { value: '3', label: '3 năm' },
+];
+const RECEIPT_STATUS: Record<string, { label: string; color: string }> = {
+  draft: { label: 'Nháp', color: 'gray' },
+  approved: { label: 'Đã duyệt', color: 'teal' },
+  sent: { label: 'Đã gửi', color: 'blue' },
+  reconciled: { label: 'Đã đối soát', color: 'green' },
+  cancelled: { label: 'Đã hủy', color: 'red' },
+};
 
 /** Two-column read-only field row (matches student/staff/schedule detail visual language). */
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <Group justify="space-between" wrap="nowrap" gap="xl">
-      <Text size="sm" c="dimmed">{label}</Text>
+      <Text size="sm" c="dimmed">
+        {label}
+      </Text>
       {/* component="div" so non-text values (e.g. a <Badge>) don't nest a block inside a <p>. */}
-      <Text component="div" size="sm" style={{ textAlign: 'right' }}>{value ?? '—'}</Text>
+      <Text component="div" size="sm" style={{ textAlign: 'right' }}>
+        {value ?? '—'}
+      </Text>
     </Group>
   );
 }
@@ -132,11 +150,24 @@ function AssignmentHistoryBlock({
 }) {
   const [logs, setLogs] = useState<AssignmentLog[] | null>(null);
   useEffect(() => {
-    trpc.crm.assignmentHistory.query({ opportunityId }).then(setLogs).catch(() => setLogs([]));
+    trpc.crm.assignmentHistory
+      .query({ opportunityId })
+      .then(setLogs)
+      .catch(() => setLogs([]));
   }, [opportunityId]);
 
-  if (!logs) return <Text size="sm" c="dimmed">Đang tải lịch sử phân bổ...</Text>;
-  if (logs.length === 0) return <Text size="sm" c="dimmed">Chưa có lịch sử phân bổ.</Text>;
+  if (!logs)
+    return (
+      <Text size="sm" c="dimmed">
+        Đang tải lịch sử phân bổ...
+      </Text>
+    );
+  if (logs.length === 0)
+    return (
+      <Text size="sm" c="dimmed">
+        Chưa có lịch sử phân bổ.
+      </Text>
+    );
 
   return (
     <Stack gap={4}>
@@ -167,8 +198,10 @@ export function OpportunityDetailPanel({
   // Mirror the server gate exactly (no hand-kept role list): only roles that hold
   // crm.opportunityReassign see the button; the mutation re-checks server-side regardless.
   const canReassign = can(me.roles, me.isSuperAdmin, 'crm', 'opportunityReassign');
+  const canCreateReceipt = can(me.roles, me.isSuperAdmin, 'finance', 'receiptCreate');
   // KHÔNG đổi: giữ nguyên danh sách role được phép chấm test (đồng bộ với crm.testGrade gate).
-  const canGrade = me.isSuperAdmin || me.roles.some((r) => ['giao_vien', 'giam_doc_dao_tao'].includes(r));
+  const canGrade =
+    me.isSuperAdmin || me.roles.some((r) => ['giao_vien', 'giam_doc_dao_tao'].includes(r));
 
   const [opp, setOpp] = useState<OppDetail | null>(null);
   const [owners, setOwners] = useState<Owner[]>([]);
@@ -176,6 +209,8 @@ export function OpportunityDetailPanel({
   const [error, setError] = useState<string | null>(null);
   const [tests, setTests] = useState<TestAppt[]>([]);
   const [testsLoading, setTestsLoading] = useState(true);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [ownReceipts, setOwnReceipts] = useState<OwnReceipt[]>([]);
 
   const [reassignOpen, setReassignOpen] = useState(false);
   const [reassignToOwnerId, setReassignToOwnerId] = useState<string | null>(null);
@@ -188,6 +223,11 @@ export function OpportunityDetailPanel({
   const [gradeTarget, setGradeTarget] = useState<TestAppt | null>(null);
   const [gradeScore, setGradeScore] = useState<number | string>('');
   const [gradeResult, setGradeResult] = useState('');
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptCourseId, setReceiptCourseId] = useState<string | null>(null);
+  const [receiptYears, setReceiptYears] = useState('1');
+  const [receiptVoucher, setReceiptVoucher] = useState('');
+  const [receiptBusy, setReceiptBusy] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -200,6 +240,18 @@ export function OpportunityDetailPanel({
           .query({ facilityId: o.facilityId })
           .then(setOwners)
           .catch(() => setOwners([]));
+        await Promise.all([
+          trpc.course.list
+            .query()
+            .then(setCourses)
+            .catch(() => setCourses([])),
+          canCreateReceipt
+            ? trpc.finance.receiptListOwn
+                .query({ opportunityId: oppId })
+                .then(setOwnReceipts)
+                .catch(() => setOwnReceipts([]))
+            : Promise.resolve(),
+        ]);
         setTestsLoading(true);
         // Same crm.testList call as before (facility-scoped, no server-side opp filter);
         // only the rendering location moved — filtered to this opportunity client-side below.
@@ -211,7 +263,7 @@ export function OpportunityDetailPanel({
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Không tải được cơ hội'))
       .finally(() => setLoading(false));
-  }, [oppId]);
+  }, [canCreateReceipt, oppId]);
   useEffect(load, [load]);
 
   const oppTests = useMemo(() => tests.filter((t) => t.opportunityId === oppId), [tests, oppId]);
@@ -227,7 +279,11 @@ export function OpportunityDetailPanel({
   async function doGrade() {
     if (!gradeTarget || typeof gradeScore !== 'number') return;
     try {
-      await trpc.crm.testGrade.mutate({ id: gradeTarget.id, score: gradeScore, result: gradeResult.trim() || undefined });
+      await trpc.crm.testGrade.mutate({
+        id: gradeTarget.id,
+        score: gradeScore,
+        result: gradeResult.trim() || undefined,
+      });
       notifySuccess('Đã chấm test (cơ hội tự lên O4)');
       setGradeTarget(null);
       setGradeScore('');
@@ -241,7 +297,10 @@ export function OpportunityDetailPanel({
   async function pickStage(stage: string) {
     if (!opp) return;
     try {
-      await trpc.crm.opportunityTransition.mutate({ id: opp.id, stage: stage as OppDetail['stage'] });
+      await trpc.crm.opportunityTransition.mutate({
+        id: opp.id,
+        stage: stage as OppDetail['stage'],
+      });
       notifySuccess('Đã chuyển bước cơ hội');
       refresh();
     } catch (e) {
@@ -311,6 +370,33 @@ export function OpportunityDetailPanel({
     }
   }
 
+  async function createOpportunityReceipt() {
+    if (!opp || !receiptCourseId) return;
+    setReceiptBusy(true);
+    try {
+      const receipt = await trpc.finance.receiptCreate.mutate({
+        facilityId: opp.facilityId,
+        courseId: receiptCourseId,
+        yearsPrepaid: Number(receiptYears),
+        voucherCode: receiptVoucher.trim() || undefined,
+        opportunityId: opp.id,
+        parentPhone: opp.contact.phone,
+        parentName: opp.contact.fullName,
+        studentName: (opp.studentName || opp.contact.fullName).trim(),
+      });
+      notifySuccess(`Đã tạo phiếu nháp ${receipt.code ?? ''}`.trim());
+      setReceiptOpen(false);
+      setReceiptCourseId(null);
+      setReceiptYears('1');
+      setReceiptVoucher('');
+      refresh();
+    } catch (e) {
+      notifyError(e, 'Tạo phiếu thu thất bại');
+    } finally {
+      setReceiptBusy(false);
+    }
+  }
+
   if (loading) {
     return (
       <Group>
@@ -322,7 +408,12 @@ export function OpportunityDetailPanel({
   if (error || !opp) {
     return (
       <Stack>
-        <Button variant="subtle" leftSection={<IconArrowLeft size={16} />} onClick={onBack} w="fit-content">
+        <Button
+          variant="subtle"
+          leftSection={<IconArrowLeft size={16} />}
+          onClick={onBack}
+          w="fit-content"
+        >
           Quay lại pipeline
         </Button>
         <Alert color="cmcRed" title="Không mở được cơ hội">
@@ -344,7 +435,12 @@ export function OpportunityDetailPanel({
     .map((o) => ({ value: o.id, label: `${o.displayName} · ${o.primaryRole}` }));
 
   const testColumns: DataTableColumn<TestAppt>[] = [
-    { key: 'type', header: 'Loại', width: 100, render: (t) => (t.type === 'entrance' ? 'Đầu vào' : 'Định kỳ') },
+    {
+      key: 'type',
+      header: 'Loại',
+      width: 100,
+      render: (t) => (t.type === 'entrance' ? 'Đầu vào' : 'Định kỳ'),
+    },
     {
       key: 'when',
       header: 'Lịch',
@@ -384,7 +480,9 @@ export function OpportunityDetailPanel({
           </ActionIcon>
           <div>
             <Title order={4}>{title}</Title>
-            <Text size="sm" c="dimmed">{opp.contact.phone}</Text>
+            <Text size="sm" c="dimmed">
+              {opp.contact.phone}
+            </Text>
           </div>
           <StatusBadge status={st.label} label={statusLabel} tone={st.tone} />
         </Group>
@@ -397,6 +495,11 @@ export function OpportunityDetailPanel({
           {!closed && canReassign && (
             <Button size="xs" variant="light" color="violet" onClick={() => setReassignOpen(true)}>
               Đổi phụ trách
+            </Button>
+          )}
+          {!closed && canCreateReceipt && (
+            <Button size="xs" onClick={() => setReceiptOpen(true)}>
+              Tạo phiếu thu
             </Button>
           )}
           {closed ? (
@@ -424,19 +527,29 @@ export function OpportunityDetailPanel({
       {/* Lead + attribution info */}
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xl">
         <Card withBorder p="md" radius="md">
-          <Title order={6} mb="sm">Thông tin liên hệ</Title>
+          <Title order={6} mb="sm">
+            Thông tin liên hệ
+          </Title>
           <Stack gap="xs">
             <Field label="Liên hệ" value={opp.contact.fullName} />
             <Field label="Số điện thoại" value={opp.contact.phone} />
             <Field label="Email" value={opp.contact.email} />
             <Field label="Học sinh" value={opp.studentName} />
-            <Field label="Chương trình" value={opp.program ? PROGRAM_LABEL[opp.program] ?? opp.program : '—'} />
+            <Field
+              label="Chương trình"
+              value={opp.program ? (PROGRAM_LABEL[opp.program] ?? opp.program) : '—'}
+            />
           </Stack>
         </Card>
         <Card withBorder p="md" radius="md">
-          <Title order={6} mb="sm">Phân bổ &amp; nguồn</Title>
+          <Title order={6} mb="sm">
+            Phân bổ &amp; nguồn
+          </Title>
           <Stack gap="xs">
-            <Field label="Người phụ trách" value={<Badge variant="light">{ownerName(opp.ownerId)}</Badge>} />
+            <Field
+              label="Người phụ trách"
+              value={<Badge variant="light">{ownerName(opp.ownerId)}</Badge>}
+            />
             <Field label="Kênh nguồn" value={opp.contact.medium || opp.contact.source} />
             <Field label="Chiến dịch" value={opp.contact.campaign} />
             <Field label="Ngày tạo" value={new Date(opp.createdAt).toLocaleString('vi-VN')} />
@@ -444,6 +557,33 @@ export function OpportunityDetailPanel({
           </Stack>
         </Card>
       </SimpleGrid>
+
+      {canCreateReceipt && ownReceipts.length > 0 && (
+        <Card withBorder p="md" radius="md">
+          <Title order={6} mb="sm">
+            Phiếu thu của tôi
+          </Title>
+          <Stack gap="xs">
+            {ownReceipts.map((receipt) => {
+              const status = RECEIPT_STATUS[receipt.status] ?? {
+                label: receipt.status,
+                color: 'gray',
+              };
+              return (
+                <Group key={receipt.id} justify="space-between" gap="md">
+                  <Text size="sm">{receipt.code ?? 'Phiếu nháp'}</Text>
+                  <Group gap="xs">
+                    <Text size="sm" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {receipt.netAmount.toLocaleString('vi-VN')}đ
+                    </Text>
+                    <Badge color={status.color}>{status.label}</Badge>
+                  </Group>
+                </Group>
+              );
+            })}
+          </Stack>
+        </Card>
+      )}
 
       <Divider label="Lịch sử phân bổ" labelPosition="left" />
       <AssignmentHistoryBlock opportunityId={opp.id} ownerName={ownerName} />
@@ -468,7 +608,11 @@ export function OpportunityDetailPanel({
       <Chatter entityType="opportunity" entityId={opp.id} />
 
       {/* ── Action modals ──────────────────────────────────────────────────── */}
-      <Modal opened={reassignOpen} onClose={() => setReassignOpen(false)} title="Đổi người phụ trách">
+      <Modal
+        opened={reassignOpen}
+        onClose={() => setReassignOpen(false)}
+        title="Đổi người phụ trách"
+      >
         <Stack>
           <Text size="sm">
             Cơ hội: <strong>{title}</strong> · hiện tại: {ownerName(opp.ownerId)}
@@ -490,8 +634,12 @@ export function OpportunityDetailPanel({
             onChange={(e) => setReassignReason(e.currentTarget.value)}
           />
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => setReassignOpen(false)}>Đóng</Button>
-            <Button color="violet" disabled={!reassignToOwnerId} onClick={doReassign}>Xác nhận</Button>
+            <Button variant="default" onClick={() => setReassignOpen(false)}>
+              Đóng
+            </Button>
+            <Button color="violet" disabled={!reassignToOwnerId} onClick={doReassign}>
+              Xác nhận
+            </Button>
           </Group>
         </Stack>
       </Modal>
@@ -515,8 +663,12 @@ export function OpportunityDetailPanel({
             onChange={(e) => setLostNote(e.currentTarget.value)}
           />
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => setLostOpen(false)}>Đóng</Button>
-            <Button color="red" disabled={!lostReason} onClick={doMarkLost}>Xác nhận</Button>
+            <Button variant="default" onClick={() => setLostOpen(false)}>
+              Đóng
+            </Button>
+            <Button color="red" disabled={!lostReason} onClick={doMarkLost}>
+              Xác nhận
+            </Button>
           </Group>
         </Stack>
       </Modal>
@@ -524,18 +676,86 @@ export function OpportunityDetailPanel({
       <Modal opened={testOpen} onClose={() => setTestOpen(false)} title="Đặt lịch test đầu vào">
         <Stack>
           <Text size="sm">{title} — cơ hội sẽ tự chuyển sang O3.</Text>
-          <DateTimePicker label="Thời gian test" value={testAt} onChange={(v: Date | null) => setTestAt(v)} />
+          <DateTimePicker
+            label="Thời gian test"
+            value={testAt}
+            onChange={(v: Date | null) => setTestAt(v)}
+          />
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => setTestOpen(false)}>Đóng</Button>
-            <Button disabled={!testAt} onClick={scheduleTest}>Đặt lịch</Button>
+            <Button variant="default" onClick={() => setTestOpen(false)}>
+              Đóng
+            </Button>
+            <Button disabled={!testAt} onClick={scheduleTest}>
+              Đặt lịch
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={receiptOpen}
+        onClose={() => setReceiptOpen(false)}
+        title="Tạo phiếu thu từ cơ hội"
+      >
+        <Stack>
+          <Text size="sm">
+            {title} · {opp.contact.phone}
+          </Text>
+          <Select
+            label="Khóa học"
+            withAsterisk
+            searchable
+            placeholder={courses.length ? 'Chọn khóa học' : 'Chưa có khóa học'}
+            data={courses.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` }))}
+            value={receiptCourseId}
+            onChange={setReceiptCourseId}
+          />
+          <Group grow align="flex-end">
+            <Select
+              label="Đóng trước"
+              data={YEARS}
+              value={receiptYears}
+              allowDeselect={false}
+              onChange={(v) => v && setReceiptYears(v)}
+            />
+            <TextInput
+              label="Voucher"
+              placeholder="Tùy chọn"
+              value={receiptVoucher}
+              onChange={(e) => setReceiptVoucher(e.currentTarget.value)}
+            />
+          </Group>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setReceiptOpen(false)}>
+              Đóng
+            </Button>
+            <Button
+              disabled={!receiptCourseId}
+              loading={receiptBusy}
+              onClick={createOpportunityReceipt}
+            >
+              Tạo phiếu nháp
+            </Button>
           </Group>
         </Stack>
       </Modal>
 
       <Modal opened={!!gradeTarget} onClose={() => setGradeTarget(null)} title="Chấm test">
         <Stack>
-          <NumberInput label="Điểm" min={0} max={10} step={0.5} value={gradeScore} onChange={setGradeScore} />
-          <TextInput label="Kết quả (tùy chọn)" placeholder="đạt / chưa đạt" value={gradeResult} onChange={(e) => setGradeResult(e.currentTarget.value)} />
+          <NumberInput
+            label="Điểm"
+            min={0}
+            max={10}
+            step={0.5}
+            value={gradeScore}
+            onChange={setGradeScore}
+          />
+          <TextInput
+            label="Kết quả (tùy chọn)"
+            placeholder="đạt / chưa đạt"
+            value={gradeResult}
+            onChange={(e) => setGradeResult(e.currentTarget.value)}
+          />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setGradeTarget(null)}>
               Đóng

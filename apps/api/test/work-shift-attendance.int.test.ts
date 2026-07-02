@@ -167,7 +167,7 @@ describe('work shift registration + punch attendance hardening', () => {
     })).rejects.toThrow();
   });
 
-  it('blocks unresolved-manager approval and supersedes only overlapping approved registrations', async () => {
+  it('allows director fallback approval and supersedes only overlapping approved registrations', async () => {
     const manager = await caller({ userId: managerId, roles: [Role.giam_doc_kinh_doanh], primaryRole: Role.giam_doc_kinh_doanh, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
     const group = await withRls(SUPER, (tx) => tx.shiftGroup.findFirstOrThrow({ where: { facilityId: FACILITY_ID, code: 'KINH_DOANH' } }));
 
@@ -184,7 +184,7 @@ describe('work shift registration + punch attendance hardening', () => {
         },
       }),
     );
-    await expect(manager.shiftRegistration.approve({ id: unresolved.id })).rejects.toThrow();
+    expect((await manager.shiftRegistration.approve({ id: unresolved.id })).approvedById).toBe(managerId);
 
     const [overlapOld, nonOverlapOld, next] = await withRls(SUPER, (tx) =>
       Promise.all([

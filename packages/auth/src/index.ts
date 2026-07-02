@@ -11,7 +11,15 @@ export {
   type LmsSession,
 } from './lms.js';
 export { Role } from '@cmc/db';
-export { PERMISSIONS, can, DIRECTOR_ROLE_GRANTS, assignableRoles } from './permissions.js';
+export {
+  PERMISSIONS,
+  can,
+  DIRECTOR_ROLE_GRANTS,
+  assignableRoles,
+  canReadSensitiveHr,
+  maskSensitive,
+  isMaskedPlaceholder,
+} from './permissions.js';
 
 /** Fully-resolved identity for the current request. */
 export interface RequestSession {

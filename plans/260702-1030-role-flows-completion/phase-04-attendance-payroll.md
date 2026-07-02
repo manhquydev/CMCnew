@@ -1,5 +1,7 @@
 # Phase 4 — Attendance→payroll: penalty deduction + monthlyReport + history UI + shift fixes + delegated approver
 
+Status: completed 2026-07-02.
+
 ## Context links
 - Brainstorm §2 Mạch tiền/người, D1/D5/D6; plan.md serialization (permissions.ts edit #2, AFTER P3).
 - Anchors: `apps/api/src/routers/check-in-out.ts:175-182` (penalty 500đ/min late + 1000đ/min early; VN UTC+7 helpers :20-36); `:250` history (works), `:258-267` manager-scoped; `permissions.ts:277` checkInOut.monthlyReport (granted, procedure DEAD); `apps/api/src/routers/payroll.ts` payslipCompute (~:433) + payslipOverrideVariablePay; `apps/api/src/routers/shift-registration.ts:328-336` (notif only managerId), `:86-101` assertAssignedApprover, `:17-58` manager resolve; `permissions.ts:259` withdraw (perm EXISTS — UI button missing), `:260-261` approve/reject (2 directors only); `apps/admin/src/shift-reg-detail-panel.tsx`.
@@ -62,16 +64,25 @@ Turn display-only attendance penalties into real payslip deductions (director-ov
 10. Tests: see below.
 
 ## Todo list
-- [ ] Payslip deduction columns + migration (serialized after P1)
-- [ ] assemblePayslip post-tax deduction input + domain tests
-- [ ] penalty aggregation in assembleSlipData (ICT bucket) + recompute-on-override/reopen verified
-- [ ] override proc (own field + reason + actor) + finalize lock
-- [ ] monthlyReport server-side aggregate proc + UI + drill-down (no canViewStaffPunch)
-- [ ] punch history UI (self + manager)
-- [ ] withdraw button (perm exists)
-- [ ] permissions approve/reject += staff (serialized #2) + director bypass in guard + inbox filters
-- [ ] notif nextManagerId + managerId-null warning
-- [ ] tests (see Risk/Test coverage)
+- [x] Payslip deduction columns + migration (serialized after P1)
+- [x] assemblePayslip post-tax deduction input + domain tests
+- [x] penalty aggregation in assembleSlipData (ICT bucket) + recompute-on-override/reopen verified
+- [x] override proc (own field + reason + actor) + finalize lock
+- [x] monthlyReport server-side aggregate proc + UI + drill-down (no canViewStaffPunch)
+- [x] punch history UI (self + manager)
+- [x] withdraw button (perm exists)
+- [x] permissions approve/reject += staff (serialized #2) + director bypass in guard + inbox filters
+- [x] notif nextManagerId + managerId-null warning
+- [x] tests (see Risk/Test coverage)
+
+## Completion evidence
+
+- Migration: `pnpm --filter @cmc/db exec prisma migrate deploy` applied `20260702093600_payslip_attendance_deduction`.
+- Typecheck: `pnpm --filter @cmc/api typecheck`, `pnpm --filter @cmc/admin typecheck`, `pnpm --filter @cmc/auth typecheck` PASS.
+- Unit: `pnpm --filter @cmc/domain-payroll test -- --run` PASS, 57/57.
+- Integration: `pnpm --filter @cmc/api exec vitest run test/permission-parity.test.ts test/check-in-out-time-calc.int.test.ts test/attendance-payroll-deduction.int.test.ts test/shift-registration-delegated-approver.int.test.ts test/payroll-finalize.int.test.ts test/payslip-commission-override.int.test.ts test/work-shift-attendance.int.test.ts` PASS, 46/46.
+- Focused rerun after UI/API select update: `pnpm --filter @cmc/api exec vitest run test/permission-parity.test.ts test/attendance-payroll-deduction.int.test.ts test/shift-registration-delegated-approver.int.test.ts test/work-shift-attendance.int.test.ts` PASS, 36/36.
+- Lint: `pnpm --filter @cmc/api lint`, `pnpm --filter @cmc/admin lint`, `pnpm --filter @cmc/auth lint` PASS with pre-existing warnings only.
 
 ## Success Criteria
 - §6.2 payslip post-tax late/early deduction matches ICT-bucketed punch total; override reduces it; finalize locks; reopen re-derives.

@@ -220,17 +220,17 @@ describe('super_admin user.create', () => {
     expect(user.roles).toContain(Role.giam_doc_kinh_doanh);
   });
 
-  it('can create a user with no facilities (system-wide account)', async () => {
+  it('rejects a 0-facility account, including for super_admin (Plan 3 P2: a login with no facility has no RLS scope — dead account)', async () => {
     const caller = await staffCaller();
-    const user = await caller.user.create({
-      email: `${uniq('nofacsa')}@cmc.test`,
-      displayName: 'No Fac SA',
-      password: 'TestPass!123',
-      roles: [Role.ke_toan],
-      primaryRole: Role.ke_toan,
-      facilityIds: [],
-    });
-    expect(user.id).toBeTruthy();
+    await expect(
+      caller.user.create({
+        email: `${uniq('nofacsa')}@cmc.test`,
+        displayName: 'No Fac SA',
+        roles: [Role.ke_toan],
+        primaryRole: Role.ke_toan,
+        facilityIds: [],
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 });
 

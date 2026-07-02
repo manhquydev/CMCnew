@@ -93,8 +93,8 @@ export function CskhPanel() {
       .then(setStudents)
       .catch((e) => notifyError(e, 'Không tải được danh sách học sinh'));
 
-    // Load staff eligible to be assigned after-sale cases (cskh/giam_doc_kinh_doanh in this facility).
-    // Uses listAssignableForAfterSale so cskh/giam_doc_kinh_doanh callers are not blocked by the
+    // Load staff eligible to be assigned after-sale cases (sale/cskh/giam_doc_kinh_doanh in this facility).
+    // Uses listAssignableForAfterSale so sale/cskh/giam_doc_kinh_doanh callers are not blocked by the
     // super-admin/director gate on user.list.
     trpc.user.listAssignableForAfterSale
       .query()

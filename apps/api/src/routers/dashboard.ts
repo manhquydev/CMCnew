@@ -78,16 +78,17 @@ async function shiftRegistrationPendingItems(
   tx: Prisma.TransactionClient,
   facilityId: number,
   groupCodes: string[],
-  session: { userId: string; isSuperAdmin: boolean },
+  session: { userId: string; roles: readonly string[]; isSuperAdmin: boolean },
 ): Promise<ApprovalInboxItem[]> {
   if (groupCodes.length === 0) return [];
+  const directorBypass = session.roles.some((r) => r === 'giam_doc_kinh_doanh' || r === 'giam_doc_dao_tao');
   const rows = await tx.shiftRegistration.findMany({
     where: {
       facilityId,
       status: 'submitted',
       archivedAt: null,
       shiftGroup: { code: { in: groupCodes } },
-      ...(session.isSuperAdmin
+      ...(session.isSuperAdmin || directorBypass
         ? {}
         : { OR: [{ managerId: session.userId }, { nextManagerId: session.userId }] }),
     },
@@ -188,7 +189,7 @@ export const dashboardRouter = router({
         const { roles, userId, isSuperAdmin } = ctx.session;
         const isBiz = hasRole(roles, 'giam_doc_kinh_doanh');
         const isEdu = hasRole(roles, 'giam_doc_dao_tao');
-        const session = { userId, isSuperAdmin };
+        const session = { userId, roles, isSuperAdmin };
 
         const groupCodes: string[] = [];
         if (isBiz) groupCodes.push('KINH_DOANH');

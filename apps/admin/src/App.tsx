@@ -282,7 +282,7 @@ function UserCreateModal({
   const [facilityIds, setFacilityIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const form = useForm({
-    initialValues: { email: '', displayName: '' },
+    initialValues: { email: '', displayName: '', phone: '' },
     validate: {
       email: email('Email không hợp lệ'),
       displayName: required('Nhập tên hiển thị'),
@@ -333,6 +333,7 @@ function UserCreateModal({
             {...form.getInputProps('email')}
           />
           <TextInput label="Tên hiển thị" withAsterisk {...form.getInputProps('displayName')} />
+          <TextInput label="Số điện thoại" {...form.getInputProps('phone')} />
           <MultiSelect
             label="Vai trò" data={roleOptions}
             value={roles}

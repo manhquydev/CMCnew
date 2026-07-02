@@ -26,10 +26,10 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   // them step in or reassign cases. setStudentLifecycle moves to giam_doc_kinh_doanh
   // (quan_ly removed — this is the sole financial-lifecycle owner now).
   afterSale: {
-    list: ['cskh', 'giam_doc_kinh_doanh'],
-    create: ['cskh', 'giam_doc_kinh_doanh'],
-    transition: ['cskh', 'giam_doc_kinh_doanh'],
-    assign: ['cskh', 'giam_doc_kinh_doanh'],
+    list: ['sale', 'cskh', 'giam_doc_kinh_doanh'],
+    create: ['sale', 'cskh', 'giam_doc_kinh_doanh'],
+    transition: ['sale', 'cskh', 'giam_doc_kinh_doanh'],
+    assign: ['sale', 'cskh', 'giam_doc_kinh_doanh'],
     setStudentLifecycle: ['giam_doc_kinh_doanh'],
   },
 
@@ -128,7 +128,12 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     voucherCreate: ['ke_toan', 'giam_doc_kinh_doanh'],
     voucherList: ['ke_toan', 'giam_doc_kinh_doanh'],
     receiptList: ['ke_toan', 'giam_doc_kinh_doanh'],
-    receiptCreate: ['ke_toan', 'giam_doc_kinh_doanh'],
+    // Sale creates DRAFT receipts only (attribution chain, decision 0024) — receiptApprove stays
+    // ke_toan/director-only, so this is not a money-approval grant.
+    receiptCreate: ['ke_toan', 'giam_doc_kinh_doanh', 'sale'],
+    // Narrow read: sale sees only receipts they personally created (collectedById=self, enforced
+    // server-side in finance.ts), never the full finance.receiptList/nav (decision 0024, N3).
+    receiptListOwn: ['sale', 'ke_toan', 'giam_doc_kinh_doanh'],
     receiptApprove: ['ke_toan', 'giam_doc_kinh_doanh'],
     receiptMarkSent: ['ke_toan', 'giam_doc_kinh_doanh'],
     receiptReconcile: ['ke_toan', 'giam_doc_kinh_doanh'],
@@ -187,6 +192,7 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     listByStaff: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     payslipBulkPay: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     payslipReopen: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    payslipOverrideAttendanceDeduction: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     kpiEvalStart: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     kpiEvalConfirm: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     kpiEvalApprove: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
@@ -238,7 +244,7 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     // Narrowly-scoped picker for the CSKH assign dropdown: returns only active cskh staff
     // within the caller's facility. Gated to roles that can also call afterSale.assign
     // so the dropdown never appears for roles that cannot perform the assignment.
-    listAssignableForAfterSale: ['cskh', 'giam_doc_kinh_doanh'],
+    listAssignableForAfterSale: ['sale', 'cskh', 'giam_doc_kinh_doanh'],
     create: ['super_admin', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     setRoles: ['super_admin'],
     setFacilities: ['super_admin'],
@@ -257,8 +263,8 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     updateEntry: ['giao_vien', 'sale', 'cskh'],
     submit: ['giao_vien', 'sale', 'cskh'],
     withdraw: ['giao_vien', 'sale', 'cskh'],
-    approve: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
-    reject: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    approve: ['giao_vien', 'sale', 'cskh', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    reject: ['giao_vien', 'sale', 'cskh', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     registeredInMonth: ['giao_vien', 'sale', 'cskh', 'hr'],
   },
 
@@ -341,4 +347,52 @@ export function can(
   const allowed = PERMISSIONS[module]?.[action];
   if (!allowed || allowed.length === 0) return false;
   return allowed.some((r) => roles.includes(r));
+}
+
+/**
+ * Roles permitted to read unmasked HR sensitive fields (CCCD, bank account).
+ * super_admin and both directors may read full values; all other roles see
+ * masked values via {@link maskSensitive}. Decision 0026 — column-level
+ * encryption is deferred to DEBT; this is a role-gate + mask-only control.
+ */
+const SENSITIVE_HR_ROLES = ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'];
+
+/**
+ * Whether the session may read unmasked HR sensitive fields (CCCD, bank account).
+ * Accepts the same minimal session shape as {@link assignableRoles} so it is safe
+ * to call from browser bundles (no Prisma types needed).
+ */
+export function canReadSensitiveHr(session: {
+  isSuperAdmin: boolean;
+  roles: string[];
+}): boolean {
+  if (session.isSuperAdmin) return true;
+  return session.roles.some((r) => SENSITIVE_HR_ROLES.includes(r));
+}
+
+/**
+ * Mask a sensitive value, showing only the last 4 characters prefixed with dots.
+ * Returns null/undefined unchanged (the caller decides whether null means "not set"
+ * vs "masked"). Short values (≤ 4 chars) are fully masked to avoid leaking length.
+ *
+ * Used for CCCD (national ID) and bank account numbers (decision 0026). Server-side
+ * only — never rely on the client to hide; apply before data leaves the API.
+ */
+export function maskSensitive(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  if (value.length <= 4) return '••••';
+  return `•••••••• ${value.slice(-4)}`;
+}
+
+/**
+ * True when `value` looks like a {@link maskSensitive} placeholder (starts with the mask bullet).
+ * A masked value only ever reaches the client when the reader lacks {@link canReadSensitiveHr};
+ * write endpoints MUST treat a masked-looking input as "unchanged", never as the real new value —
+ * otherwise a client that round-trips a read response back into a write (e.g. an edit form
+ * pre-filled from a masked list) would overwrite the real CCCD/bank value with the mask string.
+ * This is a server-side belt to the role-gate suspenders: it holds even if a future permission
+ * change ever lets a non-canReadSensitiveHr role call the write endpoint.
+ */
+export function isMaskedPlaceholder(value: string | null | undefined): boolean {
+  return typeof value === 'string' && value.startsWith('•');
 }

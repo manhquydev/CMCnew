@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import { trpc, useSession, notifyError, notifySuccess, ActivityLog } from '@cmc/ui';
-import { can } from '@cmc/auth/permissions';
+import { can, canReadSensitiveHr, maskSensitive } from '@cmc/auth/permissions';
 import {
   ActionIcon,
   Badge,
@@ -71,32 +71,117 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 function EmploymentTab({ user }: { user: StaffProfileUser }) {
   const { me } = useSession();
   const canEmployment = me.isSuperAdmin || can(me.roles as string[], me.isSuperAdmin, 'payroll', 'profileList');
+  const canUpsert = me.isSuperAdmin || can(me.roles as string[], me.isSuperAdmin, 'payroll', 'profileUpsert');
+  const canSensitive = canReadSensitiveHr({ isSuperAdmin: me.isSuperAdmin, roles: me.roles as string[] });
   const [profile, setProfile] = useState<EmploymentProfile | null>(null);
   const [loading, setLoading] = useState(canEmployment && user.facilities.length > 0);
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({
+    position: '', grade: '', dependents: 0, startedAt: '', callioExt: '',
+    managerId: '', address: '', nationalId: '', bankAccount: '', bankName: '',
+  });
 
   useEffect(() => {
     if (!canEmployment || user.facilities.length === 0) return;
     setLoading(true);
-    // profileList is per-facility; a staffer may sit at any of their facilities → query each and
-    // take the first profile that matches this user (fixes the prior facilities[0]-only bug).
     Promise.all(user.facilities.map((f) => trpc.payroll.profileList.query({ facilityId: f.facilityId })))
       .then((lists) => setProfile(lists.flat().find((r) => r.userId === user.id) ?? null))
       .catch((e) => notifyError(e, 'Không tải được hồ sơ nhân sự'))
       .finally(() => setLoading(false));
   }, [canEmployment, user.id, user.facilities]);
 
+  function startEdit() {
+    if (!profile) return;
+    const dateStr = profile.startedAt ? new Date(profile.startedAt).toISOString().slice(0, 10) : '';
+    setForm({
+      position: profile.position, grade: profile.grade ?? '', dependents: profile.dependents,
+      startedAt: dateStr, callioExt: profile.callioExt ?? '',
+      managerId: profile.managerId ?? '', address: profile.address ?? '',
+      nationalId: profile.nationalId ?? '', bankAccount: profile.bankAccount ?? '',
+      bankName: profile.bankName ?? '',
+    });
+    setEditing(true);
+  }
+
+  async function save() {
+    const facId = user.facilities[0]?.facilityId;
+    if (!facId) return;
+    setBusy(true);
+    try {
+      await trpc.payroll.profileUpsert.mutate({
+        userId: user.id, facilityId: facId,
+        position: form.position, grade: form.grade || undefined,
+        dependents: form.dependents,
+        startedAt: form.startedAt || undefined, callioExt: form.callioExt || undefined,
+        managerId: form.managerId || null,
+        address: form.address || undefined,
+        nationalId: form.nationalId || undefined,
+        bankAccount: form.bankAccount || undefined,
+        bankName: form.bankName || undefined,
+      });
+      notifySuccess('Đã lưu hồ sơ nhân sự');
+      setEditing(false);
+      Promise.all(user.facilities.map((f) => trpc.payroll.profileList.query({ facilityId: f.facilityId })))
+        .then((lists) => setProfile(lists.flat().find((r) => r.userId === user.id) ?? null))
+        .catch(() => {});
+    } catch (e) {
+      notifyError(e, 'Lưu thất bại');
+    } finally {
+      setBusy(false);
+    }
+  }
   if (!canEmployment) return <Text size="sm" c="dimmed">Bạn không có quyền xem hồ sơ nhân sự.</Text>;
   if (loading) return <Skeleton height={48} radius="md" />;
   if (!profile) return <Text size="sm" c="dimmed">Chưa có hồ sơ nhân sự cho người dùng này.</Text>;
 
+  const natIdDisplay = canSensitive ? profile.nationalId : maskSensitive(profile.nationalId);
+  const bankAcctDisplay = canSensitive ? profile.bankAccount : maskSensitive(profile.bankAccount);
+
   return (
     <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
       <Stack gap="xs">
-        <Field label="Vị trí" value={profile.position} />
-        <Field label="Bậc lương" value={profile.grade} />
-        <Field label="Người phụ thuộc" value={profile.dependents} />
-        <Field label="Số máy nhánh (Callio)" value={profile.callioExt} />
-        <Field label="Ngày vào làm" value={profile.startedAt ? new Date(profile.startedAt).toLocaleDateString('vi-VN') : '—'} />
+        <Group justify="space-between">
+          <Text fw={600} size="sm">Hồ sơ nhân sự</Text>
+          {canUpsert && !editing && <Button size="xs" variant="light" onClick={startEdit}>Chỉnh sửa</Button>}
+        </Group>
+        {editing ? (
+          <>
+            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+              <TextInput label="Vị trí" value={form.position} onChange={(e) => setForm({ ...form, position: e.currentTarget.value })} />
+              <TextInput label="Bậc lương" value={form.grade} onChange={(e) => setForm({ ...form, grade: e.currentTarget.value })} />
+              <TextInput label="Người phụ thuộc" type="number" value={form.dependents} onChange={(e) => setForm({ ...form, dependents: Number(e.currentTarget.value) })} />
+              <TextInput label="Ngày vào làm" value={form.startedAt} onChange={(e) => setForm({ ...form, startedAt: e.currentTarget.value })} placeholder="YYYY-MM-DD" />
+              <TextInput label="Số máy nhánh (Callio)" value={form.callioExt} onChange={(e) => setForm({ ...form, callioExt: e.currentTarget.value })} />
+              <TextInput label="Mã quản lý (UUID)" value={form.managerId} onChange={(e) => setForm({ ...form, managerId: e.currentTarget.value })} placeholder="Để trống = tự động" />
+            </SimpleGrid>
+            <Fieldset legend="Thông tin nhạy cảm (CCCD / Ngân hàng)">
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+                <TextInput label="Địa chỉ" value={form.address} onChange={(e) => setForm({ ...form, address: e.currentTarget.value })} />
+                <TextInput label="Số CCCD" value={form.nationalId} onChange={(e) => setForm({ ...form, nationalId: e.currentTarget.value })} />
+                <TextInput label="Số tài khoản" value={form.bankAccount} onChange={(e) => setForm({ ...form, bankAccount: e.currentTarget.value })} />
+                <TextInput label="Tên ngân hàng" value={form.bankName} onChange={(e) => setForm({ ...form, bankName: e.currentTarget.value })} />
+              </SimpleGrid>
+            </Fieldset>
+            <Group justify="flex-end">
+              <Button size="xs" variant="subtle" onClick={() => setEditing(false)}>Hủy</Button>
+              <Button size="xs" variant="filled" onClick={save} loading={busy}>Lưu</Button>
+            </Group>
+          </>
+        ) : (
+          <Stack gap="xs">
+            <Field label="Vị trí" value={profile.position} />
+            <Field label="Bậc lương" value={profile.grade} />
+            <Field label="Người phụ thuộc" value={profile.dependents} />
+            <Field label="Số máy nhánh (Callio)" value={profile.callioExt} />
+            <Field label="Ngày vào làm" value={profile.startedAt ? new Date(profile.startedAt).toLocaleDateString('vi-VN') : '—'} />
+            <Field label="Quản lý trực tiếp" value={profile.managerId ? 'Đã thiết lập' : 'Tự động'} />
+            <Field label="Địa chỉ" value={profile.address} />
+            <Field label="Số CCCD" value={natIdDisplay} />
+            <Field label="Số tài khoản" value={bankAcctDisplay} />
+            <Field label="Tên ngân hàng" value={profile.bankName} />
+          </Stack>
+        )}
       </Stack>
     </Card>
   );

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
 import type { Prisma } from '@cmc/db';
-import { rlsContextOf, type RequestSession } from '@cmc/auth';
+import { rlsContextOf, canReadSensitiveHr, maskSensitive, isMaskedPlaceholder, type RequestSession } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { enqueueEmail } from '../services/email-outbox.js';
 
@@ -21,6 +21,7 @@ import { effectiveParamsAt } from './compensation.js';
 import { router, requirePermission, protectedProcedure, Role } from '../trpc.js';
 import { canOverrideKpi } from '../lib/kpi-authz.js';
 import { callioConfigFromEnv, fetchPeriodCdrs, aggregateValidCalls } from '../lib/callio-client.js';
+import { ictPeriodRange, summarizeAttendance } from '../lib/attendance-penalty.js';
 
 /**
  * Receipt statuses that count as "collected revenue" for commission and KPI purposes.
@@ -89,13 +90,56 @@ function periodEnd(periodKey: string): Date {
   return new Date(Date.UTC(y, m, 0)); // day 0 of next month = last day of month m
 }
 
-/** First and one-past-last UTC instants of a YYYY-MM period — for date-range filters. */
+/** First and one-past-last ICT month instants, stored as UTC timestamps for date-range filters. */
 function periodRange(periodKey: string): { start: Date; end: Date } {
+  return ictPeriodRange(periodKey);
+}
+
+function periodDateRange(periodKey: string): { start: Date; end: Date } {
   const [y, m] = periodKey.split('-').map(Number);
   return {
     start: new Date(Date.UTC(y!, m! - 1, 1)),
-    end: new Date(Date.UTC(y!, m!, 1)), // exclusive: first day of following month
+    end: new Date(Date.UTC(y!, m!, 1)),
   };
+}
+
+async function attendanceDeductionForUser(
+  tx: Prisma.TransactionClient,
+  args: { userId: string; facilityId: number; periodKey: string },
+): Promise<number> {
+  const timestampRange = periodRange(args.periodKey);
+  const dateRange = periodDateRange(args.periodKey);
+  const [entries, punches] = await Promise.all([
+    tx.shiftRegistrationEntry.findMany({
+      where: {
+        type: 'work',
+        date: { gte: dateRange.start, lt: dateRange.end },
+        registration: {
+          userId: args.userId,
+          facilityId: args.facilityId,
+          status: 'approved',
+          archivedAt: null,
+        },
+      },
+      select: {
+        date: true,
+        shiftTemplateId: true,
+        shiftTemplate: { select: { name: true, startTime: true, endTime: true } },
+      },
+      orderBy: [{ date: 'asc' }, { shiftTemplate: { sortOrder: 'asc' } }],
+    }),
+    tx.timePunch.findMany({
+      where: {
+        userId: args.userId,
+        facilityId: args.facilityId,
+        timestamp: { gte: timestampRange.start, lt: timestampRange.end },
+        OR: [{ method: 'ip' }, { approvedAt: { not: null } }],
+      },
+      select: { timestamp: true, method: true, shiftTemplateId: true },
+      orderBy: { timestamp: 'asc' },
+    }),
+  ]);
+  return summarizeAttendance(entries, punches).penaltyAmount;
 }
 
 /**
@@ -127,6 +171,8 @@ async function assembleSlipData(
     variablePayOverride?: number;
     /** Note to store when variablePayOverride is set. */
     variableNoteOverride?: string;
+    /** Draft-level attendance deduction override. Null/undefined means use live punches. */
+    attendanceDeductionOverride?: number | null;
   },
 ): Promise<{
   kpiScore: number;
@@ -137,6 +183,7 @@ async function assembleSlipData(
   variablePay: number;
   variableNote: string | undefined;
   insuranceDeduction: number;
+  attendanceDeduction: number;
   dependents: number;
   grossIncome: number;
   taxableIncome: number;
@@ -157,6 +204,12 @@ async function assembleSlipData(
   const params = await effectiveParamsAt(tx, args.periodKey);
   const emp = await tx.appUser.findUnique({ where: { id: args.userId }, select: { roles: true } });
   const block: 'training' | 'sales' = emp?.roles.includes(Role.sale) ? 'sales' : 'training';
+  const liveAttendanceDeduction = await attendanceDeductionForUser(tx, {
+    userId: args.userId,
+    facilityId: args.facilityId,
+    periodKey: args.periodKey,
+  });
+  const effectiveAttendanceDeduction = args.attendanceDeductionOverride ?? liveAttendanceDeduction;
 
   // Resolve kpiScore: explicit input > KpiScore record (overrideScore ?? autoScore) > 0.
   let kpiScore: number;
@@ -221,6 +274,7 @@ async function assembleSlipData(
       standardDays: args.standardDays,
       variablePay: resolvedVariablePay,
       insuranceDeduction: args.insuranceDeduction,
+      attendanceDeduction: effectiveAttendanceDeduction,
       dependents,
     },
     params,
@@ -235,6 +289,7 @@ async function assembleSlipData(
     variablePay: r.variablePay,
     variableNote: resolvedVariableNote,
     insuranceDeduction: r.insuranceDeduction,
+    attendanceDeduction: liveAttendanceDeduction,
     dependents,
     grossIncome: r.grossIncome,
     taxableIncome: r.taxableIncome,
@@ -334,6 +389,13 @@ export const payrollRouter = router({
         dependents: z.number().int().min(0).default(0),
         startedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
         callioExt: z.string().optional(),
+        // Direct manager (reports-to). Validated: ≠ self, active co-facility, no A↔B mutual pair (M8).
+        managerId: z.string().uuid().nullable().optional(),
+        // Sensitive HR fields (decision 0026 — masked for non-privileged roles on read).
+        address: z.string().optional(),
+        nationalId: z.string().optional(),
+        bankAccount: z.string().optional(),
+        bankName: z.string().optional(),
         // Required when changing an existing grade — a salary-band change must be justified + audited.
         reason: z.string().optional(),
       }),
@@ -341,16 +403,53 @@ export const payrollRouter = router({
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
         await assertCanManagePayrollTarget(tx, ctx.session, input.userId, input.facilityId);
-        // A grade change on an existing profile is a sensitive payroll action: it must carry a
-        // reason and is audited old→new. Initial create or unchanged grade needs no reason.
+
+        // managerId validation (M8): ≠ self, active co-facility target, reject A↔B mutual pair.
+        if (input.managerId && input.managerId !== null) {
+          if (input.managerId === input.userId) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Không thể chỉ định chính mình làm quản lý' });
+          }
+          const target = await tx.appUser.findFirst({
+            where: { id: input.managerId, isActive: true, facilities: { some: { facilityId: input.facilityId } } },
+            select: { id: true },
+          });
+          if (!target) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Quản lý không tồn tại, không hoạt động, hoặc khác cơ sở' });
+          }
+          const targetProfile = await tx.employmentProfile.findUnique({
+            where: { userId: input.managerId },
+            select: { managerId: true },
+          });
+          if (targetProfile?.managerId === input.userId) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Không thể tạo vòng quản lý lẫn nhau (A↔B)' });
+          }
+        }
+
+        // Fetch existing profile for grade-change audit + sensitive-field change detection.
         const existing = await tx.employmentProfile.findUnique({
           where: { userId: input.userId },
-          select: { grade: true },
+          select: { grade: true, address: true, nationalId: true, bankAccount: true, bankName: true, id: true, facilityId: true },
         });
         const gradeChanged = !!(existing && existing.grade && input.grade && existing.grade !== input.grade);
         if (gradeChanged && !input.reason?.trim()) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Đổi bậc lương cần lý do' });
         }
+
+        // Guard against write-back of a masked placeholder (decision 0026 hardening): a caller who
+        // read this profile without canReadSensitiveHr only ever saw maskSensitive() output for
+        // nationalId/bankAccount. If a UI round-trips that read into this write unmodified, treat it
+        // as "no change" (fall back to the existing stored value) rather than persisting the mask
+        // string over the real value. Server-side only — never trust the client to strip it.
+        const nationalId = isMaskedPlaceholder(input.nationalId) ? (existing?.nationalId ?? undefined) : input.nationalId;
+        const bankAccount = isMaskedPlaceholder(input.bankAccount) ? (existing?.bankAccount ?? undefined) : input.bankAccount;
+
+        // Detect sensitive-field changes (field names only — never raw values in audit).
+        const changedSensitive: string[] = [];
+        if ((existing?.address ?? null) !== (input.address ?? null)) changedSensitive.push('address');
+        if ((existing?.nationalId ?? null) !== (nationalId ?? null)) changedSensitive.push('nationalId');
+        if ((existing?.bankAccount ?? null) !== (bankAccount ?? null)) changedSensitive.push('bankAccount');
+        if ((existing?.bankName ?? null) !== (input.bankName ?? null)) changedSensitive.push('bankName');
+
         const profile = await tx.employmentProfile.upsert({
           where: { userId: input.userId },
           update: {
@@ -359,6 +458,11 @@ export const payrollRouter = router({
             dependents: input.dependents,
             startedAt: input.startedAt ? new Date(input.startedAt) : undefined,
             callioExt: input.callioExt,
+            managerId: input.managerId === undefined ? undefined : input.managerId,
+            address: input.address ?? undefined,
+            nationalId: nationalId ?? undefined,
+            bankAccount: bankAccount ?? undefined,
+            bankName: input.bankName ?? undefined,
           },
           create: {
             facilityId: input.facilityId,
@@ -368,22 +472,46 @@ export const payrollRouter = router({
             dependents: input.dependents,
             startedAt: input.startedAt ? new Date(input.startedAt) : undefined,
             callioExt: input.callioExt,
+            managerId: input.managerId === undefined ? null : input.managerId,
+            address: input.address ?? null,
+            nationalId: nationalId ?? null,
+            bankAccount: bankAccount ?? null,
+            bankName: input.bankName ?? null,
           },
         });
-        const body = gradeChanged
-          ? `Đổi bậc lương ${existing!.grade}→${input.grade}: ${input.reason!.trim()}`
+
+        // Audit: grade change (with reason) and/or sensitive-field change (field names only).
+        const auditParts: string[] = [];
+        if (gradeChanged) auditParts.push(`Đổi bậc lương ${existing!.grade}→${input.grade}: ${input.reason!.trim()}`);
+        if (changedSensitive.length > 0) auditParts.push(`Thay đổi trường nhạy cảm: ${changedSensitive.join(', ')}`);
+        const body = auditParts.length > 0
+          ? auditParts.join('; ')
           : `Hồ sơ NS: ${input.position}${input.grade ? ' ' + input.grade : ''}`;
         await logEvent(tx, { facilityId: profile.facilityId, entityType: 'employment_profile', entityId: profile.id, type: 'updated', body, actorId: ctx.session.userId });
-        return profile;
+
+        // Mask sensitive fields for non-privileged readers (decision 0026).
+        if (canReadSensitiveHr(ctx.session)) return profile;
+        return {
+          ...profile,
+          nationalId: maskSensitive(profile.nationalId),
+          bankAccount: maskSensitive(profile.bankAccount),
+        };
       }),
     ),
 
   profileList: requirePermission('payroll', 'profileList')
     .input(z.object({ facilityId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
-      withRls(rlsContextOf(ctx.session), (tx) =>
-        tx.employmentProfile.findMany({ where: { facilityId: input.facilityId, archivedAt: null }, orderBy: { createdAt: 'desc' } }),
-      ),
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const profiles = await tx.employmentProfile.findMany({ where: { facilityId: input.facilityId, archivedAt: null }, orderBy: { createdAt: 'desc' } });
+        // Mask sensitive fields for non-privileged readers (decision 0026).
+        if (canReadSensitiveHr(ctx.session)) return profiles;
+        return profiles.map((p) => ({
+          ...p,
+          nationalId: maskSensitive(p.nationalId),
+          bankAccount: maskSensitive(p.bankAccount),
+        }));
+      }),
     ),
 
   rateCreate: requirePermission('payroll', 'rateCreate')
@@ -523,6 +651,7 @@ export const payrollRouter = router({
           variableNoteInput: input.variableNote,
           insuranceDeduction: input.insuranceDeduction,
           dependentsInput: input.dependents,
+          attendanceDeductionOverride: existing?.attendanceDeductionOverride,
           // No variablePayOverride → sales auto-feed runs normally.
         });
 
@@ -540,6 +669,7 @@ export const payrollRouter = router({
           variablePay: computed.variablePay,
           variableNote: computed.variableNote,
           insuranceDeduction: computed.insuranceDeduction,
+          attendanceDeduction: computed.attendanceDeduction,
           dependents: computed.dependents,
           grossIncome: computed.grossIncome,
           taxableIncome: computed.taxableIncome,
@@ -626,7 +756,7 @@ export const payrollRouter = router({
           tx.payslip.aggregate({
             where,
             _count: { _all: true },
-            _sum: { grossIncome: true, netIncome: true, pitAmount: true, insuranceDeduction: true },
+            _sum: { grossIncome: true, netIncome: true, pitAmount: true, insuranceDeduction: true, attendanceDeduction: true },
           }),
           tx.payslip.groupBy({ by: ['status'], where, _count: { _all: true }, _sum: { netIncome: true } }),
         ]);
@@ -638,6 +768,7 @@ export const payrollRouter = router({
           totalNet: totals._sum.netIncome ?? 0,
           totalPit: totals._sum.pitAmount ?? 0,
           totalInsurance: totals._sum.insuranceDeduction ?? 0,
+          totalAttendanceDeduction: totals._sum.attendanceDeduction ?? 0,
           draftCount: status('draft')?._count._all ?? 0,
           finalizedCount: status('finalized')?._count._all ?? 0,
           paidCount: status('paid')?._count._all ?? 0,
@@ -688,6 +819,8 @@ export const payrollRouter = router({
             netIncome: true,
             grossIncome: true,
             kpiGrade: true,
+            attendanceDeduction: true,
+            attendanceDeductionOverride: true,
           },
         }),
       ),
@@ -800,6 +933,7 @@ export const payrollRouter = router({
           kpiScoreInput: slip.kpiScore, // preserve frozen KPI from the original compute
           insuranceDeduction: slip.insuranceDeduction,
           dependentsInput: slip.dependents,
+          attendanceDeductionOverride: slip.attendanceDeductionOverride,
           variablePayInput: 0,       // unused when variablePayOverride is set
           variablePayOverride: input.amount,
           variableNoteOverride: `Điều chỉnh HH ${input.periodKey}: ${input.reason}`,
@@ -813,6 +947,7 @@ export const payrollRouter = router({
           kpiBonus: computed.kpiBonus,
           variablePay: computed.variablePay,
           variableNote: computed.variableNote,
+          attendanceDeduction: computed.attendanceDeduction,
           grossIncome: computed.grossIncome,
           taxableIncome: computed.taxableIncome,
           pitAmount: computed.pitAmount,
@@ -826,6 +961,54 @@ export const payrollRouter = router({
           type: 'updated',
           body: `Điều chỉnh hoa hồng ${input.periodKey}: ${oldVariablePay.toLocaleString('vi-VN')}đ→${input.amount.toLocaleString('vi-VN')}đ. Lý do: ${input.reason}`,
           changes: [{ field: 'variablePay', old: String(oldVariablePay), new: String(input.amount) }],
+          actorId: ctx.session.userId,
+        });
+        return updated;
+      }),
+    ),
+
+  payslipOverrideAttendanceDeduction: requirePermission('payroll', 'payslipOverrideAttendanceDeduction')
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        amount: z.number().int().nonnegative().max(1_000_000_000),
+        reason: z.string().min(1),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const slip = await tx.payslip.findUniqueOrThrow({ where: { id: input.id } });
+        if (slip.status !== 'draft') {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Chỉ điều chỉnh phạt chấm công khi phiếu ở trạng thái nháp' });
+        }
+        await assertCanManagePayrollTarget(tx, ctx.session, slip.userId, slip.facilityId);
+        const liveAttendanceDeduction = await attendanceDeductionForUser(tx, {
+          userId: slip.userId,
+          facilityId: slip.facilityId,
+          periodKey: slip.periodKey,
+        });
+        const netIncome = slip.grossIncome - slip.insuranceDeduction - slip.pitAmount - input.amount;
+        if (netIncome < 0) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Mức phạt chấm công vượt quá thực lĩnh sau thuế' });
+        }
+        const oldEffective = slip.attendanceDeductionOverride ?? slip.attendanceDeduction ?? 0;
+        const updated = await tx.payslip.update({
+          where: { id: slip.id },
+          data: {
+            attendanceDeduction: liveAttendanceDeduction,
+            attendanceDeductionOverride: input.amount,
+            attendanceDeductionOverrideReason: input.reason,
+            attendanceDeductionOverrideById: ctx.session.userId,
+            netIncome,
+          },
+        });
+        await logEvent(tx, {
+          facilityId: slip.facilityId,
+          entityType: 'payslip',
+          entityId: slip.id,
+          type: 'updated',
+          body: `Điều chỉnh phạt chấm công ${slip.periodKey}: ${oldEffective.toLocaleString('vi-VN')}đ→${input.amount.toLocaleString('vi-VN')}đ. Lý do: ${input.reason}`,
+          changes: [{ field: 'attendanceDeductionOverride', old: String(oldEffective), new: String(input.amount) }],
           actorId: ctx.session.userId,
         });
         return updated;
@@ -854,6 +1037,8 @@ export const payrollRouter = router({
           variablePay: true,
           grossIncome: true,
           insuranceDeduction: true,
+          attendanceDeduction: true,
+          attendanceDeductionOverride: true,
           pitAmount: true,
           netIncome: true,
           finalizedAt: true,

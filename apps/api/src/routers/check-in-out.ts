@@ -5,6 +5,16 @@ import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, protectedProcedure, requirePermission } from '../trpc.js';
 import { emitStaffNotif } from '../lib/emit-staff-notif.js';
+import {
+  earlyLeaveMinutes,
+  ictDateRange,
+  ictDayRangeFor,
+  ictPeriodRange,
+  lateMinutes,
+  summarizeAttendance,
+} from '../lib/attendance-penalty.js';
+
+export { earlyLeaveMinutes, lateMinutes };
 
 /// CIDR matching — check if an IP falls within a CIDR range.
 function ipMatchesCidr(ip: string, cidr: string): boolean {
@@ -14,25 +24,6 @@ function ipMatchesCidr(ip: string, cidr: string): boolean {
   const ipNum = ip.split('.').reduce((acc, o) => (acc << 8) + Number(o), 0) >>> 0;
   const rangeNum = (range ?? '').split('.').reduce((acc, o) => (acc << 8) + Number(o), 0) >>> 0;
   return (ipNum & mask) === (rangeNum & mask);
-}
-
-/// Calculate late minutes in VN timezone (positive = late).
-export function lateMinutes(punchTime: Date, shiftStart: string): number {
-  const [h, m] = shiftStart.split(':').map(Number);
-  const startMinutes = (h ?? 0) * 60 + (m ?? 0);
-  // Use VN local time (UTC+7)
-  const localH = (punchTime.getUTCHours() + 7) % 24;
-  const localM = punchTime.getUTCMinutes();
-  return Math.max(0, localH * 60 + localM - startMinutes);
-}
-
-/// Calculate early leave minutes in VN timezone (positive = left early).
-export function earlyLeaveMinutes(punchTime: Date, shiftEnd: string): number {
-  const [h, m] = shiftEnd.split(':').map(Number);
-  const endMinutes = (h ?? 0) * 60 + (m ?? 0);
-  const localH = (punchTime.getUTCHours() + 7) % 24;
-  const localM = punchTime.getUTCMinutes();
-  return Math.max(0, endMinutes - (localH * 60 + localM));
 }
 
 function hasAnyRole(roles: readonly string[], candidates: string[]): boolean {
@@ -102,8 +93,7 @@ export const checkInOutRouter = router({
         });
         const ipAllowed = networks.some((n) => ipMatchesCidr(clientIP, n.ipAddress));
         // Link punch to today's approved shift entry (if any)
-        const today = new Date(); today.setUTCHours(0, 0, 0, 0);
-        const tomorrow = new Date(today); tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+        const { start: today, end: tomorrow } = ictDayRangeFor();
         const shiftEntry = await tx.shiftRegistrationEntry.findFirst({
           where: {
             registration: { userId: ctx.session.userId, status: 'approved', archivedAt: null },
@@ -150,10 +140,7 @@ export const checkInOutRouter = router({
   todayStatus: requirePermission('checkInOut', 'todayStatus')
     .query(({ ctx }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        const { start: today, end: tomorrow, dateKey } = ictDayRangeFor();
         const punches = await tx.timePunch.findMany({
           where: {
             userId: ctx.session.userId,
@@ -168,7 +155,7 @@ export const checkInOutRouter = router({
         const shiftEntry = await tx.shiftRegistrationEntry.findFirst({
           where: {
             registration: { userId: ctx.session.userId, status: 'approved', archivedAt: null },
-            date: today,
+            date: new Date(dateKey),
           },
           include: { shiftTemplate: true },
         });
@@ -268,11 +255,79 @@ export const checkInOutRouter = router({
         return tx.timePunch.findMany({
           where: {
             userId: targetUserId,
-            timestamp: { gte: new Date(input.fromDate), lt: new Date(input.toDate + 'T23:59:59Z') },
+            timestamp: { gte: ictDateRange(input.fromDate).start, lt: ictDateRange(input.toDate).end },
           },
           orderBy: { timestamp: 'desc' },
           take: 100,
         });
+      }),
+    ),
+
+  monthlyReport: requirePermission('checkInOut', 'monthlyReport')
+    .input(z.object({ facilityId: z.number().int().positive(), periodKey: z.string().regex(/^\d{4}-\d{2}$/) }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const [y, m] = input.periodKey.split('-').map(Number);
+        const dateRange = {
+          start: new Date(Date.UTC(y!, m! - 1, 1)),
+          end: new Date(Date.UTC(y!, m!, 1)),
+        };
+        const timestampRange = ictPeriodRange(input.periodKey);
+        const entries = await tx.shiftRegistrationEntry.findMany({
+          where: {
+            type: 'work',
+            date: { gte: dateRange.start, lt: dateRange.end },
+            registration: { facilityId: input.facilityId, status: 'approved', archivedAt: null },
+          },
+          select: {
+            date: true,
+            shiftTemplateId: true,
+            shiftTemplate: { select: { name: true, startTime: true, endTime: true } },
+            registration: { select: { userId: true } },
+          },
+          orderBy: [{ date: 'asc' }, { shiftTemplate: { sortOrder: 'asc' } }],
+        });
+        const userIds = [...new Set(entries.map((e) => e.registration.userId))];
+        if (userIds.length === 0) {
+          return { periodKey: input.periodKey, rows: [] };
+        }
+        const [punches, users] = await Promise.all([
+          tx.timePunch.findMany({
+            where: {
+              facilityId: input.facilityId,
+              userId: { in: userIds },
+              timestamp: { gte: timestampRange.start, lt: timestampRange.end },
+              OR: [{ method: 'ip' }, { approvedAt: { not: null } }],
+            },
+            select: { userId: true, timestamp: true, method: true, shiftTemplateId: true },
+            orderBy: { timestamp: 'asc' },
+          }),
+          tx.appUser.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, displayName: true },
+          }),
+        ]);
+        const nameById = new Map(users.map((u) => [u.id, u.displayName]));
+        return {
+          periodKey: input.periodKey,
+          rows: userIds
+            .map((userId) => {
+              const summary = summarizeAttendance(
+                entries.filter((e) => e.registration.userId === userId),
+                punches.filter((p) => p.userId === userId),
+              );
+              return {
+                userId,
+                displayName: nameById.get(userId) ?? userId,
+                workdays: summary.workdays,
+                lateMinutes: summary.lateMinutes,
+                earlyMinutes: summary.earlyMinutes,
+                penaltyAmount: summary.penaltyAmount,
+                days: summary.days,
+              };
+            })
+            .sort((a, b) => a.displayName.localeCompare(b.displayName, 'vi')),
+        };
       }),
     ),
 });

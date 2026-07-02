@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import { trpc, useSession, notifyError, notifySuccess } from '@cmc/ui';
 import { Badge, Button, Card, Group, Stack, Table, Text } from '@mantine/core';
 import { IconClock, IconWifi, IconWifiOff } from '@tabler/icons-react';
+import { attendanceApi } from './shallow-trpc';
 
 const TH_STYLE: React.CSSProperties = {
   fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em',
@@ -12,6 +13,7 @@ const TH_STYLE: React.CSSProperties = {
 type TodayStatus = Awaited<ReturnType<typeof trpc.checkInOut.todayStatus.query>>;
 type PendingManualPunch = Awaited<ReturnType<typeof trpc.checkInOut.pendingManual.query>>[number];
 type Punch = { id: string; time: string | Date; method: string };
+type HistoryPunch = Awaited<ReturnType<typeof attendanceApi.history.query>>[number];
 
 export function CheckInPanel() {
   const { me } = useSession();
@@ -21,6 +23,7 @@ export function CheckInPanel() {
   const [busy, setBusy] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [pendingManual, setPendingManual] = useState<PendingManualPunch[]>([]);
+  const [history, setHistory] = useState<HistoryPunch[]>([]);
   const [clock, setClock] = useState(dayjs().format('HH:mm:ss'));
 
   // Live clock
@@ -46,11 +49,16 @@ export function CheckInPanel() {
     Promise.allSettled([
       canPunch ? trpc.checkInOut.checkIP.query({ facilityId: fid }) : Promise.resolve(null),
       canPunch ? trpc.checkInOut.todayStatus.query() : Promise.resolve(null),
+      canPunch ? attendanceApi.history.query({
+        fromDate: dayjs().subtract(13, 'day').format('YYYY-MM-DD'),
+        toDate: dayjs().format('YYYY-MM-DD'),
+      }) : Promise.resolve([]),
       canApproveManual ? trpc.checkInOut.pendingManual.query({ facilityId: fid }) : Promise.resolve([]),
     ])
-      .then(([ip, s, pending]) => {
+      .then(([ip, s, historyResult, pending]) => {
         if (ip.status === 'fulfilled' && ip.value) setIpCheck(ip.value);
         if (s.status === 'fulfilled') setStatus(s.value);
+        if (historyResult.status === 'fulfilled') setHistory(historyResult.value);
         if (pending.status === 'fulfilled') setPendingManual(pending.value);
         else notifyError(pending.reason, 'Không tải được danh sách chờ duyệt');
       })
@@ -201,6 +209,36 @@ export function CheckInPanel() {
                       {i === 0 ? 'CHECK-IN' : i === status.punches.length - 1 ? 'CHECK-OUT' : `Lần ${i + 1}`}
                     </Badge>
                   </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Card>
+      )}
+
+      {canPunch && history.length > 0 && (
+        <Card radius="lg" p="md" style={{ border: '1px solid var(--cmc-border)' }}>
+          <Text fw={600} size="sm" mb="xs" style={{ color: 'var(--cmc-text)' }}>Lịch sử 14 ngày</Text>
+          <Table striped highlightOnHover withTableBorder={false}>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th style={TH_STYLE}>Ngày</Table.Th>
+                <Table.Th style={TH_STYLE}>Giờ</Table.Th>
+                <Table.Th style={TH_STYLE}>Phương thức</Table.Th>
+                <Table.Th style={TH_STYLE}>IP</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {history.slice(0, 20).map((p) => (
+                <Table.Tr key={p.id}>
+                  <Table.Td>{dayjs(p.timestamp).format('DD/MM')}</Table.Td>
+                  <Table.Td>{dayjs(p.timestamp).format('HH:mm:ss')}</Table.Td>
+                  <Table.Td>
+                    <Badge size="xs" color={p.method === 'ip' ? 'green' : 'orange'} variant="light" radius="xl">
+                      {p.method === 'ip' ? 'WiFi' : 'Thủ công'}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td style={{ fontFamily: 'monospace' }}>{p.ipAddress}</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>

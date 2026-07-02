@@ -63,7 +63,7 @@ function hasAnyRole(roles: readonly string[], candidates: string[]): boolean {
 }
 
 function visibleRegistrationWhere(ctx: { session: { userId: string; roles: readonly string[]; isSuperAdmin: boolean } }) {
-  if (ctx.session.isSuperAdmin || hasAnyRole(ctx.session.roles, ['hr'])) return {};
+  if (ctx.session.isSuperAdmin || hasAnyRole(ctx.session.roles, ['hr', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'])) return {};
   return {
     OR: [
       { userId: ctx.session.userId },
@@ -83,7 +83,7 @@ function assertCanAccessRegistration(ctx: { session: { userId: string; roles: re
   throw new TRPCError({ code: 'FORBIDDEN', message: 'Không có quyền xem phiếu này' });
 }
 
-function assertAssignedApprover(ctx: { session: { userId: string; isSuperAdmin: boolean } }, reg: {
+function assertAssignedApprover(ctx: { session: { userId: string; roles: readonly string[]; isSuperAdmin: boolean } }, reg: {
   userId: string;
   managerId: string | null;
   nextManagerId: string | null;
@@ -92,6 +92,7 @@ function assertAssignedApprover(ctx: { session: { userId: string; isSuperAdmin: 
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Không tự duyệt phiếu của mình' });
   }
   if (ctx.session.isSuperAdmin) return;
+  if (hasAnyRole(ctx.session.roles, ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'])) return;
   if (!reg.managerId && !reg.nextManagerId) {
     throw new TRPCError({ code: 'FORBIDDEN', message: 'Phiếu chưa resolve manager để duyệt' });
   }
@@ -325,14 +326,17 @@ export const shiftRegistrationRouter = router({
         });
         // Persist notification inside tx; push after commit
         let pushFn: (() => void) | null = null;
-        if (reg.managerId) {
+        const recipientIds = [...new Set([reg.managerId, reg.nextManagerId].filter((id): id is string => Boolean(id)))];
+        if (recipientIds.length > 0) {
           pushFn = await emitStaffNotif(tx, {
-            recipientIds: [reg.managerId],
+            recipientIds,
             event: 'shift_reg_submitted',
             title: 'Phiếu đăng ký ca chờ duyệt',
             body: `${ctx.session.displayName} gửi phiếu ${code}`,
             facilityId: reg.facilityId,
           });
+        } else {
+          console.warn('shift_reg_submitted has no manager recipients', { registrationId: reg.id, userId: reg.userId });
         }
         await logEvent(tx, {
           facilityId: reg.facilityId, entityType: 'shift_registration', entityId: reg.id,

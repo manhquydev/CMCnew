@@ -122,6 +122,26 @@ describe('assemblePayslip (manager with variable pay → PIT applies)', () => {
   });
 });
 
+describe('assemblePayslip (attendance deduction is post-tax)', () => {
+  const r = assemblePayslip({
+    baseSalary: 30_000_000,
+    mealAllowance: 0,
+    otherAllowance: 0,
+    kpiMax: 0,
+    kpiScore: 0,
+    workdays: 26,
+    standardDays: 26,
+    attendanceDeduction: 27_500,
+  });
+
+  it('keeps taxable/PIT based on gross-insurance and subtracts attendance after PIT', () => {
+    expect(r.grossIncome).toBe(30_000_000);
+    expect(r.taxableIncome).toBe(19_000_000);
+    expect(r.attendanceDeduction).toBe(27_500);
+    expect(r.netIncome).toBe(r.grossIncome - r.insuranceDeduction - r.pitAmount - 27_500);
+  });
+});
+
 describe('assemblePayslip (grade D zeroes the KPI bonus; partial month prorates)', () => {
   const r = assemblePayslip({
     baseSalary: 5_700_000,

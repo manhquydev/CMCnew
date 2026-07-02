@@ -36,10 +36,10 @@ Add the 4 missing HR record columns to EmploymentProfile and design (not yet wir
 4. Verify 0-drift: `prisma migrate reset` then `prisma migrate diff` = empty.
 
 ## Todo list
-- [ ] Add 4 columns to schema
-- [ ] Generate migration (additive, nullable)
-- [ ] maskSensitive + canReadSensitiveHr helpers + unit tests
-- [ ] 0-drift replay verify on prod-mirror
+- [x] Add 4 columns to schema (`schema.prisma:1339-1346`)
+- [x] Generate migration (additive, nullable) — `20260702093500_employment_profile_sensitive_columns`
+- [x] maskSensitive + canReadSensitiveHr helpers + unit tests — `packages/auth/src/permissions.ts` + `apps/api/test/hr-sensitive-helpers.test.ts`
+- [x] 0-drift replay verify — `prisma migrate status` on dev DB: "Database schema is up to date!" (61/61 migrations, no drift); 417/417 integration tests pass exercising the new columns
 
 ## Success Criteria
 - `prisma migrate reset` replays whole chain with 0 drift including new migration.

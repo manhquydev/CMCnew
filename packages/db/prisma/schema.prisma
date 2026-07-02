@@ -322,17 +322,17 @@ model ScheduleSlot {
 
 /// Buổi học cụ thể — sinh từ slot, hoặc buổi bù.
 model ClassSession {
-  id           String           @id @default(uuid()) @db.Uuid
-  facilityId   Int              @map("facility_id")
-  classBatchId String           @map("class_batch_id") @db.Uuid
-  batch        ClassBatch       @relation(fields: [classBatchId], references: [id], onDelete: Cascade)
-  sessionDate  DateTime         @map("session_date") @db.Date
-  startTime    String           @map("start_time")
-  endTime      String           @map("end_time")
-  roomId       String?          @map("room_id") @db.Uuid
-  room         Room?            @relation(fields: [roomId], references: [id], onDelete: SetNull)
-  teacherId    String?          @map("teacher_id") @db.Uuid
-  teacher      AppUser?         @relation("SessionTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
+  id               String           @id @default(uuid()) @db.Uuid
+  facilityId       Int              @map("facility_id")
+  classBatchId     String           @map("class_batch_id") @db.Uuid
+  batch            ClassBatch       @relation(fields: [classBatchId], references: [id], onDelete: Cascade)
+  sessionDate      DateTime         @map("session_date") @db.Date
+  startTime        String           @map("start_time")
+  endTime          String           @map("end_time")
+  roomId           String?          @map("room_id") @db.Uuid
+  room             Room?            @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  teacherId        String?          @map("teacher_id") @db.Uuid
+  teacher          AppUser?         @relation("SessionTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
   status           SessionStatus    @default(planned)
   isMakeup         Boolean          @default(false) @map("is_makeup")
   curriculumUnitId String?          @map("curriculum_unit_id") @db.Uuid
@@ -861,18 +861,18 @@ enum AssessmentPeriod {
 /// Khi cả hai đều non-null → override tường minh cho template này (phải cộng = 1).
 /// Không bao giờ đặt giá trị mặc định trong DB; nguồn chân lý là @cmc/domain-grading.
 model GradingTemplate {
-  id                 String             @id @default(uuid()) @db.Uuid
-  facilityId         Int                @map("facility_id")
+  id                 String    @id @default(uuid()) @db.Uuid
+  facilityId         Int       @map("facility_id")
   program            Program
   level              String?
   formula            Json
   criteria           Json?
   /// NULL = use programWeights() charter constant. Non-null = explicit per-template override.
-  qualitativeWeight  Float?             @map("qualitative_weight")
+  qualitativeWeight  Float?    @map("qualitative_weight")
   /// NULL = use programWeights() charter constant. Non-null = explicit per-template override.
-  quantitativeWeight Float?             @map("quantitative_weight")
-  archivedAt         DateTime?          @map("archived_at")
-  createdAt          DateTime           @default(now()) @map("created_at")
+  quantitativeWeight Float?    @map("quantitative_weight")
+  archivedAt         DateTime? @map("archived_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
 
   @@unique([facilityId, program, level])
   @@index([facilityId])
@@ -1322,22 +1322,30 @@ enum PayslipStatus {
 
 /// Hồ sơ nhân sự (mở rộng AppUser; userId là khóa, không khai báo quan hệ để giữ AppUser gọn).
 model EmploymentProfile {
-  id         String    @id @default(uuid()) @db.Uuid
-  facilityId Int       @map("facility_id")
-  userId     String    @unique @map("user_id") @db.Uuid
-  position   String // teacher | sales | lead_teacher | center_director | training_director …
-  grade      String? // B1..B4, PT3…
-  dependents Int       @default(0)
+  id          String    @id @default(uuid()) @db.Uuid
+  facilityId  Int       @map("facility_id")
+  userId      String    @unique @map("user_id") @db.Uuid
+  position    String // teacher | sales | lead_teacher | center_director | training_director …
+  grade       String? // B1..B4, PT3…
+  dependents  Int       @default(0)
   /// Callio (Phonenet) extension number — maps this user to their call records for KPI calls
   /// (decision 0010). Null = not on the dialer; call metrics resolve 0 for them.
-  callioExt  String?   @map("callio_ext")
+  callioExt   String?   @map("callio_ext")
   /// Direct manager (reports-to). Null = auto-resolve by role: sale/cskh/ctv_mkt → giam_doc_kinh_doanh,
   /// giao_vien/head_teacher → giam_doc_dao_tao. Next-level = bgd or manager.managerId chain.
   /// Loose UUID reference (no FK — follows codebase pattern for AppUser refs like soldById).
-  managerId  String?   @map("manager_id") @db.Uuid
-  startedAt  DateTime? @map("started_at") @db.Date
-  archivedAt DateTime? @map("archived_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
+  managerId   String?   @map("manager_id") @db.Uuid
+  startedAt   DateTime? @map("started_at") @db.Date
+  /// Địa chỉ thường trú (decision 0026 — sensitive, masked for non-privileged roles).
+  address     String?   @map("address")
+  /// Số CCCD/CMND (decision 0026 — sensitive, masked for non-privileged roles).
+  nationalId  String?   @map("national_id")
+  /// Số tài khoản ngân hàng (decision 0026 — sensitive, masked for non-privileged roles).
+  bankAccount String?   @map("bank_account")
+  /// Tên ngân hàng (decision 0026).
+  bankName    String?   @map("bank_name")
+  archivedAt  DateTime? @map("archived_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
 
   @@index([facilityId])
   @@index([managerId])
@@ -1445,31 +1453,35 @@ model CompensationPolicy {
 /// Phiếu lương theo (nhân sự, kỳ YYYY-MM). Số liệu khớp @cmc/domain-payroll. Finalize gating (M6):
 /// chỉ tính lại khi draft; finalized đóng băng; paid = đã trả.
 model Payslip {
-  id                 String        @id @default(uuid()) @db.Uuid
-  facilityId         Int           @map("facility_id")
-  userId             String        @map("user_id") @db.Uuid
-  periodKey          String        @map("period_key") // YYYY-MM
-  standardDays       Int           @map("standard_days")
-  workdays           Int
-  kpiScore           Float         @map("kpi_score")
-  kpiGrade           String        @map("kpi_grade")
-  baseEarned         Int           @map("base_earned")
-  allowanceEarned    Int           @map("allowance_earned")
-  kpiBonus           Int           @map("kpi_bonus")
-  variablePay        Int           @default(0) @map("variable_pay")
-  variableNote       String?       @map("variable_note")
-  insuranceDeduction Int           @default(0) @map("insurance_deduction")
-  dependents         Int           @default(0)
-  grossIncome        Int           @map("gross_income")
-  taxableIncome      Int           @map("taxable_income")
-  pitAmount          Int           @map("pit_amount")
-  netIncome          Int           @map("net_income")
-  status             PayslipStatus @default(draft)
-  computedById       String?       @map("computed_by_id") @db.Uuid
-  finalizedById      String?       @map("finalized_by_id") @db.Uuid
-  finalizedAt        DateTime?     @map("finalized_at")
-  paidAt             DateTime?     @map("paid_at")
-  createdAt          DateTime      @default(now()) @map("created_at")
+  id                                String        @id @default(uuid()) @db.Uuid
+  facilityId                        Int           @map("facility_id")
+  userId                            String        @map("user_id") @db.Uuid
+  periodKey                         String        @map("period_key") // YYYY-MM
+  standardDays                      Int           @map("standard_days")
+  workdays                          Int
+  kpiScore                          Float         @map("kpi_score")
+  kpiGrade                          String        @map("kpi_grade")
+  baseEarned                        Int           @map("base_earned")
+  allowanceEarned                   Int           @map("allowance_earned")
+  kpiBonus                          Int           @map("kpi_bonus")
+  variablePay                       Int           @default(0) @map("variable_pay")
+  variableNote                      String?       @map("variable_note")
+  insuranceDeduction                Int           @default(0) @map("insurance_deduction")
+  attendanceDeduction               Int?          @map("attendance_deduction")
+  attendanceDeductionOverride       Int?          @map("attendance_deduction_override")
+  attendanceDeductionOverrideReason String?       @map("attendance_deduction_override_reason")
+  attendanceDeductionOverrideById   String?       @map("attendance_deduction_override_by_id") @db.Uuid
+  dependents                        Int           @default(0)
+  grossIncome                       Int           @map("gross_income")
+  taxableIncome                     Int           @map("taxable_income")
+  pitAmount                         Int           @map("pit_amount")
+  netIncome                         Int           @map("net_income")
+  status                            PayslipStatus @default(draft)
+  computedById                      String?       @map("computed_by_id") @db.Uuid
+  finalizedById                     String?       @map("finalized_by_id") @db.Uuid
+  finalizedAt                       DateTime?     @map("finalized_at")
+  paidAt                            DateTime?     @map("paid_at")
+  createdAt                         DateTime      @default(now()) @map("created_at")
 
   @@unique([userId, periodKey])
   @@index([facilityId, periodKey])

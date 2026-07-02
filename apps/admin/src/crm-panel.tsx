@@ -14,6 +14,7 @@ import {
   type DataTableColumn,
 } from '@cmc/ui';
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -27,10 +28,11 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconTargetArrow } from '@tabler/icons-react';
+import { IconAlertTriangle, IconTargetArrow } from '@tabler/icons-react';
 import { getDefaultView, getAllowedViews } from './view-defaults';
 import { STAGES, PROGRAMS, statusOf, isClosed, makeOwnerName } from './crm-shared';
 import { OpportunityDetailPanel } from './opportunity-detail';
+import { ContactDirectoryPanel } from './contact-directory-panel';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Opp = Awaited<ReturnType<typeof trpc.crm.opportunityList.query>>[number];
@@ -42,6 +44,14 @@ const STAGE_LABEL: Record<string, string> = Object.fromEntries(STAGES.map((s) =>
 function daysAgo(date: string | Date): number {
   const ms = Date.now() - new Date(date).getTime();
   return Math.max(0, Math.floor(ms / 86_400_000));
+}
+
+function normalizePhoneForCompare(raw: string): string {
+  const digits = raw.replace(/[^\d+]/g, '');
+  if (digits.startsWith('+84')) return digits;
+  if (digits.startsWith('84')) return '+' + digits;
+  if (digits.startsWith('0')) return '+84' + digits.slice(1);
+  return digits;
 }
 
 // Kanban view of the pipeline: one column per stage (O1→O5). Cards open the record page.
@@ -164,6 +174,12 @@ export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
 
   const openOpp = useCallback((o: Opp) => navigate(`/crm/opportunities/${o.id}`), [navigate]);
 
+  const duplicateOpenOpps = useMemo(() => {
+    const normalizedPhone = normalizePhoneForCompare(phone);
+    if (!normalizedPhone) return [];
+    return opps.filter((o) => !isClosed(o) && normalizePhoneForCompare(o.contact.phone) === normalizedPhone);
+  }, [opps, phone]);
+
   async function createLead() {
     if (!facilityId || !fullName.trim() || !phone.trim()) {
       notifyError(new Error('Nhập tên liên hệ và số điện thoại'), 'Tạo cơ hội thất bại');
@@ -262,6 +278,32 @@ export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
           <TextInput label="Tên liên hệ" value={fullName} onChange={(e) => setFullName(e.currentTarget.value)} />
           <TextInput label="Số điện thoại" value={phone} onChange={(e) => setPhone(e.currentTarget.value)} />
         </Group>
+        {duplicateOpenOpps.length > 0 && (
+          <Alert
+            mt="sm"
+            color="yellow"
+            icon={<IconAlertTriangle size={18} />}
+            title="SĐT này đang có cơ hội mở"
+          >
+            <Stack gap={4}>
+              {duplicateOpenOpps.slice(0, 3).map((o) => (
+                <Group key={o.id} justify="space-between" gap="xs">
+                  <Text size="sm">
+                    {o.studentName || o.contact.fullName} · {STAGE_LABEL[o.stage] ?? o.stage} · PT: {ownerName(o.ownerId)}
+                  </Text>
+                  <Button size="compact-xs" variant="subtle" onClick={() => openOpp(o)}>
+                    Mở
+                  </Button>
+                </Group>
+              ))}
+              {duplicateOpenOpps.length > 3 && (
+                <Text size="xs" c="dimmed">
+                  Còn {duplicateOpenOpps.length - 3} cơ hội mở khác trong pipeline.
+                </Text>
+              )}
+            </Stack>
+          </Alert>
+        )}
         <Group grow align="flex-end" mt="sm">
           <TextInput
             label="Tên học sinh (tùy chọn)"
@@ -290,6 +332,8 @@ export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
           </Button>
         </Group>
       </Card>
+
+      <ContactDirectoryPanel facilityId={facilityId} />
 
       <Stack gap="xs">
         <FilterBar right={<ViewSwitcher value={oppView} allowed={getAllowedViews('opportunity')} onChange={setOppView} />}>

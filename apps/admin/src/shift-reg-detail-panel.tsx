@@ -14,6 +14,7 @@ type ShiftTemplate = { id: string; code: string; name: string; startTime: string
 type ShiftRegistrationRow = {
   id: string;
   code: string | null;
+  userId: string;
   fromDate: string | Date;
   toDate: string | Date;
   status: string;
@@ -125,6 +126,18 @@ export function ShiftRegDetailPanel({ regId, onBack }: { regId: string; onBack: 
     } finally { setBusy(false); }
   }
 
+  async function handleWithdraw() {
+    if (!reg?.id) return;
+    setBusy(true);
+    try {
+      const result = await trpc.shiftRegistration.withdraw.mutate({ id: reg.id });
+      notifySuccess('Đã rút phiếu về nháp');
+      setReg(result);
+    } catch (e) {
+      notifyError(e, 'Không rút được phiếu');
+    } finally { setBusy(false); }
+  }
+
   // Create new registration
   async function handleCreate(fromDate: string, toDate: string) {
     if (!fid) return;
@@ -156,6 +169,7 @@ export function ShiftRegDetailPanel({ regId, onBack }: { regId: string; onBack: 
     dayjs(reg.toDate).format('YYYY-MM-DD'),
   );
   const isDraft = reg.status === 'draft';
+  const canWithdraw = me.isSuperAdmin || me.roles.some((r: string) => ['giao_vien', 'sale', 'cskh'].includes(r));
   const templates = group?.templates ?? [];
 
   // Calculate daily and total hours
@@ -296,6 +310,13 @@ export function ShiftRegDetailPanel({ regId, onBack }: { regId: string; onBack: 
         <Group justify="flex-end">
           <Button variant="filled" radius={9999} loading={busy} onClick={handleSubmit}>
             Gửi duyệt
+          </Button>
+        </Group>
+      )}
+      {reg.status === 'submitted' && canWithdraw && (
+        <Group justify="flex-end">
+          <Button variant="light" color="orange" radius={9999} loading={busy} onClick={() => void handleWithdraw()}>
+            Rút phiếu
           </Button>
         </Group>
       )}

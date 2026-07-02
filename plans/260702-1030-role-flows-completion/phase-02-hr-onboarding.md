@@ -43,12 +43,13 @@ Make new-staff onboarding a single complete record: capture phone at user.create
 6. Int test: onboarding creates login-able user w/ profile+rate; managerId set; masking matrix.
 
 ## Todo list
-- [ ] HARD GATE: re-grep profileUpsert/rateCreate UI callers; build base form if absent (M4)
-- [ ] user.create phone + dup-email friendly + facility guard (super_admin)
-- [ ] profileUpsert input extend (managerId + 4 cols) + managerId validation (self/facility/cycle — M8)
-- [ ] server-side mask on read + audit on sensitive change
-- [ ] onboarding form / UserCreateModal fields
-- [ ] int test: full onboarding + masking matrix + managerId reject (self/cross-facility/A↔B)
+- [x] HARD GATE: re-grep profileUpsert/rateCreate UI callers; build base form if absent (M4) — base form built in `staff-profile.tsx` `EmploymentTab`
+- [x] user.create phone + dup-email friendly + facility guard (super_admin) — includes fixing mojibake corruption found in `user.ts` during verification (whole-file re-encoding artifact from the original interrupted session, not a P2 requirement — restored to match `git show HEAD` correct UTF-8)
+- [x] profileUpsert input extend (managerId + 4 cols) + managerId validation (self/facility/cycle — M8)
+- [x] server-side mask on read + audit on sensitive change
+- [x] onboarding form / UserCreateModal fields
+- [x] int test: full onboarding + masking matrix + managerId reject (self/cross-facility/A↔B) — `apps/api/test/hr-onboarding.int.test.ts`, 8/8 pass. Also updated a pre-existing stale test (`director-user-create.int.test.ts`) that asserted the OLD (unintended) super_admin 0-facility-account gap — now asserts the new intentional rejection per this phase's own success criteria ("0-facility create rejected for all roles").
+- [x] **FIX-FIRST from code review**: masked-value write-back landmine — `profileUpsert`/`profileList` masking branches were dead code (SENSITIVE_HR_ROLES == profileUpsert's own permission gate today) with zero test coverage, and a client round-tripping a masked read into a write would silently overwrite the real CCCD/bank value with the placeholder string. Fixed with a server-side `isMaskedPlaceholder()` guard in `permissions.ts` wired into `profileUpsert` (treats a masked-looking input as "no change", falls back to the existing stored value) — holds even if `profileUpsert`'s permission gate and `SENSITIVE_HR_ROLES` ever diverge. Added unit tests (`hr-sensitive-helpers.test.ts`) + an integration test reproducing the exact round-trip scenario (`hr-onboarding.int.test.ts`).
 
 ## Success Criteria
 - New staff created in one form logs in via SSO, has profile + rate, managerId set.
