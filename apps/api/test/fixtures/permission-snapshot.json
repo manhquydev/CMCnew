@@ -25,6 +25,7 @@
   "classBatch.cancel": ["giam_doc_dao_tao"],
   "classBatch.reopen": ["giam_doc_dao_tao"],
   "dashboard.summary": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
+  "dashboard.myApprovals": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "exercise.create": ["giao_vien", "giam_doc_dao_tao"],
   "exercise.publish": ["giao_vien", "giam_doc_dao_tao"],
   "sessionEvidence.commentTemplate": ["giao_vien", "giam_doc_dao_tao"],
