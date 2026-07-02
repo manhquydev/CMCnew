@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# ALTERNATE PATH (not the default). Use only for real Let's Encrypt origin certs / Cloudflare
+# Full (strict). Default is self-signed via scripts/ensure-origin-cert.sh — see
+# docs/decisions/0029-canonical-origin-tls-self-signed-behind-cloudflare.md.
+#
 # One-time: obtain the initial Let's Encrypt SAN cert for both domains via certbot
 # --standalone (port 80 must be free — run BEFORE the nginx service is up). Renewals
 # afterwards are handled by the in-compose certbot service (webroot, no downtime).

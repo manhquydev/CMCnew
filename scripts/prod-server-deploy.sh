@@ -18,15 +18,10 @@ DB_NAME="$(val DB_NAME)"; DB_NAME="${DB_NAME:-cmc}"
 DB_APP_PASSWORD="$(val DB_APP_PASSWORD)"
 
 # ── Origin TLS cert ────────────────────────────────────────────────────────────
-# Behind Cloudflare (proxied). nginx needs a cert to start. Create a self-signed SAN
-# cert (accepted by Cloudflare "Full" mode) if none present. For "Full (strict)" replace
-# this with a Cloudflare Origin Certificate at the same path later.
-docker volume create cmcnew-prod_letsencrypt >/dev/null
-if ! docker run --rm -v cmcnew-prod_letsencrypt:/le alpine test -f /le/live/erp.cmcvn.edu.vn/fullchain.pem 2>/dev/null; then
-  docker run --rm -v cmcnew-prod_letsencrypt:/etc/letsencrypt alpine sh -c \
-    'apk add --no-cache openssl >/dev/null 2>&1; mkdir -p /etc/letsencrypt/live/erp.cmcvn.edu.vn; openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -keyout /etc/letsencrypt/live/erp.cmcvn.edu.vn/privkey.pem -out /etc/letsencrypt/live/erp.cmcvn.edu.vn/fullchain.pem -subj "/CN=erp.cmcvn.edu.vn" -addext "subjectAltName=DNS:erp.cmcvn.edu.vn,DNS:hoc.cmcvn.edu.vn"'
-  echo "✓ self-signed origin SAN cert created (erp+hoc)"
-fi
+# Behind Cloudflare (proxied). nginx needs a cert to start. Canonical strategy = self-signed
+# SAN cert (Cloudflare "Full" mode) via the shared, idempotent, self-verifying helper — see
+# docs/decisions/0029-canonical-origin-tls-self-signed-behind-cloudflare.md.
+bash scripts/ensure-origin-cert.sh
 
 echo "=== [1/5] postgres + redis ==="
 $COMPOSE up -d postgres redis
