@@ -1,5 +1,7 @@
 # Phase 05 — Annotator UX (eraser / pen width / pinch-zoom + pan)
 
+Status: completed 2026-07-02 for code + typecheck. Real-tablet manual checklist deferred to Phase 7.
+
 Closes gap #7 (annotator UX for kids 3-11 on tablets).
 
 ## Context links
@@ -38,11 +40,17 @@ Interaction flow: tool state (pen|eraser, width) in component state → pointer 
 5. Confirm change events still trigger P1 autosave.
 
 ## Todo list
-- [ ] eraser + per-stroke delete
-- [ ] pen width UI
-- [ ] pinch-zoom + pan (coord-safe)
-- [ ] client cap guard
-- [ ] verify autosave still fires on change
+- [x] eraser + per-stroke delete
+- [x] pen width UI
+- [x] pinch-zoom + pan (coord-safe)
+- [x] client cap guard
+- [x] verify autosave still fires on change
+
+## Evidence 2026-07-02
+- `pnpm --filter @cmc/ui|@cmc/admin|@cmc/lms typecheck` all PASS.
+- Coordinate safety: zoom/pan is a pure CSS transform on a wrapper div; `norm()` reads `getBoundingClientRect()` on the transformed element (post-transform screen space), so normalized 0..1 coords stay zoom-invariant with no change to the normalize math itself.
+- Consumer regression check: `grading.tsx` and `student-view.tsx` prop contracts (`pdfRef`/`value`/`onChange`/`editable`/`readOnlyLayers`) read and confirmed unchanged; `parent-view.tsx` does not import PdfAnnotator yet (P2 not landed), so not applicable.
+- No existing unit/component test harness for this file; manual/tablet verification remains deferred to Phase 7 per plan.
 
 ## Success Criteria
 - Kid can erase a stroke, pick pen width, pinch-zoom and pan on a tablet (manual checklist P7).
