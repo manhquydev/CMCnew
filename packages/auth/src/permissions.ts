@@ -225,6 +225,7 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     generateSessions: ['giam_doc_dao_tao'],
     editSlot: ['giam_doc_dao_tao'],
     removeSlot: ['giam_doc_dao_tao'],
+    createMakeupSession: ['giam_doc_dao_tao'],
   },
 
   student: {

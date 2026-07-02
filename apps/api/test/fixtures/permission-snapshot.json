@@ -117,6 +117,7 @@
   "schedule.generateSessions": ["giam_doc_dao_tao"],
   "schedule.editSlot": ["giam_doc_dao_tao"],
   "schedule.removeSlot": ["giam_doc_dao_tao"],
+  "schedule.createMakeupSession": ["giam_doc_dao_tao"],
   "student.update": ["sale", "giam_doc_kinh_doanh"],
   "student.resetLmsPassword": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "submission.listByExercise": ["giao_vien", "giam_doc_dao_tao"],

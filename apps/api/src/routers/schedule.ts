@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { withRls } from '@cmc/db';
+import { withRls, Prisma } from '@cmc/db';
 import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent, diffChanges } from '@cmc/audit';
 import { enumerateSessions, detectConflicts, type SessionLike } from '@cmc/domain-academic';
@@ -249,6 +249,116 @@ export const scheduleRouter = router({
           actorId: ctx.session.userId,
         });
         return { created: fresh.length, skipped: candidates.length - fresh.length };
+      }),
+    ),
+
+  // Tạo buổi học bù (isMakeup=true) — buổi đơn lẻ, KHÔNG qua khung lịch (scheduleSlot).
+  // Trùng phòng/GV bị chặn cứng như generateSessions (reuse detectConflicts). Buổi bù không
+  // mở curriculumUnit cho cả lớp (Tier-A, exercise-open.ts) — chỉ HS có điểm danh present/late
+  // trên buổi này được mở riêng (Tier-B).
+  createMakeupSession: requirePermission('schedule', 'createMakeupSession')
+    .input(
+      z.object({
+        classBatchId: z.string().uuid(),
+        sessionDate: z.string().date(),
+        startTime: z.string().regex(/^\d{2}:\d{2}$/),
+        endTime: z.string().regex(/^\d{2}:\d{2}$/),
+        roomId: z.string().uuid().optional(),
+        teacherId: z.string().uuid().optional(),
+        curriculumUnitId: z.string().uuid().optional(),
+      }).refine((v) => v.startTime < v.endTime, {
+        message: 'Giờ bắt đầu phải trước giờ kết thúc',
+        path: ['endTime'],
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const batch = await tx.classBatch.findUniqueOrThrow({
+          where: { id: input.classBatchId },
+          select: { id: true, facilityId: true, status: true },
+        });
+        if (batch.status !== 'open' && batch.status !== 'running') {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Lớp phải đang mở hoặc đang học mới tạo được buổi bù',
+          });
+        }
+        await assertSlotRefsInFacility(tx, batch.facilityId, {
+          roomId: input.roomId,
+          teacherId: input.teacherId,
+        });
+
+        const candidate: SessionLike = {
+          sessionDate: input.sessionDate,
+          startTime: input.startTime,
+          endTime: input.endTime,
+          roomId: input.roomId ?? null,
+          teacherId: input.teacherId ?? null,
+        };
+        const facilitySessions = await tx.classSession.findMany({
+          where: {
+            facilityId: batch.facilityId,
+            status: { not: 'cancelled' },
+            sessionDate: new Date(input.sessionDate),
+          },
+          select: { sessionDate: true, startTime: true, endTime: true, roomId: true, teacherId: true },
+        });
+        const conflicts = detectConflicts(
+          [candidate],
+          facilitySessions.map<SessionLike>((s) => ({
+            sessionDate: dateKey(s.sessionDate),
+            startTime: s.startTime,
+            endTime: s.endTime,
+            roomId: s.roomId,
+            teacherId: s.teacherId,
+          })),
+        );
+        if (conflicts.length > 0) {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: `Trùng lịch (${conflicts.length}): ${conflicts
+              .slice(0, 3)
+              .map((c) => `${c.kind}@${c.date}`)
+              .join(', ')}`,
+          });
+        }
+
+        let created;
+        try {
+          created = await tx.classSession.create({
+            data: {
+              facilityId: batch.facilityId,
+              classBatchId: input.classBatchId,
+              sessionDate: new Date(input.sessionDate),
+              startTime: input.startTime,
+              endTime: input.endTime,
+              roomId: input.roomId ?? null,
+              teacherId: input.teacherId ?? null,
+              curriculumUnitId: input.curriculumUnitId ?? null,
+              status: 'planned',
+              isMakeup: true,
+            },
+          });
+        } catch (err) {
+          if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: 'Lớp đã có buổi vào đúng ngày/giờ này',
+            });
+          }
+          throw err;
+        }
+
+        await logEvent(tx, {
+          facilityId: batch.facilityId,
+          entityType: 'class_batch',
+          entityId: input.classBatchId,
+          type: 'updated',
+          body: `Tạo buổi học bù: ${input.sessionDate} ${input.startTime}-${input.endTime}`,
+          actorId: ctx.session.userId,
+        });
+
+        return created;
       }),
     ),
 
