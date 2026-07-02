@@ -62,10 +62,16 @@ pipeline {
           docker run --rm -v /root/cmcnew/docker:/dest -v "$WORKSPACE/docker":/src:ro alpine \
             cp /src/nginx-prod.conf /dest/nginx-prod.conf
           $COMPOSE up -d postgres redis
-          $COMPOSE --profile migrate run --rm api-migrate
           # Bound concurrent image-build memory (api/admin/lms can otherwise build in parallel
           # while old containers still serve traffic — see docs/decisions/0029-*).
           export COMPOSE_PARALLEL_LIMIT=1
+          # --build here is required: without it, `run` reuses whatever api image last existed
+          # locally (stale, pre-dating this commit's migration files), so a schema change added in
+          # this same commit can silently apply against an OLD Prisma client that has never seen it
+          # — "No pending migrations to apply" while the migration sits unapplied on prod. The api
+          # image is rebuilt again below by `up -d --build`; Docker layer caching makes that second
+          # build cheap once this first one has run.
+          $COMPOSE --profile migrate run --rm --build api-migrate
           $COMPOSE up -d --build
           # nginx resolves the admin/lms/api upstream hostnames once at startup. Recreated app
           # containers get new IPs, so restart nginx to re-resolve — otherwise it can proxy a
