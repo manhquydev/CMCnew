@@ -636,10 +636,12 @@ function ReceiptsCard({
   students,
   courses,
   facilities,
+  onStudentsChanged,
 }: {
   students: StudentT[];
   courses: CourseT[];
   facilities: Facility[];
+  onStudentsChanged: () => void;
 }) {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [rLoad, setRLoad] = useState<'loading' | 'error' | 'ok'>('loading');
@@ -699,6 +701,9 @@ function ReceiptsCard({
       notifySuccess(`Đã duyệt phiếu ${r.code}`);
       if (r.lmsAccount) setCred(r.lmsAccount);
       loadReceipts();
+      // Approve can auto-provision a new student (new-student receipt) — refresh the students
+      // list so the receipts table's name column doesn't show a truncated id for that row.
+      onStudentsChanged();
     } catch (e) {
       notifyError(e, 'Duyệt phiếu thu thất bại');
     }
@@ -1367,11 +1372,15 @@ export function FinancePanel() {
   // receipts are managed inside ReceiptsCard via a ref reload callback
   const [reloadKey, setReloadKey] = useState(0);
 
-  useEffect(() => {
+  const loadStudents = useCallback(() => {
     trpc.student.list
       .query()
       .then(setStudents)
       .catch((e) => notifyError(e, 'Không tải được danh sách học sinh'));
+  }, []);
+
+  useEffect(() => {
+    loadStudents();
     trpc.course.list
       .query()
       .then(setCourses)
@@ -1380,7 +1389,7 @@ export function FinancePanel() {
       .query()
       .then(setFacilities)
       .catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
-  }, []);
+  }, [loadStudents]);
 
   return (
     <Stack>
@@ -1394,7 +1403,13 @@ export function FinancePanel() {
         onCreated={() => setReloadKey((k) => k + 1)}
       />
       {/* key forces ReceiptsCard to re-mount and reload after a new receipt is created */}
-      <ReceiptsCard key={reloadKey} students={students} courses={courses} facilities={facilities} />
+      <ReceiptsCard
+        key={reloadKey}
+        students={students}
+        courses={courses}
+        facilities={facilities}
+        onStudentsChanged={loadStudents}
+      />
     </Stack>
   );
 }
