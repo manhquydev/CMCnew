@@ -42,10 +42,13 @@ still owed.
   leads need an operator-reviewed inbox before entering the pipeline.
 - Callio sync: phone/call-center integration remains unbuilt; CRM contact/opportunity phones
   are local records only. Close before relying on call logs for sales ops attribution.
-- Badge administration: backend exists for badge/star mechanics; admin CRUD/review UI remains deferred.
+- [x] PAID 2026-07-02 (lms-engagement Plan 6 P3): Badge administration UI shipped in `apps/admin/src/badge-panel.tsx` (list/create/archive/grant).
 - Shift registration withdraw/cancel: shift registration flow supports submit/approve paths; employee withdraw UX remains deferred.
 - [x] PAID 2026-07-02 (academic-ops Plan 5 P6): Room update/archive UI shipped in `apps/admin/src/class-workspace.tsx` (`RoomEditModal` + archive action).
 - Facility network update/archive: network list/create exists; full management UX remains deferred.
+- [ ] DEBT: `attendance.report` (per-class/per-period attendance summary) has no admin UI caller -- backend complete, permission-gated, integration-tested (`attendance-report-markall.int.test.ts`) -- close when a facility/director-facing attendance report screen is built -- opened 2026-07-02 (found in full-project cross-plan integrity review)
+- [ ] DEBT: `enrollment.transfer` (move a student between class batches) has no admin UI caller -- backend complete, permission-gated, integration-tested (`enrollment-transfer.int.test.ts`) -- close when a class-workspace transfer action is built -- opened 2026-07-02 (found in full-project cross-plan integrity review)
+- [ ] DEBT: `schedule.createMakeupSession` has no admin UI caller -- backend complete, permission-gated, integration-tested (`schedule-makeup-session.int.test.ts`) -- close when a schedule/class-workspace makeup-session action is built -- opened 2026-07-02 (found in full-project cross-plan integrity review)
 
 ## Security / Identity
 
