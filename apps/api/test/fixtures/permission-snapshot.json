@@ -52,6 +52,7 @@
   "crm.testGrade": ["giao_vien", "giam_doc_dao_tao"],
   "enrollment.enroll": ["sale", "giam_doc_kinh_doanh"],
   "enrollment.complete": ["giam_doc_dao_tao"],
+  "enrollment.transfer": ["giam_doc_dao_tao"],
   "facility.update": ["super_admin"],
   "facility.create": ["super_admin"],
   "finance.priceCreate": ["ke_toan", "giam_doc_kinh_doanh"],

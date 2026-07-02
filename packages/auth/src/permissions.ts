@@ -111,6 +111,9 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   enrollment: {
     enroll: ['sale', 'giam_doc_kinh_doanh'],
     complete: ['giam_doc_dao_tao'],
+    // Class transfer is an academic-scheduling action (moving a student between classes),
+    // not a sales/enrollment action — mirrors `complete`'s education-director ownership.
+    transfer: ['giam_doc_dao_tao'],
   },
 
   // facility.update / facility.create are super_admin-only (enforced via superAdminProcedure).

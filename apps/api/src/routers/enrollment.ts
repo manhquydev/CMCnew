@@ -128,6 +128,112 @@ export const enrollmentRouter = router({
       }).then(({ pushNotifs, ...result }) => { pushNotifs(); return result; }),
     ),
 
+  // Chuyển lớp (history-preserving): flip old enrollment → transferred, create a new active
+  // enrollment in the target batch for the same student. Attendance/FinalGrade on the old
+  // enrollment are left untouched — FinalGrade is student-keyed (not enrollment-keyed), so it
+  // blends old+new class attendance automatically within the term (intentional, see plan).
+  // Old-class exercise access is cut immediately once the old enrollment leaves 'active'
+  // (exercise-open.ts scopes status:'active') — accepted trade-off, not a bug.
+  transfer: requirePermission('enrollment', 'transfer')
+    .input(
+      z.object({
+        enrollmentId: z.string().uuid(),
+        targetClassBatchId: z.string().uuid(),
+        effectiveDate: z.coerce.date().optional(),
+        reason: z.string().max(500).optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const oldEnrollment = await tx.enrollment.findUniqueOrThrow({
+          where: { id: input.enrollmentId },
+          include: { batch: { select: { id: true, code: true } } },
+        });
+        if (oldEnrollment.status === 'transferred' || oldEnrollment.status === 'withdrawn') {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'Ghi danh đã rời lớp (transferred/withdrawn) — không thể chuyển lớp lần nữa',
+          });
+        }
+        if (oldEnrollment.status !== 'active' && oldEnrollment.status !== 'reserved') {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'Chỉ có thể chuyển lớp ghi danh đang active/reserved',
+          });
+        }
+        if (oldEnrollment.classBatchId === input.targetClassBatchId) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Lớp đích trùng lớp hiện tại' });
+        }
+
+        const targetBatch = await tx.classBatch.findUniqueOrThrow({
+          where: { id: input.targetClassBatchId },
+        });
+        if (targetBatch.status !== 'open' && targetBatch.status !== 'running') {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'Lớp đích chưa mở hoặc đã đóng — không thể chuyển vào',
+          });
+        }
+
+        // Friendly guard before the DB unique([classBatchId, studentId]) fires a raw P2002 (→ 500)
+        // — same defensive shape as `enroll`.
+        const dup = await tx.enrollment.findFirst({
+          where: {
+            classBatchId: input.targetClassBatchId,
+            studentId: oldEnrollment.studentId,
+            archivedAt: null,
+          },
+          select: { id: true },
+        });
+        if (dup) {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Học sinh đã có ghi danh tại lớp đích' });
+        }
+
+        await tx.enrollment.update({
+          where: { id: oldEnrollment.id },
+          data: { status: 'transferred' },
+        });
+
+        const newEnrollment = await tx.enrollment.create({
+          data: {
+            facilityId: oldEnrollment.facilityId,
+            classBatchId: input.targetClassBatchId,
+            studentId: oldEnrollment.studentId,
+            status: 'active',
+            opportunityId: oldEnrollment.opportunityId,
+            createdByReceiptId: null,
+          },
+        });
+
+        // Capacity = cảnh báo mềm (không chặn), same convention as `enroll`.
+        const activeCount = await tx.enrollment.count({
+          where: { classBatchId: input.targetClassBatchId, status: 'active', archivedAt: null },
+        });
+        const overCapacity = targetBatch.capacity != null && activeCount > targetBatch.capacity;
+
+        await logEvent(tx, {
+          facilityId: oldEnrollment.facilityId,
+          entityType: 'student',
+          entityId: oldEnrollment.studentId,
+          type: 'status_changed',
+          body: `Chuyển lớp: ${oldEnrollment.batch.code} → ${targetBatch.code}${input.effectiveDate ? ` từ ${input.effectiveDate.toISOString().slice(0, 10)}` : ''}${input.reason ? ` (${input.reason})` : ''}`,
+          changes: [
+            { field: 'classBatchId', old: oldEnrollment.classBatchId, new: input.targetClassBatchId },
+            { field: 'enrollmentStatus', old: oldEnrollment.status, new: 'transferred' },
+          ],
+          actorId: ctx.session.userId,
+        });
+
+        return {
+          oldEnrollmentId: oldEnrollment.id,
+          newEnrollmentId: newEnrollment.id,
+          overCapacity,
+          capacity: targetBatch.capacity,
+          enrolledCount: activeCount,
+        };
+      }),
+    ),
+
   // Hoàn tất thủ công (khi đóng lớp).
   complete: requirePermission('enrollment', 'complete')
     .input(z.object({ id: z.string().uuid() }))
