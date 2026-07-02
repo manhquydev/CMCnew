@@ -83,6 +83,11 @@ describe('rewards gift/star/redeem admin (phase 02)', () => {
 
     const after = await lmsCaller(lms).rewards.gifts();
     expect(after.some((g) => g.id === giftId)).toBe(false);
+
+    const events = await withRls(SUPER, (tx) =>
+      tx.recordEvent.findMany({ where: { entityType: 'gift', entityId: giftId, type: 'archived' } }),
+    );
+    expect(events.length).toBeGreaterThanOrEqual(1);
   });
 
   it('stockAdjust to 0 makes a subsequent redeem return out_of_stock', async () => {
