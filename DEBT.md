@@ -16,6 +16,10 @@ still owed.
 
 - [ ] DEBT: Receipt render is print-to-PDF HTML, not a server-generated PDF -- `/files/receipt/:id` returns styled Vietnamese HTML (browser Ctrl+P → Save as PDF); a true server PDF (pdf-lib) needs an embedded Unicode font for Vietnamese diacritics -- close before: if a non-interactive/archival PDF artifact is required, embed a TTF via @pdf-lib/fontkit -- opened 2026-06-24
 
+## Finance
+
+- [ ] DEBT: refund amount is manual-entry only, no auto pro-rata calculation (decision 0028, D-P4a) -- staff enters the refund amount by hand against the sum-cap (`SUM(amount) + newAmount <= receipt.netAmount`); nothing computes a suggested pro-rata figure from elapsed enrollment time/sessions consumed, so a facility that wants "refund the unused portion" must compute that portion themselves before entering it -- close before: if operators report manual pro-rata math is error-prone or slow enough to justify a calculator/suggestion UI -- opened 2026-07-02 (Plan 4 P1/P5)
+
 ## CI/CD
 
 - [ ] DEBT: CI/CD chưa chạy tự động — GitHub Actions bị chặn do billing tài khoản (repo private). Quyết định chủ dự án (2026-06-24): **dựng CI/CD bằng Jenkins (sau)**. `.github/workflows/ci.yml` giữ làm tham chiếu pipeline (self-contained: Postgres service + env ci-only). Tới khi có Jenkins: verify = chạy local pipeline (`pnpm db:up` → migrate → seed → verify-rls → `pnpm -r typecheck` → `pnpm -r test` → `pnpm --filter @cmc/api test:int` → `pnpm -r build`). -- close before: stand up Jenkins pipeline chạy chuỗi này trên mỗi PR -- opened 2026-06-24
@@ -40,7 +44,7 @@ still owed.
   are local records only. Close before relying on call logs for sales ops attribution.
 - Badge administration: backend exists for badge/star mechanics; admin CRUD/review UI remains deferred.
 - Shift registration withdraw/cancel: shift registration flow supports submit/approve paths; employee withdraw UX remains deferred.
-- Room update/archive: room creation/listing is wired; edit/archive UI remains deferred.
+- [x] PAID 2026-07-02 (academic-ops Plan 5 P6): Room update/archive UI shipped in `apps/admin/src/class-workspace.tsx` (`RoomEditModal` + archive action).
 - Facility network update/archive: network list/create exists; full management UX remains deferred.
 
 ## Security / Identity

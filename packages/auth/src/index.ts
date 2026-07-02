@@ -8,6 +8,7 @@ export {
   mintParentSession,
   resolveLmsSession,
   lmsRlsContextOf,
+  BLOCKED_LMS_LIFECYCLE,
   type LmsSession,
 } from './lms.js';
 export { Role } from '@cmc/db';

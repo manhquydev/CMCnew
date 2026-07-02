@@ -1,5 +1,9 @@
-import { withRls, verifyPassword, type RlsContext } from '@cmc/db';
+import { withRls, verifyPassword, type RlsContext, type StudentLifecycle } from '@cmc/db';
 import { signLmsSession, verifyLmsToken } from './jwt.js';
+
+/** Lifecycle states that revoke LMS access. `completed` intentionally excluded — those students
+ * still read transcripts/certificates. `active`/`admitted` are unaffected (normal access). */
+export const BLOCKED_LMS_LIFECYCLE = new Set<StudentLifecycle>(['on_hold', 'withdrawn', 'transferred']);
 
 /** Fully-resolved LMS identity (parent or student) for the current request. */
 export interface LmsSession {
@@ -36,11 +40,17 @@ async function parentSession(accountId: string): Promise<ResolvedLms | null> {
     const acc = await tx.parentAccount.findUnique({
       where: { id: accountId },
       include: {
-        guardians: { include: { student: { select: { id: true, fullName: true, facilityId: true } } } },
+        guardians: {
+          include: { student: { select: { id: true, fullName: true, facilityId: true, lifecycle: true } } },
+        },
       },
     });
     if (!acc || !acc.isActive) return null;
-    const students = acc.guardians.map((g) => g.student);
+    // Per-child filter, not whole-session reject: a parent with any non-blocked child must still
+    // log in. Only when EVERY child is blocked does the session resolve with zero accessible children.
+    const students = acc.guardians
+      .map((g) => g.student)
+      .filter((s) => !BLOCKED_LMS_LIFECYCLE.has(s.lifecycle));
     return {
       kind: 'parent' as const,
       accountId: acc.id,
@@ -57,9 +67,10 @@ async function studentSession(accountId: string): Promise<ResolvedLms | null> {
   return withRls(SYSTEM_RLS, async (tx) => {
     const acc = await tx.studentAccount.findUnique({
       where: { id: accountId },
-      include: { student: { select: { id: true, fullName: true, facilityId: true } } },
+      include: { student: { select: { id: true, fullName: true, facilityId: true, lifecycle: true } } },
     });
     if (!acc || !acc.isActive) return null;
+    if (BLOCKED_LMS_LIFECYCLE.has(acc.student.lifecycle)) return null;
     return {
       kind: 'student' as const,
       accountId: acc.id,

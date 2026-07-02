@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls, AttendanceStatus } from '@cmc/db';
-import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
+import { rlsContextOf, lmsRlsContextOf, BLOCKED_LMS_LIFECYCLE } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, protectedProcedure, requirePermission, lmsProcedure } from '../trpc.js';
 import { sessionEndUtc } from '../lib/exercise-open.js';
@@ -55,7 +55,7 @@ export const attendanceRouter = router({
           }),
           tx.enrollment.findUniqueOrThrow({
             where: { id: input.enrollmentId },
-            select: { classBatchId: true, status: true },
+            select: { classBatchId: true, status: true, student: { select: { lifecycle: true } } },
           }),
         ]);
         if (enrollment.classBatchId !== session.classBatchId) {
@@ -72,6 +72,11 @@ export const attendanceRouter = router({
         // A student who has left the class (withdrawn/transferred) must not receive new attendance marks.
         // active / completed / reserved stay markable (final-session and trial attendance are valid).
         if (enrollment.status === 'withdrawn' || enrollment.status === 'transferred') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Học sinh đã rời lớp — không thể điểm danh' });
+        }
+        // Same guard by lifecycle (on_hold/withdrawn/transferred): catches a student paused/withdrawn
+        // at the profile level even when this particular enrollment's status hasn't been updated yet.
+        if (BLOCKED_LMS_LIFECYCLE.has(enrollment.student.lifecycle)) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Học sinh đã rời lớp — không thể điểm danh' });
         }
         const facilityId = session.facilityId;
@@ -143,13 +148,17 @@ export const attendanceRouter = router({
         }
         // Same left-class guard as `mark`: transferred/withdrawn enrollments are excluded from
         // the active set, so markAll never writes an attendance row for a student who has left.
-        const enrollments = await tx.enrollment.findMany({
-          where: {
-            classBatchId: session.classBatchId,
-            status: { notIn: ['withdrawn', 'transferred'] },
-          },
-          select: { id: true },
-        });
+        // Also excludes students whose lifecycle is blocked (on_hold/withdrawn/transferred) even
+        // when this particular enrollment's status hasn't been updated to match yet.
+        const enrollments = (
+          await tx.enrollment.findMany({
+            where: {
+              classBatchId: session.classBatchId,
+              status: { notIn: ['withdrawn', 'transferred'] },
+            },
+            select: { id: true, student: { select: { lifecycle: true } } },
+          })
+        ).filter((e) => !BLOCKED_LMS_LIFECYCLE.has(e.student.lifecycle));
         const overrideByEnrollment = new Map(input.overrides.map((o) => [o.enrollmentId, o]));
         const facilityId = session.facilityId;
         const now = new Date();
