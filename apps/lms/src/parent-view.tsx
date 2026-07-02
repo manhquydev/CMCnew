@@ -251,6 +251,10 @@ function describeNotif(n: ParentNotif): { icon: string; text: string } {
       return { icon: '🏅', text: `Con đạt huy hiệu "${p.badge ?? ''}"` };
     case 'level_up':
       return { icon: '🎉', text: `Con lên cấp độ ${p.toLevel ?? ''}` };
+    case 'new_exercise_open':
+      return { icon: '📚', text: 'Bài tập mới đã mở cho con' };
+    case 'parent_meeting_reminder':
+      return { icon: '📅', text: `Sắp có buổi họp phụ huynh${p.title ? `: ${p.title}` : ''}` };
     default:
       return { icon: '🔔', text: 'Thông báo mới' };
   }

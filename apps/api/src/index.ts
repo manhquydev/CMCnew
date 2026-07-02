@@ -31,6 +31,7 @@ import { generateParentMeetings } from './services/parent-meeting-cadence.js';
 import { renderCertificateHtml } from './services/certificate-html.js';
 import { renderTranscriptHtml } from './services/transcript-html.js';
 import { runEmailOutbox } from './services/email-outbox.js';
+import { runExerciseOpenNotifications } from './services/exercise-open-notify.js';
 import { logger } from './lib/logger.js';
 import { recordError, maybeAlert } from './lib/error-alert.js';
 
@@ -513,5 +514,17 @@ if (process.env.DISABLE_CRON !== '1') {
         if (!r.disabled && (r.sent || r.failed)) logger.info({ sent: r.sent, failed: r.failed, rescheduled: r.rescheduled }, 'email outbox tick');
       })
       .catch((e) => logger.error({ err: e }, 'email outbox tick failed'));
+  });
+
+  // Exercise-open notification, Trigger B: every 30 min, catch the reverse ordering where a
+  // published exercise already existed and a session has just ended.
+  // Trigger A (exercise.upsert) covers publish-after-session-end inline; per-(student,
+  // exercise) dedup makes tick overlap with Trigger A free of duplicates.
+  cron.schedule('*/30 * * * *', () => {
+    runExerciseOpenNotifications()
+      .then((r) => {
+        if (r.notificationsCreated) logger.info({ sessions: r.sessionsScanned, notifications: r.notificationsCreated }, 'exercise-open notifications');
+      })
+      .catch((e) => logger.error({ err: e }, 'exercise-open notification tick failed'));
   });
 }

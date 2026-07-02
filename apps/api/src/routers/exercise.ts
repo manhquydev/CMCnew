@@ -3,6 +3,7 @@ import { withRls, ExerciseStatus, ExerciseType } from '@cmc/db';
 import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { openedUnitIdsFor } from '../lib/exercise-open.js';
+import { notifyForExercise } from '../services/exercise-open-notify.js';
 import { router, protectedProcedure, lmsProcedure, requirePermission } from '../trpc.js';
 
 const ENTITY = 'exercise';
@@ -109,8 +110,8 @@ export const exerciseRouter = router({
         status: z.nativeEnum(ExerciseStatus).optional(),
       }),
     )
-    .mutation(({ ctx, input }) =>
-      withRls(rlsContextOf(ctx.session), async (tx) => {
+    .mutation(async ({ ctx, input }) => {
+      const exercise = await withRls(rlsContextOf(ctx.session), async (tx) => {
         const before = await tx.exercise.findUnique({
           where: { curriculumUnitId_type: { curriculumUnitId: input.curriculumUnitId, type: input.type } },
         });
@@ -144,6 +145,14 @@ export const exerciseRouter = router({
           actorId: ctx.session.userId,
         });
         return exercise;
-      }),
-    ),
+      });
+
+      // Trigger A (own SYSTEM_CTX pass, after the director's RLS tx commits): notify every
+      // student for whom this unit is already open. Never run inside the tx above.
+      if (exercise.status === 'published') {
+        await notifyForExercise(exercise.id);
+      }
+
+      return exercise;
+    }),
 });

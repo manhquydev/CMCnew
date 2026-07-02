@@ -99,6 +99,63 @@ export async function openedUnitIdsFor(
   return [...opened];
 }
 
+// Inverse of openedUnitIdsFor: given one curriculumUnitId, which students already have it
+// open. Mirrors the exact same predicate (tier A class-wide non-makeup session end, tier B
+// per-student makeup attendance) so notify == visible — see exercise-open-notify.ts.
+export async function openStudentIdsForUnit(
+  tx: Prisma.TransactionClient,
+  curriculumUnitId: string,
+  now: Date = new Date(),
+): Promise<string[]> {
+  const studentIds = new Set<string>();
+
+  const sessions = await tx.classSession.findMany({
+    where: {
+      status: { not: 'cancelled' },
+      curriculumUnitId,
+      isMakeup: false,
+    },
+    select: {
+      sessionDate: true,
+      endTime: true,
+      batch: {
+        select: {
+          enrollments: {
+            where: { status: 'active', archivedAt: null },
+            select: { studentId: true },
+          },
+        },
+      },
+    },
+  });
+  for (const s of sessions) {
+    if (!sessionHasEnded(s.sessionDate, s.endTime, now)) continue;
+    for (const e of s.batch.enrollments) studentIds.add(e.studentId);
+  }
+
+  const makeupAttended = await tx.attendance.findMany({
+    where: {
+      status: { in: ['present', 'late'] },
+      session: {
+        isMakeup: true,
+        curriculumUnitId,
+        status: { not: 'cancelled' },
+      },
+    },
+    select: {
+      enrollment: { select: { studentId: true } },
+      session: { select: { sessionDate: true, endTime: true } },
+    },
+  });
+  for (const a of makeupAttended) {
+    if (sessionHasEnded(a.session.sessionDate, a.session.endTime, now)) {
+      studentIds.add(a.enrollment.studentId);
+    }
+  }
+
+  return [...studentIds];
+}
+
 export async function assertExerciseOpenForStudent(
   tx: Prisma.TransactionClient,
   exerciseId: string,
