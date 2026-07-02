@@ -1,5 +1,7 @@
 # Phase 04 — MinIO/S3 blob store driver + migration
 
+Status: completed 2026-07-02 for code. VPS/prod cutover deferred to a deploy window (kept on disk driver by default).
+
 Closes gap #4 (PDF store local disk → MinIO/S3, documented DEBT).
 
 ## Context links
@@ -45,13 +47,20 @@ Driver abstraction: keep `pdf-store.ts` as the single module; add an internal dr
 6. Confirm session-photo store left as-is (out of scope) OR note follow-up.
 
 ## Todo list
-- [ ] add S3 client dep
-- [ ] refactor pdf-store.ts with driver toggle (in place)
-- [ ] compose MinIO service + bucket bootstrap + volume
-- [ ] env vars + example (no secrets committed)
-- [ ] migration script + dry-run
-- [ ] verify serve/upload byte-identical
-- [ ] decide session-photo follow-up
+- [x] add S3 client dep
+- [x] refactor pdf-store.ts with driver toggle (in place)
+- [x] compose MinIO service + bucket bootstrap + volume
+- [x] env vars + example (no secrets committed)
+- [x] migration script + dry-run
+- [x] verify serve/upload byte-identical
+- [x] decide session-photo follow-up (deferred — flagged as a follow-up, not built)
+
+## Evidence 2026-07-02
+- `pnpm --filter @cmc/api typecheck` PASS. Driver interface (`putPdf`/`pdfExists`/`readPdf`/`PdfStoreError`) unchanged; default driver stays `disk`.
+- Verified against a real throwaway MinIO container (not the running dev/prod stacks): put→exists→read round-trip, content-addressing dedup (same content → same ref), migration script idempotent on re-run (copy-only, HeadObject-verified).
+- Code review fix: dev-compose `minio`/`minio-init` services now gated behind `profiles: ['minio']` (previously would start unconditionally on `docker compose up`, contradicting the "opt-in" comment) — matches the prod-compose pattern.
+- Prod compose MinIO section stays behind its own `minio` profile with hard-fail `${VAR:?...}` creds (no default secret); not exposed via published ports.
+- Migration script lives at `apps/api/scripts/migrate-pdf-blobs-to-s3.ts` (not repo-root `scripts/`) — pnpm's non-hoisted resolution requires it inside the `@cmc/api` workspace to resolve `@aws-sdk/client-s3`.
 
 ## Success Criteria
 - Existing PDFs (pre-migration refs) serve correctly from MinIO.

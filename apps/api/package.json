@@ -16,6 +16,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1078.0",
     "@azure/identity": "^4.5.0",
     "@azure/msal-node": "^2.16.2",
     "@cmc/audit": "workspace:*",

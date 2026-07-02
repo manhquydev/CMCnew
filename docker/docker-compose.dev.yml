@@ -22,5 +22,42 @@ services:
     ports:
       - '6380:6379'
 
+  # ── MinIO (S3-compatible blob store for exercise PDFs) ──────────────────────
+  # Opt-in: dev defaults to the disk driver (PDF_STORE_DRIVER unset/disk), so this
+  # service is only needed when testing the S3 driver locally.
+  minio:
+    image: minio/minio:latest
+    container_name: cmcnew-minio-dev
+    profiles: ['minio']
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: cmc-dev-minio
+      MINIO_ROOT_PASSWORD: cmc-dev-minio-secret
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - cmcnew_miniodata:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot bucket bootstrap (private bucket, no public read) — exits after creating the bucket.
+  minio-init:
+    image: minio/mc:latest
+    container_name: cmcnew-minio-init-dev
+    profiles: ['minio']
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 cmc-dev-minio cmc-dev-minio-secret &&
+      mc mb -p local/cmc-pdf-dev
+      "
+
 volumes:
   cmcnew_pgdata:
+  cmcnew_miniodata:

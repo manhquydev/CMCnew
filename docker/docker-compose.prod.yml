@@ -113,6 +113,17 @@ services:
       # ── Callio call-metrics sync (optional; no-op if unset) ────────────────────
       CALLIO_API_BASE:      ${CALLIO_API_BASE:-}
       CALLIO_API_TOKEN:     ${CALLIO_API_TOKEN:-}
+      # ── PDF blob store driver (disk|s3) ─────────────────────────────────────────
+      # Defaults to 'disk' (unchanged behavior). Flip to 's3' only after running
+      # scripts/migrate-pdf-blobs-to-s3.ts and verifying objects — see plan phase-04.
+      PDF_STORE_DRIVER:     ${PDF_STORE_DRIVER:-disk}
+      PDF_STORE_DIR:        ${PDF_STORE_DIR:-}
+      S3_ENDPOINT:          ${S3_ENDPOINT:-}
+      S3_BUCKET:            ${S3_BUCKET:-}
+      S3_ACCESS_KEY:        ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY:        ${S3_SECRET_KEY:-}
+      S3_REGION:            ${S3_REGION:-}
+      S3_FORCE_PATH_STYLE:  ${S3_FORCE_PATH_STYLE:-true}
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:4000/health || exit 1']
       interval: 10s
@@ -184,6 +195,39 @@ services:
         VITE_BASE_URL: /lms/
     restart: unless-stopped
 
+  # ── MinIO (S3-compatible blob store for exercise PDFs) ──────────────────────
+  # Idle by default: only used once PDF_STORE_DRIVER=s3 is set on the api service
+  # (after running scripts/migrate-pdf-blobs-to-s3.ts). Not exposed publicly —
+  # accessed only by the api container over the compose network.
+  minio:
+    image: minio/minio:latest
+    environment:
+      MINIO_ROOT_USER:     ${S3_ACCESS_KEY:?S3_ACCESS_KEY is required}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:?S3_SECRET_KEY is required}
+    volumes:
+      - miniodata:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    profiles: ['minio']
+
+  # One-off: bootstrap the private PDF bucket (no public read).
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${S3_ACCESS_KEY} ${S3_SECRET_KEY} &&
+      mc mb -p local/${S3_BUCKET:?S3_BUCKET is required}
+      "
+    profiles: ['minio']
+
   # ── Nginx reverse proxy (only public port) ────────────────────────────────────
   nginx:
     image: nginx:alpine
@@ -203,3 +247,4 @@ services:
 volumes:
   pgdata:
   redisdata:
+  miniodata:
