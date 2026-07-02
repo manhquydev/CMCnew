@@ -1,7 +1,7 @@
 ---
 title: "LMS engagement + rewards admin: open-notif + gift/star/badge mgmt + parent self-service"
 description: "Notify students when new exercises open; add gift/star/redeem + badge admin UIs; parent profile edit + staff-approved child-link (anti-takeover); polish meeting-reminder notif label."
-status: pending
+status: completed
 priority: P2
 effort: ~4d
 branch: develop
@@ -26,11 +26,11 @@ Flags: Authorization (star-adjust director-gate, parent self-link), Data model (
 
 | # | Phase | Depends | File ownership (exclusive) | Status |
 |---|-------|---------|----------------------------|--------|
-| P1 | New-exercise-open student notification (2 triggers) | Plan 1 | services/exercise-open-notify.ts (new), lib/exercise-open.ts (inverse helper), routers/exercise.ts (upsert Trigger A), index.ts (cron reg), parent-view.tsx (label) | pending |
-| P2 | Gift/star/redeem admin | Plan 1 | routers/rewards.ts, domain-rewards/stars.ts, rewards-panel.tsx, schema (enum value) | pending |
-| P3 | Badge admin UI | none | apps/admin/src/badge-panel.tsx (new), admin nav | pending |
-| P4 | Parent self-service (profile + link request) | Plan 2 | routers/guardian.ts, schema (new model), guardians-panel.tsx, apps/lms parent UI | pending |
-| P5 | Validation | P1-P4 | *.int.test.ts (new), manual checklist | pending |
+| P1 | New-exercise-open student notification (2 triggers) | Plan 1 | services/exercise-open-notify.ts (new), lib/exercise-open.ts (inverse helper), routers/exercise.ts (upsert Trigger A), index.ts (cron reg), parent-view.tsx (label) | completed |
+| P2 | Gift/star/redeem admin | Plan 1 | routers/rewards.ts, domain-rewards/stars.ts, rewards-panel.tsx, schema (enum value) | completed |
+| P3 | Badge admin UI | none | apps/admin/src/badge-panel.tsx (new), admin nav | completed |
+| P4 | Parent self-service (profile + link request) | Plan 2 | routers/guardian.ts, schema (new model), guardians-panel.tsx, apps/lms parent UI | completed |
+| P5 | Validation | P1-P4 | *.int.test.ts (new), manual checklist | completed (except live-browser manual checklist — deferred, no dev-server session run) |
 
 Parallelizable: P3 fully independent (no shared files, API complete). P2 independent of P1. P1 + P4 both touch `parent-view.tsx` → P1 label edit is a tiny disjoint region (notif switch `:225`) from P4's parent UI, but same file → serialize P1 before P4 or coordinate single owner. P5 last.
 
