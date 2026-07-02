@@ -49,7 +49,7 @@ built) — see `docs/CK_WORKFLOW.md` §5. The ELI5 output style
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **CMCnew** (6081 symbols, 9108 relationships, 198 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **CMCnew** (6175 symbols, 9302 relationships, 199 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
