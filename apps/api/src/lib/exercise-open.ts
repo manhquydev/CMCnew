@@ -1,5 +1,6 @@
 import { TRPCError } from '@trpc/server';
 import type { Prisma } from '@cmc/db';
+import { BLOCKED_LMS_LIFECYCLE } from '@cmc/auth';
 
 const ICT_OFFSET_HOURS = 7;
 
@@ -109,6 +110,11 @@ export async function openStudentIdsForUnit(
 ): Promise<string[]> {
   const studentIds = new Set<string>();
 
+  // notifyForExercise/runExerciseOpenNotifications call this directly (no pre-filtered studentIds
+  // list, unlike openedUnitIdsFor's callers which always pass an already lifecycle-filtered set
+  // from lms.ts's session resolution) — so this function must filter lifecycle itself.
+  const blockedLifecycles = [...BLOCKED_LMS_LIFECYCLE];
+
   const sessions = await tx.classSession.findMany({
     where: {
       status: { not: 'cancelled' },
@@ -121,7 +127,7 @@ export async function openStudentIdsForUnit(
       batch: {
         select: {
           enrollments: {
-            where: { status: 'active', archivedAt: null },
+            where: { status: 'active', archivedAt: null, student: { lifecycle: { notIn: blockedLifecycles } } },
             select: { studentId: true },
           },
         },
@@ -141,6 +147,7 @@ export async function openStudentIdsForUnit(
         curriculumUnitId,
         status: { not: 'cancelled' },
       },
+      enrollment: { student: { lifecycle: { notIn: blockedLifecycles } } },
     },
     select: {
       enrollment: { select: { studentId: true } },
