@@ -1,5 +1,7 @@
 # Phase 03 — Upload RBAC gate + delete dead PdfViewer
 
+Status: completed 2026-07-02.
+
 Closes gaps #6 (no RBAC on PDF upload) and #9 (dead PdfViewer). Bundled: both are small hardening/cleanup edits with disjoint file ownership.
 
 ## Context links
@@ -35,12 +37,17 @@ Upload flow unchanged except an added authorization check between session resolu
 4. Delete file + remove export; run typecheck/build.
 
 ## Todo list
-- [ ] confirm exercise.upsert permission tuple
-- [ ] add 403 gate to exercise-pdf upload
-- [ ] update superseded comment
-- [ ] confirm zero PdfViewer imports
-- [ ] delete pdf-viewer.tsx + export
-- [ ] typecheck/build green
+- [x] confirm exercise.upsert permission tuple
+- [x] add 403 gate to exercise-pdf upload
+- [x] update superseded comment
+- [x] confirm zero PdfViewer imports
+- [x] delete pdf-viewer.tsx + export
+- [x] typecheck/build green
+
+## Evidence 2026-07-02
+- `pnpm --filter @cmc/api typecheck` PASS. New `apps/api/test/upload-exercise-pdf-rbac.int.test.ts`: 3/3 pass (403 non-director, 200 director, 401 unauthenticated before RBAC).
+- `exercise.upsert` confirmed `['giam_doc_kinh_doanh','giam_doc_dao_tao']` (permissions.ts) — no drift from plan assumption.
+- Code review fix: `PdfStoreError` from server misconfiguration (missing S3_BUCKET) no longer echoed to the client as a 400 — split into `PdfStoreConfigError`, re-thrown to the global error boundary as a generic 500 instead.
 
 ## Success Criteria
 - Staff without exercise.upsert → 403 on upload (integration test P7).

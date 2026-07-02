@@ -3,7 +3,6 @@ export type { AppRouter } from './client.js';
 export { useNotificationStream, type LiveNotification } from './notification-stream.js';
 export { notifyError, notifySuccess, notifyInfo, errorMessage } from './notify.js';
 export { required, email, positiveNumber, minLength, combine } from './validators.js';
-export { PdfViewer } from './pdf-viewer.js';
 export { PdfAnnotator, type Tool } from './pdf-annotator.js';
 export type { AnnotationData, AnnotationItem } from '@cmc/api/annotation';
 export { theme } from './theme.js';

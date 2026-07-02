@@ -16,7 +16,14 @@ import { appRouter } from './routers/index.js';
 import { createContext, COOKIE_NAME, LMS_COOKIE_NAME } from './context.js';
 import { onNotification } from './events.js';
 import { onStaffNotification } from './staff-notification.js';
-import { putPdf, readPdf, pdfExists, PdfStoreError, MAX_PDF_BYTES } from './services/pdf-store.js';
+import {
+  putPdf,
+  readPdf,
+  pdfExists,
+  PdfStoreError,
+  PdfStoreConfigError,
+  MAX_PDF_BYTES,
+} from './services/pdf-store.js';
 import { putSessionPhoto, readSessionPhoto, PhotoStoreError, MAX_SESSION_PHOTO_BYTES } from './services/photo-store.js';
 import { renderReceiptHtml } from './services/receipt-html.js';
 import { runParentMeetingReminders } from './services/parent-meeting-reminder.js';
@@ -26,7 +33,7 @@ import { runEmailOutbox } from './services/email-outbox.js';
 import { logger } from './lib/logger.js';
 import { recordError, maybeAlert } from './lib/error-alert.js';
 
-const app = new Hono();
+export const app = new Hono();
 
 // Allowed origins from env (comma-separated); defaults to the dev Vite ports.
 // credentials:true so the session cookie flows. In production, set CORS_ORIGINS.
@@ -66,18 +73,23 @@ app.get('/health', (c) =>
 );
 
 // ── Exercise base-PDF storage (S1.7) ───────────────────────────────────────────────────────
-// Upload: staff only (a teacher attaches the base PDF when creating an exercise). Raw PDF body.
-// Returns the content-address ref to store in exercise.basePdfRef.
+// Upload: gated to the same roles that author exercises (exercise.upsert) — only the two
+// director roles create exercises post-seam-fixes, so upload authority must match write
+// authority. Raw PDF body. Returns the content-address ref to store in exercise.basePdfRef.
 app.post('/upload/exercise-pdf', async (c) => {
   const token = getCookie(c, COOKIE_NAME);
   const session = token ? await resolveSession(token) : null;
   if (!session) return c.text('unauthorized', 401);
+  if (!can(session.roles, session.isSuperAdmin, 'exercise', 'upsert')) {
+    return c.text('forbidden', 403);
+  }
   const body = await c.req.arrayBuffer();
   if (body.byteLength > MAX_PDF_BYTES) return c.text('file too large', 413);
   try {
     const ref = await putPdf(Buffer.from(body));
     return c.json({ ref });
   } catch (e) {
+    if (e instanceof PdfStoreConfigError) throw e; // server misconfig — surface as 500, not a client-facing 400
     if (e instanceof PdfStoreError) return c.text(e.message, 400);
     throw e;
   }
@@ -390,9 +402,13 @@ app.use(
   }),
 );
 
-const port = Number(process.env.API_PORT ?? 4000);
-serve({ fetch: app.fetch, port });
-logger.info({ port }, '✓ CMCnew API listening');
+// Skip binding a real port under Vitest (NODE_ENV=test by default) so integration tests can
+// import `app` and drive routes via `app.request(...)` without starting a listener.
+if (process.env.NODE_ENV !== 'test') {
+  const port = Number(process.env.API_PORT ?? 4000);
+  serve({ fetch: app.fetch, port });
+  logger.info({ port }, '✓ CMCnew API listening');
+}
 
 // Embedded reminder cron (docs/specs/parent-meeting.md): every 30 min, remind parents of
 // meetings within T-1 day. Idempotent via parent_meeting.remindedAt — re-ticks never double-send.
