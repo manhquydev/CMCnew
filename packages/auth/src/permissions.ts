@@ -181,6 +181,10 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     listForStudent: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     link: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     unlink: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    // Parent self-link request review queue (anti-takeover: approve is the only path that
+    // creates a Guardian row from a parent-initiated request).
+    linkRequestList: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    linkRequestReview: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
 
   // parentMeeting.runReminders / runCadence are super_admin-only (superAdminProcedure).

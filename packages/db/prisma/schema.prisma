@@ -562,6 +562,7 @@ model ParentAccount {
   emailNotifications Boolean    @default(true) @map("email_notifications")
   createdAt          DateTime   @default(now()) @map("created_at")
   guardians          Guardian[]
+  linkRequests       GuardianLinkRequest[]
 
   @@map("parent_account")
 }
@@ -595,6 +596,39 @@ model Guardian {
   @@index([facilityId])
   @@index([studentId])
   @@map("guardian")
+}
+
+enum GuardianLinkRequestStatus {
+  pending
+  approved
+  rejected
+}
+
+/// Anti-takeover self-link request: a parent can NEVER create a Guardian row directly — this is
+/// a staff-reviewed request queue. facilityId/matchedStudentId are resolved at REQUEST time
+/// (best-effort, under a system-context read), not at review time, so a "facility-scoped" staff
+/// list can actually scope a row before it is reviewed. Unresolved rows (facilityId null) form a
+/// director-global bucket (permission-gated to directors at the router layer, not RLS role-aware).
+model GuardianLinkRequest {
+  id                    String                    @id @default(uuid()) @db.Uuid
+  requestedByAccountId  String                    @map("requested_by_account_id") @db.Uuid
+  requestedBy           ParentAccount             @relation(fields: [requestedByAccountId], references: [id], onDelete: Cascade)
+  studentPhone          String?                   @map("student_phone")
+  studentCode           String?                   @map("student_code")
+  /// Best-effort resolved candidate at request time; null when zero or ambiguous (>1) matches.
+  matchedStudentId      String?                   @map("matched_student_id") @db.Uuid
+  /// Set only when matchedStudentId is unambiguous — the RLS scope for staff review.
+  facilityId            Int?                      @map("facility_id")
+  status                GuardianLinkRequestStatus @default(pending)
+  reviewedById          String?                   @map("reviewed_by_id") @db.Uuid
+  reviewedAt            DateTime?                 @map("reviewed_at")
+  reason                String?
+  createdAt             DateTime                  @default(now()) @map("created_at")
+
+  @@index([requestedByAccountId])
+  @@index([facilityId])
+  @@index([status])
+  @@map("guardian_link_request")
 }
 
 /// Global curriculum exercise asset. No RLS backstop; every write path must be app-layer gated.

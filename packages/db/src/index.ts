@@ -31,6 +31,8 @@ export interface RlsContext {
   principalKind?: 'staff' | 'parent' | 'student';
   /** Students the principal owns (child set for a parent, self for a student). */
   studentIds?: string[];
+  /** The LMS principal's own account id (ParentAccount/StudentAccount id) — scopes "own row only" policies. */
+  accountId?: string;
 }
 
 /**
@@ -50,16 +52,22 @@ export function withRls<T>(ctx: RlsContext, fn: (tx: PrismaTx) => Promise<T>): P
     throw new Error('withRls: studentIds must be uuids');
   }
   const principalKind = ctx.principalKind ?? 'staff';
+  // account id flows into a SQL uuid GUC (cast only inside app_account_id(), and only by policies
+  // that reference it — parent_account/guardian_link_request). A malformed value here must never
+  // crash unrelated queries, so sanitize to '' (→ SQL NULL, matches nothing) rather than throwing —
+  // some non-parent-scoped test fixtures still pass an opaque non-uuid placeholder accountId.
+  const accountId = ctx.accountId !== undefined && UUID_RE.test(ctx.accountId) ? ctx.accountId : '';
   // set_config(...,true) is transaction-local: Postgres resets it at COMMIT/ROLLBACK,
   // and Prisma holds one dedicated connection for the interactive transaction — so the
   // GUC cannot leak to another request even under connection pooling.
   return prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(
-      "SELECT set_config('app.facility_ids', $1, true), set_config('app.is_super_admin', $2, true), set_config('app.principal_kind', $3, true), set_config('app.student_ids', $4, true)",
+      "SELECT set_config('app.facility_ids', $1, true), set_config('app.is_super_admin', $2, true), set_config('app.principal_kind', $3, true), set_config('app.student_ids', $4, true), set_config('app.account_id', $5, true)",
       ctx.facilityIds.join(','),
       ctx.isSuperAdmin ? 'true' : 'false',
       principalKind,
       studentIds.join(','),
+      accountId,
     );
     return fn(tx);
   });

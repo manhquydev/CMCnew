@@ -25,6 +25,7 @@ export function lmsRlsContextOf(s: LmsSession): RlsContext {
     isSuperAdmin: false,
     principalKind: s.kind,
     studentIds: s.studentIds,
+    accountId: s.accountId,
   };
 }
 

@@ -88,6 +88,8 @@
   "guardian.listForStudent": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "guardian.link": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "guardian.unlink": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
+  "guardian.linkRequestList": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
+  "guardian.linkRequestReview": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "parentMeeting.setStatus": ["giao_vien", "giam_doc_dao_tao"],
   "parentMeeting.setSchedule": ["giao_vien", "giam_doc_dao_tao"],
   "parentMeeting.setNote": ["giao_vien", "giam_doc_dao_tao"],

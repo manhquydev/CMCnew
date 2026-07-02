@@ -8,6 +8,7 @@ import {
   NotificationCenter,
   PdfAnnotator,
   notifyError,
+  notifySuccess,
   type LmsPrincipal,
   type LiveNotification,
   type AnnotationData,
@@ -23,8 +24,10 @@ import {
   Modal,
   Select,
   Stack,
+  Switch,
   Table,
   Text,
+  TextInput,
   Title,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -32,7 +35,7 @@ import { IconCircleCheck, IconClock, IconCircleX, IconAlertCircle, IconStar } fr
 import { SessionEvidenceTab } from './session-evidence-tab';
 import { CurriculumSessionsTab } from './curriculum-sessions-tab';
 
-export type ParentTab = 'overview' | 'schedule' | 'sessions' | 'gradebook' | 'notifications' | 'rewards';
+export type ParentTab = 'overview' | 'schedule' | 'sessions' | 'gradebook' | 'notifications' | 'rewards' | 'profile';
 
 type Submission = Awaited<ReturnType<typeof trpc.submission.forStudent.query>>[number];
 type Gradebook = Awaited<ReturnType<typeof trpc.assessment.gradebook.query>>;
@@ -459,6 +462,142 @@ function AttendanceHistoryCard({ studentId, refreshKey }: { studentId: string; r
         </Table.Tbody>
       </Table>
     </Card>
+  );
+}
+
+type LinkRequestRow = Awaited<ReturnType<typeof trpc.guardian.linkRequestListMine.query>>[number];
+
+const LINK_REQUEST_STATUS: Record<LinkRequestRow['status'], { label: string; color: string }> = {
+  pending: { label: 'Chờ duyệt', color: 'yellow' },
+  approved: { label: 'Đã duyệt', color: 'teal' },
+  rejected: { label: 'Từ chối', color: 'red' },
+};
+
+/**
+ * Account-level self-service: profile edit (scoped server-side to the parent's own row) and a
+ * staff-reviewed self-link request. Anti-takeover: submitting a phone/student-code only queues a
+ * request — it never creates a Guardian row directly, so this tab cannot grant access by itself.
+ */
+function ProfileTab({ principal }: { principal: LmsPrincipal }) {
+  const [displayName, setDisplayName] = useState(principal.displayName);
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  const [linkCode, setLinkCode] = useState('');
+  const [linkPhone, setLinkPhone] = useState('');
+  const [submittingLink, setSubmittingLink] = useState(false);
+  const [requests, setRequests] = useState<LinkRequestRow[] | null>(null);
+
+  const loadRequests = useCallback(() => {
+    trpc.guardian.linkRequestListMine
+      .query()
+      .then(setRequests)
+      .catch((e) => notifyError(e, 'Không tải được danh sách yêu cầu liên kết'));
+  }, []);
+  useEffect(loadRequests, [loadRequests]);
+
+  async function saveProfile() {
+    if (!displayName.trim()) {
+      notifyError(new Error('Nhập họ tên.'), 'Thông tin chưa đủ');
+      return;
+    }
+    setSavingProfile(true);
+    try {
+      await trpc.guardian.profileUpdate.mutate({
+        displayName: displayName.trim(),
+        email: email.trim() || undefined,
+        phone: phone.trim() || undefined,
+        emailNotifications,
+      });
+      notifySuccess('Đã cập nhật thông tin cá nhân');
+    } catch (e) {
+      notifyError(e, 'Cập nhật thất bại');
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  async function submitLinkRequest() {
+    if (!linkCode.trim() && !linkPhone.trim()) {
+      notifyError(new Error('Nhập mã học sinh hoặc số điện thoại đăng ký của con.'), 'Thông tin chưa đủ');
+      return;
+    }
+    setSubmittingLink(true);
+    try {
+      await trpc.guardian.requestLink.mutate({
+        studentCode: linkCode.trim() || undefined,
+        studentPhone: linkPhone.trim() || undefined,
+      });
+      notifySuccess('Đã gửi yêu cầu liên kết. Nhà trường sẽ xét duyệt trong ít ngày.');
+      setLinkCode('');
+      setLinkPhone('');
+      loadRequests();
+    } catch (e) {
+      notifyError(e, 'Gửi yêu cầu thất bại');
+    } finally {
+      setSubmittingLink(false);
+    }
+  }
+
+  return (
+    <Stack gap="xl">
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} mb="md" style={{ color: 'var(--cmc-text)' }}>Thông tin cá nhân</Text>
+        <Stack gap="sm">
+          <TextInput label="Họ tên" value={displayName} onChange={(e) => setDisplayName(e.currentTarget.value)} />
+          <Group grow>
+            <TextInput label="Email" placeholder="Không đổi nếu để trống" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
+            <TextInput label="Số điện thoại" placeholder="Không đổi nếu để trống" value={phone} onChange={(e) => setPhone(e.currentTarget.value)} />
+          </Group>
+          <Switch
+            label="Nhận email thông báo"
+            checked={emailNotifications}
+            onChange={(e) => setEmailNotifications(e.currentTarget.checked)}
+          />
+          <Group justify="flex-end">
+            <Button variant="filled" radius={9999} loading={savingProfile} onClick={saveProfile}>
+              Lưu thay đổi
+            </Button>
+          </Group>
+        </Stack>
+      </Card>
+
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} mb="xs" style={{ color: 'var(--cmc-text)' }}>Liên kết thêm con</Text>
+        <Text size="sm" c="dimmed" mb="md">
+          Nhập mã học sinh hoặc số điện thoại đã đăng ký của con. Yêu cầu sẽ được nhà trường xét duyệt trước khi liên kết.
+        </Text>
+        <Group grow align="flex-end">
+          <TextInput label="Mã học sinh" value={linkCode} onChange={(e) => setLinkCode(e.currentTarget.value)} />
+          <TextInput label="Số điện thoại đã đăng ký" value={linkPhone} onChange={(e) => setLinkPhone(e.currentTarget.value)} />
+        </Group>
+        <Group justify="flex-end" mt="md">
+          <Button variant="filled" radius={9999} loading={submittingLink} onClick={submitLinkRequest}>
+            Gửi yêu cầu
+          </Button>
+        </Group>
+      </Card>
+
+      {requests && requests.length > 0 && (
+        <Card radius="lg" p={0} style={{ border: '1px solid var(--cmc-border)' }}>
+          <Text size="sm" fw={600} p="md" style={{ color: 'var(--cmc-text-2)', borderBottom: '1px solid var(--cmc-border-faint)' }}>
+            Yêu cầu liên kết đã gửi ({requests.length})
+          </Text>
+          <Stack gap={0}>
+            {requests.map((r) => (
+              <Group key={r.id} justify="space-between" px="md" py="xs" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
+                <Text size="sm">{r.studentCode ?? r.studentPhone} · {fmtDateTime(r.createdAt)}</Text>
+                <Badge size="sm" color={LINK_REQUEST_STATUS[r.status].color} variant="light" radius="xl">
+                  {LINK_REQUEST_STATUS[r.status].label}
+                </Badge>
+              </Group>
+            ))}
+          </Stack>
+        </Card>
+      )}
+    </Stack>
   );
 }
 
@@ -930,12 +1069,31 @@ export function ParentView({ principal, activeTab, onTabChange: _onTabChange, on
     onNotification?.();
   });
 
+  // Profile/link-request is account-level, not child-scoped — must stay reachable even for a
+  // parent with zero linked children (that's exactly who most needs the self-link request form).
+  if (currentTab === 'profile') {
+    return (
+      <Stack>
+        {!isControlled && (
+          <Group justify="space-between" align="flex-end">
+            <div>
+              <Title order={4}>Hồ sơ &amp; liên kết</Title>
+              <Text c="dimmed" size="sm">Xin chào {principal.displayName}.</Text>
+            </div>
+            <NotificationCenter pulse={refreshKey} />
+          </Group>
+        )}
+        <ProfileTab principal={principal} />
+      </Stack>
+    );
+  }
+
   if (students.length === 0) {
     return (
       <Card radius="lg" p="xl" maw={520} style={{ border: '1px solid var(--cmc-border)' }}>
         <Text fw={600} mb="xs">Theo dõi học tập</Text>
         <Text c="dimmed" size="sm">
-          Chưa có học sinh được liên kết với tài khoản này.
+          Chưa có học sinh được liên kết với tài khoản này. Vào mục "Hồ sơ &amp; liên kết" để gửi yêu cầu liên kết con.
         </Text>
       </Card>
     );
