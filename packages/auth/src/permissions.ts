@@ -35,6 +35,8 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
 
   attendance: {
     mark: ['giao_vien', 'giam_doc_dao_tao'],
+    markAll: ['giao_vien', 'giam_doc_dao_tao'],
+    report: ['giao_vien', 'giam_doc_dao_tao'],
   },
 
   // Education Director owns curriculum; course.create/archive moved off quan_ly-only.

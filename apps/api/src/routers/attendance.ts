@@ -1,9 +1,23 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls, AttendanceStatus } from '@cmc/db';
-import { rlsContextOf } from '@cmc/auth';
+import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, protectedProcedure, requirePermission } from '../trpc.js';
+import { router, protectedProcedure, requirePermission, lmsProcedure } from '../trpc.js';
+import { sessionEndUtc } from '../lib/exercise-open.js';
+
+// Same ICT offset as apps/api/src/lib/exercise-open.ts (ICT_OFFSET_HOURS). Not exported there,
+// so it's duplicated here rather than modifying that file (owned by a different, already-shipped phase).
+const ICT_OFFSET_HOURS = 7;
+
+/** Calendar month (ICT) a session's real end instant falls into — reuses sessionEndUtc so a
+ * session whose wall-clock ICT end crosses a UTC day boundary still buckets by its true ICT month,
+ * not by the raw UTC-midnight sessionDate column. */
+function ictMonthKey(sessionDate: Date, endTime: string): string {
+  const endUtc = sessionEndUtc(sessionDate, endTime);
+  const ict = new Date(endUtc.getTime() + ICT_OFFSET_HOURS * 3600_000);
+  return `${ict.getUTCFullYear()}-${String(ict.getUTCMonth() + 1).padStart(2, '0')}`;
+}
 
 export const attendanceRouter = router({
   listBySession: protectedProcedure
@@ -96,6 +110,204 @@ export const attendanceRouter = router({
           actorId: ctx.session.userId,
         });
         return attendance;
+      }),
+    ),
+
+  // Bulk điểm danh cả lớp trong 1 lần gọi: mọi ghi danh active nhận defaultStatus, trừ khi có
+  // override riêng (theo enrollmentId). Cùng transaction với upsert của `mark` (idempotent).
+  markAll: requirePermission('attendance', 'markAll')
+    .input(
+      z.object({
+        classSessionId: z.string().uuid(),
+        defaultStatus: z.nativeEnum(AttendanceStatus),
+        overrides: z
+          .array(
+            z.object({
+              enrollmentId: z.string().uuid(),
+              status: z.nativeEnum(AttendanceStatus).optional(),
+              excused: z.boolean().optional(),
+              note: z.string().optional(),
+            }),
+          )
+          .default([]),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const session = await tx.classSession.findUniqueOrThrow({
+          where: { id: input.classSessionId },
+          select: { classBatchId: true, facilityId: true, status: true },
+        });
+        if (session.status === 'cancelled') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Buổi học đã hủy — không thể điểm danh' });
+        }
+        // Same left-class guard as `mark`: transferred/withdrawn enrollments are excluded from
+        // the active set, so markAll never writes an attendance row for a student who has left.
+        const enrollments = await tx.enrollment.findMany({
+          where: {
+            classBatchId: session.classBatchId,
+            status: { notIn: ['withdrawn', 'transferred'] },
+          },
+          select: { id: true },
+        });
+        const overrideByEnrollment = new Map(input.overrides.map((o) => [o.enrollmentId, o]));
+        const facilityId = session.facilityId;
+        const now = new Date();
+
+        const attendances = await Promise.all(
+          enrollments.map((e) => {
+            const override = overrideByEnrollment.get(e.id);
+            const status = override?.status ?? input.defaultStatus;
+            const excused = override?.excused ?? false;
+            const note = override?.note;
+            return tx.attendance.upsert({
+              where: {
+                classSessionId_enrollmentId: {
+                  classSessionId: input.classSessionId,
+                  enrollmentId: e.id,
+                },
+              },
+              update: { status, excused, note, markedById: ctx.session.userId, markedAt: now },
+              create: {
+                facilityId,
+                classSessionId: input.classSessionId,
+                enrollmentId: e.id,
+                status,
+                excused,
+                note,
+                markedById: ctx.session.userId,
+                markedAt: now,
+              },
+            });
+          }),
+        );
+
+        await logEvent(tx, {
+          facilityId,
+          entityType: 'class_session',
+          entityId: input.classSessionId,
+          type: 'updated',
+          body: `Điểm danh tất cả: ${input.defaultStatus} (${enrollments.length} học sinh)`,
+          actorId: ctx.session.userId,
+        });
+        return attendances;
+      }),
+    ),
+
+  // Báo cáo điểm danh theo học sinh / lớp / kỳ. Authz riêng (N4): giáo viên chỉ thấy buổi mình
+  // dạy (ClassSession.teacherId); giám đốc đào tạo (và super_admin) thấy toàn cơ sở — KHÔNG kế
+  // thừa ngầm định phạm vi của quyền `mark`, lọc tường minh ngay trong câu truy vấn.
+  report: requirePermission('attendance', 'report')
+    .input(
+      z.object({
+        scope: z.enum(['student', 'class', 'term']),
+        id: z.string().uuid(),
+        termId: z.string().uuid().optional(),
+      }),
+    )
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const isDirector =
+          ctx.session.isSuperAdmin || ctx.session.roles.some((r) => r === 'giam_doc_dao_tao');
+        // giao_vien (the only other role permitted through requirePermission('attendance','report'))
+        // is scoped to sessions they personally taught; director/super_admin see the full facility
+        // (still bounded by RLS tenant isolation on facilityId).
+        const teacherFilter = isDirector ? undefined : ctx.session.userId;
+
+        const termWindow =
+          input.scope === 'term'
+            ? await tx.academicTerm.findUniqueOrThrow({
+                where: { id: input.id },
+                select: { startDate: true, endDate: true },
+              })
+            : input.termId
+              ? await tx.academicTerm.findUniqueOrThrow({
+                  where: { id: input.termId },
+                  select: { startDate: true, endDate: true },
+                })
+              : null;
+
+        const sessionWhere: Record<string, unknown> = {};
+        if (input.scope === 'class') sessionWhere.classBatchId = input.id;
+        if (termWindow) sessionWhere.sessionDate = { gte: termWindow.startDate, lte: termWindow.endDate };
+        if (teacherFilter) sessionWhere.teacherId = teacherFilter;
+
+        const attendances = await tx.attendance.findMany({
+          where: {
+            ...(input.scope === 'student' ? { enrollment: { studentId: input.id } } : {}),
+            session: sessionWhere,
+          },
+          select: {
+            status: true,
+            excused: true,
+            session: { select: { sessionDate: true, endTime: true } },
+          },
+        });
+
+        const counts = { present: 0, absent: 0, late: 0, excused: 0, total: attendances.length };
+        // N1: makeup sessions (isMakeup=true) stay INCLUDED in the denominator by default — a
+        // makeup a student actually attended counts toward their rate. This is intentionally the
+        // opposite convention from exercise-open.ts's class-wide unit-open gate, which excludes
+        // isMakeup — the two rules serve different purposes and must not be unified.
+        const byMonth = new Map<string, { present: number; absent: number; late: number; excused: number; total: number }>();
+        for (const a of attendances) {
+          counts[a.status] += 1;
+          if (a.excused) counts.excused += 1;
+          if (input.scope === 'term') {
+            const key = ictMonthKey(a.session.sessionDate, a.session.endTime);
+            const m = byMonth.get(key) ?? { present: 0, absent: 0, late: 0, excused: 0, total: 0 };
+            m[a.status] += 1;
+            if (a.excused) m.excused += 1;
+            m.total += 1;
+            byMonth.set(key, m);
+          }
+        }
+        const attended = counts.present + counts.late;
+        const rate = counts.total > 0 ? attended / counts.total : null;
+
+        return {
+          scope: input.scope,
+          id: input.id,
+          counts,
+          rate,
+          ...(input.scope === 'term'
+            ? { byMonth: [...byMonth.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([month, c]) => ({ month, ...c })) }
+            : {}),
+        };
+      }),
+    ),
+
+  // Lịch sử điểm danh theo buổi cho phụ huynh/học sinh (LMS) — hiển thị từng buổi thay vì chỉ
+  // tỷ lệ tổng hợp. Giới hạn nghiêm ngặt theo studentIds của phiên LMS đang đăng nhập.
+  forStudent: lmsProcedure
+    .input(z.object({ studentId: z.string().uuid().optional() }).optional())
+    .query(({ ctx, input }) =>
+      withRls(lmsRlsContextOf(ctx.lms), async (tx) => {
+        const studentIds = input?.studentId ? [input.studentId] : ctx.lms.studentIds;
+        for (const id of studentIds) {
+          if (!ctx.lms.studentIds.includes(id)) {
+            throw new TRPCError({ code: 'FORBIDDEN', message: 'Không có quyền xem học sinh này' });
+          }
+        }
+        return tx.attendance.findMany({
+          where: { enrollment: { studentId: { in: studentIds } } },
+          select: {
+            id: true,
+            status: true,
+            excused: true,
+            session: {
+              select: {
+                id: true,
+                sessionDate: true,
+                startTime: true,
+                endTime: true,
+                isMakeup: true,
+                batch: { select: { name: true } },
+              },
+            },
+          },
+          orderBy: { session: { sessionDate: 'desc' } },
+        });
       }),
     ),
 });

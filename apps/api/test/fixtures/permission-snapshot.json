@@ -13,6 +13,8 @@
   "afterSale.assign": ["sale", "cskh", "giam_doc_kinh_doanh"],
   "afterSale.setStudentLifecycle": ["giam_doc_kinh_doanh"],
   "attendance.mark": ["giao_vien", "giam_doc_dao_tao"],
+  "attendance.markAll": ["giao_vien", "giam_doc_dao_tao"],
+  "attendance.report": ["giao_vien", "giam_doc_dao_tao"],
   "course.create": ["giam_doc_dao_tao"],
   "course.archive": ["giam_doc_dao_tao"],
   "badge.list": ["giao_vien", "giam_doc_dao_tao"],
