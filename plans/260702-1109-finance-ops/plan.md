@@ -20,7 +20,7 @@ Hard gates tripped: **Data model** (new `RefundRecord` model + migration), **Aud
 Required durable artifacts (checkpoints, NOT code):
 - High-risk story folder from `docs/templates/high-risk-story/` (execplan/overview/design/validation).
 - **1 decision record** (next free id **0028** — 0023 latest, Plan 3 reserves 0024–0027):
-  - 0028 refund-ledger: refund is a manual amount + reason + payer bound to the cancelled receipt; no auto pro-rata; refund never mutates receipt.netAmount (audit-preserving); RefundRecord is append-only (reversible only by a compensating negative entry, not delete).
+  - 0028 refund-ledger: refund is a manual amount (`>= 1`, no auto pro-rata) + reason + recordedById, bound to a receipt that is `cancelled AND approvedAt IS NOT NULL`; sum atomically capped at netAmount; never mutates receipt.netAmount (audit-preserving); RefundRecord append-only. Correction = an additional refund row up to remaining cap; over-refund fix = documented DBA/ops SQL (no negative-entry path). Also records P3 net-revenue semantics (net = gross by approvedAt − refunds by createdAt; live-ledger, exports non-reproducible after later cancels).
 - Harness: `harness-cli intake` → `story add`/`story update` per phase → `harness-cli decision add 0028` → `harness-cli trace` at each phase close. Every DB phase ends 0-drift (`prisma migrate diff` clean).
 
 ## Dependency
@@ -55,10 +55,10 @@ File-ownership rule: **P1 owns all `finance-panel.tsx` + `permissions.ts` edits 
 
 ## Success criteria (go-live)
 
-1. Every đồng out has a record: cancelling an approved receipt captures a `RefundRecord` (amount+reason+payer+audit).
-2. A stuck/failed provisioning email is visible + retryable; secret-scrubbed rows warn instead of sending blank.
-3. A receipt can be emailed to the parent; the `receipt_pending_approval` notif reaches a real recipient (GĐKD).
-4. Monthly/facility/course revenue exports to CSV; a "chưa đối soát kỳ này" worklist exists.
+1. Every đồng out has a record: cancelling an APPROVED receipt captures a `RefundRecord` (amount+reason+recordedById+audit); sum atomically capped at netAmount; no refund on a never-approved receipt.
+2. A stuck/failed provisioning email is visible + retryable; ANY secret-kind row is blocked from retry (re-issue instead of resend).
+3. A receipt can be emailed to the parent (corrected-address re-send possible); `receipt_pending_approval` reaches ke_toan ∪ GĐKD (deduped).
+4. Monthly/facility/course NET revenue (gross − refunds) exports to CSV; a "chưa đối soát kỳ này" worklist exists.
 5. Discount tiers are editable per facility, 35% cap enforced.
 
 ## Next steps

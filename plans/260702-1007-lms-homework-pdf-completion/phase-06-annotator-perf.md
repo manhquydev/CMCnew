@@ -5,6 +5,7 @@ Closes gap #8 (many-page / large-PDF perf).
 ## Context links
 - `packages/ui/src/pdf-annotator.tsx:139-153` (renders EVERY page to full data-URL PNG at `RENDER_WIDTH=720`)
 - 20MB PDF cap (`MAX_PDF_BYTES`, index.ts) — a 20-page doc renders 20 full canvases → data-URLs held in memory
+- **Regression-risk consumers of this shared component**: `apps/admin/src/grading.tsx:166-171` (teacher grading), `apps/lms/src/student-view.tsx:239-243`, `apps/lms/src/parent-view.tsx`. Lazy-render changes must not break their overlay alignment; P7 regression-checks grading.tsx.
 
 ## Overview
 Replace eager full-document render (all pages → PNG data-URLs upfront) with lazy/virtualized rendering so only visible (and near-visible) pages are rasterized, bounding memory for large/many-page PDFs.
@@ -49,6 +50,7 @@ Data flow: load PDF doc → for each page compute viewport dims only (no raster)
 - Annotation misalignment on late-rendered pages (Med likelihood, HIGH impact): drive layout from measured viewport dims computed eagerly; raster only affects pixels, not geometry. Manual alignment test mandatory.
 - Scroll jank / flicker on raster (Med/Med): prefetch band + placeholder at known dims prevents layout shift.
 - Interaction with P5 zoom/pan (Med/Med): recompute visible set on zoom; test combined.
+- Shared-component regression in grading.tsx (Med/Med): lazy render alters when pages rasterize; teacher grading view depends on the same component. Mitigation: overlays position from eagerly-measured dims (not raster state); P7 regression-checks the teacher grading flow after this phase.
 
 ## Security Considerations
 - None new — pure client rendering optimization. Server caps/validation unchanged.

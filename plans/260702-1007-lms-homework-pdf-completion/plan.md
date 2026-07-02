@@ -44,6 +44,7 @@ Parallelizable after seam-fixes: {P1→P2}, {P3}, {P4}, {P5→P6} are independen
 - Parent sees student layer + published teacher-correction layer read-only; sees nothing (score/feedback/teacher layer) pre-publish — integration test asserts redaction.
 - Cross-guardian studentId → empty/denied (integration test).
 - Stale `version` on save → `CONFLICT` + friendly reload UX (integration test + manual).
+- Session cancelled / enrollment lapsed mid-edit → save `FORBIDDEN` → autosave stops, local strokes retained (not lost), non-alarming "bài đã đóng" message (integration test + manual).
 - `POST /upload/exercise-pdf` returns 403 for staff lacking `exercise.upsert` (integration test).
 - PDF blobs served from MinIO with content-addressing + ref format unchanged; existing blobs migrated; `GET /files/exercise/:ref` auth flow unchanged.
 - Annotator: eraser/per-stroke delete, pen width, pinch-zoom+pan work on tablet; AnnotationData `v:1` unchanged (server caps MAX_ITEMS 500 / MAX_INK_POINTS 2000 still hold).

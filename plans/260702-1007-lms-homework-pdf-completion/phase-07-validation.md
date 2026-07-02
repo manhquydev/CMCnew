@@ -17,12 +17,14 @@ Integration (Vitest, real DB + RLS — no mocks per project rule):
 - **Parent post-publish**: after grade publish → teacher layer + score visible.
 - **Cross-guardian denial**: guardian A requests guardian B's child studentId → FORBIDDEN/empty (both proc guard AND RLS).
 - **Version conflict**: two saves with same stale version → second returns CONFLICT; first succeeds; version incremented.
+- **Open-gate FORBIDDEN mid-edit**: with a submission mid-edit, cancel the session (`status → 'cancelled'`) OR archive the enrollment, then `submission.save` → FORBIDDEN (distinct from CONFLICT and from the unpublished-403). Assert the client-facing contract that this is the code the freeze-and-retain UX keys on.
 - **Upload RBAC**: staff without `exercise.upsert` → 403 on `/upload/exercise-pdf`; director role → 200.
 - **Redaction on save**: student save response never carries unpublished grade score/feedback.
 
 E2E (Playwright):
 - LMS student: open exercise, draw, autosave (close without manual save → reopen shows strokes), submit.
-- LMS parent: view published drawn work read-only; confirm no edit controls.
+- LMS parent: view published drawn work read-only; confirm no edit controls. Confirm the base PDF serves to a guardian principal (global no-RLS exercise, decision 0022).
+- **grading.tsx regression after P5/P6**: teacher opens a submission in the admin grading view (`grading.tsx:166-171`, shared PdfAnnotator) and can still draw a correction over the student `readOnlyLayers`, undo, and save — after the eraser/pen-width/pinch-zoom (P5) and lazy/virtualized render (P6) changes land. (Automation bucket — Playwright vs. manual checklist — is an open operator question; default to Playwright if the admin app has an e2e harness, else manual.)
 
 Manual tablet checklist (kids 3-11):
 - Eraser / per-stroke delete works by touch.
@@ -46,9 +48,11 @@ Manual tablet checklist (kids 3-11):
 - [ ] parent redaction pre/post-publish int tests
 - [ ] cross-guardian denial int test
 - [ ] version conflict int test
+- [ ] open-gate FORBIDDEN mid-edit int test (session-cancelled / enrollment-archived → FORBIDDEN)
 - [ ] upload RBAC int test
 - [ ] save-response redaction int test
 - [ ] e2e autosave + parent read-only
+- [ ] grading.tsx teacher-correction regression check after P5/P6
 - [ ] full suite + typecheck + build green
 - [ ] manual tablet checklist recorded
 

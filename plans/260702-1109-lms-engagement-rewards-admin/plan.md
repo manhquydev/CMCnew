@@ -26,7 +26,7 @@ Flags: Authorization (star-adjust director-gate, parent self-link), Data model (
 
 | # | Phase | Depends | File ownership (exclusive) | Status |
 |---|-------|---------|----------------------------|--------|
-| P1 | New-exercise-open student notification (cron) | Plan 1 | services/exercise-open-notify.ts (new), index.ts (cron reg), parent-view.tsx (label) | pending |
+| P1 | New-exercise-open student notification (2 triggers) | Plan 1 | services/exercise-open-notify.ts (new), lib/exercise-open.ts (inverse helper), routers/exercise.ts (upsert Trigger A), index.ts (cron reg), parent-view.tsx (label) | pending |
 | P2 | Gift/star/redeem admin | Plan 1 | routers/rewards.ts, domain-rewards/stars.ts, rewards-panel.tsx, schema (enum value) | pending |
 | P3 | Badge admin UI | none | apps/admin/src/badge-panel.tsx (new), admin nav | pending |
 | P4 | Parent self-service (profile + link request) | Plan 2 | routers/guardian.ts, schema (new model), guardians-panel.tsx, apps/lms parent UI | pending |
@@ -36,7 +36,7 @@ Parallelizable: P3 fully independent (no shared files, API complete). P2 indepen
 
 ## Acceptance (measurable)
 
-- Cron emits ONE `new_exercise_open` notification per (studentId, exerciseId); re-tick creates zero duplicates (idempotency integration test). Only fires for published exercises whose unit's session for an active enrollment has ended.
+- Student gets ONE `new_exercise_open` notification per (studentId, exerciseId) whenever the exercise becomes visible, via EITHER trigger: (A) `exercise.upsert` publishes an exercise whose unit already had a session end, or (B) cron detects a session end for a unit that already has a published exercise. Idempotency keyed on (studentId, exerciseId) — re-ticks, both-triggers, and editSlot session moves create zero duplicates (integration tests). Fires iff the exercise is visible per `openedUnitIdsFor`.
 - `parent-view.tsx` label switch renders friendly text for `new_exercise_open` AND `parent_meeting_reminder` (no more "Thông báo mới" fallback for these two).
 - Director can update gift (name/stars/stock/image), archive gift, adjust stock; changes audited. Manual star adjust (+/- with reason) is director-gated, writes a `manual` StarTransaction, audited; balance reflects it.
 - Redeem lifecycle extends approved → delivered; staff marks delivered; delivered is terminal (integration test rejects re-transition).

@@ -14,6 +14,7 @@ Surface the existing (unused) contact directory, make phone-dedupe visible befor
 
 ## Requirements
 - `permissions.ts:28-34` afterSale.{list,create,transition,assign} += `'sale'` (keep setStudentLifecycle director-only).
+- **M7:** `user.listAssignableForAfterSale` (`permissions.ts:241`, currently cskh/gd_kd) += `'sale'`. The assign dropdown calls it (`cskh-panel.tsx:97-99`); without this grant sale's assign flow throws FORBIDDEN in the UI. Its own comment says it must track the afterSale.assign role set. This makes the P6 snapshot diff 4 modules, not 3 — see P6.
 - Contact directory UI: search by phone/name, calls `crm.contactList`.
 - createLead flow (crm-panel): on phone entry matching existing contact, surface open opportunities (warning, non-blocking) before create.
 
@@ -28,13 +29,13 @@ Surface the existing (unused) contact directory, make phone-dedupe visible befor
 - new contact-directory panel (create) calling `crm.contactList`.
 
 ## Implementation Steps
-1. permissions.ts: afterSale list/create/transition/assign += 'sale' (serialized #3).
+1. permissions.ts: afterSale list/create/transition/assign += 'sale' AND user.listAssignableForAfterSale += 'sale' (serialized #3, M7).
 2. Contact directory panel: search input → contactList; render results.
 3. createLead: reuse dedupe (`:71-100`) to fetch open opps for entered phone; render non-blocking warning listing them; user confirms to proceed.
 4. Tests: sale can list/create/transition/assign afterSale within facility, denied cross-facility + setStudentLifecycle; dup-phone warning shows existing open opps.
 
 ## Todo list
-- [ ] permissions afterSale += sale (serialized #3)
+- [ ] permissions afterSale += sale AND listAssignableForAfterSale += sale (serialized #3, M7)
 - [ ] contact directory panel (contactList)
 - [ ] createLead dup-phone warning (reuse server dedupe)
 - [ ] tests: afterSale scope + dup warning

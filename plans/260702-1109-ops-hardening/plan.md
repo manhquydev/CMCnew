@@ -35,8 +35,8 @@ All five phases own disjoint files → fully parallelizable. No shared-file cont
 
 ## File ownership (no overlap)
 
-- P1: `apps/api/src/lib/logger.ts` (new), `apps/api/src/lib/error-alert.ts` (new), `apps/api/src/index.ts`, `apps/api/package.json`
-- P2: `scripts/backup-db.sh`, `scripts/db-backup.sh` (delete), `scripts/db-restore.sh`, `docs/prod-deploy-security-runbook.md` §5, `docs/ops/restore-drill-YYMMDD.md` (new)
+- P1: `apps/api/src/lib/logger.ts` (new), `apps/api/src/lib/error-alert.ts` (new), `apps/api/src/index.ts`, `apps/api/src/services/email-templates.ts` (add `ops_error_alert` kind), `apps/api/package.json`
+- P2: `scripts/backup-db.sh` (+ blob tar step), `scripts/db-backup.sh` (delete), `scripts/db-restore.sh` (+ blob extract), `docs/prod-deploy-security-runbook.md` §5, `docs/ops/restore-drill-YYMMDD.md` (new)
 - P3: `Jenkinsfile`, `scripts/ci-integration-tests.sh`
 - P4: `eslint.config.js`
 - P5: `docs/roadmap.md`, `docs/TEST_MATRIX.md`, `docs/stories/LMS-SESSION-EVIDENCE/validation.md`, `DEBT.md`, `.env.example`, other plan dirs' `plan.md` (status-only edits)
@@ -46,7 +46,7 @@ All five phases own disjoint files → fully parallelizable. No shared-file cont
 ## Global success criteria
 
 1. Prod errors produce structured logs + an alert email (via existing outbox) when error rate crosses threshold.
-2. Backup runs automatically (cron on VPS); one restore drill executed with recorded evidence.
+2. Backup runs automatically (cron on VPS) covering DB **and** local-disk blob stores (`.data/pdf`, `.data/session-photos`); one restore drill (DB + blobs) executed with recorded evidence.
 3. A PR with a red integration test cannot merge (gate runs on PRs, not just `main`).
 4. Raw `prisma` / `@prisma/client` import outside the whitelist fails lint.
 5. Stale roadmap/TEST_MATRIX/DEBT/plan statuses reflect shipped reality; `.env.example` documents every read env var.
@@ -56,8 +56,12 @@ All five phases own disjoint files → fully parallelizable. No shared-file cont
 - **Backup/restore format mismatch (P2, HIGH):** `db-restore.sh` uses `pg_restore` (custom `-Fc`, pairs with the
   deleted `db-backup.sh`), but the canonical `backup-db.sh` emits plain SQL (`--clean --if-exists`). Dedupe MUST
   realign restore to the plain-SQL/`psql` path or the drill silently fails. See P2.
-- **CI cost on 2-vCPU VPS (P3, MED):** integration tests spin an ephemeral Postgres per PR; `disableConcurrentBuilds`
-  already serializes. Watch build minutes.
+- **Blob-store backup gap (P2, CRITICAL→mitigated):** `backup-db.sh` was DB-only; `.data/pdf` + `.data/session-photos`
+  (referenced by DB rows) were never captured → DB-only restore leaves dangling refs. P2 now tars both store dirs on the
+  same cron/retention; P5 re-surfaces the residual MinIO/S3-migration debt in DEBT.md so it stays visible.
+- **CI cost + port safety on 2-vCPU VPS (P3, MED):** integration tests spin an ephemeral Postgres per PR. Serialization
+  is guaranteed by `numExecutors: 1` (`jenkins-casc.yaml:4`), NOT `disableConcurrentBuilds()` (per-branch only). Watch
+  build minutes; if executors ever increase, the hardcoded `55432` port becomes a collision risk — revisit then.
 - **Single-instance state (P1):** error-rate counter is a process-level singleton (same topology caveat as
   `email-outbox.ts:96-100` and `rate-limit.ts`). A second API replica would undercount — documented, not fixed (YAGNI).
 

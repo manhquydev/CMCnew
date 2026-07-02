@@ -18,10 +18,24 @@ hygiene — no code change. Bring roadmap/TEST_MATRIX/plan-statuses/DEBT/env in 
 - **`.env.example` gap (verified via grep of `process.env.*` in `apps/api/src`):** missing `STAFF_PASSWORD_LOGIN`
   (auth.ts:34), `DISABLE_CRON` (index.ts:385), `LOGIN_RATE_PAIR_LIMIT`/`LOGIN_RATE_IP_LIMIT`/`LOGIN_RATE_WINDOW_MS`
   (rate-limit.ts:23-26), `LEAD_RATE_IP_LIMIT` (crm.ts:23), `OTP_RATE_LIMIT` (lms-auth.ts:10), `PDF_STORE_DIR`
-  (pdf-store.ts:9), `SESSION_PHOTO_STORE_DIR` (photo-store.ts:19). That's STAFF_PASSWORD_LOGIN + DISABLE_CRON + 7
-  rate-limit/store vars. Also fold in P1's new names (LOG_LEVEL, ERROR_ALERT_THRESHOLD, optional SENTRY_DSN).
+  (pdf-store.ts:9), `SESSION_PHOTO_STORE_DIR` (photo-store.ts:19), and `LMS_COOKIE_NAME` (context.ts:7 —
+  `process.env.LMS_COOKIE_NAME ?? 'cmc.lms'`, the LMS auth cookie name, security-relevant). That's
+  STAFF_PASSWORD_LOGIN + DISABLE_CRON + 7 rate-limit/store vars + LMS_COOKIE_NAME = **≥10** missing vars. Also fold in
+  P1's new names (LOG_LEVEL, ERROR_ALERT_THRESHOLD, optional SENTRY_DSN). The step-5 re-grep is the authoritative final
+  list — must actually run, not be treated as a formality.
 - **DEBT close:** `DEBT.md:13` payroll director-read is intentional per Plan 3 Decision B (facility-wide read, only
   writes domain-scoped) → move from "gap" to a closed/decided note; keep the long-term Q at `:23` or resolve it.
+  In the current tree the payroll line already reads as effectively decided, so this is a heading-placement/wording
+  edit, not a status flip.
+- **Line-citation basis:** the `DEBT.md:13`/`:23`, `docs/roadmap.md:33`, and `docs/TEST_MATRIX.md:87` line numbers
+  above are cited against the **CURRENT UNCOMMITTED working tree** (Plan-1's seam-fixes already rewrote `DEBT.md`),
+  NOT `git HEAD`. A reader diffing against `main`/HEAD will see different content/structure — re-anchor by heading/
+  content, not bare line number, since Plan-1's commit will shift these lines. (Plan-1's `DEBT.md` rewrite is itself
+  being separately fixed right now to restore dropped items, so treat exact line numbers as advisory.)
+- **Re-surface blob-durability debt (from P2/C1):** ensure `DEBT.md` carries an explicit item that local-disk blob
+  stores (`.data/pdf`, `.data/session-photos`) are backed up by tar (P2) but NOT yet on a durable/replicated object
+  store — close-before: MinIO/S3 migration (LMS-PDF plan). This is the one place the gap was previously recorded and
+  it must not silently vanish again.
 - **Plan-status ambiguity:** report says "260626 prod-readiness ×2" but three exist — list all three, mark
   superseded-by-260628-0147, flag for operator (see plan.md Unresolved).
 
@@ -34,8 +48,8 @@ hygiene — no code change. Bring roadmap/TEST_MATRIX/plan-statuses/DEBT/env in 
   - `plans/260701-1910-teacher-nav-lich360-consolidation/plan.md`: implemented-pending-e2e → e2e fixed (`26dc955`)
   - `plans/260626-0133-erp-prod-readiness`, `plans/260626-0949-full-prod-readiness`, `plans/260626-1413-prod-readiness-completion`: mark superseded-by-`260628-0147-prod-deployment` (flag ×2-vs-×3 for operator)
   - `plans/260701-1223-lms-climb-session-lock/plan.md`: superseded-by-`260702-0929-lms-erp-seam-fixes` (Plan 1)
-- `DEBT.md`: close payroll director-read per Plan 3 Decision B; add new debt items surfaced by the report (e.g. off-box backup copy, e2e-on-PR deferral, unit-test coverage gap).
-- `.env.example`: add the 9 missing vars above (+ P1 names) with short comments; keep the inert-until-set convention wording.
+- `DEBT.md`: close payroll director-read per Plan 3 Decision B; add new debt items surfaced by the report (blob-store durability / MinIO-S3 migration, off-box backup copy, e2e-on-PR deferral, unit-test coverage gap). Re-anchor edits by heading/content, not the working-tree line numbers (they will shift after Plan-1 commits).
+- `.env.example`: add the ≥10 missing vars above (incl. `LMS_COOKIE_NAME`) (+ P1 names) with short comments; keep the inert-until-set convention wording.
 
 ## Related code files
 - MODIFY `docs/roadmap.md`, `docs/TEST_MATRIX.md`, `docs/stories/LMS-SESSION-EVIDENCE/validation.md`
@@ -54,8 +68,8 @@ hygiene — no code change. Bring roadmap/TEST_MATRIX/plan-statuses/DEBT/env in 
 - [ ] roadmap session-evidence → shipped (3d6db9d)
 - [ ] TEST_MATRIX + story validation → implemented
 - [ ] 6 plan statuses updated (with supersede pointers)
-- [ ] DEBT.md: close payroll director-read + add new items
-- [ ] .env.example: +9 vars (+P1 names), re-grep confirms complete
+- [ ] DEBT.md: close payroll director-read + add new items (incl. blob-store durability re-surface)
+- [ ] .env.example: +≥10 vars (incl. LMS_COOKIE_NAME) (+P1 names), re-grep confirms complete
 - [ ] Flag 260626 ×2-vs-×3 to operator
 
 ## Success Criteria

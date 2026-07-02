@@ -13,7 +13,8 @@ owns: [apps/admin/src/class-workspace.tsx, apps/admin/src/meetings-panel.tsx]
 - Anchors (verified): `room.update` `room.ts:37`, `room.archive` `room.ts:61`; `parentMeeting.setSchedule` `parent-meeting.ts:50`; meeting `note` field in select `parent-meeting.ts:44`; only admin file referencing `room.` = `apps/admin/src/class-workspace.tsx`; meetings UI `apps/admin/src/meetings-panel.tsx`.
 
 ## Requirements
-- Room edit + archive UI wired to `room.update`/`room.archive`. Host panel = `class-workspace.tsx` (sole current `room.` consumer) OR a dedicated rooms admin section — confirm host before building (see Open Qs).
+- **Resolve before build (was Open Qs, now gating prerequisites — do these in step 0, not mid-implementation):** (a) host panel for room UI — verified `class-workspace.tsx` is the SOLE current `room.` consumer (only `room.create`/`room.list`, grep-confirmed), so default host = `class-workspace.tsx` unless a dedicated rooms section is preferred; (b) note-write mutation existence — grep `parent-meeting.ts` for a mutation that persists `note`; if none exists, this adds API scope → escalate before building the note UI (do not silently invent a mutation).
+- Room edit + archive UI wired to `room.update`/`room.archive`. Host panel = `class-workspace.tsx` (sole current `room.` consumer) unless operator picks a dedicated rooms admin section.
 - `parentMeeting.setSchedule` UI: staff confirms date/time → parents see confirmed time (they already read via `myMeetings`).
 - Meeting outcome/note: writable field on meeting after it happens (`note` already in schema + select).
 

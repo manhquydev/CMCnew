@@ -12,7 +12,7 @@ Closes gap #4 (PDF store local disk → MinIO/S3, documented DEBT).
 Swap the pdf-store persistence driver from local disk to MinIO/S3, preserving content-addressing (sha256 ref) and the ref format so callers, DB `basePdfRef` values, and the `GET /files/exercise/:ref` auth flow are unchanged. Add a MinIO compose service + env, and migrate existing blobs.
 
 ## Key Insights
-- Only the DRIVER changes. `putPdf(buffer) → ref` and `readPdf(ref) → {buffer, contentType}` and `pdfExists(ref)` signatures stay identical; callers (index.ts) untouched.
+- Only the DRIVER changes. Actual signatures (pdf-store.ts) MUST stay identical: `putPdf(buffer) → ref`, `readPdf(ref): Promise<Buffer>` (returns a **bare Buffer** — verified at pdf-store.ts:48-54), `pdfExists(ref)`. The S3 driver's `readPdf` must also return a bare `Buffer`. Do NOT add a `contentType` field — it does not exist in this store's return shape. Content-Type is hardcoded `application/pdf` at the call site (index.ts:151) and is out of scope for the driver swap. (The `{buffer, contentType}` shape belongs to the separate `readSessionPhoto` store — do not conflate.)
 - Content-addressing preserved: ref = sha256 of content → object key in bucket. Idempotent put (same content = same key = dedup) must survive.
 - Auth flow (index.ts:143-146) checks exercise RLS BEFORE existence; keep `pdfExists`→`readPdf` order so a non-entitled principal still cannot probe existence.
 - Existing `basePdfRef` values in DB are content hashes — they remain valid keys after migration; no DB change.
@@ -34,7 +34,7 @@ Driver abstraction: keep `pdf-store.ts` as the single module; add an internal dr
 - Modify: `apps/api/src/services/pdf-store.ts` (add S3 driver, keep interface)
 - Modify: docker compose file(s) + env example
 - New: migration script (e.g. `scripts/migrate-pdf-blobs-to-s3.ts`) — one-shot
-- Read-only: `apps/api/src/index.ts` (must remain unchanged)
+- Read-only: `apps/api/src/index.ts` (must remain unchanged). NOTE: its `/files/exercise/:ref` comment (index.ts:129-133) still describes the old "enrolled-in-class" serving semantics and predates decision 0022 (Exercise now global no-RLS → any authenticated principal). Do not let the stale comment mislead the authz model while swapping the driver; the actual comment fix belongs to Plan 1 (seam-fixes), not this phase.
 
 ## Implementation Steps
 1. Add S3 client dep (aws-sdk v3 `@aws-sdk/client-s3` or minio). Confirm not already present (npm-live/list).

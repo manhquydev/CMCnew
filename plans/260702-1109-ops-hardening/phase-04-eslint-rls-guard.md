@@ -12,9 +12,10 @@ imports `{ prisma }` from `@cmc/db` or `@prisma/client` directly bypasses row-le
 file does this (verified) — so this phase is a **regression guard** that locks in the good state, not a cleanup.
 
 ## Key Insights
-- Verified current surface (grep): the only non-`packages/db` raw importers are `apps/api/test/helpers.ts:2`
-  (`import { prisma, withRls } from '@cmc/db'` — legit test harness) and `packages/db` seeds. `apps/api/src/**` = 0
-  raw prisma imports. The guard therefore starts green.
+- Verified current surface (grep across the full `apps/**` rule scope, not just API): the only non-`packages/db` raw
+  importers are `apps/api/test/helpers.ts:2` (`import { prisma, withRls } from '@cmc/db'` — legit test harness) and
+  `packages/db` seeds. `apps/api/src/**`, `apps/admin/src/**`, and `apps/lms/src/**` all = 0 raw prisma imports. The
+  guard therefore starts green across every glob it covers.
 - Two bypass vectors to forbid in app source: (1) `import ... from '@prisma/client'`, (2) named `prisma` from `@cmc/db`.
   `@typescript-eslint/no-restricted-imports` with `paths[].importNames: ['prisma']` catches the named-import vector while
   still allowing `withRls`, `Role`, `Prisma` types from the same module (DRY — one module, selective ban).
@@ -33,7 +34,7 @@ file does this (verified) — so this phase is a **regression guard** that locks
 ## Architecture
 ```
 eslint.config.js
-  └─ new config block  files: ['apps/api/src/**/*.ts', 'apps/{admin,teaching,lms}/src/**/*.{ts,tsx}']
+  └─ new config block  files: ['apps/api/src/**/*.ts', 'apps/{admin,lms}/src/**/*.{ts,tsx}']
        rules:
          '@typescript-eslint/no-restricted-imports': ['error', {
             paths: [
@@ -44,7 +45,7 @@ eslint.config.js
 ```
 
 ## Related code files
-- MODIFY `eslint.config.js` — add the scoped `no-restricted-imports` block (append after existing blocks so it merges via flat-config ordering)
+- MODIFY `eslint.config.js` — add the scoped `no-restricted-imports` block (append after existing blocks so it merges via flat-config ordering). Note: `apps/` currently holds only `admin`, `api`, `e2e`, `lms` (no `teaching` — retired into `admin`). Use `apps/{admin,lms}/src/**`, NOT `apps/{admin,teaching,lms}/src/**`. The existing stale `apps/teaching/src/**` glob at `eslint.config.js:74` matches zero files — trim it while touching the file rather than propagating the dead app name.
 
 ## Implementation Steps
 1. Add the config block scoped to app source globs (exclude tests/packages by not matching them).

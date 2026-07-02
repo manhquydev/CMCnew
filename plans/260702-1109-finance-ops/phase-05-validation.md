@@ -18,12 +18,12 @@ Final gate: prove every money/email/report path from P1-P4 works, RLS holds, mig
 
 ## Requirements
 - **Integration tests**:
-  - P1: cancel an approved receipt + refundCreate → RefundRecord written, `receipt.netAmount` UNCHANGED, audit event present; sum-cap guard rejects `sum+amount > netAmount`; cross-facility read blocked (RLS parity with receipt).
-  - P2: retry a non-secret failed outbox row → re-queued; retry a scrubbed-secret (`bodyHtml=''`, kind∈SECRET_KINDS) row → REJECTED; `sendReceiptEmail` enqueues once, dedupKey re-send = no-op; `receipt_pending_approval` recipients = GĐKD (not ke_toan).
-  - P3: `revenueReport` sum matches raw receipt sum for a seeded period per groupBy; CSV header + VND formatting; `reconcileWorklist` returns only un-reconciled in-period; reconcile flip removes a row; RLS scoping.
+  - P1: cancel an approved receipt + refundCreate → RefundRecord written, `receipt.netAmount` UNCHANGED, audit present; sum-cap rejects `sum+amount > netAmount`; TWO concurrent refunds summing over netAmount → exactly one succeeds (atomic claim); refundCreate on a draft-cancelled (never-approved) receipt → REJECTED; cross-facility read blocked (RLS parity with receipt).
+  - P2: retry a non-secret failed outbox row → re-queued; retry a secret-kind row (BOTH scrubbed `bodyHtml=''` AND intact-body cases) → REJECTED unconditionally; null-facility system row hidden from a non-director staff caller (app-layer filter, not RLS); `sendReceiptEmail` enqueues once, automatic same-target re-send = no-op, corrected-address re-send succeeds; `receipt_pending_approval` recipients = ke_toan ∪ GĐKD, deduped (ke_toan NOT dropped).
+  - P3: `revenueReport` gross matches raw receipt sum by approvedAt per groupBy; net = gross − seeded RefundRecord; a receipt cancelled after its approval month drops from that month's gross on re-run; CSV header (gross/refunds/net) + VND formatting; `reconcileWorklist` returns only un-reconciled in-period (by approvedAt); reconcile flip removes a row; RLS scoping.
   - P4: `discountTierUpsert` rejects percent > 35; upsert on (facility,years); archive soft; a configured facility reprices vs defaults; cross-facility RLS.
 - **e2e** (2 flows): (a) cancel approved receipt → enter refund amount → RefundRecord + audit visible; (b) send receipt email → appears in outbox surface → simulate failure → retry path.
-- **Decision 0028**: write `docs/decisions/0028-refund-ledger-manual-append-only.md` from template (manual amount + reason + payer bound to cancelled receipt; no auto pro-rata; never mutates netAmount; append-only, correction = compensating negative row). Then `harness-cli decision add 0028`.
+- **Decision 0028**: write `docs/decisions/0028-refund-ledger-manual-append-only.md` from template. Content: refund = manual amount (`>= 1`, no auto pro-rata) + reason + `recordedById`, bound to a receipt that is `cancelled AND approvedAt IS NOT NULL`; sum atomically capped at `netAmount`; never mutates `netAmount`; append-only. Correction of an under-refund = an ADDITIONAL refund row up to the remaining cap; correction of an over-refund = a documented DBA/ops SQL procedure (out of scope for the UI). Do NOT promise a "compensating negative entry" — it is unimplementable against the non-negative cap guard. Also record the P3 revenue semantics: net = gross(by approvedAt) − refunds(by createdAt); reports are a live ledger view, cancellations retroactively reduce a past month's gross, exports are not point-in-time reproducible (intended). Then `harness-cli decision add 0028`.
 - **DEBT capture** (`docs/DEBT.md` or repo DEBT surface): pro-rata auto-calc refund (deferred per D-P4a); any batch-reconcile deferral; MAES/leaderboard already tracked elsewhere (do not duplicate).
 - **Harness**: `harness-cli intake` recorded; `story update` per phase to proof status; `harness-cli trace` at each phase close; final `prisma migrate diff` clean (0-drift).
 
@@ -47,9 +47,9 @@ Validation flow: seed (facility + payer + approved receipt) → run int tests pe
 5. Write decision 0028 + `harness-cli decision add`; capture DEBT; `harness-cli trace` each phase close.
 
 ## Todo list
-- [ ] P1 refund int test (netAmount unchanged, cap guard, RLS)
-- [ ] P2 email-ops int test (retry guard, dedup, notif recipient)
-- [ ] P3 revenue/reconcile int test (sum parity, CSV, worklist, RLS)
+- [ ] P1 refund int test (netAmount unchanged, atomic cap under concurrency, never-approved rejection, RLS)
+- [ ] P2 email-ops int test (secret-kind retry blocked unconditionally, null-facility app-filter, corrected re-send, notif union+dedupe)
+- [ ] P3 revenue/reconcile int test (gross by approvedAt, net−refunds, retroactive-cancel, CSV, worklist, RLS)
 - [ ] P4 discount-tier int test (cap, upsert, archive, reprice, RLS)
 - [ ] 2 e2e money flows
 - [ ] decision 0028 recorded (file + harness)

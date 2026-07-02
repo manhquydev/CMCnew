@@ -4,14 +4,15 @@ Closes gap #7 (annotator UX for kids 3-11 on tablets).
 
 ## Context links
 - `packages/ui/src/pdf-annotator.tsx` (annotator component)
-- `apps/api/src/annotation.ts` (AnnotationData `v:1`; caps MAX_ITEMS 500, MAX_INK_POINTS 2000)
+- `apps/api/src/annotation.ts:22` (AnnotationData `v:1`; ink `width: 0.1-40` already in schema; caps MAX_ITEMS 500, MAX_INK_POINTS 2000)
+- **Regression-risk consumers of this shared component** (do not break): `apps/admin/src/grading.tsx:166-171` (teacher grading, `editable` default true, draws corrections over `readOnlyLayers` student layer), `apps/lms/src/student-view.tsx:239-243`, `apps/lms/src/parent-view.tsx` (P2, read-only). P7 must regression-check grading.tsx after this phase.
 
 ## Overview
 Add child-friendly editing affordances: eraser / per-stroke delete, pen width selector, and pinch-zoom + pan — while keeping the AnnotationData `v:1` schema byte-compatible with the server validator.
 
 ## Key Insights
 - Schema stays `v:1`: items are ink|text|highlight, coords normalized 0..1. Eraser and per-stroke delete operate on the items array (remove ink items); they do NOT introduce a new item type — no schema bump needed.
-- Pen width: if `AnnotationData` ink items already carry a width field, reuse it; if not, adding a width to ink items IS a schema change. Verify annotation.ts ink shape first. If width not in schema, either (a) keep width client-only visual and store default, or (b) coordinate a `v:1` additive optional field with server validator — prefer (a) unless persistence required. UNRESOLVED — see plan questions.
+- Pen width: RESOLVED — ink items ALREADY carry `width: 0.1-40` under `v:1` (annotation.ts:22). Reuse the existing field; no schema change. The width UI just needs to set values within that range.
 - Server caps unchanged: eraser reduces item count (safe); ensure UI still guards against exceeding MAX_ITEMS/MAX_INK_POINTS before save (server rejects otherwise).
 - Pinch-zoom + pan is a view transform only — must not alter stored normalized coords. Keep the normalize/denormalize math anchored to page dimensions, not zoom level.
 - This phase and P6 both own pdf-annotator.tsx — SAME OWNER, strictly sequential. P5 first (interaction), then P6 (render). If P2 added a readOnly prop, rebase on it.
@@ -30,14 +31,13 @@ Interaction flow: tool state (pen|eraser, width) in component state → pointer 
 - Read-only: `apps/api/src/annotation.ts` (respect caps + schema)
 
 ## Implementation Steps
-1. Verify annotation.ts ink item shape (does it carry width?). Decide width persistence per Key Insights.
+1. Use the existing ink `width` field (annotation.ts:22, `0.1-40`) — no schema work.
 2. Add tool toolbar: pen / eraser / width. Wire eraser to remove hit-tested ink items.
 3. Implement pinch-zoom + pan view transform; invert transform for pointer→normalized mapping.
 4. Enforce client-side item/point caps with a friendly "quá nhiều nét vẽ" message before save.
 5. Confirm change events still trigger P1 autosave.
 
 ## Todo list
-- [ ] verify ink schema (width?) + decide persistence
 - [ ] eraser + per-stroke delete
 - [ ] pen width UI
 - [ ] pinch-zoom + pan (coord-safe)
@@ -51,14 +51,15 @@ Interaction flow: tool state (pen|eraser, width) in component state → pointer 
 
 ## Risk Assessment
 - Coordinate distortion under zoom/pan (Med likelihood, HIGH impact): normalize against page dims independent of view transform; add manual test drawing at 1x, zoom, verify stroke stays put.
-- Schema drift if width persisted without validator support (Med/HIGH): verify annotation.ts first; server would reject unknown fields. Do not persist width unless validator explicitly allows.
+- **Shared-component regression in grading.tsx (Med likelihood, Med impact)**: eraser/width/zoom changes touch the same PdfAnnotator that `grading.tsx:166-171` uses for teacher corrections. Mitigation: keep changes additive to interaction state; P7 regression-checks the teacher draw/undo/save flow after this phase (see P7 matrix).
+- Width is already in the `v:1` schema (annotation.ts:22) — no schema-drift risk; server accepts it.
 - Touch gesture conflict (pan vs draw) (Med/Med): mode toggle or two-finger=pan / one-finger=draw convention; test on real tablet.
 
 ## Security Considerations
 - Server-side annotation validation (annotation.ts caps + schema) is the authoritative guard against malicious oversized payloads — client caps are UX only, never a security boundary. Do not weaken server validation.
 
 ## Rollback
-- Code-only revert of pdf-annotator.tsx. No schema/data change if width kept client-only. If a schema field was added, revert requires confirming no stored data relies on it (prefer avoiding the schema change).
+- Code-only revert of pdf-annotator.tsx. No schema/data change (width reuses the existing `v:1` field).
 
 ## Next steps
 Blocks P6 (same file). Feeds P7 tablet checklist.

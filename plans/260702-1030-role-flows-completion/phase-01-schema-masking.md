@@ -58,3 +58,4 @@ Add the 4 missing HR record columns to EmploymentProfile and design (not yet wir
 
 ## Next steps
 - P2 consumes columns in profileUpsert input + onboarding form + masking on read.
+- NOTE (C1): `Payslip.attendanceDeduction` (+ override columns) is a SEPARATE schema change owned by **P4**, serialized AFTER this P1 migration (P4 depends on P1 → no parallel schema.prisma collision). This phase owns EmploymentProfile columns only; do not add Payslip columns here.

@@ -6,12 +6,20 @@
 - Canonical script: `scripts/backup-db.sh` (docker exec, plain SQL `--clean --if-exists`, retention prune)
 - Duplicate to delete: `scripts/db-backup.sh` (host `pg_dump -Fc` custom format)
 - Restore: `scripts/db-restore.sh` (uses `pg_restore` — pairs with the DELETED custom-format script, NOT with backup-db.sh)
+- Blob stores (local disk): `apps/api/src/services/pdf-store.ts:9` writes `.data/pdf` (env `PDF_STORE_DIR`); `photo-store.ts:19` writes `.data/session-photos` (env `SESSION_PHOTO_STORE_DIR`). DB rows (`basePdfRef`, session photo refs) point at these files.
 
 ## Overview
 `backup-db.sh` exists and the runbook claims daily backup, but no cron is installed anywhere in the deploy path and
-no restore has ever been drilled. Three scripts overlap with an incompatible-format trap. This phase: dedupe to one
-backup + one matching restore, install the cron on the VPS (operator-assisted), and run one restore drill with
-recorded evidence.
+no restore has ever been drilled. Three scripts overlap with an incompatible-format trap. Worse, backup today is
+**DB-only** — the local-disk blob stores (`.data/pdf`, `.data/session-photos`) that DB rows reference are never
+captured, so a DB-only restore leaves dangling refs (exercises with unopenable PDFs, sessions with missing photos).
+This phase: dedupe to one backup + one matching restore, **add local-disk blob-store backup alongside the DB dump**,
+install the cron on the VPS (operator-assisted), and run one restore drill (DB + blobs) with recorded evidence.
+
+**Blob-backup scope note:** THIS plan runs independently and possibly before the LMS-PDF plan's future MinIO/S3
+migration. If that migration lands first, blob durability becomes a bucket-replication problem and this local-disk
+tar step is retired. But we do NOT defer to a plan that may not have landed — local-disk blob backup is the baseline
+NOW.
 
 ## Key Insights
 - **Format mismatch is a data-integrity landmine.** `backup-db.sh` emits **plain SQL** (`pg_dump --clean --if-exists`
@@ -25,24 +33,33 @@ recorded evidence.
 
 ## Requirements
 - One backup script (`backup-db.sh`), one restore script (`db-restore.sh`) with **matching plain-SQL format**.
+- `backup-db.sh` also captures the blob stores: `tar czf` of `PDF_STORE_DIR` (`.data/pdf`) and
+  `SESSION_PHOTO_STORE_DIR` (`.data/session-photos`) into the same `./backups` dir, same stamp, same retention prune.
+- `db-restore.sh` (or a companion restore step) untars the blob archive back into the store dirs during a drill.
 - `db-backup.sh` deleted; any doc/reference repointed to `backup-db.sh`.
-- Cron entry installed on the VPS: daily `backup-db.sh` with logging + retention (already `RETENTION_DAYS=14`).
-- One restore drill executed against a throwaway DB/container (NEVER prod), evidence recorded.
-- Runbook §5 expanded from 2 lines to actual install + drill procedure.
+- Cron entry installed on the VPS: daily `backup-db.sh` (now DB + blobs) with logging + retention (already `RETENTION_DAYS=14`).
+- One restore drill executed against a throwaway DB/container (NEVER prod), evidence recorded — drill covers BOTH the
+  DB restore AND a blob-archive extract with a file-count/spot-open check.
+- Runbook §5 expanded from 2 lines to actual install + drill procedure (DB + blobs).
 
 ## Architecture
 ```
 VPS host crontab
   0 2 * * *  ENV_FILE=/secrets/.env.production /root/cmcnew/scripts/backup-db.sh >> /var/log/cmc-backup.log 2>&1
         │
-        ▼ docker exec cmcnew-prod-postgres-1 pg_dump --clean --if-exists | gzip
-   ./backups/cmc-<stamp>.sql.gz   ──(drill)──► gunzip | docker exec -i postgres psql -d <drill_db>
+        ├─► docker exec cmcnew-prod-postgres-1 pg_dump --clean --if-exists | gzip
+        │     ./backups/cmc-<stamp>.sql.gz   ──(drill)──► gunzip | docker exec -i postgres psql -d <drill_db>
+        │
+        └─► tar czf ./backups/cmc-blobs-<stamp>.tar.gz  $PDF_STORE_DIR  $SESSION_PHOTO_STORE_DIR
+              ──(drill)──► tar xzf into scratch dirs, verify file count + spot-open one PDF/photo
 ```
 
 ## Related code files
-- MODIFY `scripts/backup-db.sh` — confirm docker-exec path, ensure ENV_FILE/BACKUP_DIR documented for cron use
+- MODIFY `scripts/backup-db.sh` — confirm docker-exec path, ensure ENV_FILE/BACKUP_DIR documented for cron use;
+  **add a `tar czf` step for `PDF_STORE_DIR`/`SESSION_PHOTO_STORE_DIR` (defaults `.data/pdf`, `.data/session-photos`)
+  emitting `cmc-blobs-<stamp>.tar.gz` next to the SQL dump, pruned by the same `RETENTION_DAYS`**
 - DELETE `scripts/db-backup.sh` — remove the `-Fc` duplicate
-- REWRITE `scripts/db-restore.sh` — plain-SQL restore via `gunzip -c file | docker exec -i <pg> psql -U $DB_USER -d $DB_NAME`; keep the 5s abort guard + `cmc_app` password reminder; drop the drop/create-DB-as-superuser assumptions that don't hold via docker exec
+- REWRITE `scripts/db-restore.sh` — plain-SQL restore via `gunzip -c file | docker exec -i <pg> psql -U $DB_USER -d $DB_NAME`; keep the 5s abort guard + `cmc_app` password reminder; drop the drop/create-DB-as-superuser assumptions that don't hold via docker exec; **add an optional companion blob-extract step (`tar xzf cmc-blobs-<stamp>.tar.gz` into the store dirs) so a drill can restore DB + blobs together**
 - MODIFY `docs/prod-deploy-security-runbook.md` §5 — cron install steps + restore-drill procedure + evidence pointer
 - CREATE `docs/ops/restore-drill-YYMMDD.md` — evidence template (operator fills: date, backup file, drill DB, row-count checks, outcome)
 
@@ -50,23 +67,29 @@ VPS host crontab
 1. Delete `db-backup.sh`; grep repo for `db-backup.sh` references and repoint to `backup-db.sh`.
 2. Rewrite `db-restore.sh` to the plain-SQL docker-exec path; make the target DB a parameter so a drill can restore
    into a scratch DB name (e.g. `cmc_drill`) without touching `cmc`.
-3. Expand runbook §5: (a) host crontab line, (b) `/var/log` rotation note, (c) restore-drill steps into a scratch DB,
-   (d) mark every VPS command **[operator-assisted]**.
-4. Add `docs/ops/restore-drill-YYMMDD.md` template.
-5. **[operator-assisted]** on VPS: install crontab entry; run `backup-db.sh` once; restore latest dump into `cmc_drill`;
-   verify a known table row count; record results in the drill doc.
+3. Add the blob `tar czf` step to `backup-db.sh` (both store dirs, same stamp, same retention prune) and the companion
+   `tar xzf` extract path to `db-restore.sh`.
+4. Expand runbook §5: (a) host crontab line, (b) `/var/log` rotation note, (c) restore-drill steps into a scratch DB
+   **+ blob extract into scratch dirs**, (d) mark every VPS command **[operator-assisted]**.
+5. Add `docs/ops/restore-drill-YYMMDD.md` template (rows for DB restore AND blob extract).
+6. **[operator-assisted]** on VPS: install crontab entry; run `backup-db.sh` once (produces SQL + blob archive);
+   restore latest dump into `cmc_drill`; extract blob archive into scratch dirs; verify a known table row count AND
+   blob file count + spot-open one PDF/photo; record results in the drill doc.
 
 ## Todo list
 - [ ] Delete db-backup.sh + repoint references
-- [ ] Rewrite db-restore.sh to plain-SQL docker-exec, parameterized target DB
-- [ ] Expand runbook §5 (cron + drill, operator-assisted tags)
-- [ ] Add restore-drill evidence template
-- [ ] [operator] install cron, run backup, run drill, record evidence
+- [ ] Rewrite db-restore.sh to plain-SQL docker-exec, parameterized target DB + blob-extract companion step
+- [ ] Add blob tar step to backup-db.sh (PDF_STORE_DIR + SESSION_PHOTO_STORE_DIR, same stamp/retention)
+- [ ] Expand runbook §5 (cron + DB+blob drill, operator-assisted tags)
+- [ ] Add restore-drill evidence template (DB + blob rows)
+- [ ] [operator] install cron, run backup (SQL+blobs), run drill (DB+blobs), record evidence
 
 ## Success Criteria
 - Only `backup-db.sh` + `db-restore.sh` remain; they use the same (plain SQL) format — a fresh backup restores cleanly.
-- Runbook §5 contains copy-pasteable cron + drill commands, all VPS steps tagged operator-assisted.
-- `docs/ops/restore-drill-*.md` filled with a real drill: backup file name, scratch DB, row-count parity, pass/fail.
+- One `backup-db.sh` run produces BOTH a `.sql.gz` DB dump AND a `cmc-blobs-<stamp>.tar.gz` containing the two store dirs.
+- Runbook §5 contains copy-pasteable cron + drill commands (DB + blobs), all VPS steps tagged operator-assisted.
+- `docs/ops/restore-drill-*.md` filled with a real drill: DB backup file name, scratch DB, row-count parity, **blob
+  archive name, extracted file count, one spot-opened PDF/photo**, pass/fail.
 
 ## Risk Assessment
 - **Format mismatch left unfixed (HIGH×HIGH):** restore silently fails when needed most. Mitigation: step 2 is the
@@ -80,4 +103,6 @@ VPS host crontab
 - Never commit a dump or `.env.production`. Drill evidence doc records file names/sizes only, never contents.
 
 ## Next steps
-- Feeds go-live criterion "backup chạy tự động + restore đã diễn tập". Consider off-box backup copy (rsync/object store) as a later debt item — out of scope here (YAGNI).
+- Feeds go-live criterion "backup chạy tự động + restore đã diễn tập". Off-box backup copy (rsync/object store) and the
+  eventual MinIO/S3 blob migration (LMS-PDF plan) remain later debt items — P5 re-surfaces the blob-durability debt in
+  DEBT.md so it stays visible after this plan lands.
