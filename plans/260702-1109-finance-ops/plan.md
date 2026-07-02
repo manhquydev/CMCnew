@@ -1,7 +1,7 @@
 ---
 title: "Finance ops: refund ledger + email ops + revenue reporting"
 description: "Close the money-out gap (manual refund ledger on cancel), give email outbox an admin surface + receipt email, add revenue reporting + reconciliation worklist, and a discount-tier config UI."
-status: pending
+status: in_progress
 priority: P1
 effort: 4-5d
 branch: develop
@@ -31,10 +31,10 @@ Required durable artifacts (checkpoints, NOT code):
 
 | # | Phase | Status | Link |
 |---|-------|--------|------|
-| P1 | RefundRecord model + migration + refund router + cancel-flow UI + audit | pending | [phase-01-refund-ledger.md](phase-01-refund-ledger.md) |
-| P2 | Email ops: outbox admin surface + retry guard + `receipt` template + send-by-email + notif fix | pending | [phase-02-email-ops.md](phase-02-email-ops.md) |
-| P3 | Revenue report (month/facility/course + CSV) + reconciliation period worklist | pending | [phase-03-revenue-reconcile.md](phase-03-revenue-reconcile.md) |
-| P4 | Discount-tier config UI (model exists, no migration) + 35% cap | pending | [phase-04-discount-tier-ui.md](phase-04-discount-tier-ui.md) |
+| P1 | RefundRecord model + migration + refund router + cancel-flow UI + audit | completed | [phase-01-refund-ledger.md](phase-01-refund-ledger.md) |
+| P2 | Email ops: outbox admin surface + retry guard + `receipt` template + send-by-email + notif fix | completed | [phase-02-email-ops.md](phase-02-email-ops.md) |
+| P3 | Revenue report (month/facility/course + CSV) + reconciliation period worklist | completed | [phase-03-revenue-reconcile.md](phase-03-revenue-reconcile.md) |
+| P4 | Discount-tier config UI (model exists, no migration) + 35% cap | completed | [phase-04-discount-tier-ui.md](phase-04-discount-tier-ui.md) |
 | P5 | Validation: int + e2e + decision 0028 + DEBT + harness trace + 0-drift | pending | [phase-05-validation.md](phase-05-validation.md) |
 
 ## Dependency graph
