@@ -115,6 +115,28 @@ export const submissionRouter = router({
       }),
     ),
 
+  // Parent/guardian: read a specific child's annotation layers (their marks + the published
+  // teacher correction). Unlike myLayer (single-student sessions), a guardian session can own
+  // multiple children, so studentId is an explicit input — validated against ctx.lms.studentIds
+  // (the guardian's own resolved children) before RLS is even consulted, and RLS is the backstop.
+  layerForGuardian: lmsProcedure
+    .input(z.object({ exerciseId: z.string().uuid(), studentId: z.string().uuid() }))
+    .query(({ ctx, input }) => {
+      if (!ctx.lms.studentIds.includes(input.studentId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      return withRls(lmsRlsContextOf(ctx.lms), async (tx) => {
+        const sub = await tx.submission.findUnique({
+          where: { exerciseId_studentId: { exerciseId: input.exerciseId, studentId: input.studentId } },
+          select: { annotationLayer: true, grade: { select: { annotationLayer: true, isPublished: true } } },
+        });
+        const student = (sub?.annotationLayer ?? null) as AnnotationData | null;
+        const teacher =
+          sub?.grade?.isPublished ? ((sub.grade.annotationLayer ?? null) as AnnotationData | null) : null;
+        return { student, teacher };
+      });
+    }),
+
   // Student saves their working copy (answer text + annotation layer over the base PDF).
   save: studentProcedure
     .input(

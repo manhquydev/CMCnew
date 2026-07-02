@@ -5,23 +5,28 @@ import {
   BadgeShelf,
   Leaderboard,
   NotificationCenter,
+  PdfAnnotator,
   notifyError,
   type LmsPrincipal,
   type LiveNotification,
+  type AnnotationData,
 } from '@cmc/ui';
 import {
   Alert,
   Badge,
+  Button,
   Card,
   Center,
   Group,
   Loader,
+  Modal,
   Select,
   Stack,
   Table,
   Text,
   Title,
 } from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
 import { IconCircleCheck, IconClock, IconCircleX, IconAlertCircle, IconStar } from '@tabler/icons-react';
 import { SessionEvidenceTab } from './session-evidence-tab';
 import { CurriculumSessionsTab } from './curriculum-sessions-tab';
@@ -31,6 +36,7 @@ export type ParentTab = 'overview' | 'schedule' | 'sessions' | 'gradebook' | 'no
 type Submission = Awaited<ReturnType<typeof trpc.submission.forStudent.query>>[number];
 type Gradebook = Awaited<ReturnType<typeof trpc.assessment.gradebook.query>>;
 type FinalGrade = Gradebook['finalGrades'][number];
+type Exercise = Awaited<ReturnType<typeof trpc.exercise.listForPrincipal.query>>[number];
 
 const PROGRAM_LABEL: Record<string, string> = {
   UCREA: 'UCREA',
@@ -306,6 +312,67 @@ function ParentNotifCard({ refreshKey }: { refreshKey: number }) {
   );
 }
 
+/**
+ * Read-only drawn-work view for a parent: the child's marks plus the published teacher
+ * correction, if any. Reuses PdfAnnotator's existing `editable={false}` + `readOnlyLayers`
+ * contract (same one student-view.tsx uses for a graded exercise) — no annotator changes.
+ * No draft/save controls; this is a viewer, never an editing surface.
+ */
+function DrawnWorkModal({
+  opened,
+  onClose,
+  exercise,
+  studentId,
+}: {
+  opened: boolean;
+  onClose: () => void;
+  exercise: Exercise | null;
+  studentId: string;
+}) {
+  const [student, setStudent] = useState<AnnotationData | null>(null);
+  const [teacher, setTeacher] = useState<AnnotationData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!opened || !exercise) return;
+    setLoading(true);
+    setError('');
+    setStudent(null);
+    setTeacher(null);
+    trpc.submission.layerForGuardian
+      .query({ exerciseId: exercise.id, studentId })
+      .then((layers) => {
+        setStudent(layers.student);
+        setTeacher(layers.teacher);
+      })
+      .catch((e) => {
+        setError('Không tải được bài làm: ' + (e instanceof Error ? e.message : ''));
+        notifyError(e, 'Tải bài làm thất bại');
+      })
+      .finally(() => setLoading(false));
+  }, [opened, exercise, studentId]);
+
+  return (
+    <Modal opened={opened} onClose={onClose} title={exercise?.title ?? 'Bài làm'} size="lg" radius="xl" centered>
+      {loading && (
+        <Center py="xl">
+          <Loader />
+        </Center>
+      )}
+      {!loading && error && <Alert color="red">{error}</Alert>}
+      {!loading && !error && exercise?.basePdfRef && (
+        <PdfAnnotator
+          pdfRef={exercise.basePdfRef}
+          value={student}
+          editable={false}
+          readOnlyLayers={teacher ? [{ items: teacher.items, opacity: 1 }] : []}
+        />
+      )}
+    </Modal>
+  );
+}
+
 function ChildDashboard({
   childId,
   refreshKey,
@@ -318,8 +385,11 @@ function ChildDashboard({
   const [balance, setBalance] = useState<number | null>(null);
   const [submissions, setSubmissions] = useState<Submission[] | null>(null);
   const [gradebook, setGradebook] = useState<Gradebook | null>(null);
+  const [exercisesById, setExercisesById] = useState<Map<string, Exercise>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [drawnWorkExercise, setDrawnWorkExercise] = useState<Exercise | null>(null);
+  const [drawnWorkOpened, { open: openDrawnWork, close: closeDrawnWork }] = useDisclosure(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -331,11 +401,13 @@ function ChildDashboard({
       trpc.rewards.balance.query({ studentId: childId }),
       trpc.submission.forStudent.query({ studentId: childId }),
       trpc.assessment.gradebook.query({ studentId: childId }),
+      trpc.exercise.listForPrincipal.query(),
     ])
-      .then(([bal, subs, gb]) => {
+      .then(([bal, subs, gb, exercises]) => {
         setBalance(bal);
         setSubmissions(sortNewestFirst(subs));
         setGradebook(gb);
+        setExercisesById(new Map(exercises.map((ex) => [ex.id, ex])));
       })
       .catch((e) => {
         setError('Không tải được dữ liệu: ' + (e instanceof Error ? e.message : ''));
@@ -345,6 +417,13 @@ function ChildDashboard({
   }, [childId]);
 
   useEffect(load, [load, refreshKey]);
+
+  function openDrawnWorkFor(exerciseId: string) {
+    const exercise = exercisesById.get(exerciseId);
+    if (!exercise?.basePdfRef) return;
+    setDrawnWorkExercise(exercise);
+    openDrawnWork();
+  }
 
   if (loading) {
     return (
@@ -421,11 +500,13 @@ function ChildDashboard({
                   <Table.Th style={thStyle}>Điểm</Table.Th>
                   <Table.Th style={thStyle}>Nhận xét</Table.Th>
                   <Table.Th style={thStyle}>Thời gian nộp</Table.Th>
+                  <Table.Th style={{ ...thStyle, width: 120 }} />
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
                 {submissions.map((s) => {
                   const published = s.grade && s.grade.isPublished;
+                  const hasDrawnWork = exercisesById.get(s.exerciseId)?.basePdfRef;
                   return (
                     <Table.Tr key={s.id}>
                       <Table.Td>
@@ -453,6 +534,19 @@ function ChildDashboard({
                       </Table.Td>
                       <Table.Td>
                         <Text size="sm">{fmtDateTime(s.submittedAt)}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        {hasDrawnWork && (
+                          <Button
+                            size="xs"
+                            variant="subtle"
+                            color="cmc"
+                            radius={9999}
+                            onClick={() => openDrawnWorkFor(s.exerciseId)}
+                          >
+                            Xem bài làm
+                          </Button>
+                        )}
                       </Table.Td>
                     </Table.Tr>
                   );
@@ -572,6 +666,13 @@ function ChildDashboard({
             </Stack>
           </Card>
         )}
+
+        <DrawnWorkModal
+          opened={drawnWorkOpened}
+          onClose={closeDrawnWork}
+          exercise={drawnWorkExercise}
+          studentId={childId}
+        />
       </Stack>
     );
   }

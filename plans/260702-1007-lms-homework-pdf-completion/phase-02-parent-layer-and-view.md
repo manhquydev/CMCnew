@@ -1,5 +1,7 @@
 # Phase 02 — Parent layer API + parent drawn-work view
 
+Status: completed 2026-07-02.
+
 Closes gaps #2 (parent cannot see drawn work) and #3 (no parent-facing layer query). Operator: "PH xem đầy đủ như xem vở của con."
 
 ## Context links
@@ -38,10 +40,14 @@ Data flow: parent selects child + exercise → `layerForGuardian({exerciseId, st
 3. Ensure loading of base PDF reuses `/files/exercise/:ref` (index.ts:134-146). Post seam-fixes Exercise is a global no-RLS curriculum asset (decision 0022), so the endpoint resolves for any authenticated principal — a guardian session included. Verify a guardian token serves the ref at implementation time.
 
 ## Todo list
-- [ ] layerForGuardian proc with ownership guard + publish redaction
-- [ ] parent-view read-only drawn-work view (reuse `editable={false}` + `readOnlyLayers` — no annotator change)
-- [ ] verify base PDF serves to guardian principal (global no-RLS exercise)
-- [ ] integration: pre-publish teacher layer hidden; cross-guardian denied
+- [x] layerForGuardian proc with ownership guard + publish redaction
+- [x] parent-view read-only drawn-work view (reuse `editable={false}` + `readOnlyLayers` — no annotator change)
+- [x] verify base PDF serves to guardian principal (global no-RLS exercise)
+- [x] integration: pre-publish teacher layer hidden; cross-guardian denied
+
+## Evidence 2026-07-02
+- `pnpm --filter @cmc/api|@cmc/lms typecheck` PASS. New `apps/api/test/submission-guardian-layer.int.test.ts`: 4/4 pass (own-child read, pre-publish teacher-layer null, post-publish reveal, cross-guardian FORBIDDEN).
+- Code review (security-focused, given this is the plan's highest-sensitivity phase): `studentId ∈ ctx.lms.studentIds` guard runs before any DB read, `studentIds` is server-derived (not client-supplied) so unspoofable; RLS is a genuine second layer, not the only guard. Redaction gate (`grade.isPublished`) is the sole path producing the teacher layer, mirrors the already-shipped `myLayer`. `submission.ts` diff is purely additive (0 lines changed in existing procedures). No findings.
 
 ## Success Criteria
 - Guardian sees own child's strokes + published corrections read-only.
