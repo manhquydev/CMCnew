@@ -126,11 +126,14 @@ app.get('/files/session-photo/:ref', async (c) => {
   }
 });
 
-// Serve: per-principal access. Authorization reuses the exercise RLS policy as the single source
-// of truth — staff see their facility's exercises, a parent/student only exercises in a class their
-// owned student is enrolled in. We look for an RLS-visible exercise that uses this base PDF; if none
-// is visible the principal may not see it. Authorization is checked BEFORE existence on disk so the
-// endpoint never reveals whether a ref exists to a principal who is not entitled to it.
+// Serve: exercise PDFs are a GLOBAL curriculum asset — RLS is DISABLED on the exercise table
+// (decision 0022), so this findFirst matches for ANY authenticated principal (staff or LMS),
+// regardless of facility, enrollment, or exercise status. In effect any logged-in principal can
+// fetch any non-archived exercise PDF by ref, INCLUDING drafts/closed. That was accepted with the
+// global-asset decision: worksheets carry no PII, and the only gate is "must be authenticated"
+// (anonymous → 401 below). No status='published' filter is applied on purpose — staff preview
+// drafts before publishing and LMS reads are already gated upstream by the unit-open check. The
+// existence-on-disk check runs only after this authz so an unauthenticated caller learns nothing.
 app.get('/files/exercise/:ref', async (c) => {
   const staffTok = getCookie(c, COOKIE_NAME);
   const lmsTok = getCookie(c, LMS_COOKIE_NAME);

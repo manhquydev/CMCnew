@@ -865,7 +865,8 @@ export const payrollRouter = router({
 
   // ─── KPI Evaluation Workflow (P05, decision 0011) ────────────────────────────
   // draft → submitted → confirmed → approved
-  // HR starts; employee self-submits; manager confirms; BGD approves (≠ confirmer).
+  // HR/director starts; employee self-submits; a domain director confirms (domain-scoped);
+  // either director approves (cross-domain, decision 0023) as long as approver ≠ confirmer.
 
   /** HR creates/resets a draft KPI sheet for (employee, period). CONFLICT if already beyond draft. */
   kpiEvalStart: requirePermission('payroll', 'kpiEvalStart')
@@ -999,7 +1000,10 @@ export const payrollRouter = router({
       }),
     ),
 
-  /** BGD approves a confirmed KPI sheet. Separation of duties: approver ≠ confirmer. */
+  /** A director approves a confirmed KPI sheet. Approve is CROSS-DOMAIN (decision 0023): either
+   *  director may approve any sheet, unlike kpiEvalConfirm which stays domain-scoped. This is what
+   *  lets the real two-director org (one KD, one DT) reach `approved` without a same-domain second
+   *  signer. Separation of duties still holds: approver ≠ confirmer and approver ≠ subject. */
   kpiEvalApprove: requirePermission('payroll', 'kpiEvalApprove')
     .input(
       z.object({
@@ -1013,7 +1017,8 @@ export const payrollRouter = router({
           where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
         });
         if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
-        await assertCanManagePayrollTarget(tx, ctx.session, row.userId, row.facilityId);
+        // No domain-scope check here: approve is cross-domain (decision 0023). The requirePermission
+        // gate already restricts callers to the two director roles; SoD checks below do the rest.
         if (row.status !== 'confirmed') throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu KPI chưa được xác nhận' });
         // Separation of duties (decision 0011): never approve your own sheet, nor one you confirmed.
         if (row.userId === ctx.session.userId) {

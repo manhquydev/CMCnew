@@ -274,12 +274,10 @@ describe('KPI evaluation workflow (P05 — phiếu đánh giá)', () => {
   });
 
   it('Tự duyệt phiếu của chính mình → FORBIDDEN (tách trách nhiệm)', async () => {
-    // Use saleId as target (business domain, not TOP_PAYROLL_ROLES) so domain-scoped guard passes.
-    // eduDirId (giam_doc_dao_tao) can manage BUSINESS_PAYROLL_ROLES including sale.
-    // eduDir tự nộp phiếu cho saleId, giam_doc_kinh_doanh (managerId) xác nhận (≠ subject),
-    // rồi eduDir cố tự duyệt phiếu của saleId (nếu eduDir === managerId thì SoD sẽ block)
-    // → ở đây eduDirId ≠ managerId, nhưng để test self-approve, ta cần người approve = người confirm.
-    // Thay: managerId (giam_doc_kinh_doanh) confirm, rồi managerId cố approve → FORBIDDEN (SoD).
+    // Target là saleId (business domain). Confirm domain-scoped: giam_doc_kinh_doanh (managerId)
+    // quản lý BUSINESS_PAYROLL_ROLES gồm sale nên managerId được xác nhận. Approve KHÔNG domain-scoped
+    // (decision 0023) — director nào cũng duyệt được — nên chặn dưới đây phải đến từ SoD, không phải
+    // domain: chính manager vừa confirm rồi thử approve → FORBIDDEN (confirmer ≠ approver).
     const PERIOD_SELF = '2099-12';
     const su = await hrCaller();
     await su.payroll.kpiEvalStart({ userId: saleId, facilityId: FACILITY, periodKey: PERIOD_SELF, block: 'sales' });

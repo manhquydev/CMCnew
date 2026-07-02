@@ -1,7 +1,9 @@
 /**
  * Integration tests for the 3-heads executive authority added this round:
  *   1. Both directors can confirm AND approve KPI (replacing legacy bgd, which prod bootstrap
- *      never seeds), with separation of duties intact (approver ≠ confirmer).
+ *      never seeds). Confirm is domain-scoped but approve is cross-domain (decision 0023), so the
+ *      real one-KD/one-DT org reaches `approved` without a second same-domain director. SoD intact
+ *      (approver ≠ confirmer).
  *   2. Directors can load the KPI panel (kpiList + kpiEvalGet).
  *   3. user.create enqueues an SSO welcome email that carries NO password.
  *
@@ -15,7 +17,6 @@ const FACILITY_1 = 1;
 
 let bizDirId: string;
 let eduDirId: string;
-let otherEduDirId: string; // second education director for SoD
 let teacherId: string;
 
 const eduDirCaller = () =>
@@ -27,11 +28,13 @@ const eduDirCaller = () =>
     facilityIds: [FACILITY_1],
   });
 
-const otherEduDirCaller = () =>
+// The OTHER director (business domain). Cross-domain approve (decision 0023) lets this director
+// approve an education-domain KPI even though confirm would be domain-scoped to the DT director.
+const bizDirCaller = () =>
   staffCaller({
-    userId: otherEduDirId,
-    roles: [Role.giam_doc_dao_tao],
-    primaryRole: Role.giam_doc_dao_tao,
+    userId: bizDirId,
+    roles: [Role.giam_doc_kinh_doanh],
+    primaryRole: Role.giam_doc_kinh_doanh,
     isSuperAdmin: false,
     facilityIds: [FACILITY_1],
   });
@@ -66,7 +69,6 @@ beforeAll(async () => {
 
   bizDirId = (await mk(Role.giam_doc_kinh_doanh, 'dir-kd')).id;
   eduDirId = (await mk(Role.giam_doc_dao_tao, 'dir-dt')).id;
-  otherEduDirId = (await mk(Role.giam_doc_dao_tao, 'dir-dt2')).id;
   teacherId = (await mk(Role.giao_vien, 'dir-teacher')).id;
 });
 
@@ -74,12 +76,12 @@ afterAll(async () => {
   await withRls(SUPER, async (tx) => {
     await tx.recordEvent.deleteMany({ where: { entityType: 'kpi_score', facilityId: FACILITY_1 } });
     await tx.kpiScore.deleteMany({ where: { userId: teacherId } });
-    await tx.appUser.deleteMany({ where: { id: { in: [bizDirId, eduDirId, otherEduDirId, teacherId] } } });
+    await tx.appUser.deleteMany({ where: { id: { in: [bizDirId, eduDirId, teacherId] } } });
   });
 });
 
 describe('director KPI authority', () => {
-  it('director can confirm, a second director can approve (SoD satisfied)', async () => {
+  it('DT director confirms, KD director approves cross-domain (SoD satisfied)', async () => {
     const su = await staffCaller();
     const period = '2099-41';
     await su.payroll.kpiEvalStart({ userId: teacherId, facilityId: FACILITY_1, periodKey: period, block: 'training' });
@@ -90,17 +92,18 @@ describe('director KPI authority', () => {
       scores: [{ key: 'chuyen_mon', score: 85 }, { key: 'tuan_thu', score: 80 }],
     });
 
-    // Education Director confirms (proves directors may confirm).
+    // Education Director confirms (domain-scoped: DT director manages the teacher's education domain).
     const edu = await eduDirCaller();
     const confirmed = await edu.payroll.kpiEvalConfirm({ userId: teacherId, periodKey: period });
     expect(confirmed.status).toBe('confirmed');
     expect(confirmed.confirmedById).toBe(eduDirId);
 
-    // Second Education Director approves (different person → SoD ok; domain-scoped: EDU director manages EDU target).
-    const otherEdu = await otherEduDirCaller();
-    const approved = await otherEdu.payroll.kpiEvalApprove({ userId: teacherId, periodKey: period });
+    // The OTHER director (KD, business domain) approves — cross-domain approve (decision 0023):
+    // different person → SoD ok; domain no longer gates approve, so the real one-DT org still closes.
+    const biz = await bizDirCaller();
+    const approved = await biz.payroll.kpiEvalApprove({ userId: teacherId, periodKey: period });
     expect(approved.status).toBe('approved');
-    expect(approved.approvedById).toBe(otherEduDirId);
+    expect(approved.approvedById).toBe(bizDirId);
   });
 
   it('same director cannot confirm AND approve the same sheet (FORBIDDEN)', async () => {
