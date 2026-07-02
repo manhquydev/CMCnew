@@ -44,6 +44,9 @@ import { CompensationConfigPanel } from './compensation-panel';
 import { PayrollPanel } from './payroll-panel';
 import { KpiEvaluationPanel } from './kpi-evaluation-panel';
 import { FinancePanel } from './finance-panel';
+import { EmailOutboxPanel } from './email-outbox-panel';
+import { RevenueReportPanel } from './revenue-report';
+import { ReconcileWorklistPanel } from './reconcile-worklist';
 import { CrmPanel } from './crm-panel';
 import { CskhPanel } from './cskh-panel';
 import { StudentsPanel } from './students-panel';
@@ -488,7 +491,7 @@ function HrPayrollSection() {
 
 const ALL_SECTION_KEYS = new Set<string>([
   'overview', 'courses', 'students', 'org', 'guardians',
-  'hr', 'kpi', 'compensation', 'finance', 'crm', 'cskh', 'rewards',
+  'hr', 'kpi', 'compensation', 'finance', 'email-outbox', 'revenue-report', 'reconcile-worklist', 'crm', 'cskh', 'rewards',
   'schedule', 'attendance', 'grading', 'assessment',
   // 'certificate' intentionally omitted: the feature is hidden from nav (shell.tsx visible:false),
   // so #certificate is not a reachable hash route either. Re-add when the feature is re-enabled.
@@ -689,6 +692,30 @@ function Dashboard() {
           <Stack>
             <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Tài chính</Text>
             <FinancePanel />
+          </Stack>
+        );
+
+      case 'email-outbox':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Hộp thư gửi đi</Text>
+            <EmailOutboxPanel />
+          </Stack>
+        );
+
+      case 'revenue-report':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Báo cáo doanh thu</Text>
+            <RevenueReportPanel />
+          </Stack>
+        );
+
+      case 'reconcile-worklist':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Đối soát theo kỳ</Text>
+            <ReconcileWorklistPanel />
           </Stack>
         );
 

@@ -78,6 +78,15 @@ export const NAV_GATES: Record<SectionKey, NavGate> = {
   // finance: finance.receiptList = [ke_toan, giam_doc_kinh_doanh]
   finance:      { kind: 'permission', module: 'finance', action: 'receiptList' },
 
+  // email-outbox: email.outboxList = [giam_doc_kinh_doanh] only (v1, YAGNI)
+  'email-outbox': { kind: 'permission', module: 'email', action: 'outboxList' },
+
+  // revenue-report: finance.revenueReport = [ke_toan, giam_doc_kinh_doanh]
+  'revenue-report': { kind: 'permission', module: 'finance', action: 'revenueReport' },
+
+  // reconcile-worklist: finance.reconcileWorklist = [ke_toan, giam_doc_kinh_doanh]
+  'reconcile-worklist': { kind: 'permission', module: 'finance', action: 'reconcileWorklist' },
+
   // crm: crm.opportunityList = [sale, cskh, ctv_mkt, giam_doc_kinh_doanh]
   //   All CRM-role staff can at minimum read opportunities.
   crm:          { kind: 'permission', module: 'crm', action: 'opportunityList' },

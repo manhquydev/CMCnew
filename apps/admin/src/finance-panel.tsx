@@ -19,6 +19,7 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { IconRefresh } from '@tabler/icons-react';
+import { DISCOUNT_CAP_PERCENT } from '@cmc/domain-finance';
 
 type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
 type CourseT = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
@@ -26,6 +27,8 @@ type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Receipt = Awaited<ReturnType<typeof trpc.finance.receiptList.query>>[number];
 type CoursePrice = Awaited<ReturnType<typeof trpc.finance.priceList.query>>[number];
 type Voucher = Awaited<ReturnType<typeof trpc.finance.voucherList.query>>[number];
+type DiscountTierListResult = Awaited<ReturnType<typeof trpc.finance.discountTierList.query>>;
+type DiscountTier = DiscountTierListResult['tiers'][number];
 
 const vnd = (n: number) => n.toLocaleString('vi-VN') + 'đ';
 const YEARS = [
@@ -427,6 +430,202 @@ function VoucherCard({ facilities }: { facilities: Facility[] }) {
           </Table>
         )}
       </Stack>
+    </Card>
+  );
+}
+
+// ─── Discount Tier Card ───────────────────────────────────────────────────────
+
+// Server re-validates on every write; this import is only the input's max for immediate feedback.
+const DISCOUNT_TIER_PERCENT_CAP = DISCOUNT_CAP_PERCENT;
+
+function DiscountTierCard({ facilities }: { facilities: Facility[] }) {
+  const [facilityId, setFacilityId] = useState<string | null>(null);
+  const [tiers, setTiers] = useState<DiscountTier[]>([]);
+  const [usingDefaults, setUsingDefaults] = useState(false);
+  const [tLoad, setTLoad] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [tError, setTError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<DiscountTier | null>(null);
+
+  const form = useForm({
+    initialValues: { years: 1, percent: 15 },
+    validate: {
+      years: (v) => (v < 1 ? 'Số năm tối thiểu 1' : null),
+      percent: (v) =>
+        v <= 0 || v > DISCOUNT_TIER_PERCENT_CAP
+          ? `Phần trăm 1–${DISCOUNT_TIER_PERCENT_CAP}`
+          : null,
+    },
+  });
+
+  const loadTiers = useCallback((fid: string) => {
+    setTLoad('loading');
+    setTError('');
+    trpc.finance.discountTierList
+      .query({ facilityId: Number(fid) })
+      .then((res) => {
+        setTiers(res.tiers);
+        setUsingDefaults(res.usingDefaults);
+        setTLoad('idle');
+      })
+      .catch((e: unknown) => {
+        setTError(e instanceof Error ? e.message : 'Lỗi tải bậc giảm giá');
+        setTLoad('error');
+      });
+  }, []);
+
+  function handleFacilitySelect(v: string | null) {
+    setFacilityId(v);
+    setTiers([]);
+    setUsingDefaults(false);
+    form.reset();
+    if (v) loadTiers(v);
+  }
+
+  async function upsertTier(values: typeof form.values) {
+    if (!facilityId) return;
+    setBusy(true);
+    try {
+      await trpc.finance.discountTierUpsert.mutate({
+        facilityId: Number(facilityId),
+        years: values.years,
+        percent: values.percent,
+      });
+      notifySuccess(`Đã lưu bậc giảm giá ${values.years} năm → −${values.percent}%`);
+      form.reset();
+      loadTiers(facilityId);
+    } catch (e) {
+      notifyError(e, 'Lưu bậc giảm giá thất bại');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function archiveTier() {
+    if (!archiveTarget || !facilityId) return;
+    try {
+      await trpc.finance.discountTierArchive.mutate({ id: archiveTarget.id });
+      notifySuccess(`Đã lưu trữ bậc ${archiveTarget.years} năm`);
+      setArchiveTarget(null);
+      loadTiers(facilityId);
+    } catch (e) {
+      notifyError(e, 'Lưu trữ bậc giảm giá thất bại');
+    }
+  }
+
+  return (
+    <Card withBorder>
+      <Title order={5} mb="sm">
+        Bậc giảm giá theo năm đóng trước
+      </Title>
+
+      <Select
+        label="Cơ sở"
+        placeholder="Chọn cơ sở để cấu hình"
+        data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
+        value={facilityId}
+        onChange={handleFacilitySelect}
+        clearable
+        w={280}
+        mb="sm"
+      />
+
+      {facilityId && (
+        <Stack gap="sm">
+          {tLoad === 'idle' && usingDefaults && (
+            <Alert color="yellow" title="Đang dùng mặc định">
+              Cơ sở này chưa cấu hình bậc giảm giá riêng — đang áp dụng mặc định 1 năm −15%, 2 năm
+              −20%, 3 năm −30%. Thêm một bậc bên dưới để chuyển sang cấu hình riêng.
+            </Alert>
+          )}
+
+          <form onSubmit={form.onSubmit(upsertTier)}>
+            <Group grow align="flex-end">
+              <NumberInput
+                label="Số năm đóng trước"
+                withAsterisk
+                min={1}
+                {...form.getInputProps('years')}
+              />
+              <NumberInput
+                label="Giảm (%)"
+                withAsterisk
+                min={1}
+                max={DISCOUNT_TIER_PERCENT_CAP}
+                {...form.getInputProps('percent')}
+              />
+              <Button type="submit" loading={busy}>
+                Lưu bậc
+              </Button>
+            </Group>
+          </form>
+
+          {tLoad === 'loading' && (
+            <Text c="dimmed" size="sm">
+              Đang tải...
+            </Text>
+          )}
+          {tLoad === 'error' && (
+            <Alert color="red" title="Lỗi">
+              {tError}
+            </Alert>
+          )}
+          {tiers.length > 0 && (
+            <Table striped withTableBorder={false} fz="sm">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Số năm</Table.Th>
+                  <Table.Th>Giảm</Table.Th>
+                  <Table.Th />
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {tiers.map((t) => (
+                  <Table.Tr key={t.id}>
+                    <Table.Td>{t.years}</Table.Td>
+                    <Table.Td>−{t.percent}%</Table.Td>
+                    <Table.Td>
+                      <Group justify="flex-end">
+                        <Button
+                          size="compact-xs"
+                          variant="light"
+                          color="red"
+                          onClick={() => setArchiveTarget(t)}
+                        >
+                          Lưu trữ
+                        </Button>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          )}
+        </Stack>
+      )}
+
+      <Modal
+        opened={!!archiveTarget}
+        onClose={() => setArchiveTarget(null)}
+        title="Lưu trữ bậc giảm giá"
+      >
+        <Stack>
+          <Text size="sm">
+            Lưu trữ bậc {archiveTarget?.years} năm (−{archiveTarget?.percent}%)? Phiếu thu đã tạo
+            trước đó không đổi (giá lưu tại thời điểm lập phiếu); chỉ ảnh hưởng phiếu mới lập sau
+            khi lưu trữ.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setArchiveTarget(null)}>
+              Đóng
+            </Button>
+            <Button color="red" onClick={archiveTier}>
+              Xác nhận lưu trữ
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Card>
   );
 }
@@ -1187,6 +1386,7 @@ export function FinancePanel() {
     <Stack>
       <CoursePriceCard courses={courses} facilities={facilities} />
       <VoucherCard facilities={facilities} />
+      <DiscountTierCard facilities={facilities} />
       <ReceiptCreateCard
         students={students}
         courses={courses}

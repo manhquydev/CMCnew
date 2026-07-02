@@ -27,7 +27,7 @@ const LEASE_MS = 5 * 60 * 1000; // a 'sending' row older than this is considered
 // only these get their body scrubbed once terminal. Non-secret templates keep their body so a
 // terminally-failed row can still be re-sent (requeued) with its content intact — without this,
 // retrying a failed email delivered a BLANK message.
-const SECRET_KINDS = new Set<EmailTemplateKind>(['otp_login', 'lms_account_ready']);
+export const SECRET_KINDS = new Set<EmailTemplateKind>(['otp_login', 'lms_account_ready']);
 /** Returns the bodyHtml patch for a terminal row: '' for secret templates, untouched otherwise. */
 function scrubPatch(templateKind: string): { bodyHtml: string } | Record<string, never> {
   return SECRET_KINDS.has(templateKind as EmailTemplateKind) ? { bodyHtml: '' } : {};
@@ -48,11 +48,16 @@ export interface EnqueueInput<K extends EmailTemplateKind> {
  * Queue one email inside the caller's transaction. Renders subject/html now so the row is
  * self-contained. A duplicate dedupKey is swallowed (already queued/sent). Always safe to call,
  * even when Graph is unconfigured — queuing is free; the worker decides whether to send.
+ *
+ * Returns true when a new row was inserted, false when the dedupKey collided (no-op). A collision
+ * aborts the underlying Postgres transaction (unique-violation), so the caller MUST NOT run any
+ * further query in the same transaction after a `false` return — only COMMIT/ROLLBACK are valid
+ * once a statement has errored, even though the JS exception was caught here.
  */
 export async function enqueueEmail<K extends EmailTemplateKind>(
   tx: Tx,
   input: EnqueueInput<K>,
-): Promise<void> {
+): Promise<boolean> {
   const { subject, html } = renderTemplate(input.kind, input.data);
   try {
     await tx.emailOutbox.create({
@@ -67,9 +72,10 @@ export async function enqueueEmail<K extends EmailTemplateKind>(
         attachRef: input.attachRef ?? null,
       },
     });
+    return true;
   } catch (e) {
     // P2002 = unique violation on dedupKey → already enqueued, nothing to do.
-    if (isUniqueViolation(e)) return;
+    if (isUniqueViolation(e)) return false;
     throw e;
   }
 }

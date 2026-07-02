@@ -132,6 +132,10 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     priceList: ['ke_toan', 'giam_doc_kinh_doanh'],
     voucherCreate: ['ke_toan', 'giam_doc_kinh_doanh'],
     voucherList: ['ke_toan', 'giam_doc_kinh_doanh'],
+    // Facility-config authority: discount tiers change future receipt pricing — GĐKD-only.
+    discountTierList: ['giam_doc_kinh_doanh'],
+    discountTierUpsert: ['giam_doc_kinh_doanh'],
+    discountTierArchive: ['giam_doc_kinh_doanh'],
     receiptList: ['ke_toan', 'giam_doc_kinh_doanh'],
     // Sale creates DRAFT receipts only (attribution chain, decision 0024) — receiptApprove stays
     // ke_toan/director-only, so this is not a money-approval grant.
@@ -146,6 +150,12 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     // Append-only refund ledger (decision 0028) — same write scope as receiptCancel.
     refundCreate: ['ke_toan', 'giam_doc_kinh_doanh'],
     refundList: ['ke_toan', 'giam_doc_kinh_doanh'],
+    // Send an approved receipt to the payer by email — same actors who can already work the receipt.
+    sendReceiptEmail: ['ke_toan', 'giam_doc_kinh_doanh'],
+    // Read-only revenue report (gross/refunds/net by month/facility/course) + CSV export +
+    // the "chưa đối soát kỳ này" worklist (P3) — same grantee set as the rest of finance.*.
+    revenueReport: ['ke_toan', 'giam_doc_kinh_doanh'],
+    reconcileWorklist: ['ke_toan', 'giam_doc_kinh_doanh'],
   },
 
   certificate: {
@@ -299,6 +309,13 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     list: ['super_admin', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     create: ['super_admin', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     delete: ['super_admin', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+  },
+
+  // Outbox admin surface (email ops). GĐKD-only in v1 (YAGNI) — widening the read grant to
+  // ke_toan would require excluding payroll/account_welcome staff-PII rows from their view.
+  email: {
+    outboxList: ['giam_doc_kinh_doanh'],
+    outboxRetry: ['giam_doc_kinh_doanh'],
   },
 };
 

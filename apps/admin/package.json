@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@cmc/auth": "workspace:*",
+    "@cmc/domain-finance": "workspace:*",
     "@cmc/ui": "workspace:*",
     "@mantine/core": "^7.15.2",
     "@mantine/dates": "^7.15.2",

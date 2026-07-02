@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls, hashPassword, type Program, type Prisma } from '@cmc/db';
@@ -11,6 +11,7 @@ import {
   effectiveDiscountPercent,
   netAmount,
   DEFAULT_DISCOUNT_TIERS,
+  DISCOUNT_CAP_PERCENT,
   type DiscountTier,
 } from '@cmc/domain-finance';
 import { nextReceiptCode } from '../services/receipt-code.js';
@@ -70,6 +71,207 @@ export async function receiptPendingItems(
     submittedAt: r.createdAt,
     actionKey: 'finance.receiptApprove',
   }));
+}
+
+// ── Revenue report + reconciliation worklist (P3) ────────────────────────────
+// Read-only aggregation over Receipt + RefundRecord — no schema, no new money path.
+// Period key = Receipt.approvedAt (money accepted + code allocated), NOT createdAt (draft time)
+// and NOT issuedAt (does not exist on Receipt). This is a LIVE ledger view, not an immutable
+// snapshot: a receipt cancelled after its approval month retroactively drops from that month's
+// gross on re-run (status no longer qualifies) — intended accounting behavior, not a bug.
+const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
+
+const revenueReportInput = z
+  .object({
+    from: z.string().regex(dateOnly),
+    to: z.string().regex(dateOnly), // exclusive upper bound
+    groupBy: z.enum(['month', 'facility', 'course']),
+  })
+  .refine((d) => new Date(d.from) < new Date(d.to), {
+    message: 'from phải trước to',
+    path: ['to'],
+  })
+  .refine(
+    (d) => new Date(d.to).getTime() - new Date(d.from).getTime() <= 1096 * 24 * 60 * 60 * 1000,
+    { message: 'Khoảng thời gian tối đa 3 năm', path: ['to'] },
+  );
+
+type RevenueBucket = {
+  key: string;
+  label: string;
+  gross: number;
+  refunds: number;
+  net: number;
+  count: number;
+};
+
+// Gross = SUM(netAmount) of qualifying receipts bucketed by approvedAt; refunds = SUM(RefundRecord.
+// amount) bucketed by the refund's OWN createdAt (the actual cash-out event), not the receipt's
+// approvedAt — a refund issued in a later month must land in that later month's bucket.
+// Raw SQL: RLS applies automatically (same session-scoped tx as every other query in this router).
+async function computeRevenueBuckets(
+  tx: Parameters<Parameters<typeof withRls>[1]>[0],
+  input: { from: string; to: string; groupBy: 'month' | 'facility' | 'course' },
+): Promise<RevenueBucket[]> {
+  const from = new Date(input.from);
+  const to = new Date(input.to);
+
+  let grossRows: Array<{ key: string; gross: bigint; count: bigint }>;
+  let refundRows: Array<{ key: string; refunds: bigint }>;
+
+  if (input.groupBy === 'month') {
+    grossRows = await tx.$queryRaw`
+      SELECT to_char("approved_at", 'YYYY-MM') AS key,
+             COALESCE(SUM("net_amount"), 0)::bigint AS gross,
+             COUNT(*)::bigint AS count
+      FROM "receipt"
+      WHERE "status" IN ('approved','sent','reconciled')
+        AND "approved_at" >= ${from} AND "approved_at" < ${to}
+      GROUP BY 1`;
+    refundRows = await tx.$queryRaw`
+      SELECT to_char("created_at", 'YYYY-MM') AS key,
+             COALESCE(SUM("amount"), 0)::bigint AS refunds
+      FROM "refund_record"
+      WHERE "created_at" >= ${from} AND "created_at" < ${to}
+      GROUP BY 1`;
+  } else if (input.groupBy === 'facility') {
+    grossRows = await tx.$queryRaw`
+      SELECT "facility_id"::text AS key,
+             COALESCE(SUM("net_amount"), 0)::bigint AS gross,
+             COUNT(*)::bigint AS count
+      FROM "receipt"
+      WHERE "status" IN ('approved','sent','reconciled')
+        AND "approved_at" >= ${from} AND "approved_at" < ${to}
+      GROUP BY "facility_id"`;
+    refundRows = await tx.$queryRaw`
+      SELECT "facility_id"::text AS key,
+             COALESCE(SUM("amount"), 0)::bigint AS refunds
+      FROM "refund_record"
+      WHERE "created_at" >= ${from} AND "created_at" < ${to}
+      GROUP BY "facility_id"`;
+  } else {
+    grossRows = await tx.$queryRaw`
+      SELECT "course_id"::text AS key,
+             COALESCE(SUM("net_amount"), 0)::bigint AS gross,
+             COUNT(*)::bigint AS count
+      FROM "receipt"
+      WHERE "status" IN ('approved','sent','reconciled')
+        AND "approved_at" >= ${from} AND "approved_at" < ${to}
+      GROUP BY "course_id"`;
+    refundRows = await tx.$queryRaw`
+      SELECT r."course_id"::text AS key,
+             COALESCE(SUM(rr."amount"), 0)::bigint AS refunds
+      FROM "refund_record" rr
+      JOIN "receipt" r ON r."id" = rr."receipt_id"
+      WHERE rr."created_at" >= ${from} AND rr."created_at" < ${to}
+      GROUP BY r."course_id"`;
+  }
+
+  const refundByKey = new Map(refundRows.map((r) => [r.key, Number(r.refunds)]));
+  const grossByKey = new Map(grossRows.map((r) => [r.key, Number(r.gross)]));
+  const countByKey = new Map(grossRows.map((r) => [r.key, Number(r.count)]));
+  // Union of both sides: a bucket with refund activity but zero approved-receipt gross in the
+  // period (e.g. a receipt approved in an earlier period, refunded in this one) must still show
+  // up — iterating grossRows alone would silently drop that refund from the report entirely.
+  const keys = [...new Set([...grossByKey.keys(), ...refundByKey.keys()])];
+  const buckets: RevenueBucket[] = [];
+
+  if (input.groupBy === 'month') {
+    for (const key of keys) {
+      const [y, m] = key.split('-');
+      const gross = grossByKey.get(key) ?? 0;
+      const refunds = refundByKey.get(key) ?? 0;
+      buckets.push({
+        key,
+        label: `Tháng ${m}/${y}`,
+        gross,
+        refunds,
+        net: gross - refunds,
+        count: countByKey.get(key) ?? 0,
+      });
+    }
+  } else if (input.groupBy === 'facility') {
+    const ids = keys.map((k) => Number(k));
+    const facilities = ids.length
+      ? await tx.facility.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, name: true, code: true },
+        })
+      : [];
+    const labelMap = new Map(facilities.map((f) => [String(f.id), `${f.code} — ${f.name}`]));
+    for (const key of keys) {
+      const gross = grossByKey.get(key) ?? 0;
+      const refunds = refundByKey.get(key) ?? 0;
+      buckets.push({
+        key,
+        label: labelMap.get(key) ?? `#${key}`,
+        gross,
+        refunds,
+        net: gross - refunds,
+        count: countByKey.get(key) ?? 0,
+      });
+    }
+  } else {
+    const courses = keys.length
+      ? await tx.course.findMany({
+          where: { id: { in: keys } },
+          select: { id: true, name: true, code: true },
+        })
+      : [];
+    const labelMap = new Map(courses.map((c) => [c.id, `${c.code} — ${c.name}`]));
+    for (const key of keys) {
+      const gross = grossByKey.get(key) ?? 0;
+      const refunds = refundByKey.get(key) ?? 0;
+      buckets.push({
+        key,
+        label: labelMap.get(key) ?? key,
+        gross,
+        refunds,
+        net: gross - refunds,
+        count: countByKey.get(key) ?? 0,
+      });
+    }
+  }
+
+  buckets.sort((a, b) => a.key.localeCompare(b.key));
+  return buckets;
+}
+
+// Formula-injection guard: a cell starting with =/+/-/@ is prefixed with a literal quote so
+// spreadsheet apps render it as text instead of evaluating it as a formula. Applied only to the
+// text (label) column — gross/refunds/net/count are always emitted as plain integers, so a
+// legitimately negative "net" bucket is never mistaken for an injection attempt.
+//
+// Applied unconditionally to the whole label (not just the entity name) — course/facility codes
+// are staff-entered free text (course.create has no character restriction beyond non-empty), not
+// system-assigned, so a code itself could start with a guarded char at cell position 0. The guard
+// is the real boundary here, not the "code — name" label format; covered by a unit test.
+export function csvText(value: string): string {
+  const guarded = /^[=+\-@]/.test(value) ? `'${value}` : value;
+  return /["\r\n,]/.test(guarded) ? `"${guarded.replace(/"/g, '""')}"` : guarded;
+}
+
+function csvNumber(n: number): string {
+  return String(Math.trunc(n));
+}
+
+// UTF-8 BOM so Excel (vi locale) renders Vietnamese diacritics correctly; CRLF line endings for
+// broad spreadsheet-app compatibility.
+function buildRevenueCsv(buckets: RevenueBucket[]): string {
+  const lines = ['key,label,gross,refunds,net,count'];
+  for (const b of buckets) {
+    lines.push(
+      [
+        csvText(b.key),
+        csvText(b.label),
+        csvNumber(b.gross),
+        csvNumber(b.refunds),
+        csvNumber(b.net),
+        csvNumber(b.count),
+      ].join(','),
+    );
+  }
+  return '﻿' + lines.join('\r\n');
 }
 
 export const financeRouter = router({
@@ -168,6 +370,72 @@ export const financeRouter = router({
           orderBy: { createdAt: 'desc' },
         }),
       ),
+    ),
+
+  // ── Config: discount tier (per-facility year-prepaid discount %) ────────────
+  discountTierList: requirePermission('finance', 'discountTierList')
+    .input(z.object({ facilityId: z.number().int().positive() }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const tiers = await tx.discountTier.findMany({
+          where: { facilityId: input.facilityId, archivedAt: null },
+          orderBy: { years: 'asc' },
+        });
+        // 0 active rows → tiersFor() falls back to DEFAULT_DISCOUNT_TIERS at pricing time.
+        return { tiers, usingDefaults: tiers.length === 0 };
+      }),
+    ),
+
+  // Upsert on the (facilityId, years) unique constraint, which also covers archived rows —
+  // re-adding a previously-archived year must reactivate the SAME row (clear archivedAt +
+  // overwrite percent), never insert a second row. Archive is therefore not a per-row history:
+  // the audit trail for a past receipt's discount is receipt.tierPercent (frozen at receipt
+  // time, schema.prisma) plus the audit log below — not DiscountTier row history.
+  discountTierUpsert: requirePermission('finance', 'discountTierUpsert')
+    .input(
+      z.object({
+        facilityId: z.number().int().positive(),
+        years: z.number().int().min(1),
+        percent: z.number().int().min(1).max(DISCOUNT_CAP_PERCENT),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const tier = await tx.discountTier.upsert({
+          where: { facilityId_years: { facilityId: input.facilityId, years: input.years } },
+          create: { facilityId: input.facilityId, years: input.years, percent: input.percent },
+          update: { percent: input.percent, archivedAt: null },
+        });
+        await logEvent(tx, {
+          facilityId: tier.facilityId,
+          entityType: 'discount_tier',
+          entityId: tier.id,
+          type: 'updated',
+          body: `Bậc giảm giá ${tier.years} năm → ${tier.percent}%`,
+          actorId: ctx.session.userId,
+        });
+        return tier;
+      }),
+    ),
+
+  discountTierArchive: requirePermission('finance', 'discountTierArchive')
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const tier = await tx.discountTier.update({
+          where: { id: input.id },
+          data: { archivedAt: new Date() },
+        });
+        await logEvent(tx, {
+          facilityId: tier.facilityId,
+          entityType: 'discount_tier',
+          entityId: tier.id,
+          type: 'archived',
+          body: `Lưu trữ bậc giảm giá ${tier.years} năm (${tier.percent}%)`,
+          actorId: ctx.session.userId,
+        });
+        return tier;
+      }),
     ),
 
   // ── Receipt: draft → approve → cancel ────────────────────────────────────────
@@ -304,16 +572,26 @@ export const financeRouter = router({
           body: `Phiếu thu nháp: ${receipt.netAmount.toLocaleString('vi-VN')}đ (giảm ${effective}%)`,
           actorId: ctx.session.userId,
         });
-        // Notify ke_toan of this facility that a receipt is pending approval.
+        // Notify the UNION of approvers (ke_toan ∪ giam_doc_kinh_doanh — mirrors the
+        // receiptApprove grant) that a receipt is pending approval. Dedupe by userId so an
+        // account holding both roles is not double-notified.
         const facilityUsers = await tx.userFacility.findMany({
           where: { facilityId: input.facilityId },
           select: { userId: true, user: { select: { roles: true } } },
         });
-        const keToanIds = facilityUsers
-          .filter((uf) => uf.user.roles.includes('ke_toan'))
-          .map((uf) => uf.userId);
+        const approverIds = [
+          ...new Set(
+            facilityUsers
+              .filter(
+                (uf) =>
+                  uf.user.roles.includes('ke_toan') ||
+                  uf.user.roles.includes('giam_doc_kinh_doanh'),
+              )
+              .map((uf) => uf.userId),
+          ),
+        ];
         const pushNotifs = await emitStaffNotif(tx, {
-          recipientIds: keToanIds,
+          recipientIds: approverIds,
           event: 'receipt_pending_approval',
           title: 'Phiếu thu chờ duyệt',
           body: `Phiếu thu ${receipt.netAmount.toLocaleString('vi-VN')}đ vừa được tạo, chờ kế toán duyệt`,
@@ -1072,6 +1350,147 @@ export const financeRouter = router({
         tx.refundRecord.findMany({
           where: { receiptId: input.receiptId },
           orderBy: { createdAt: 'desc' },
+        }),
+      ),
+    ),
+
+  // Send an approved receipt to the payer by email. Recipient defaults to the resolved payer
+  // (receipt.parentEmail for new-student receipts; guardian→parentAccount.email for renewals,
+  // scoped to this receipt's facility so a cross-facility guardian link can't leak); an explicit
+  // `to` override is available to the same approver roles and is audited as a note. The dedupKey
+  // embeds a hash of the target address so a resend to a CORRECTED address always enqueues a
+  // fresh row, while a same-address resend stays a no-op via enqueueEmail's existing dedup swallow.
+  sendReceiptEmail: requirePermission('finance', 'sendReceiptEmail')
+    .input(z.object({ receiptId: z.string().uuid(), to: z.string().email().optional() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const receipt = await tx.receipt.findUniqueOrThrow({
+          where: { id: input.receiptId },
+          include: { student: { select: { fullName: true } } },
+        });
+        if (!(['approved', 'sent', 'reconciled'] as string[]).includes(receipt.status)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Chỉ gửi email cho phiếu đã duyệt' });
+        }
+        let to = input.to;
+        if (!to) {
+          if (receipt.parentEmail) {
+            to = receipt.parentEmail;
+          } else if (receipt.studentId) {
+            const guardian = await tx.guardian.findFirst({
+              where: {
+                studentId: receipt.studentId,
+                facilityId: receipt.facilityId,
+                parent: { email: { not: null } },
+              },
+              select: { parent: { select: { email: true } } },
+              orderBy: { createdAt: 'asc' },
+            });
+            to = guardian?.parent.email ?? undefined;
+          }
+        }
+        if (!to) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Không tìm được email người nhận — nhập email thủ công',
+          });
+        }
+        const facility = await tx.facility.findUniqueOrThrow({
+          where: { id: receipt.facilityId },
+          select: { name: true },
+        });
+        const targetHash = createHash('sha256')
+          .update(to.trim().toLowerCase())
+          .digest('hex')
+          .slice(0, 16);
+        // enqueueEmail is deliberately the LAST statement before the conditional logEvent: a
+        // dedupKey collision (automatic resend to the same address, a true no-op) aborts the
+        // underlying Postgres transaction even though the JS exception is caught inside
+        // enqueueEmail — no further query may run in this tx once that happens, so logEvent
+        // only fires when a row was actually inserted.
+        const inserted = await enqueueEmail(tx, {
+          facilityId: receipt.facilityId,
+          dedupKey: `receipt:${receipt.id}:${targetHash}`,
+          to,
+          mailbox: 'notify',
+          kind: 'receipt',
+          data: {
+            receiptCode: receipt.code ?? receipt.id.slice(0, 8),
+            netAmount: receipt.netAmount,
+            studentName: receipt.student?.fullName ?? receipt.studentName ?? 'học sinh',
+            facilityName: facility.name,
+            approvedAt: receipt.approvedAt ? receipt.approvedAt.toLocaleDateString('vi-VN') : '—',
+          },
+        });
+        if (!inserted) return { to };
+        await logEvent(tx, {
+          facilityId: receipt.facilityId,
+          entityType: 'receipt',
+          entityId: receipt.id,
+          type: 'note',
+          body: `Gửi phiếu thu qua email tới ${to}`,
+          actorId: ctx.session.userId,
+        });
+        return { to };
+      }),
+    ),
+
+  // Revenue report grouped by month / facility / course — gross − refunds = net (P3).
+  revenueReport: requirePermission('finance', 'revenueReport')
+    .input(revenueReportInput)
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) => computeRevenueBuckets(tx, input)),
+    ),
+
+  // Same aggregation as revenueReport, serialized to CSV (BOM + gross/refunds/net/count columns,
+  // formula-injection guarded). A single server-side string keeps VND/date formatting consistent
+  // and avoids a client-side CSV dependency.
+  revenueReportCsv: requirePermission('finance', 'revenueReport')
+    .input(revenueReportInput)
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const buckets = await computeRevenueBuckets(tx, input);
+        return { csv: buildRevenueCsv(buckets), rowCount: buckets.length };
+      }),
+    ),
+
+  // "Chưa đối soát kỳ này": approved/sent (not yet reconciled, not cancelled) receipts in a
+  // period, bucketed by the same approvedAt key as revenueReport. Reuses the EXISTING
+  // receiptReconcile mutation per row — no new money mutation here.
+  reconcileWorklist: requirePermission('finance', 'reconcileWorklist')
+    .input(
+      z
+        .object({
+          from: z.string().regex(dateOnly),
+          to: z.string().regex(dateOnly),
+          facilityId: z.number().int().positive().optional(),
+        })
+        .refine((d) => new Date(d.from) < new Date(d.to), {
+          message: 'from phải trước to',
+          path: ['to'],
+        })
+        .refine(
+          (d) => new Date(d.to).getTime() - new Date(d.from).getTime() <= 1096 * 24 * 60 * 60 * 1000,
+          { message: 'Khoảng thời gian tối đa 3 năm', path: ['to'] },
+        ),
+    )
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.receipt.findMany({
+          where: {
+            status: { in: ['approved', 'sent'] },
+            approvedAt: { gte: new Date(input.from), lt: new Date(input.to) },
+            ...(input.facilityId ? { facilityId: input.facilityId } : {}),
+          },
+          orderBy: { approvedAt: 'asc' },
+          take: 500,
+          select: {
+            id: true,
+            code: true,
+            netAmount: true,
+            facilityId: true,
+            approvedAt: true,
+            status: true,
+          },
         }),
       ),
     ),

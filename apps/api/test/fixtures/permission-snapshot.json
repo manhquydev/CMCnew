@@ -61,6 +61,9 @@
   "finance.priceList": ["ke_toan", "giam_doc_kinh_doanh"],
   "finance.voucherCreate": ["ke_toan", "giam_doc_kinh_doanh"],
   "finance.voucherList": ["ke_toan", "giam_doc_kinh_doanh"],
+  "finance.discountTierList": ["giam_doc_kinh_doanh"],
+  "finance.discountTierUpsert": ["giam_doc_kinh_doanh"],
+  "finance.discountTierArchive": ["giam_doc_kinh_doanh"],
   "finance.receiptList": ["ke_toan", "giam_doc_kinh_doanh"],
   "finance.receiptCreate": ["ke_toan", "giam_doc_kinh_doanh", "sale"],
   "finance.receiptListOwn": ["sale", "ke_toan", "giam_doc_kinh_doanh"],
@@ -70,6 +73,9 @@
   "finance.receiptCancel": ["ke_toan", "giam_doc_kinh_doanh"],
   "finance.refundCreate": ["ke_toan", "giam_doc_kinh_doanh"],
   "finance.refundList": ["ke_toan", "giam_doc_kinh_doanh"],
+  "finance.sendReceiptEmail": ["ke_toan", "giam_doc_kinh_doanh"],
+  "finance.revenueReport": ["ke_toan", "giam_doc_kinh_doanh"],
+  "finance.reconcileWorklist": ["ke_toan", "giam_doc_kinh_doanh"],
   "certificate.list": ["giao_vien", "giam_doc_dao_tao"],
   "certificate.issue": ["giam_doc_dao_tao"],
   "grade.grade": ["giao_vien", "giam_doc_dao_tao"],
@@ -155,5 +161,7 @@
   "checkInOut.approveManual": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "facilityNetwork.list": ["super_admin", "giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "facilityNetwork.create": ["super_admin", "giam_doc_kinh_doanh", "giam_doc_dao_tao"],
-  "facilityNetwork.delete": ["super_admin", "giam_doc_kinh_doanh", "giam_doc_dao_tao"]
+  "facilityNetwork.delete": ["super_admin", "giam_doc_kinh_doanh", "giam_doc_dao_tao"],
+  "email.outboxList": ["giam_doc_kinh_doanh"],
+  "email.outboxRetry": ["giam_doc_kinh_doanh"]
 }

@@ -23,6 +23,7 @@ import {
   IconHeadset,
   IconId,
   IconLayoutDashboard,
+  IconInbox,
   IconPencil,
   IconReceipt,
   IconReport,
@@ -55,6 +56,9 @@ export type SectionKey =
   | 'certificate'
   // Finance / CRM
   | 'finance'
+  | 'email-outbox'
+  | 'revenue-report'
+  | 'reconcile-worklist'
   | 'crm'
   | 'cskh'
   | 'rewards'
@@ -443,6 +447,9 @@ export function buildNavGroups({
       groupLabel: 'Tài chính',
       items: [
         { key: 'finance' as const, label: 'Tài chính', icon: <IconReceipt {...I()} />, visible: visible('finance') },
+        { key: 'email-outbox' as const, label: 'Hộp thư gửi đi', icon: <IconInbox {...I()} />, visible: visible('email-outbox') },
+        { key: 'revenue-report' as const, label: 'Báo cáo doanh thu', icon: <IconReport {...I()} />, visible: visible('revenue-report') },
+        { key: 'reconcile-worklist' as const, label: 'Đối soát theo kỳ', icon: <IconClipboardCheck {...I()} />, visible: visible('reconcile-worklist') },
       ],
     },
     {
@@ -491,6 +498,9 @@ export const SECTION_TITLES: Record<SectionKey, string> = {
   org: 'Cơ sở & Người dùng',
   guardians: 'Phụ huynh',
   finance: 'Tài chính',
+  'email-outbox': 'Hộp thư gửi đi',
+  'revenue-report': 'Báo cáo doanh thu',
+  'reconcile-worklist': 'Đối soát theo kỳ',
   crm: 'CRM',
   cskh: 'Chăm sóc khách hàng',
   hr: 'Nhân sự & Lương',
