@@ -27,6 +27,10 @@ still owed.
 
 - [ ] DEBT: backups (`scripts/backup-db.sh`) write to local disk on the VPS only — no off-box copy (rsync/S3/object-store replication). A VPS-level disk loss loses both the live data and every local backup simultaneously. -- close before: production go-live hardening pass: add a cron step (or object-store sync) that copies `./backups/*` off the VPS after each run -- opened 2026-07-02 (ops-hardening Plan 7 P2)
 
+- [ ] DEBT: `apps/e2e` cannot statically import `@cmc/auth`/`@cmc/db` for direct-session-injection specs — `apps/e2e/package.json` has no `"type": "module"`, so Playwright's default CJS transform breaks on `import.meta` inside `packages/db/src/seed-curriculum.ts` (both packages are ESM-only). Blocks `apps/e2e/tests/work-shift-manual-punch-approval.spec.ts` (pre-existing) and `admin-monthly-report-drilldown.spec.ts` (Plan 3 E2E gap-fill, 2026-07-02) from running live; both are syntactically correct and logic-reviewed, just unexecuted. Attempted fix (adding `"type": "module"` to `apps/e2e/package.json`) surfaced a deeper Node-ESM workspace-resolution break (`Cannot find package '@cmc/auth'`) — reverted rather than chase it under time pressure. -- close before: someone with `apps/e2e` + `packages/db` in scope investigates the ESM/CJS boundary properly (likely needs a Playwright-specific module resolver config, not just a package.json flag) -- opened 2026-07-02
+
+- [ ] DEBT: Plan 3's onboarding→SSO-login E2E flow has no feasible Playwright coverage — SSO login is an external IdP redirect with no mock IdP in this repo. `admin-create-staff.spec.ts` covers the onboarding-form half only. Accepted as a permanent gap, not deferred work, unless a mock IdP gets built for other reasons. -- close before: n/a (accepted gap) -- opened 2026-07-02
+
 ## Backend-Ready UI Gaps
 
 - Web-lead inbox: public/integrated lead intake queue remains unbuilt; CRM still relies on
