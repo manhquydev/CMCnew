@@ -206,6 +206,33 @@ async function seedFull(email: string, password: string): Promise<void> {
     update: {},
   });
   console.log('✓ Seed guardian link: parent@cmc.local ↔ TEST-001');
+
+  // ── Priced course fixture — the CRM receipt-provision and commission-chain E2E specs
+  // (apps/e2e/tests/admin-receipt-provision.spec.ts, admin-commission-chain.spec.ts) both
+  // create a receipt via the admin UI's course Select, which only lists courses with an
+  // active CoursePrice. Without this, both specs fail with no priced course to select.
+  const seedCourse = await prisma.course.upsert({
+    where: { code: 'CRS_10512_5483' },
+    create: { code: 'CRS_10512_5483', name: 'Khóa học Test (giá cố định)', program: 'UCREA' },
+    update: {},
+  });
+  const existingSeedPrice = await prisma.coursePrice.findFirst({
+    where: { facilityId: hq.id, courseId: seedCourse.id },
+  });
+  if (!existingSeedPrice) {
+    await prisma.coursePrice.create({
+      data: {
+        facilityId: hq.id,
+        courseId: seedCourse.id,
+        amount: 10_000_000,
+        effectiveFrom: new Date('2020-01-01'),
+      },
+    });
+    console.log(`✓ Seed coursePrice: ${seedCourse.code} @ HQ`);
+  } else {
+    console.log(`• coursePrice ${seedCourse.code} @ HQ already exists — skipped`);
+  }
+
   // ── Work shift defaults ──────────────────────────────────────────────
   await seedWorkShift(hq.id, hq.code);
   await seedWorkShift(branch.id, branch.code);
