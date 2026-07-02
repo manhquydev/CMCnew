@@ -138,6 +138,9 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     receiptMarkSent: ['ke_toan', 'giam_doc_kinh_doanh'],
     receiptReconcile: ['ke_toan', 'giam_doc_kinh_doanh'],
     receiptCancel: ['ke_toan', 'giam_doc_kinh_doanh'],
+    // Append-only refund ledger (decision 0028) — same write scope as receiptCancel.
+    refundCreate: ['ke_toan', 'giam_doc_kinh_doanh'],
+    refundList: ['ke_toan', 'giam_doc_kinh_doanh'],
   },
 
   certificate: {

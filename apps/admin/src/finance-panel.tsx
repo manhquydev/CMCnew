@@ -449,10 +449,18 @@ function ReceiptsCard({
   const [page, setPage] = useState(1);
   const [cancelTarget, setCancelTarget] = useState<Receipt | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+  const [cancelRefundAmount, setCancelRefundAmount] = useState<number>(0);
   const [detailTarget, setDetailTarget] = useState<Receipt | null>(null);
   // LMS credential surfaced once when approving a NEW-student receipt, so staff can relay it to the
   // parent (backend returns it plaintext exactly once; it is also emailed). Shown in a dismissible modal.
   const [cred, setCred] = useState<{ loginCode: string; tempPassword: string } | null>(null);
+  // Standalone "Ghi hoàn tiền" on an already-cancelled row (also reached right after a cancel that
+  // included a refund amount fails to record — cancel already committed, refund is addable here).
+  const [refundTarget, setRefundTarget] = useState<Receipt | null>(null);
+  const [refundAmount, setRefundAmount] = useState<number>(0);
+  const [refundReason, setRefundReason] = useState('');
+  // Refund total per receipt id — fetched lazily for cancelled rows on the current page.
+  const [refundTotals, setRefundTotals] = useState<Record<string, number>>({});
 
   const studentName = (id: string | null) =>
     id ? (students.find((s) => s.id === id)?.fullName ?? id.slice(0, 8)) : '—';
@@ -522,13 +530,69 @@ function ReceiptsCard({
     try {
       await trpc.finance.receiptCancel.mutate({ id: cancelTarget.id, reason: cancelReason.trim() });
       notifySuccess('Đã hủy phiếu thu');
+      // Refund is a separate call after cancel commits — a refund failure must not look like the
+      // cancel itself failed. The refund can be added later via "Ghi hoàn tiền" on the cancelled row.
+      if (cancelRefundAmount > 0) {
+        try {
+          await trpc.finance.refundCreate.mutate({
+            receiptId: cancelTarget.id,
+            amount: cancelRefundAmount,
+            reason: cancelReason.trim(),
+          });
+          notifySuccess(`Đã ghi hoàn tiền ${vnd(cancelRefundAmount)}`);
+        } catch (e) {
+          notifyError(
+            e,
+            'Đã hủy phiếu nhưng ghi hoàn tiền thất bại — dùng "Ghi hoàn tiền" trên dòng phiếu để thử lại',
+          );
+        }
+      }
       setCancelTarget(null);
       setCancelReason('');
+      setCancelRefundAmount(0);
       loadReceipts();
     } catch (e) {
       notifyError(e, 'Hủy phiếu thu thất bại');
     }
   }
+
+  async function doRefund() {
+    if (!refundTarget || refundAmount <= 0 || !refundReason.trim()) return;
+    try {
+      await trpc.finance.refundCreate.mutate({
+        receiptId: refundTarget.id,
+        amount: refundAmount,
+        reason: refundReason.trim(),
+      });
+      notifySuccess(`Đã ghi hoàn tiền ${vnd(refundAmount)}`);
+      setRefundTotals((prev) => ({
+        ...prev,
+        [refundTarget.id]: (prev[refundTarget.id] ?? 0) + refundAmount,
+      }));
+      setRefundTarget(null);
+      setRefundAmount(0);
+      setRefundReason('');
+    } catch (e) {
+      notifyError(e, 'Ghi hoàn tiền thất bại');
+    }
+  }
+
+  // Lazily fetch the refund total for cancelled rows visible on the current page.
+  useEffect(() => {
+    const missing = paged
+      .filter((r) => r.status === 'cancelled' && !(r.id in refundTotals))
+      .map((r) => r.id);
+    if (missing.length === 0) return;
+    missing.forEach((id) => {
+      trpc.finance.refundList
+        .query({ receiptId: id })
+        .then((rows) => {
+          const sum = rows.reduce((s, x) => s + x.amount, 0);
+          setRefundTotals((prev) => ({ ...prev, [id]: sum }));
+        })
+        .catch(() => {});
+    });
+  }, [paged, refundTotals]);
 
   return (
     <Card withBorder>
@@ -613,6 +677,7 @@ function ReceiptsCard({
                 <Table.Th>Giảm</Table.Th>
                 <Table.Th>Thành tiền</Table.Th>
                 <Table.Th>Trạng thái</Table.Th>
+                <Table.Th>Đã hoàn</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>
@@ -630,6 +695,9 @@ function ReceiptsCard({
                     </Table.Td>
                     <Table.Td>
                       <Badge color={st.color}>{st.label}</Badge>
+                    </Table.Td>
+                    <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {r.status === 'cancelled' ? vnd(refundTotals[r.id] ?? 0) : '—'}
                     </Table.Td>
                     <Table.Td>
                       <Group gap={4} justify="flex-end">
@@ -682,6 +750,18 @@ function ReceiptsCard({
                             Hủy
                           </Button>
                         )}
+                        {/* approvedAt gate: a draft cancelled before ever being approved never took
+                            money in, so it never gets a refund action (mirrors the server guard). */}
+                        {r.status === 'cancelled' && r.approvedAt && (
+                          <Button
+                            size="compact-xs"
+                            variant="light"
+                            color="orange"
+                            onClick={() => setRefundTarget(r)}
+                          >
+                            Ghi hoàn tiền
+                          </Button>
+                        )}
                       </Group>
                     </Table.Td>
                   </Table.Tr>
@@ -697,7 +777,14 @@ function ReceiptsCard({
         </>
       )}
 
-      <Modal opened={!!cancelTarget} onClose={() => setCancelTarget(null)} title="Hủy phiếu thu">
+      <Modal
+        opened={!!cancelTarget}
+        onClose={() => {
+          setCancelTarget(null);
+          setCancelRefundAmount(0);
+        }}
+        title="Hủy phiếu thu"
+      >
         <Stack>
           <Text size="sm">
             Hủy phiếu {cancelTarget?.code ?? 'nháp'} (
@@ -710,12 +797,85 @@ function ReceiptsCard({
             value={cancelReason}
             onChange={(e) => setCancelReason(e.currentTarget.value)}
           />
+          {/* Refund field only makes sense for a receipt that actually took money in — matches
+              receiptCancel's own wasApproved check (approved/sent/reconciled), not just 'approved'.
+              Manual amount — no auto pro-rata (D-P4a). Left blank = no refund recorded now; can be
+              added later via "Ghi hoàn tiền" on the cancelled row. */}
+          {cancelTarget && ['approved', 'sent', 'reconciled'].includes(cancelTarget.status) && (
+            <NumberInput
+              label="Hoàn tiền (tùy chọn, VNĐ)"
+              placeholder="Để trống nếu không hoàn tiền ngay"
+              min={0}
+              step={100000}
+              value={cancelRefundAmount}
+              onChange={(v) => setCancelRefundAmount(Number(v) || 0)}
+            />
+          )}
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => setCancelTarget(null)}>
+            <Button
+              variant="default"
+              onClick={() => {
+                setCancelTarget(null);
+                setCancelRefundAmount(0);
+              }}
+            >
               Đóng
             </Button>
             <Button color="red" disabled={!cancelReason.trim()} onClick={doCancel}>
               Xác nhận hủy
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={!!refundTarget}
+        onClose={() => {
+          setRefundTarget(null);
+          setRefundAmount(0);
+          setRefundReason('');
+        }}
+        title="Ghi hoàn tiền"
+      >
+        <Stack>
+          <Text size="sm">
+            Ghi hoàn tiền cho phiếu {refundTarget?.code ?? ''} (
+            {refundTarget ? vnd(refundTarget.netAmount) : ''}, đã hoàn{' '}
+            {refundTarget ? vnd(refundTotals[refundTarget.id] ?? 0) : ''}).
+          </Text>
+          <NumberInput
+            label="Số tiền hoàn (VNĐ)"
+            withAsterisk
+            min={1}
+            step={100000}
+            value={refundAmount}
+            onChange={(v) => setRefundAmount(Number(v) || 0)}
+          />
+          <Textarea
+            label="Lý do hoàn tiền"
+            withAsterisk
+            autosize
+            minRows={2}
+            value={refundReason}
+            onChange={(e) => setRefundReason(e.currentTarget.value)}
+          />
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => {
+                setRefundTarget(null);
+                setRefundAmount(0);
+                setRefundReason('');
+              }}
+            >
+              Đóng
+            </Button>
+            <Button
+              color="orange"
+              disabled={refundAmount <= 0 || !refundReason.trim()}
+              onClick={doRefund}
+            >
+              Xác nhận hoàn tiền
             </Button>
           </Group>
         </Stack>

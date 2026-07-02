@@ -1069,6 +1069,7 @@ model Receipt {
   /// Reverse provenance: students and enrollments created atomically by this receipt.
   studentsCreated          Student[]     @relation("StudentProvenance")
   enrollmentsCreated       Enrollment[]  @relation("EnrollmentProvenance")
+  refunds                  RefundRecord[]
 
   @@unique([facilityId, code]) // codes are unique per facility; counters are keyed (facilityId, year)
   @@index([facilityId])
@@ -1076,6 +1077,29 @@ model Receipt {
   @@index([soldById, status])
   @@index([classBatchId])
   @@map("receipt")
+}
+
+/// Append-only refund ledger (money-out), decision 0028. One row per manual refund entry
+/// captured at cancel or standalone against a receipt that is cancelled AND was previously
+/// approved (`approvedAt IS NOT NULL` — a never-funded draft-cancelled receipt gets no refund).
+/// Never mutates receipt.netAmount. Sum of amounts per receipt is capped at receipt.netAmount,
+/// enforced atomically in finance.refundCreate via SELECT ... FOR UPDATE on the receipt row
+/// (not read-then-check). No update/delete endpoint — corrections are an additional row, an
+/// over-refund is a documented DBA/ops SQL path (decision 0028), not a v1 feature.
+/// recordedById = the staff who entered the refund (session user), not the money recipient.
+model RefundRecord {
+  id           String   @id @default(uuid()) @db.Uuid
+  receiptId    String   @map("receipt_id") @db.Uuid
+  receipt      Receipt  @relation(fields: [receiptId], references: [id])
+  facilityId   Int      @map("facility_id")
+  amount       Int
+  reason       String
+  recordedById String   @map("recorded_by_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([receiptId])
+  @@index([facilityId])
+  @@map("refund_record")
 }
 
 /// Bộ đếm sinh mã phiếu thu nguyên tử theo (cơ sở, năm).

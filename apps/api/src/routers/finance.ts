@@ -992,4 +992,87 @@ export const financeRouter = router({
         return cancelled;
       }),
     ),
+
+  // Append-only refund ledger (money-out), decision 0028. Never mutates receipt.netAmount.
+  // Guard folded into ONE atomic critical section (SELECT ... FOR UPDATE on the receipt row,
+  // not read-then-check): status must be 'cancelled' AND approvedAt must be set (a draft
+  // cancelled before ever being approved never took money in, so it gets no refund row), and
+  // the running sum of refunds for this receipt must stay <= receipt.netAmount. The row lock
+  // serializes concurrent refundCreate calls on the same receipt: the second call blocks on
+  // FOR UPDATE until the first commits, then re-reads the sum including the first's insert.
+  refundCreate: requirePermission('finance', 'refundCreate')
+    .input(
+      z.object({
+        receiptId: z.string().uuid(),
+        amount: z.number().int().min(1),
+        reason: z.string().min(1),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        // RLS-filtered: a cross-facility caller gets 0 rows here, same as any other receipt read.
+        const locked = await tx.$queryRaw<
+          Array<{
+            id: string;
+            facility_id: number;
+            net_amount: number;
+            status: string;
+            approved_at: Date | null;
+          }>
+        >`
+          SELECT id, facility_id, net_amount, status, approved_at
+          FROM "receipt"
+          WHERE id = ${input.receiptId}::uuid
+          FOR UPDATE
+        `;
+        const receipt = locked[0];
+        if (!receipt || receipt.status !== 'cancelled' || receipt.approved_at === null) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Chỉ ghi hoàn tiền cho phiếu đã hủy và đã từng được duyệt',
+          });
+        }
+        const sumRows = await tx.$queryRaw<Array<{ sum: number }>>`
+          SELECT COALESCE(SUM(amount), 0)::int AS sum
+          FROM "refund_record"
+          WHERE receipt_id = ${input.receiptId}::uuid
+        `;
+        const alreadyRefunded = sumRows[0]?.sum ?? 0;
+        if (alreadyRefunded + input.amount > receipt.net_amount) {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: `Vượt số tiền phiếu: đã hoàn ${alreadyRefunded.toLocaleString('vi-VN')}đ / ${receipt.net_amount.toLocaleString('vi-VN')}đ`,
+          });
+        }
+        const refund = await tx.refundRecord.create({
+          data: {
+            receiptId: input.receiptId,
+            facilityId: receipt.facility_id,
+            amount: input.amount,
+            reason: input.reason,
+            recordedById: ctx.session.userId,
+          },
+        });
+        await logEvent(tx, {
+          facilityId: refund.facilityId,
+          entityType: 'receipt',
+          entityId: refund.receiptId,
+          type: 'note',
+          body: `Hoàn tiền ${refund.amount.toLocaleString('vi-VN')}đ: ${refund.reason}`,
+          actorId: ctx.session.userId,
+        });
+        return refund;
+      }),
+    ),
+
+  refundList: requirePermission('finance', 'refundList')
+    .input(z.object({ receiptId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.refundRecord.findMany({
+          where: { receiptId: input.receiptId },
+          orderBy: { createdAt: 'desc' },
+        }),
+      ),
+    ),
 });

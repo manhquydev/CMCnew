@@ -65,6 +65,8 @@
   "finance.receiptMarkSent": ["ke_toan", "giam_doc_kinh_doanh"],
   "finance.receiptReconcile": ["ke_toan", "giam_doc_kinh_doanh"],
   "finance.receiptCancel": ["ke_toan", "giam_doc_kinh_doanh"],
+  "finance.refundCreate": ["ke_toan", "giam_doc_kinh_doanh"],
+  "finance.refundList": ["ke_toan", "giam_doc_kinh_doanh"],
   "certificate.list": ["giao_vien", "giam_doc_dao_tao"],
   "certificate.issue": ["giam_doc_dao_tao"],
   "grade.grade": ["giao_vien", "giam_doc_dao_tao"],
