@@ -1,7 +1,7 @@
 ---
 title: "Academic ops: transfer + makeup + attendance + học bạ PDF + lifecycle"
 description: "Close month-1 giáo vụ seams: student class transfer, makeup sessions, bulk attendance + reports, học bạ/certificate PDF with LMS parent visibility, and lifecycle access enforcement."
-status: in_progress
+status: completed
 priority: P1
 effort: 3-4d
 branch: develop
@@ -33,10 +33,10 @@ Durable artifacts (checkpoints, NOT code): high-risk story folder (`docs/templat
 | P1 | Enrollment transfer (old→transferred + new enrollment, history preserved, chatter, LMS continuity) | completed | [phase-01-transfer.md](phase-01-transfer.md) |
 | P2 | Makeup sessions (createMakeupSession, isMakeup=true, detectConflicts reuse, roster) | completed | [phase-02-makeup.md](phase-02-makeup.md) |
 | P3 | Attendance bulk mark-all + per-student/class/term report + parent per-session visibility | completed | [phase-03-attendance.md](phase-03-attendance.md) |
-| P4 | Học bạ + certificate PDF (shared print-render infra) + LMS parent visibility | pending | [phase-04-pdf-visibility.md](phase-04-pdf-visibility.md) |
-| P5 | Lifecycle enforcement (withdrawn/paused → block LMS login + attendance + visible state) | pending | [phase-05-lifecycle.md](phase-05-lifecycle.md) |
+| P4 | Học bạ + certificate PDF (shared print-render infra) + LMS parent visibility | completed | [phase-04-pdf-visibility.md](phase-04-pdf-visibility.md) |
+| P5 | Lifecycle enforcement (withdrawn/paused → block LMS login + attendance + visible state) | completed | [phase-05-lifecycle.md](phase-05-lifecycle.md) |
 | P6 | UI wiring: room.update/archive + parentMeeting.setSchedule + meeting outcome note | completed | [phase-06-ui-wiring.md](phase-06-ui-wiring.md) |
-| P7 | Validation (int tests + e2e + migration 0-drift on prod-mirror) | pending | [phase-07-validation.md](phase-07-validation.md) |
+| P7 | Validation (int tests + e2e + migration 0-drift on prod-mirror) | completed (except P6 e2e/browser-PDF flows, blocked on pre-existing DEBT.md ESM/CJS issue) | [phase-07-validation.md](phase-07-validation.md) |
 
 ## Dependency graph
 
