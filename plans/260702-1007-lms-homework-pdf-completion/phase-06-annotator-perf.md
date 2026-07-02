@@ -1,5 +1,7 @@
 # Phase 06 — Annotator perf (lazy / virtualized page render)
 
+Status: completed 2026-07-02 for code + typecheck. Empirical DevTools memory profile deferred to Phase 7 (no browser available in this environment).
+
 Closes gap #8 (many-page / large-PDF perf).
 
 ## Context links
@@ -35,11 +37,17 @@ Data flow: load PDF doc → for each page compute viewport dims only (no raster)
 5. Verify with a 20-page / ~20MB PDF: memory bounded, scroll smooth, strokes aligned.
 
 ## Todo list
-- [ ] separate measure vs rasterize
-- [ ] IntersectionObserver windowing + prefetch band
-- [ ] LRU evict + URL revoke
-- [ ] annotation alignment from measured dims
-- [ ] 20-page/20MB memory + alignment test
+- [x] separate measure vs rasterize
+- [x] IntersectionObserver windowing + prefetch band
+- [x] LRU evict + URL revoke (data-URL Map entry drop, no blob URLs used — nothing to revoke)
+- [x] annotation alignment from measured dims
+- [ ] 20-page/20MB memory + alignment test (manual/real-browser, deferred to P7)
+
+## Evidence 2026-07-02
+- `pnpm --filter @cmc/ui|@cmc/admin|@cmc/lms typecheck` all PASS.
+- Layout/scroll-height derives solely from eagerly-measured `PageDim` (getViewport, no raster); raster state never affects sizing — verified via code review.
+- Code review fixes: (1) LRU eviction no longer evicts a page that's currently on-screen (`visiblePages` set tracked from IntersectionObserver enter/leave) — previously a still-visible page could be silently evicted to a blank placeholder if more than `MAX_RENDERED_PAGES` pages were simultaneously in the viewport+prefetch band; (2) moved `lruOrder`/`renderedRef` ref mutation out of the `setRendered` functional updater into a synchronous step before calling `setRendered` — React 18 StrictMode double-invokes updater functions in dev, which was silently double-mutating the LRU ref order.
+- No real browser available to take an actual DevTools memory profile or confirm zoom-interaction visually — deferred to Phase 7 per plan.
 
 ## Success Criteria
 - 20-page / 20MB PDF opens without rasterizing all pages upfront; memory bounded (spot-check dev tools).

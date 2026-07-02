@@ -22,12 +22,17 @@ const MAX_ITEMS = 500;
 const MAX_INK_POINTS = 2000;
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
+// Bounds simultaneously-rasterized page bitmaps in memory regardless of document length.
+const MAX_RENDERED_PAGES = 6;
+// Rasterize pages a bit before they scroll into view so there's no visible pop-in.
+const PREFETCH_MARGIN = '800px 0px 800px 0px';
 
-type PageImg = { url: string; w: number; h: number };
+/** Page geometry, known cheaply upfront (no raster) — layout and annotation alignment derive from this alone. */
+type PageDim = { w: number; h: number };
 const empty: AnnotationData = { v: 1, items: [] };
 
 /** Shortest distance (px) from a point to a polyline, in the page's rendered pixel space. */
-function distToPolyline(px: number, py: number, points: { x: number; y: number }[], page: PageImg) {
+function distToPolyline(px: number, py: number, points: { x: number; y: number }[], page: PageDim) {
   let best = Infinity;
   for (let i = 0; i < points.length; i++) {
     const a = { x: points[i]!.x * page.w, y: points[i]!.y * page.h };
@@ -51,7 +56,7 @@ function PageLayer({
   readOnlyLayers,
   pageIndex,
 }: {
-  page: PageImg;
+  page: PageDim;
   editableItems: AnnotationItem[];
   readOnlyLayers: { items: AnnotationItem[]; opacity?: number }[];
   pageIndex: number;
@@ -71,7 +76,7 @@ function PageLayer({
   );
 }
 
-function renderItem(it: AnnotationItem, key: string, opacity: number, page: PageImg) {
+function renderItem(it: AnnotationItem, key: string, opacity: number, page: PageDim) {
   if (it.type === 'text') {
     return (
       <div
@@ -139,7 +144,17 @@ export function PdfAnnotator({
   editable?: boolean;
   readOnlyLayers?: { items: AnnotationItem[]; opacity?: number }[];
 }) {
-  const [pages, setPages] = useState<PageImg[]>([]);
+  // Measured eagerly for every page (cheap — no raster); drives layout + annotation alignment.
+  const [dims, setDims] = useState<PageDim[]>([]);
+  // Rasterized bitmaps, windowed: only pages in/near the viewport get an entry.
+  const [rendered, setRendered] = useState<Map<number, string>>(new Map());
+  const renderedRef = useRef<Map<number, string>>(new Map());
+  const lruOrder = useRef<number[]>([]);
+  const visiblePages = useRef<Set<number>>(new Set());
+  const rasterizing = useRef<Set<number>>(new Set());
+  const docRef = useRef<pdfjs.PDFDocumentProxy | null>(null);
+  const pageNodes = useRef<Map<number, HTMLDivElement>>(new Map());
+  const observerRef = useRef<IntersectionObserver | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [tool, setTool] = useState<Tool>('ink');
@@ -168,11 +183,20 @@ export function PdfAnnotator({
     [onChange],
   );
 
+  // Load the doc and measure every page's viewport dims upfront (cheap — no raster). Pixels are
+  // rasterized lazily below, on demand, as pages enter the viewport.
   useEffect(() => {
     let cancelled = false;
     let loadingTask: ReturnType<typeof pdfjs.getDocument> | null = null;
     setLoading(true);
     setError('');
+    setDims([]);
+    setRendered(new Map());
+    renderedRef.current = new Map();
+    lruOrder.current = [];
+    visiblePages.current = new Set();
+    rasterizing.current = new Set();
+    docRef.current = null;
     (async () => {
       try {
         const res = await fetch(`${API_URL}/files/exercise/${pdfRef}`, { credentials: 'include' });
@@ -181,21 +205,18 @@ export function PdfAnnotator({
         if (cancelled) return;
         loadingTask = pdfjs.getDocument({ data: buf });
         const doc = await loadingTask.promise;
-        const out: PageImg[] = [];
+        if (cancelled) return;
+        docRef.current = doc;
+        const out: PageDim[] = [];
         for (let n = 1; n <= doc.numPages; n++) {
           const pg = await doc.getPage(n);
           if (cancelled) return;
           const scale = RENDER_WIDTH / pg.getViewport({ scale: 1 }).width;
           const viewport = pg.getViewport({ scale });
-          const canvas = document.createElement('canvas');
-          canvas.width = Math.floor(viewport.width);
-          canvas.height = Math.floor(viewport.height);
-          const ctx = canvas.getContext('2d')!;
-          await pg.render({ canvas, canvasContext: ctx, viewport }).promise;
-          out.push({ url: canvas.toDataURL('image/png'), w: viewport.width, h: viewport.height });
+          out.push({ w: viewport.width, h: viewport.height });
         }
         if (!cancelled) {
-          setPages(out);
+          setDims(out);
           setLoading(false);
         }
       } catch (e) {
@@ -208,11 +229,103 @@ export function PdfAnnotator({
     return () => {
       cancelled = true;
       loadingTask?.destroy();
+      docRef.current = null;
     };
   }, [pdfRef]);
 
+  // Bumps a page to most-recently-used and evicts least-recently-used bitmaps past the cap.
+  // Never evicts a page currently on screen (visiblePages) — a still-visible page must not go
+  // blank; if every rendered page is visible, the cap is temporarily exceeded rather than evict
+  // one. Mutates `map` in place — callers pass a fresh copy staged for setRendered.
+  function touchLruAndEvict(map: Map<number, string>, index: number) {
+    lruOrder.current = lruOrder.current.filter((i) => i !== index);
+    lruOrder.current.push(index);
+    if (lruOrder.current.length <= MAX_RENDERED_PAGES) return;
+    const evictable = lruOrder.current.filter((i) => !visiblePages.current.has(i));
+    const evict = evictable[0];
+    if (evict === undefined) return;
+    lruOrder.current = lruOrder.current.filter((i) => i !== evict);
+    map.delete(evict);
+  }
+
+  // Rasterizes one page on demand; a no-op if already rendered or already in flight. Ref
+  // bookkeeping (lruOrder/renderedRef) happens synchronously here, outside any setState
+  // updater — React 18 StrictMode double-invokes updater functions in dev, which would
+  // otherwise double-mutate these refs.
+  const rasterizePage = useCallback(async (index: number) => {
+    if (rasterizing.current.has(index) || renderedRef.current.has(index)) return;
+    const doc = docRef.current;
+    if (!doc) return;
+    rasterizing.current.add(index);
+    try {
+      const pg = await doc.getPage(index + 1);
+      const scale = RENDER_WIDTH / pg.getViewport({ scale: 1 }).width;
+      const viewport = pg.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      const ctx = canvas.getContext('2d')!;
+      await pg.render({ canvas, canvasContext: ctx, viewport }).promise;
+      const url = canvas.toDataURL('image/png');
+      const next = new Map(renderedRef.current);
+      next.set(index, url);
+      touchLruAndEvict(next, index);
+      renderedRef.current = next;
+      setRendered(next);
+    } catch {
+      // Leave the placeholder; the IntersectionObserver retries on the next visibility change.
+    } finally {
+      rasterizing.current.delete(index);
+    }
+  }, []);
+
+  // Registers/unregisters each page's DOM node with the shared IntersectionObserver as it mounts/unmounts.
+  const setPageNode = useCallback((index: number, el: HTMLDivElement | null) => {
+    if (el) {
+      pageNodes.current.set(index, el);
+      observerRef.current?.observe(el);
+    } else {
+      const prev = pageNodes.current.get(index);
+      if (prev) observerRef.current?.unobserve(prev);
+      pageNodes.current.delete(index);
+    }
+  }, []);
+
+  // Windowed rasterization: only pages in/near the viewport render pixels; the rest stay as
+  // measured-dims placeholders. Works inside the P5 zoom/pan transform because IntersectionObserver
+  // measures actual rendered geometry (CSS transforms included), not untransformed layout boxes.
+  useEffect(() => {
+    if (dims.length === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const idx = Number((entry.target as HTMLElement).dataset.pageIndex);
+          if (Number.isNaN(idx)) continue;
+          if (!entry.isIntersecting) {
+            visiblePages.current.delete(idx);
+            continue;
+          }
+          visiblePages.current.add(idx);
+          if (renderedRef.current.has(idx)) {
+            lruOrder.current = lruOrder.current.filter((i) => i !== idx);
+            lruOrder.current.push(idx);
+          } else {
+            void rasterizePage(idx);
+          }
+        }
+      },
+      { rootMargin: PREFETCH_MARGIN, threshold: 0 },
+    );
+    observerRef.current = observer;
+    pageNodes.current.forEach((el) => observer.observe(el));
+    return () => {
+      observer.disconnect();
+      observerRef.current = null;
+    };
+  }, [dims.length, rasterizePage]);
+
   // Pointer → normalised page coordinate.
-  function norm(e: React.PointerEvent, _page: PageImg) {
+  function norm(e: React.PointerEvent, _page: PageDim) {
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     return {
       x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
@@ -220,7 +333,7 @@ export function PdfAnnotator({
     };
   }
 
-  function eraseAt(pageIndex: number, page: PageImg, p: { x: number; y: number }) {
+  function eraseAt(pageIndex: number, page: PageDim, p: { x: number; y: number }) {
     const px = p.x * page.w;
     const py = p.y * page.h;
     let bestIdx = -1;
@@ -238,7 +351,7 @@ export function PdfAnnotator({
     }
   }
 
-  function onDown(e: React.PointerEvent, pageIndex: number, page: PageImg) {
+  function onDown(e: React.PointerEvent, pageIndex: number, page: PageDim) {
     if (!editable) return;
     if (pointers.current.size >= 1) return; // a second finger is a pinch gesture, not a draw
     const p = norm(e, page);
@@ -270,7 +383,7 @@ export function PdfAnnotator({
     force((n) => n + 1);
   }
 
-  function onMove(e: React.PointerEvent, pageIndex: number, page: PageImg) {
+  function onMove(e: React.PointerEvent, pageIndex: number, page: PageDim) {
     if (erasing.current && tool === 'eraser') {
       eraseAt(pageIndex, page, norm(e, page));
       return;
@@ -446,23 +559,32 @@ export function PdfAnnotator({
           transformOrigin: '0 0',
         }}
       >
-        {pages.map((page, i) => (
-          <div
-            key={i}
-            style={{ position: 'relative', width: page.w, height: page.h, margin: '0 auto 12px', border: '1px solid #e9ecef', touchAction: 'none' }}
-          >
-            <img src={page.url} width={page.w} height={page.h} alt={`Trang ${i + 1}`} draggable={false} style={{ display: 'block' }} />
-            <PageLayer page={page} pageIndex={i} editableItems={live} readOnlyLayers={readOnlyLayers} />
-            {editable && (
-              <div
-                onPointerDown={(e) => onDown(e, i, page)}
-                onPointerMove={(e) => onMove(e, i, page)}
-                onPointerUp={onUp}
-                style={{ position: 'absolute', inset: 0, cursor: tool === 'eraser' ? 'cell' : 'crosshair' }}
-              />
-            )}
-          </div>
-        ))}
+        {dims.map((page, i) => {
+          const url = rendered.get(i);
+          return (
+            <div
+              key={i}
+              ref={(el) => setPageNode(i, el)}
+              data-page-index={i}
+              style={{ position: 'relative', width: page.w, height: page.h, margin: '0 auto 12px', border: '1px solid #e9ecef', touchAction: 'none' }}
+            >
+              {url ? (
+                <img src={url} width={page.w} height={page.h} alt={`Trang ${i + 1}`} draggable={false} style={{ display: 'block' }} />
+              ) : (
+                <div style={{ width: page.w, height: page.h, background: '#f1f3f5' }} aria-label={`Trang ${i + 1} đang tải`} />
+              )}
+              <PageLayer page={page} pageIndex={i} editableItems={live} readOnlyLayers={readOnlyLayers} />
+              {editable && (
+                <div
+                  onPointerDown={(e) => onDown(e, i, page)}
+                  onPointerMove={(e) => onMove(e, i, page)}
+                  onPointerUp={onUp}
+                  style={{ position: 'absolute', inset: 0, cursor: tool === 'eraser' ? 'cell' : 'crosshair' }}
+                />
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
