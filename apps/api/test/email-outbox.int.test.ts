@@ -43,16 +43,25 @@ function withGraphEnv<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 const PREFIX = uniq('emailtest');
+// These tests exercise the Graph-transport worker mechanics (rate cap, 429 backoff, hard-fail) —
+// unset STAFF_EMAIL_DOMAIN around enqueue so decideTransport('a@b.com') stays 'graph' regardless
+// of the real env's staff domain (mirrors the existing GRAPH_*/ENTRA_* scrubbing pattern above).
 async function enqueue(dedup: string, mailbox: 'notify' | 'payroll' | 'hr' = 'notify') {
-  await withRls(SUPER, (tx) =>
-    enqueueEmail(tx, {
-      dedupKey: `${PREFIX}:${dedup}`,
-      to: 'a@b.com',
-      mailbox,
-      kind: 'account_security_alert',
-      data: { action: 'test', at: '2026-06-26 00:00' },
-    }),
-  );
+  const saved = process.env.STAFF_EMAIL_DOMAIN;
+  delete process.env.STAFF_EMAIL_DOMAIN;
+  try {
+    await withRls(SUPER, (tx) =>
+      enqueueEmail(tx, {
+        dedupKey: `${PREFIX}:${dedup}`,
+        to: 'a@b.com',
+        mailbox,
+        kind: 'account_security_alert',
+        data: { action: 'test', at: '2026-06-26 00:00' },
+      }),
+    );
+  } finally {
+    if (saved !== undefined) process.env.STAFF_EMAIL_DOMAIN = saved;
+  }
 }
 async function rows() {
   return withRls(SUPER, (tx) => tx.emailOutbox.findMany({ where: { dedupKey: { startsWith: PREFIX } } }));
@@ -127,15 +136,21 @@ describe('email outbox', () => {
   });
 
   it('secret-bearing template (otp_login) scrubs body on terminal fail', async () => {
-    await withRls(SUPER, (tx) =>
-      enqueueEmail(tx, {
-        dedupKey: `${PREFIX}:secret`,
-        to: 'a@b.com',
-        mailbox: 'notify',
-        kind: 'otp_login',
-        data: { code: '123456', expiresMinutes: 5 },
-      }),
-    );
+    const savedDomain = process.env.STAFF_EMAIL_DOMAIN;
+    delete process.env.STAFF_EMAIL_DOMAIN;
+    try {
+      await withRls(SUPER, (tx) =>
+        enqueueEmail(tx, {
+          dedupKey: `${PREFIX}:secret`,
+          to: 'a@b.com',
+          mailbox: 'notify',
+          kind: 'otp_login',
+          data: { code: '123456', expiresMinutes: 5 },
+        }),
+      );
+    } finally {
+      if (savedDomain !== undefined) process.env.STAFF_EMAIL_DOMAIN = savedDomain;
+    }
     let now = new Date();
     for (let i = 0; i < 5; i++) {
       await withGraphEnv(() => runEmailOutbox(now, { getToken, fetchImpl: fetchReturning(500) }));

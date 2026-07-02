@@ -782,6 +782,12 @@ enum EmailStatus {
   skipped
 }
 
+/// Kênh gửi email: graph = nội bộ (Microsoft Graph), brevo = ngoài hệ thống (phụ huynh). Decision 0030.
+enum EmailTransport {
+  graph
+  brevo
+}
+
 /// Outbox cho email gửi qua Microsoft Graph (M365). Business code ghi 1 dòng cùng transaction
 /// với hành động nghiệp vụ (transactional outbox — atomic + idempotent qua dedupKey). Một worker
 /// cron rút hàng đợi với tốc độ giới hạn (≤20/phút < ngưỡng Exchange 30/phút), render & gửi.
@@ -798,6 +804,7 @@ model EmailOutbox {
   bodyHtml     String      @map("body_html")
   attachRef    String?     @map("attach_ref")
   status       EmailStatus @default(queued)
+  transport    EmailTransport @default(graph)
   attempts     Int         @default(0)
   lastError    String?     @map("last_error")
   scheduledFor DateTime    @default(now()) @map("scheduled_for")

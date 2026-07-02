@@ -25,8 +25,11 @@ export interface GraphMailerConfig {
 
 /** Thrown on HTTP 429 so the worker can back off without losing the row. */
 export class RateLimitError extends Error {
-  constructor(public retryAfterSec: number) {
-    super(`Graph sendMail rate-limited; retry after ${retryAfterSec}s`);
+  constructor(
+    public retryAfterSec: number,
+    transport: 'graph' | 'brevo' = 'graph',
+  ) {
+    super(`${transport} sendMail rate-limited; retry after ${retryAfterSec}s`);
     this.name = 'RateLimitError';
   }
 }
