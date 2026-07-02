@@ -32,6 +32,11 @@ export DATABASE_URL="postgresql://cmc_app:${PW}@127.0.0.1:55432/cmc?schema=publi
 docker run --rm -v "$WORKSPACE":/app -w /app -e DIRECT_URL="$DIRECT_URL" -e DATABASE_URL="$DIRECT_URL" --network host node:22-alpine sh -c \
   'corepack enable && pnpm install --frozen-lockfile && pnpm --filter @cmc/db generate && pnpm --filter @cmc/db seed'
 
+# CI has no repo-root .env (gitignored, not present in the Jenkins checkout) — test/setup.ts's
+# dotenv load is a no-op here, so CI must set its own values for anything the suite requires
+# at runtime (same pattern already established for CRM_LEAD_TOKEN in that file).
 docker run --rm -v "$WORKSPACE":/app -w /app \
-  -e DIRECT_URL="$DIRECT_URL" -e DATABASE_URL="$DATABASE_URL" --network host node:22-alpine sh -c \
+  -e DIRECT_URL="$DIRECT_URL" -e DATABASE_URL="$DATABASE_URL" \
+  -e JWT_SECRET="ci-integration-test-jwt-secret-please-ignore-32b" \
+  --network host node:22-alpine sh -c \
   'corepack enable && pnpm install --frozen-lockfile && pnpm --filter @cmc/db generate && pnpm --filter @cmc/api test:integration'
