@@ -5,7 +5,9 @@
 
 import { randomInt, createHash } from 'node:crypto';
 import { withRls } from '@cmc/db';
-import { sendEmailNow, graphMailerFromEnv, type SendDeps } from '../lib/graph-client.js';
+import { graphMailerFromEnv, sendViaGraph, type SendDeps } from '../lib/graph-client.js';
+import { brevoMailerFromEnv, sendViaBrevo } from '../lib/brevo-client.js';
+import { decideTransport } from '../lib/email-routing.js';
 import { renderTemplate } from './email-templates.js';
 
 const SYSTEM_CTX = { facilityIds: [] as number[], isSuperAdmin: true };
@@ -43,16 +45,25 @@ export async function requestLoginOtp(email: string, deps: SendDeps = {}): Promi
   );
 
   const { subject, html } = renderTemplate('otp_login', { code, expiresMinutes: OTP_TTL_MIN });
-  // Dev fallback (Graph unconfigured) is detectable synchronously — surface the code so the flow is
-  // testable before the tenant secret exists. NEVER in production.
-  const graphDisabled = graphMailerFromEnv() === null;
-  // Fire the Graph send WITHOUT blocking the response: removes the network round-trip from the
-  // request latency, shrinking the timing side-channel between known/unknown email (MED-3).
-  void sendEmailNow({ mailbox: 'notify', to: normEmail(email), subject, html }, deps).catch((e) =>
-    console.error('OTP email send failed', e),
-  );
-  if (graphDisabled && process.env.NODE_ENV !== 'production') {
-    console.log(`[dev] LMS login OTP for ${normEmail(email)}: ${code}`);
+  const to = normEmail(email);
+  const msg = { mailbox: 'notify' as const, to, subject, html };
+  const transport = decideTransport(to);
+  const graphCfg = graphMailerFromEnv();
+  const brevoCfg = brevoMailerFromEnv();
+  const cfg = transport === 'brevo' ? brevoCfg : graphCfg;
+  // Dev fallback (decided transport unconfigured) is detectable synchronously — surface the code so
+  // the flow is testable before real credentials exist. NEVER in production.
+  const transportDisabled = cfg === null;
+  // Fire the send WITHOUT blocking the response: removes the network round-trip from the request
+  // latency, shrinking the timing side-channel between known/unknown email (MED-3). No fallback
+  // between transports if the decided one isn't configured — same silent-no-op shape sendEmailNow
+  // already had when Graph alone was unconfigured.
+  if (cfg) {
+    const send = transport === 'brevo' ? sendViaBrevo(brevoCfg!, msg, deps) : sendViaGraph(graphCfg!, msg, deps);
+    void send.catch((e) => console.error(`OTP email send failed (${transport})`, e));
+  }
+  if (transportDisabled && process.env.NODE_ENV !== 'production') {
+    console.log(`[dev] LMS login OTP for ${to}: ${code}`);
     return { devCode: code };
   }
   return {};

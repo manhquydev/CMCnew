@@ -12,6 +12,8 @@ import {
   RateLimitError,
   type SendDeps,
 } from '../lib/graph-client.js';
+import { brevoMailerFromEnv, sendViaBrevo, type BrevoMailerConfig } from '../lib/brevo-client.js';
+import { decideTransport, isValidEmailFormat, type EmailTransport } from '../lib/email-routing.js';
 import { renderTemplate, type EmailTemplateKind, type TemplatePayloads } from './email-templates.js';
 
 type Tx = Prisma.TransactionClient;
@@ -19,7 +21,8 @@ type Tx = Prisma.TransactionClient;
 /** System context for the worker: no session, super-bypass (mirrors parent-meeting-reminder). */
 const SYSTEM_CTX = { facilityIds: [] as number[], isSuperAdmin: true };
 
-const RATE_PER_RUN = 20; // < Exchange 30/min cap
+const GRAPH_RATE_PER_RUN = 20; // < Exchange 30/min cap
+const BREVO_RATE_PER_RUN = 20; // starting value; raise once the real provisioned Brevo tier limit is confirmed
 const MAX_ATTEMPTS = 5;
 const LEASE_MS = 5 * 60 * 1000; // a 'sending' row older than this is considered stuck → reclaimed
 
@@ -58,6 +61,9 @@ export async function enqueueEmail<K extends EmailTemplateKind>(
   tx: Tx,
   input: EnqueueInput<K>,
 ): Promise<boolean> {
+  if (!isValidEmailFormat(input.to)) {
+    throw new Error(`enqueueEmail: malformed recipient address "${input.to}"`);
+  }
   const { subject, html } = renderTemplate(input.kind, input.data);
   try {
     await tx.emailOutbox.create({
@@ -70,6 +76,7 @@ export async function enqueueEmail<K extends EmailTemplateKind>(
         subject,
         bodyHtml: html,
         attachRef: input.attachRef ?? null,
+        transport: decideTransport(input.to),
       },
     });
     return true;
@@ -113,8 +120,9 @@ let workerRunning = false;
  * tests.
  */
 export async function runEmailOutbox(now: Date = new Date(), deps: SendDeps = {}): Promise<OutboxRunResult> {
-  const cfg = graphMailerFromEnv();
-  if (!cfg) {
+  const graphCfg = graphMailerFromEnv();
+  const brevoCfg = brevoMailerFromEnv();
+  if (!graphCfg && !brevoCfg) {
     return { sent: 0, failed: 0, rescheduled: 0, disabled: true };
   }
   if (workerRunning) {
@@ -122,109 +130,118 @@ export async function runEmailOutbox(now: Date = new Date(), deps: SendDeps = {}
   }
   workerRunning = true;
   try {
-    return await drainOutbox(cfg, now, deps);
+    return await drainOutbox(graphCfg, brevoCfg, now, deps);
   } finally {
     workerRunning = false;
   }
 }
 
 async function drainOutbox(
-  cfg: NonNullable<ReturnType<typeof graphMailerFromEnv>>,
+  graphCfg: ReturnType<typeof graphMailerFromEnv>,
+  brevoCfg: BrevoMailerConfig | null,
   now: Date,
   deps: SendDeps,
 ): Promise<OutboxRunResult> {
-  // 1) Claim a batch atomically.
   const staleBefore = new Date(now.getTime() - LEASE_MS);
-  const claimed = await withRls(SYSTEM_CTX, async (tx) => {
-    const due = await tx.emailOutbox.findMany({
-      where: {
-        OR: [
-          { status: 'queued', scheduledFor: { lte: now } },
-          { status: 'sending', scheduledFor: { lte: staleBefore } },
-        ],
-      },
-      orderBy: { scheduledFor: 'asc' },
-      take: RATE_PER_RUN,
-    });
-    if (due.length) {
-      await tx.emailOutbox.updateMany({
-        where: { id: { in: due.map((r) => r.id) } },
-        data: { status: 'sending', scheduledFor: now },
-      });
-    }
-    return due;
-  });
+  const configured: EmailTransport[] = [];
+  if (graphCfg) configured.push('graph');
+  if (brevoCfg) configured.push('brevo');
 
   let sent = 0;
   let failed = 0;
   let rescheduled = 0;
 
-  // 2) Send each claimed row outside the transaction, then record the outcome in a short txn.
-  for (let i = 0; i < claimed.length; i++) {
-    const row = claimed[i]!;
-    try {
-      await sendViaGraph(
-        cfg,
-        { mailbox: row.mailbox, to: row.toAddress, subject: row.subject, html: row.bodyHtml },
-        deps,
-      );
-      await withRls(SYSTEM_CTX, async (tx) => {
-        // Scrub the rendered body once delivered ONLY for secret-bearing templates (their plaintext
-        // one-time secret must not linger in the outbox). Non-secret templates keep their body for
-        // auditability + the ability to re-send. Subject + templateKind + audit log preserve traceability.
-        await tx.emailOutbox.update({
-          where: { id: row.id },
-          data: { status: 'sent', sentAt: now, lastError: null, ...scrubPatch(row.templateKind) },
-        });
-        await logEvent(tx, {
-          facilityId: row.facilityId,
-          entityType: 'email_outbox',
-          entityId: row.id,
-          type: 'status_changed',
-          body: `Đã gửi email "${row.templateKind}" tới ${row.toAddress}`,
-          actorId: null,
-        });
+  // Claim + send each configured transport's slice separately, so a rate-limit on one transport
+  // can never reschedule the other transport's already-claimed batch.
+  for (const transport of configured) {
+    const take = transport === 'graph' ? GRAPH_RATE_PER_RUN : BREVO_RATE_PER_RUN;
+
+    // 1) Claim a batch atomically.
+    const claimed = await withRls(SYSTEM_CTX, async (tx) => {
+      const due = await tx.emailOutbox.findMany({
+        where: {
+          transport,
+          OR: [
+            { status: 'queued', scheduledFor: { lte: now } },
+            { status: 'sending', scheduledFor: { lte: staleBefore } },
+          ],
+        },
+        orderBy: { scheduledFor: 'asc' },
+        take,
       });
-      sent++;
-    } catch (e) {
-      if (e instanceof RateLimitError) {
-        // Back off the whole remaining batch: return this row AND the rest of the claimed (still
-        // 'sending') rows to 'queued' with a future schedule, so they retry on the next due tick
-        // instead of waiting out the 5-min lease. No attempt is counted.
-        const retryAt = new Date(now.getTime() + e.retryAfterSec * 1000);
-        const remainingIds = claimed.slice(i).map((r) => r.id);
-        await withRls(SYSTEM_CTX, (tx) =>
-          tx.emailOutbox.updateMany({
-            where: { id: { in: remainingIds } },
-            data: { status: 'queued', scheduledFor: retryAt },
-          }),
-        );
-        rescheduled += remainingIds.length;
-        break; // stop the batch on rate-limit; next tick resumes
-      }
-      const attempts = row.attempts + 1;
-      const message = e instanceof Error ? e.message : String(e);
-      const terminal = attempts >= MAX_ATTEMPTS;
-      await withRls(SYSTEM_CTX, async (tx) => {
-        await tx.emailOutbox.update({
-          where: { id: row.id },
-          data: terminal
-            ? { status: 'failed', attempts, lastError: message, ...scrubPatch(row.templateKind) } // scrub secret-bearing bodies only; keep others so a failed row stays re-sendable
-            : { status: 'queued', attempts, lastError: message, scheduledFor: new Date(now.getTime() + backoffMs(attempts)) },
+      if (due.length) {
+        await tx.emailOutbox.updateMany({
+          where: { id: { in: due.map((r) => r.id) } },
+          data: { status: 'sending', scheduledFor: now },
         });
-        if (terminal) {
+      }
+      return due;
+    });
+
+    // 2) Send each claimed row outside the transaction, then record the outcome in a short txn.
+    for (let i = 0; i < claimed.length; i++) {
+      const row = claimed[i]!;
+      try {
+        const msg = { mailbox: row.mailbox, to: row.toAddress, subject: row.subject, html: row.bodyHtml };
+        if (transport === 'brevo') await sendViaBrevo(brevoCfg!, msg, deps);
+        else await sendViaGraph(graphCfg!, msg, deps);
+        await withRls(SYSTEM_CTX, async (tx) => {
+          // Scrub the rendered body once delivered ONLY for secret-bearing templates (their plaintext
+          // one-time secret must not linger in the outbox). Non-secret templates keep their body for
+          // auditability + the ability to re-send. Subject + templateKind + audit log preserve traceability.
+          await tx.emailOutbox.update({
+            where: { id: row.id },
+            data: { status: 'sent', sentAt: now, lastError: null, ...scrubPatch(row.templateKind) },
+          });
           await logEvent(tx, {
             facilityId: row.facilityId,
             entityType: 'email_outbox',
             entityId: row.id,
             type: 'status_changed',
-            body: `Email "${row.templateKind}" tới ${row.toAddress} thất bại sau ${attempts} lần: ${message.slice(0, 200)}`,
+            body: `Đã gửi email "${row.templateKind}" tới ${row.toAddress}`,
             actorId: null,
           });
+        });
+        sent++;
+      } catch (e) {
+        if (e instanceof RateLimitError) {
+          // Back off the rest of THIS transport's claimed (still 'sending') rows — the other
+          // transport's batch is unaffected since it was claimed/sent in its own loop iteration.
+          const retryAt = new Date(now.getTime() + e.retryAfterSec * 1000);
+          const remainingIds = claimed.slice(i).map((r) => r.id);
+          await withRls(SYSTEM_CTX, (tx) =>
+            tx.emailOutbox.updateMany({
+              where: { id: { in: remainingIds } },
+              data: { status: 'queued', scheduledFor: retryAt },
+            }),
+          );
+          rescheduled += remainingIds.length;
+          break; // stop this transport's batch on rate-limit; next tick resumes
         }
-      });
-      if (terminal) failed++;
-      else rescheduled++;
+        const attempts = row.attempts + 1;
+        const message = e instanceof Error ? e.message : String(e);
+        const terminal = attempts >= MAX_ATTEMPTS;
+        await withRls(SYSTEM_CTX, async (tx) => {
+          await tx.emailOutbox.update({
+            where: { id: row.id },
+            data: terminal
+              ? { status: 'failed', attempts, lastError: message, ...scrubPatch(row.templateKind) } // scrub secret-bearing bodies only; keep others so a failed row stays re-sendable
+              : { status: 'queued', attempts, lastError: message, scheduledFor: new Date(now.getTime() + backoffMs(attempts)) },
+          });
+          if (terminal) {
+            await logEvent(tx, {
+              facilityId: row.facilityId,
+              entityType: 'email_outbox',
+              entityId: row.id,
+              type: 'status_changed',
+              body: `Email "${row.templateKind}" tới ${row.toAddress} thất bại sau ${attempts} lần: ${message.slice(0, 200)}`,
+              actorId: null,
+            });
+          }
+        });
+        if (terminal) failed++;
+        else rescheduled++;
+      }
     }
   }
 
