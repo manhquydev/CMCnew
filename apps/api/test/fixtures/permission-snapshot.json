@@ -82,6 +82,7 @@
   "guardian.unlink": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "parentMeeting.setStatus": ["giao_vien", "giam_doc_dao_tao"],
   "parentMeeting.setSchedule": ["giao_vien", "giam_doc_dao_tao"],
+  "parentMeeting.setNote": ["giao_vien", "giam_doc_dao_tao"],
   "parentMeeting.runReminders": ["super_admin"],
   "parentMeeting.runCadence": ["super_admin"],
   "payroll.roster": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],

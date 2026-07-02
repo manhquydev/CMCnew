@@ -70,6 +70,26 @@ describe('parent-meeting time TBD state', () => {
     expect(updated.scheduledAt.toISOString()).toBe(confirmedAt.toISOString());
   });
 
+  it('setNote persists the outcome note and audits the change', async () => {
+    expect(meetingId).toBeTruthy();
+    const caller = await staffCaller();
+    const m = await caller.parentMeeting.setNote({ id: meetingId, note: 'Phụ huynh đồng ý lộ trình mới' });
+    expect(m.note).toBe('Phụ huynh đồng ý lộ trình mới');
+
+    const updated = await withRls(SUPER, (tx) =>
+      tx.parentMeeting.findUniqueOrThrow({ where: { id: meetingId } }),
+    );
+    expect(updated.note).toBe('Phụ huynh đồng ý lộ trình mới');
+
+    const event = await withRls(SUPER, (tx) =>
+      tx.recordEvent.findFirst({
+        where: { entityType: 'parent_meeting', entityId: meetingId, type: 'note' },
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
+    expect(event).toBeTruthy();
+  });
+
   it('myMeetings query selects timeConfirmed in the payload shape', async () => {
     // Verify the field is in the select list by checking the query returns the field.
     // We use SUPER-scoped direct read as a proxy — the real test is type-level (tsc),

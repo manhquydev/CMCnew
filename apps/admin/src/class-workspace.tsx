@@ -1087,6 +1087,59 @@ function ClassDetail({
 
 // ─── RoomsManager ─────────────────────────────────────────────────────────────
 
+function RoomEditModal({
+  room,
+  onClose,
+  onSaved,
+}: {
+  room: Room;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [code, setCode] = useState(room.code);
+  const [name, setName] = useState(room.name);
+  const [capacity, setCapacity] = useState<number | string>(room.capacity ?? '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function save() {
+    setBusy(true);
+    setErr('');
+    try {
+      await trpc.room.update.mutate({
+        id: room.id,
+        code: code.trim() || undefined,
+        name: name.trim() || undefined,
+        capacity: typeof capacity === 'number' ? capacity : undefined,
+      });
+      notifySuccess('Đã cập nhật phòng học');
+      onSaved();
+      onClose();
+    } catch (e) {
+      setErr('Lỗi: ' + (e instanceof Error ? e.message : ''));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal opened onClose={onClose} title="Sửa phòng học">
+      <Stack>
+        <Group align="flex-end">
+          <TextInput label="Mã" w={90} value={code} onChange={(e) => setCode(e.currentTarget.value)} />
+          <TextInput label="Tên" style={{ flex: 1 }} value={name} onChange={(e) => setName(e.currentTarget.value)} />
+          <NumberInput label="Sức chứa" w={100} value={capacity} onChange={setCapacity} min={1} />
+        </Group>
+        {err && <Text c="red" size="sm">{err}</Text>}
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>Hủy</Button>
+          <Button onClick={save} loading={busy} disabled={!code.trim() || !name.trim()}>Lưu</Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
 function RoomsManager({
   facilityId,
   rooms,
@@ -1102,6 +1155,7 @@ function RoomsManager({
   const [capacity, setCapacity] = useState<number | string>('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [editing, setEditing] = useState<Room | null>(null);
 
   async function create() {
     setBusy(true);
@@ -1124,6 +1178,17 @@ function RoomsManager({
     }
   }
 
+  async function archive(room: Room) {
+    if (!window.confirm(`Lưu trữ phòng ${room.code} — ${room.name}? Phòng sẽ ẩn khỏi danh sách chọn.`)) return;
+    try {
+      await trpc.room.archive.mutate({ id: room.id });
+      notifySuccess('Đã lưu trữ phòng học');
+      reload();
+    } catch (e) {
+      notifyError(e, 'Lưu trữ phòng thất bại');
+    }
+  }
+
   return (
     <>
       <Button size="xs" variant="default" onClick={open}>Quản lý phòng ({rooms.length})</Button>
@@ -1143,6 +1208,12 @@ function RoomsManager({
                   <Table.Td w={80}><b>{r.code}</b></Table.Td>
                   <Table.Td>{r.name}</Table.Td>
                   <Table.Td w={80}>{r.capacity ?? '—'}</Table.Td>
+                  <Table.Td w={130}>
+                    <Group gap={6}>
+                      <Button size="compact-xs" variant="light" onClick={() => setEditing(r)}>Sửa</Button>
+                      <Button size="compact-xs" variant="light" color="red" onClick={() => archive(r)}>Lưu trữ</Button>
+                    </Group>
+                  </Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
@@ -1152,6 +1223,9 @@ function RoomsManager({
           )}
         </Stack>
       </Modal>
+      {editing && (
+        <RoomEditModal room={editing} onClose={() => setEditing(null)} onSaved={reload} />
+      )}
     </>
   );
 }

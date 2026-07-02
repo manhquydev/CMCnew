@@ -175,6 +175,7 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   parentMeeting: {
     setStatus: ['giao_vien', 'giam_doc_dao_tao'],
     setSchedule: ['giao_vien', 'giam_doc_dao_tao'],
+    setNote: ['giao_vien', 'giam_doc_dao_tao'],
     runReminders: ['super_admin'],
     runCadence: ['super_admin'],
   },

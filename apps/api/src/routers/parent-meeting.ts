@@ -77,6 +77,26 @@ export const parentMeetingRouter = router({
       }),
     ),
 
+  // Staff records the outcome/note after a meeting happens (or updates it later).
+  setNote: requirePermission('parentMeeting', 'setNote')
+    .input(z.object({ id: z.string().uuid(), note: z.string().max(2000) }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const before = await tx.parentMeeting.findUniqueOrThrow({ where: { id: input.id } });
+        const m = await tx.parentMeeting.update({ where: { id: input.id }, data: { note: input.note } });
+        await logEvent(tx, {
+          facilityId: m.facilityId,
+          entityType: 'parent_meeting',
+          entityId: m.id,
+          type: 'note',
+          body: 'Ghi chú kết quả họp PH cập nhật',
+          changes: [{ field: 'note', old: before.note, new: input.note }],
+          actorId: ctx.session.userId,
+        });
+        return m;
+      }),
+    ),
+
   // Manual reminder tick (ops/dev) — same idempotent logic the embedded cron runs. Super-only.
   runReminders: superAdminProcedure
     .input(z.object({ windowHours: z.number().int().positive().max(168).default(24) }).optional())
