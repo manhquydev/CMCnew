@@ -45,7 +45,12 @@ jobs:
                 configuredByUrl(true)
                 traits {
                   gitHubBranchDiscovery { strategyId(1) }
-                  gitHubPullRequestDiscovery { strategyId(1) }
+                  // strategyId(2) = build the PR head commit directly (no synthetic merge with
+                  // the target branch). Required for publishChecks: strategyId(1) checks out an
+                  // ephemeral merge SHA never pushed to GitHub, so a check posted against it
+                  // 404s silently inside catchError — the required-check gate can't work with
+                  // strategyId(1).
+                  gitHubPullRequestDiscovery { strategyId(2) }
                 }
               }
             }
