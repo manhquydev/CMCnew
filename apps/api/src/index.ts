@@ -11,7 +11,7 @@ import { streamSSE } from 'hono/streaming';
 import { trpcServer } from '@hono/trpc-server';
 import { resolveLmsSession, resolveSession, rlsContextOf, lmsRlsContextOf, mintStaffSession, can } from '@cmc/auth';
 import { ssoConfigFromEnv, buildAuthUrl, redeemCode } from './lib/sso.js';
-import { withRls } from '@cmc/db';
+import { withRls, type RlsContext } from '@cmc/db';
 import { appRouter } from './routers/index.js';
 import { createContext, COOKIE_NAME, LMS_COOKIE_NAME } from './context.js';
 import { onNotification } from './events.js';
@@ -29,6 +29,7 @@ import { renderReceiptHtml } from './services/receipt-html.js';
 import { runParentMeetingReminders } from './services/parent-meeting-reminder.js';
 import { generateParentMeetings } from './services/parent-meeting-cadence.js';
 import { renderCertificateHtml } from './services/certificate-html.js';
+import { renderTranscriptHtml } from './services/transcript-html.js';
 import { runEmailOutbox } from './services/email-outbox.js';
 import { logger } from './lib/logger.js';
 import { recordError, maybeAlert } from './lib/error-alert.js';
@@ -225,22 +226,39 @@ app.get('/files/receipt/:id', async (c) => {
   return c.html(html);
 });
 
-// Printable certificate (chứng chỉ) — staff only, authorized via the certificate RLS policy.
+// Printable certificate (chứng chỉ) — staff (facility RLS) OR LMS parent/student who owns the
+// certificate's student. The certificate table's RLS policy is staff-only (principal_kind='staff'),
+// so the LMS branch reads under a system (bypass) context and enforces ownership explicitly in code —
+// never trust the :id path param alone (same invariant as submission.layerForGuardian).
+const SYSTEM_RLS: RlsContext = { facilityIds: [], isSuperAdmin: true };
+
 app.get('/files/certificate/:id', async (c) => {
   const staffTok = getCookie(c, COOKIE_NAME);
+  const lmsTok = getCookie(c, LMS_COOKIE_NAME);
   const staff = staffTok ? await resolveSession(staffTok) : null;
-  if (!staff) return c.text('unauthorized', 401);
+  const lms = !staff && lmsTok ? await resolveLmsSession(lmsTok) : null;
+  if (!staff && !lms) return c.text('unauthorized', 401);
 
   const id = c.req.param('id');
-  const data = await withRls(rlsContextOf(staff), async (tx) => {
-    const cert = await tx.certificate.findUnique({ where: { id } });
-    if (!cert) return null;
-    const [student, facility] = await Promise.all([
-      tx.student.findUnique({ where: { id: cert.studentId }, select: { fullName: true } }),
-      tx.facility.findUnique({ where: { id: cert.facilityId }, select: { name: true } }),
-    ]);
-    return { cert, student, facility };
-  });
+  const data = staff
+    ? await withRls(rlsContextOf(staff), async (tx) => {
+        const cert = await tx.certificate.findUnique({ where: { id } });
+        if (!cert) return null;
+        const [student, facility] = await Promise.all([
+          tx.student.findUnique({ where: { id: cert.studentId }, select: { fullName: true } }),
+          tx.facility.findUnique({ where: { id: cert.facilityId }, select: { name: true } }),
+        ]);
+        return { cert, student, facility };
+      })
+    : await withRls(SYSTEM_RLS, async (tx) => {
+        const cert = await tx.certificate.findUnique({ where: { id } });
+        if (!cert || !lms!.studentIds.includes(cert.studentId)) return null; // ownership check — the security boundary for this branch
+        const [student, facility] = await Promise.all([
+          tx.student.findUnique({ where: { id: cert.studentId }, select: { fullName: true } }),
+          tx.facility.findUnique({ where: { id: cert.facilityId }, select: { name: true } }),
+        ]);
+        return { cert, student, facility };
+      });
   if (!data) return c.text('forbidden', 403);
 
   const { cert, student, facility } = data;
@@ -252,6 +270,60 @@ app.get('/files/certificate/:id', async (c) => {
     level: cert.level,
     title: cert.title,
     issuedAt: cert.issuedAt,
+  });
+  c.header('Content-Type', 'text/html; charset=utf-8');
+  return c.html(html);
+});
+
+// Printable học bạ (transcript) — LMS parent/student only, scoped to an owned student.
+// finalGrade/qualitativeAssessment/student RLS already support parent/student ownership
+// (studentId ∈ app.student_ids), so lmsRlsContextOf is sufficient here — no bypass needed,
+// unlike the certificate branch above.
+app.get('/files/transcript/:studentId', async (c) => {
+  const lmsTok = getCookie(c, LMS_COOKIE_NAME);
+  const lms = lmsTok ? await resolveLmsSession(lmsTok) : null;
+  if (!lms) return c.text('unauthorized', 401);
+
+  const studentId = c.req.param('studentId');
+  if (!lms.studentIds.includes(studentId)) return c.text('forbidden', 403);
+
+  const data = await withRls(lmsRlsContextOf(lms), async (tx) => {
+    const student = await tx.student.findUnique({ where: { id: studentId }, select: { fullName: true, facilityId: true } });
+    if (!student) return null;
+    const [facility, finalGrades, qualitative] = await Promise.all([
+      tx.facility.findUnique({ where: { id: student.facilityId }, select: { name: true } }),
+      tx.finalGrade.findMany({
+        where: { studentId },
+        orderBy: { periodKey: 'desc' },
+        select: {
+          id: true,
+          program: true,
+          level: true,
+          periodKey: true,
+          homeworkAvg: true,
+          testScore: true,
+          attendanceRate: true,
+          qualitativeScore: true,
+          finalScore: true,
+          passed: true,
+          complete: true,
+        },
+      }),
+      tx.qualitativeAssessment.findMany({
+        where: { studentId, archivedAt: null },
+        orderBy: { periodKey: 'desc' },
+        select: { id: true, period: true, periodKey: true, criteria: true, narrative: true },
+      }),
+    ]);
+    return { student, facility, finalGrades, qualitative };
+  });
+  if (!data) return c.text('forbidden', 403);
+
+  const html = renderTranscriptHtml({
+    facilityName: data.facility?.name ?? '',
+    studentName: data.student.fullName,
+    finalGrades: data.finalGrades,
+    qualitative: data.qualitative.map((q) => ({ ...q, criteria: q.criteria as Record<string, number> })),
   });
   c.header('Content-Type', 'text/html; charset=utf-8');
   return c.html(html);

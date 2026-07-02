@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   trpc,
   useNotificationStream,
+  API_URL,
   BadgeShelf,
   Leaderboard,
   NotificationCenter,
@@ -457,6 +458,74 @@ function AttendanceHistoryCard({ studentId, refreshKey }: { studentId: string; r
   );
 }
 
+type CertificateRow = Awaited<ReturnType<typeof trpc.certificate.forStudent.query>>[number];
+
+/**
+ * Certificates issued to the child, each with its own PDF download link — served by the
+ * LMS-authorized `/files/certificate/:id` route (ownership checked server-side against the
+ * parent's session, never the client-supplied id alone).
+ */
+function CertificatesCard({ studentId, refreshKey }: { studentId: string; refreshKey: number }) {
+  const [rows, setRows] = useState<CertificateRow[] | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setRows(null);
+    setError('');
+    trpc.certificate.forStudent
+      .query({ studentId })
+      .then(setRows)
+      .catch((e) => {
+        setError('Không tải được danh sách chứng chỉ: ' + (e instanceof Error ? e.message : ''));
+        notifyError(e, 'Tải chứng chỉ thất bại');
+      });
+  }, [studentId, refreshKey]);
+
+  if (error) return <Alert color="red">{error}</Alert>;
+  if (rows === null) return <Center py="md"><Loader size="sm" /></Center>;
+  if (rows.length === 0) return null;
+
+  return (
+    <Card radius="lg" p={0} style={{ border: '1px solid var(--cmc-border)' }}>
+      <Text size="sm" fw={600} p="md" style={{ color: 'var(--cmc-text-2)', borderBottom: '1px solid var(--cmc-border-faint)' }}>
+        Chứng chỉ ({rows.length})
+      </Text>
+      <Table striped highlightOnHover withTableBorder={false}>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th style={thStyle}>Chứng chỉ</Table.Th>
+            <Table.Th style={thStyle}>Ngày cấp</Table.Th>
+            <Table.Th style={{ ...thStyle, width: 120 }} />
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {rows.map((cert) => (
+            <Table.Tr key={cert.id}>
+              <Table.Td>
+                <Text size="sm">{cert.title}</Text>
+              </Table.Td>
+              <Table.Td>
+                <Text size="sm">{new Date(cert.issuedAt).toLocaleDateString('vi-VN')}</Text>
+              </Table.Td>
+              <Table.Td>
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  color="cmc"
+                  radius={9999}
+                  onClick={() => window.open(`${API_URL}/files/certificate/${cert.id}`, '_blank', 'noopener')}
+                >
+                  Tải PDF
+                </Button>
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Card>
+  );
+}
+
 function ChildDashboard({
   childId,
   refreshKey,
@@ -576,6 +645,18 @@ function ChildDashboard({
   if (tab === 'gradebook') {
     return (
       <Stack>
+        <Group justify="flex-end">
+          <Button
+            size="xs"
+            variant="light"
+            color="cmc"
+            radius={9999}
+            onClick={() => window.open(`${API_URL}/files/transcript/${childId}`, '_blank', 'noopener')}
+          >
+            Tải học bạ (PDF)
+          </Button>
+        </Group>
+
         <Card radius="lg" p={0} style={{ border: '1px solid var(--cmc-border)' }}>
           <Text size="sm" fw={600} p="md" style={{ color: 'var(--cmc-text-2)', borderBottom: '1px solid var(--cmc-border-faint)' }}>
             Bài tập &amp; kết quả ({submissions?.length ?? 0})
@@ -755,6 +836,8 @@ function ChildDashboard({
             </Stack>
           </Card>
         )}
+
+        <CertificatesCard studentId={childId} refreshKey={refreshKey} />
 
         <DrawnWorkModal
           opened={drawnWorkOpened}
