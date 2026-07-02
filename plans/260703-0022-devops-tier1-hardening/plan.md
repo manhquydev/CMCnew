@@ -1,16 +1,62 @@
 ---
 title: "DevOps Tier-1 Hardening: TLS reconciliation, resource limits, CI merge gate"
 description: "Canonicalize prod TLS bootstrap, add Docker resource limits to all prod services, and wire Jenkins publishChecks into a GitHub required-check that blocks PR merge."
-status: pending
+status: soaking
 priority: P1
 effort: 14h
-branch: develop
+branch: devops/tier1-hardening
+mergedTo: main
+mergeCommit: bd890fb8d20764af7fc122e4178b0679e99881d4
+soakStartedAt: "2026-07-02T19:58:30Z"
+soakRequiredHours: 48
 tags: [devops, tls, docker, jenkins, ci, prod, hardening]
 blocks: [260703-0052-dev-prod-cicd-environments]
 relatedPlans:
   - plans/260703-0052-dev-prod-cicd-environments/plan.md
 created: 2026-07-03
 ---
+
+## Live status (2026-07-02T19:58Z, autonomous session)
+
+**TLS reconciliation (Phase 1) and Docker resource limits (Phase 2): LIVE on prod**, verified:
+- `curl https://erp.cmcvn.edu.vn/api/health` returns `{"ok":true,"commit":"bd890fb..."}` matching
+  the merge commit; `hoc.cmcvn.edu.vn` returns 200.
+- All 6 persistent services show enforced limits via `docker inspect` (api/postgres 1GiB/0.75cpu,
+  redis 256MiB/0.25cpu, nginx/admin/lms 128MiB/0.25cpu) — byte-exact match to Phase 2's sizing table.
+- No OOM events (`docker events --filter event=oom`, `dmesg | grep oom`) since deploy.
+- Pre-flight (Phase 4 Step 0) confirmed before merge: `github-checks` plugin already installed,
+  PAT has `repo` scope, `deploy.resources` enforcement verified on `cmcnew-jenkins`, live cert
+  confirmed self-signed (matches Phase 1's assumption), Cloudflare mode confirmed compatible.
+
+**CI gate (Phase 3): code merged, required-check NOT enabled — known follow-up.**
+`publishChecks` never posted a `CMCnew CI` check-run to GitHub despite the Jenkins pipeline
+reporting SUCCESS on every build. Root cause partially diagnosed and fixed: `docker/jenkins-casc.yaml`'s
+`gitHubPullRequestDiscovery { strategyId(1) }` was checking out an ephemeral PR-merge-commit SHA
+never pushed to GitHub, so `publishChecks` (using that checkout's SHA) 404'd silently inside
+`catchError` — fixed to `strategyId(2)` (build the real PR head SHA directly), confirmed live via
+`docker/jenkins-casc.yaml`'s CASC reload and the job's `config.xml`. Even after this fix and a
+build against the correct head SHA, no check-run appeared. Deeper `github-checks` plugin
+investigation needed (possibly the multibranch job needs an explicit checks-related trait, or a
+plugin-version issue) — **do not run `scripts/setup-github-required-check.sh` until this is
+resolved**, per this plan's own Phase 4 Step 2 gate (never enable a required check that hasn't
+proven it posts). Follow-up scope: read `github-checks` plugin docs/GitHub issues for known
+multibranch-PR posting gaps, or consider `checks-api`'s `withChecks` block as an alternative wiring.
+
+**Also fixed during this rollout (found via dogfooding this PR's own CI run, unrelated to this
+plan's declared scope but blocking it):**
+- `packages/ui/src/leaderboard.tsx`/`login-gate.tsx`: pre-existing unused-var lint errors on
+  `develop`, blocking every PR's lint stage. Removed (dead code, 0 upstream callers verified via
+  `gitnexus_impact`).
+- `scripts/ci-integration-tests.sh`: never ran `pnpm db:seed` before the integration suite —
+  `apps/api/test/helpers.ts`'s `superAdminUserId()` requires a real seeded `app_user`. 136/539
+  tests failed with "No app_user seeded" before this fix.
+- `scripts/ci-integration-tests.sh`: never set `JWT_SECRET` for the test run (CI has no repo-root
+  `.env`, `test/setup.ts`'s dotenv load is a no-op) — 43 more tests failed with
+  "JWT_SECRET missing or too short" after the seed fix, before this second fix.
+
+**Next:** Phase 4 Step 4's 48h soak in progress (started 2026-07-02T19:58:30Z, required until
+~2026-07-04T19:58:30Z) — periodic `docker stats`/OOM-event checks. Plan `260703-0052` remains
+blocked until this soak completes AND the `status` field above is updated to `done`.
 
 # DevOps Tier-1 Hardening
 
