@@ -1,6 +1,8 @@
 # Plan: Khóa tầng mây theo buổi học đã diễn ra
 
-Status: DRAFT — chờ duyệt trước khi implement (đụng schema + đổi nghiệp vụ đã chốt trước đó)
+Status: SUPERSEDED by `plans/260702-0929-lms-erp-seam-fixes/` (Plan 1) — exercise-open gating rebuilt
+there against the global-Exercise, per-unit shape (decision 0022); do not implement this plan as-is,
+re-check the seam-fixes exercise-open.ts semantics first.
 Lane: **high-risk** (data model + existing behavior change + multi-domain: academic + LMS)
 Ngày: 2026-07-01 | Nhánh: develop
 

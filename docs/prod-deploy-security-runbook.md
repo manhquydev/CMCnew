@@ -71,8 +71,46 @@ docker exec -it <postgres-container> psql -U cmc -d cmc \
 ```
 Cập nhật `DB_APP_PASSWORD` trong `.env.production` rồi `up -d --force-recreate api`.
 
-## 5. Backup DB
-Dùng script `scripts/backup-db.sh` (cron hằng ngày). Hoặc snapshot volume `pgdata`. Test restore định kỳ.
+## 5. Backup DB + blob stores
+
+`scripts/backup-db.sh` dump DB (plain-SQL `pg_dump --clean --if-exists | gzip`, qua `docker exec` vì
+postgres prod không mở port host) **và** tar 2 thư mục blob local-disk mà các dòng DB tham chiếu
+(`.data/pdf` — `exercise.basePdfRef`; `.data/session-photos` — ảnh minh chứng buổi học). Restore
+dùng `scripts/db-restore.sh` — CÙNG định dạng plain-SQL (không dùng `pg_restore`).
+
+### Cài cron (VPS, [operator-assisted])
+```bash
+crontab -e
+# thêm dòng (02:00 hằng ngày, log ra /var/log, ENV_FILE trỏ .env.production thật):
+0 2 * * *  ENV_FILE=/root/cmcnew/.env.production BACKUP_DIR=/root/cmcnew/backups \
+  PDF_STORE_DIR=/root/cmcnew/.data/pdf SESSION_PHOTO_STORE_DIR=/root/cmcnew/.data/session-photos \
+  /root/cmcnew/scripts/backup-db.sh >> /var/log/cmc-backup.log 2>&1
+```
+Rotate `/var/log/cmc-backup.log` qua `logrotate` (weekly, keep 8) nếu chưa có entry chung.
+
+`RETENTION_DAYS` (mặc định 14) prune cả `cmc-*.sql.gz` lẫn `cmc-blobs-*.tar.gz` cùng lúc.
+
+### Restore drill (định kỳ, [operator-assisted] — KHÔNG BAO GIỜ chạy vào DB `cmc` thật)
+```bash
+# 1) Tạo DB scratch một lần:
+docker exec -e PGPASSWORD=$DB_PASSWORD cmcnew-prod-postgres-1 \
+  psql -U cmc -d postgres -c "CREATE DATABASE cmc_drill OWNER cmc;"
+
+# 2) Restore bản backup mới nhất (DB + blobs) vào DB scratch + thư mục scratch:
+DB_PASSWORD=*** PDF_STORE_DIR=./drill-data/pdf SESSION_PHOTO_STORE_DIR=./drill-data/session-photos \
+  ./scripts/db-restore.sh ./backups/cmc-<stamp>.sql.gz ./backups/cmc-blobs-<stamp>.tar.gz cmc_drill
+
+# 3) Kiểm tra: đếm row 1 bảng biết trước + đếm file blob + mở thử 1 PDF/ảnh:
+docker exec -e PGPASSWORD=$DB_PASSWORD cmcnew-prod-postgres-1 \
+  psql -U cmc -d cmc_drill -c "SELECT count(*) FROM \"Student\";"
+find ./drill-data -type f | wc -l
+
+# 4) Dọn dẹp DB scratch sau khi ghi nhận kết quả:
+docker exec -e PGPASSWORD=$DB_PASSWORD cmcnew-prod-postgres-1 \
+  psql -U cmc -d postgres -c "DROP DATABASE cmc_drill;"
+rm -rf ./drill-data
+```
+Ghi kết quả vào `docs/ops/restore-drill-YYMMDD.md` (copy từ file mẫu, đổi tên theo ngày chạy).
 
 ## 6. Verify sau deploy (smoke)
 ```

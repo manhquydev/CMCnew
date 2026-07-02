@@ -23,6 +23,8 @@ import { runParentMeetingReminders } from './services/parent-meeting-reminder.js
 import { generateParentMeetings } from './services/parent-meeting-cadence.js';
 import { renderCertificateHtml } from './services/certificate-html.js';
 import { runEmailOutbox } from './services/email-outbox.js';
+import { logger } from './lib/logger.js';
+import { recordError, maybeAlert } from './lib/error-alert.js';
 
 const app = new Hono();
 
@@ -41,6 +43,16 @@ const corsOrigins = (
   .filter(Boolean);
 
 app.use('*', cors({ origin: corsOrigins, credentials: true }));
+
+// Global error boundary: log every uncaught handler error with request context, count it toward
+// the rolling error-rate window, and fire an ops alert once the window crosses threshold. The
+// alert path is fire-and-forget and internally guarded — it must never mask the original error.
+app.onError((err, c) => {
+  logger.error({ method: c.req.method, path: c.req.path, err }, 'unhandled request error');
+  recordError();
+  void maybeAlert(logger);
+  return c.json({ error: 'internal_error' }, 500);
+});
 
 // Health + deploy marker: `commit`/`builtAt` come from env injected at deploy
 // time (Jenkins passes the git SHA + build time); default 'unknown' locally so
@@ -380,7 +392,7 @@ app.use(
 
 const port = Number(process.env.API_PORT ?? 4000);
 serve({ fetch: app.fetch, port });
-console.log(`✓ CMCnew API on http://localhost:${port}`);
+logger.info({ port }, '✓ CMCnew API listening');
 
 // Embedded reminder cron (docs/specs/parent-meeting.md): every 30 min, remind parents of
 // meetings within T-1 day. Idempotent via parent_meeting.remindedAt — re-ticks never double-send.
@@ -389,9 +401,9 @@ if (process.env.DISABLE_CRON !== '1') {
   cron.schedule('*/30 * * * *', () => {
     runParentMeetingReminders()
       .then((r) => {
-        if (r.meetingsReminded) console.log(`↳ parent-meeting reminders: ${r.meetingsReminded} meetings → ${r.notificationsCreated} notifications`);
+        if (r.meetingsReminded) logger.info({ meetings: r.meetingsReminded, notifications: r.notificationsCreated }, 'parent-meeting reminders');
       })
-      .catch((e) => console.error('parent-meeting reminder tick failed', e));
+      .catch((e) => logger.error({ err: e }, 'parent-meeting reminder tick failed'));
   });
 
   // Auto-cadence generation (charter §4): daily at 02:00, generate per-program meetings for running
@@ -399,9 +411,9 @@ if (process.env.DISABLE_CRON !== '1') {
   cron.schedule('0 2 * * *', () => {
     generateParentMeetings()
       .then((r) => {
-        if (r.meetingsCreated) console.log(`↳ parent-meeting cadence: +${r.meetingsCreated} meetings across ${r.classesScanned} running classes`);
+        if (r.meetingsCreated) logger.info({ created: r.meetingsCreated, classesScanned: r.classesScanned }, 'parent-meeting cadence');
       })
-      .catch((e) => console.error('parent-meeting cadence tick failed', e));
+      .catch((e) => logger.error({ err: e }, 'parent-meeting cadence tick failed'));
   });
 
   // Email outbox drain (decision: email-graph-integration): every minute, send up to 20 queued
@@ -410,8 +422,8 @@ if (process.env.DISABLE_CRON !== '1') {
   cron.schedule('* * * * *', () => {
     runEmailOutbox()
       .then((r) => {
-        if (!r.disabled && (r.sent || r.failed)) console.log(`↳ email outbox: ${r.sent} sent, ${r.failed} failed, ${r.rescheduled} rescheduled`);
+        if (!r.disabled && (r.sent || r.failed)) logger.info({ sent: r.sent, failed: r.failed, rescheduled: r.rescheduled }, 'email outbox tick');
       })
-      .catch((e) => console.error('email outbox tick failed', e));
+      .catch((e) => logger.error({ err: e }, 'email outbox tick failed'));
   });
 }

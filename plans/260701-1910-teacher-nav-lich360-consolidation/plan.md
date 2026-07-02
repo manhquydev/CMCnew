@@ -1,5 +1,5 @@
 ---
-status: implemented-pending-e2e-verification
+status: shipped (26dc955, e2e verified)
 role: giao_vien (teacher)
 source: plans/reports/brainstorm-260701-1845-teacher-nav-lich360-report.md
 ---

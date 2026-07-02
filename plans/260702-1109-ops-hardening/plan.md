@@ -1,7 +1,7 @@
 ---
 title: "Ops hardening: monitoring + backup cron + CI PR gates + RLS lint guard + docs hygiene"
 description: "Structured logging + error alerting, real backup cron with restore drill, integration tests on PR, ESLint RLS-bypass guard, and stale docs/status cleanup."
-status: pending
+status: implemented-pending-operator-verification
 priority: P1
 effort: 14h
 branch: develop
@@ -25,11 +25,11 @@ steps flagged. Backup/CI/deploy execution on the live VPS is operator-assisted (
 
 | # | Phase | File | Status | Depends |
 |---|-------|------|--------|---------|
-| 1 | Structured logging + error tracking + alerting | [phase-01-logging-error-tracking.md](phase-01-logging-error-tracking.md) | pending | — |
-| 2 | Backup cron install + dedupe + restore drill | [phase-02-backup-cron-restore-drill.md](phase-02-backup-cron-restore-drill.md) | pending | — |
-| 3 | Jenkins PR gates (integration tests on PR) | [phase-03-jenkins-pr-gates.md](phase-03-jenkins-pr-gates.md) | pending | — |
-| 4 | ESLint RLS-bypass guard | [phase-04-eslint-rls-guard.md](phase-04-eslint-rls-guard.md) | pending | — |
-| 5 | Docs / status hygiene + .env.example sync | [phase-05-docs-status-hygiene.md](phase-05-docs-status-hygiene.md) | pending | — |
+| 1 | Structured logging + error tracking + alerting | [phase-01-logging-error-tracking.md](phase-01-logging-error-tracking.md) | done | — |
+| 2 | Backup cron install + dedupe + restore drill | [phase-02-backup-cron-restore-drill.md](phase-02-backup-cron-restore-drill.md) | code-done, drill blocked-on-operator | — |
+| 3 | Jenkins PR gates (integration tests on PR) | [phase-03-jenkins-pr-gates.md](phase-03-jenkins-pr-gates.md) | code-done, demo blocked-on-operator | — |
+| 4 | ESLint RLS-bypass guard | [phase-04-eslint-rls-guard.md](phase-04-eslint-rls-guard.md) | done | — |
+| 5 | Docs / status hygiene + .env.example sync | [phase-05-docs-status-hygiene.md](phase-05-docs-status-hygiene.md) | done | — |
 
 All five phases own disjoint files → fully parallelizable. No shared-file contention.
 

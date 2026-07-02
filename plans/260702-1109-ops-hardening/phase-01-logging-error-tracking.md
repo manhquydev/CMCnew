@@ -71,13 +71,13 @@ request ──► Hono handler ──► throws
 7. Add the new env vars to `.env.example` — coordinate with P5 (P5 owns the file; P1 supplies the names/comments).
 
 ## Todo list
-- [ ] Add pino (+ optional sentry) deps
-- [ ] logger.ts
-- [ ] email-templates.ts: add `ops_error_alert` kind + payload + renderer
-- [ ] error-alert.ts (singleton counter + dedup'd outbox alert via local sysCtx literal)
-- [ ] Wire app.onError + swap bootstrap console.*
-- [ ] Env names handed to P5: LOG_LEVEL, ERROR_ALERT_THRESHOLD, (optional) SENTRY_DSN
-- [ ] typecheck + lint + `pnpm --filter @cmc/api test:integration`
+- [x] Add pino (+ pino-pretty dev) deps — Sentry dropped per operator decision (2026-07-02: no PII egress, pino+email only)
+- [x] logger.ts
+- [x] email-templates.ts: add `ops_error_alert` kind + payload + renderer
+- [x] error-alert.ts (singleton counter + dedup'd outbox alert via local sysCtx literal)
+- [x] Wire app.onError + swap bootstrap console.*
+- [x] Env names handed to P5: LOG_LEVEL, ERROR_ALERT_THRESHOLD, OPS_ALERT_EMAIL (SENTRY_DSN dropped)
+- [x] typecheck + lint + `pnpm --filter @cmc/api test:integration` — 410/410 int-tests, 0 typecheck/lint errors
 
 ## Success Criteria
 - Boot logs are structured JSON in production mode.

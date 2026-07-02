@@ -77,12 +77,12 @@ VPS host crontab
    blob file count + spot-open one PDF/photo; record results in the drill doc.
 
 ## Todo list
-- [ ] Delete db-backup.sh + repoint references
-- [ ] Rewrite db-restore.sh to plain-SQL docker-exec, parameterized target DB + blob-extract companion step
-- [ ] Add blob tar step to backup-db.sh (PDF_STORE_DIR + SESSION_PHOTO_STORE_DIR, same stamp/retention)
-- [ ] Expand runbook §5 (cron + DB+blob drill, operator-assisted tags)
-- [ ] Add restore-drill evidence template (DB + blob rows)
-- [ ] [operator] install cron, run backup (SQL+blobs), run drill (DB+blobs), record evidence
+- [x] Delete db-backup.sh + repoint references (only historical plan/report docs still reference it — left untouched, frozen record)
+- [x] Rewrite db-restore.sh to plain-SQL docker-exec, parameterized target DB + blob-extract companion step
+- [x] Add blob tar step to backup-db.sh (PDF_STORE_DIR + SESSION_PHOTO_STORE_DIR, same stamp/retention)
+- [x] Expand runbook §5 (cron + DB+blob drill, operator-assisted tags)
+- [x] Add restore-drill evidence template (DB + blob rows)
+- [ ] **[BLOCKED-ON-OPERATOR]** install cron, run backup (SQL+blobs), run drill (DB+blobs), record evidence — agent has no VPS access; runbook §5 has copy-pasteable commands
 
 ## Success Criteria
 - Only `backup-db.sh` + `db-restore.sh` remain; they use the same (plain SQL) format — a fresh backup restores cleanly.

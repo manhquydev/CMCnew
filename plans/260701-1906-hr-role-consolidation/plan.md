@@ -1,7 +1,7 @@
 ---
 title: "Gộp role RBAC dư thừa (quan_ly/head_teacher/bgd)"
 description: "Xóa 3 role quản lý-cấp-trung trùng chức năng 2 giám đốc, giữ 4 role back-office thật"
-status: in-progress
+status: shipped (27849d3)
 priority: P2
 effort: 10h
 branch: develop

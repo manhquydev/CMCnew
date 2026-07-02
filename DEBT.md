@@ -19,6 +19,13 @@ still owed.
 ## CI/CD
 
 - [ ] DEBT: CI/CD chưa chạy tự động — GitHub Actions bị chặn do billing tài khoản (repo private). Quyết định chủ dự án (2026-06-24): **dựng CI/CD bằng Jenkins (sau)**. `.github/workflows/ci.yml` giữ làm tham chiếu pipeline (self-contained: Postgres service + env ci-only). Tới khi có Jenkins: verify = chạy local pipeline (`pnpm db:up` → migrate → seed → verify-rls → `pnpm -r typecheck` → `pnpm -r test` → `pnpm --filter @cmc/api test:int` → `pnpm -r build`). -- close before: stand up Jenkins pipeline chạy chuỗi này trên mỗi PR -- opened 2026-06-24
+  - PARTIALLY PAID 2026-07-02 (ops-hardening Plan 7 P3): Jenkins integration-test gate now runs on PRs too (`changeRequest()`), not just `main` — a red int-test blocks merge. Remaining: e2e-on-PR (see below), broader unit coverage.
+
+- [ ] DEBT: e2e tests run only post-deploy smoke on `main`, not per-PR — real e2e (`apps/e2e`) needs a running full stack; wiring that per-PR is a bigger lift than the int-test gate and coverage is currently ~1 e2e file. Deferred (YAGNI) per ops-hardening Plan 7 P3 assessment. -- close before: when e2e coverage grows enough to justify the per-PR stack cost, or a lighter-weight e2e harness is adopted -- opened 2026-07-02
+
+- [ ] DEBT: unit-test coverage gap — the repo leans on integration tests (RLS/tenancy/business-flow) with comparatively thin unit coverage of pure logic (domain-* calc functions, small helpers). Not blocking (integration tests catch regressions in the paths that matter most), but slows isolating a failure to one function. -- close before: no hard gate; grow unit coverage opportunistically alongside touched modules -- opened 2026-07-02 (ops-hardening Plan 7 P5)
+
+- [ ] DEBT: backups (`scripts/backup-db.sh`) write to local disk on the VPS only — no off-box copy (rsync/S3/object-store replication). A VPS-level disk loss loses both the live data and every local backup simultaneously. -- close before: production go-live hardening pass: add a cron step (or object-store sync) that copies `./backups/*` off the VPS after each run -- opened 2026-07-02 (ops-hardening Plan 7 P2)
 
 ## Backend-Ready UI Gaps
 
@@ -26,7 +33,6 @@ still owed.
 - Shift registration withdraw/cancel: shift registration flow supports submit/approve paths; employee withdraw UX remains deferred.
 - Room update/archive: room creation/listing is wired; edit/archive UI remains deferred.
 - Facility network update/archive: network list/create exists; full management UX remains deferred.
-- Payroll domain read filtering: P5 keeps director read/list surfaces facility-wide; only writes are domain-scoped.
 
 ## Cleanup Follow-Up
 
@@ -43,6 +49,8 @@ still owed.
 
 - [x] DROPPED 2026-06-24 (operator decision): Chat CSKH (AI chatbot via Gemini) removed from roadmap — never built; the `cskh` role + Odoo-style `chatter` activity log stay (unrelated). No code to remove.
 
+- [x] CLOSED (Plan 3 role-flows Decision B — RBAC role consolidation): payroll domain read/list surfaces stay facility-wide for the 2 directors; only writes (approve/confirm) are domain-scoped. This is intentional executive visibility, not a gap — see `[[rbac-role-consolidation-decision]]` memory / Plan 3 permission tests.
+
 ## Unresolved Questions
 
-- Should director read surfaces eventually hide non-domain staff, or is facility-wide executive visibility intentional long term?
+- (none open — payroll director-read visibility resolved above, closed)

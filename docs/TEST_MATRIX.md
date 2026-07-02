@@ -38,7 +38,7 @@ This file maps product behavior to proof.
 | LMS-ASSESS | computeFinalGrade published-only filter (assessment invariant) | no | yes | no | no | implemented | `apps/api/test/assessment-final-grade-publish.int.test.ts` |
 | LMS-LEVEL | Level-progress propose/decide authz (Phase 2 §2.10 invariant) | no | yes | no | no | implemented | `apps/api/test/level-progress-authz.int.test.ts` |
 | LMS-NO-CERT | Level-up approve: updates level, does NOT auto-issue certificate (decision 0008) | no | yes | no | no | implemented | `apps/api/test/level-up-no-auto-certificate.int.test.ts` |
-| LMS-SESSION-EVIDENCE | Session 360 vertical slice: class create can create first schedule slot; post-class evidence cards are mock pending persisted LMS evidence | no | yes | no | no | planned | `apps/api/test/class-create-initial-slot.int.test.ts`; `docs/stories/LMS-SESSION-EVIDENCE/` |
+| LMS-SESSION-EVIDENCE | Session 360 vertical slice: class create can create first schedule slot; post-class evidence cards persisted + published to LMS (shipped `3d6db9d`) | no | yes | no | no | implemented | `apps/api/test/class-create-initial-slot.int.test.ts`; `docs/stories/LMS-SESSION-EVIDENCE/` |
 | LMS-STAR | Star redeem atomic (rewards invariant) | no | yes | no | no | implemented | `apps/api/test/star-redeem.int.test.ts` |
 | LMS-REWARD | Reward review refund (rewards invariant) | no | yes | no | no | implemented | `apps/api/test/reward-review-refund.int.test.ts` |
 | CRM-HOOKS | CRM auto-hooks + lead-ingest token | no | yes | no | no | implemented | `apps/api/test/crm-hooks.int.test.ts` |

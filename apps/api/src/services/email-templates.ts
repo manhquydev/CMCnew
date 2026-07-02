@@ -8,7 +8,8 @@ export type EmailTemplateKind =
   | 'parent_meeting'
   | 'otp_login'
   | 'lms_account_ready'
-  | 'account_welcome';
+  | 'account_welcome'
+  | 'ops_error_alert';
 
 /**
  * Brand identity for outbound email — the REAL CMC EDU public info (mirrors the LMS login footer).
@@ -114,6 +115,12 @@ export interface TemplatePayloads {
     loginUrl: string;
     roleLabel?: string;
   };
+  /** Sent to ops when the error-rate window crosses ERROR_ALERT_THRESHOLD. No PII — counts only. */
+  ops_error_alert: {
+    windowStart: string;
+    count: number;
+    threshold: number;
+  };
 }
 
 type Renderer<K extends EmailTemplateKind> = (data: TemplatePayloads[K]) => RenderedEmail;
@@ -208,6 +215,17 @@ const renderers: { [K in EmailTemplateKind]: Renderer<K> } = {
         ) +
         button('Mở hệ thống', d.loginUrl) +
         p('Nếu bạn chưa nhận được tài khoản Microsoft, vui lòng liên hệ bộ phận IT.'),
+    }),
+  }),
+
+  ops_error_alert: (d) => ({
+    subject: `[CMC EDU] Cảnh báo tỉ lệ lỗi tăng cao (${d.count} lỗi)`,
+    html: layout({
+      title: 'Cảnh báo vận hành: tỉ lệ lỗi tăng cao',
+      preheader: `${d.count}/${d.threshold} lỗi trong cửa sổ ${d.windowStart}`,
+      bodyHtml:
+        p(`Hệ thống ghi nhận <strong>${d.count}</strong> lỗi kể từ ${esc(d.windowStart)}, vượt ngưỡng cảnh báo (${d.threshold}).`) +
+        p('Vui lòng kiểm tra log máy chủ để xác định nguyên nhân.'),
     }),
   }),
 };

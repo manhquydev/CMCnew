@@ -65,12 +65,12 @@ hygiene — no code change. Bring roadmap/TEST_MATRIX/plan-statuses/DEBT/env in 
 5. Re-grep `process.env.` in `apps/api/src` after editing to confirm no read var is still undocumented.
 
 ## Todo list
-- [ ] roadmap session-evidence → shipped (3d6db9d)
-- [ ] TEST_MATRIX + story validation → implemented
-- [ ] 6 plan statuses updated (with supersede pointers)
-- [ ] DEBT.md: close payroll director-read + add new items (incl. blob-store durability re-surface)
-- [ ] .env.example: +≥10 vars (incl. LMS_COOKIE_NAME) (+P1 names), re-grep confirms complete
-- [ ] Flag 260626 ×2-vs-×3 to operator
+- [x] roadmap session-evidence → shipped (3d6db9d)
+- [x] TEST_MATRIX + story validation → implemented
+- [x] 6 plan statuses updated (hr-role-consolidation, teacher-nav-lich360, lms-climb-session-lock superseded; 3 prod-readiness plans marked NOT superseded per operator 2026-07-02 decision — interim/test env only)
+- [x] DEBT.md: closed payroll director-read; added e2e-on-PR deferral, unit-test coverage gap, off-box backup copy items; blob-store durability already present from Plan 1
+- [x] .env.example: +14 vars (LMS_COOKIE_NAME, STAFF_PASSWORD_LOGIN, SEED_MODE, DISABLE_CRON, rate-limit ×5, PDF/SESSION_PHOTO store dirs, LOG_LEVEL, ERROR_ALERT_THRESHOLD, OPS_ALERT_EMAIL); re-grep confirms complete (only deploy-injected APP_COMMIT/APP_BUILT_AT/NODE_ENV/CORS_ORIGINS-as-comment excluded, consistent with prior convention)
+- [x] Flagged 260626 ×2-vs-×3 to operator — resolved 2026-07-02: NOT superseded, all 3 remain relevant
 
 ## Success Criteria
 - No `⬜`/planned marker remains for session-evidence in roadmap or TEST_MATRIX.

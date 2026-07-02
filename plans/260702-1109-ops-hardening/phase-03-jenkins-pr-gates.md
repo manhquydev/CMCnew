@@ -49,10 +49,10 @@ main build: Checkout → Lint+Typecheck → Integration tests → Build+Deploy �
 5. **[operator-assisted]** open a throwaway PR with a deliberately failing integration test → confirm the PR check goes red and blocks; then confirm a green PR passes.
 
 ## Todo list
-- [ ] Jenkinsfile: integration gate on PR + main
-- [ ] Confirm ci-integration-tests.sh port safe under serialized builds
-- [ ] [operator] verify multibranch PR trigger + red-PR-blocks demonstration
-- [ ] Record e2e-on-PR defer rationale (hand to P5 DEBT)
+- [x] Jenkinsfile: integration gate on PR + main (`when { anyOf { branch 'main'; changeRequest() } }`)
+- [x] Confirm ci-integration-tests.sh port safe under serialized builds (numExecutors:1 — no change needed, documented risk if that ever changes)
+- [ ] **[BLOCKED-ON-OPERATOR]** verify multibranch PR trigger + red-PR-blocks demonstration — needs a live throwaway PR against the real Jenkins instance
+- [x] Record e2e-on-PR defer rationale — added to DEBT.md (P5)
 
 ## Success Criteria
 - A PR with a failing integration test shows a failed Jenkins check and cannot merge (branch protection permitting).

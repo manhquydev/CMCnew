@@ -54,9 +54,9 @@ eslint.config.js
 4. Sanity check: temporarily add `import { prisma } from '@cmc/db'` into an `apps/api/src` file → lint errors; revert.
 
 ## Todo list
-- [ ] Add scoped no-restricted-imports block to eslint.config.js
-- [ ] pnpm -r lint passes (clean baseline)
-- [ ] Negative test: raw prisma import in app src → error (then revert)
+- [x] Add scoped no-restricted-imports block to eslint.config.js (also trimmed the stale retired `apps/teaching/src/**` glob)
+- [x] pnpm -r lint passes (clean baseline; packages/ui's 3 pre-existing errors are unrelated no-unused-vars, confirmed via git-stash diff)
+- [x] Negative test: raw prisma import in app src → error (verified, temp file removed)
 
 ## Success Criteria
 - `pnpm -r lint` passes with the new rule (no existing violations).

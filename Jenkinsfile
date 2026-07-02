@@ -34,7 +34,7 @@ pipeline {
     }
 
     stage('Integration tests') {
-      when { branch 'main' }   // CI/CD pipeline runs on main only; other branches get lint+typecheck as a PR gate
+      when { anyOf { branch 'main'; changeRequest() } }   // gate PRs too — a red integration test must block merge, not just fire post-merge on main
       steps {
         sh 'bash scripts/ci-integration-tests.sh'   // spins an ephemeral Postgres, runs vitest, tears down
       }
