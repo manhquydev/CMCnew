@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
+import { type LmsSession } from '@cmc/auth';
+import { staffCaller, lmsCaller, withRls, SUPER, uniq } from './helpers.js';
 import { generateParentMeetings } from '../src/services/parent-meeting-cadence.js';
 
 // Invariant: auto-generated parent meetings carry timeConfirmed=false (TBD); staff can
@@ -101,5 +102,57 @@ describe('parent-meeting time TBD state', () => {
       }),
     );
     expect(typeof row.timeConfirmed).toBe('boolean');
+  });
+
+  // P6 invariant: a parent whose child is enrolled in classBatchId sees the confirmed schedule
+  // via the actual RLS-scoped myMeetings procedure (not the SUPER-bypass proxy above); a parent
+  // with no enrollment in that class sees nothing (parent_meeting_isolation policy, enrollment-scoped).
+  it('setSchedule result is visible to an enrolled parent via myMeetings; not visible to an unrelated parent', async () => {
+    expect(meetingId).toBeTruthy();
+    const enrolledStudentId = (
+      await withRls(SUPER, async (tx) => {
+        const student = await tx.student.create({
+          data: { facilityId: FAC, studentCode: uniq('TBD_PS'), fullName: 'TBD Parent Student', program: 'UCREA' },
+        });
+        await tx.enrollment.create({
+          data: { facilityId: FAC, classBatchId, studentId: student.id, status: 'active' },
+        });
+        return student.id;
+      })
+    );
+    const unrelatedStudentId = (
+      await withRls(SUPER, (tx) =>
+        tx.student.create({
+          data: { facilityId: FAC, studentCode: uniq('TBD_UNREL'), fullName: 'TBD Unrelated Student', program: 'UCREA' },
+        }),
+      )
+    ).id;
+
+    try {
+      function parentSession(studentId: string): LmsSession {
+        return {
+          kind: 'parent',
+          accountId: uniq('tbd-parent-account'),
+          displayName: 'TBD Test Parent',
+          students: [{ id: studentId, fullName: 'x' }],
+          studentIds: [studentId],
+          facilityIds: [FAC],
+        };
+      }
+
+      const enrolledMeetings = await lmsCaller(parentSession(enrolledStudentId)).parentMeeting.myMeetings();
+      const found = enrolledMeetings.find((m) => m.id === meetingId);
+      expect(found).toBeDefined();
+      expect(found!.timeConfirmed).toBe(true);
+      expect(found!.scheduledAt.toISOString()).toBe('2026-06-10T11:00:00.000Z');
+
+      const unrelatedMeetings = await lmsCaller(parentSession(unrelatedStudentId)).parentMeeting.myMeetings();
+      expect(unrelatedMeetings.find((m) => m.id === meetingId)).toBeUndefined();
+    } finally {
+      await withRls(SUPER, async (tx) => {
+        await tx.enrollment.deleteMany({ where: { studentId: enrolledStudentId } });
+        await tx.student.deleteMany({ where: { id: { in: [enrolledStudentId, unrelatedStudentId] } } });
+      });
+    }
   });
 });

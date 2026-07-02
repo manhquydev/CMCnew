@@ -33,6 +33,10 @@ let otherParentId: string;
 let certId: string;
 let staffEmail: string;
 
+let completedChildId: string;
+let completedParentId: string;
+let completedCertId: string;
+
 beforeAll(async () => {
   await withRls(SUPER, async (tx) => {
     const student = await tx.student.create({
@@ -106,17 +110,58 @@ beforeAll(async () => {
         isActive: true,
       },
     });
+
+    // C3 fixture: lifecycle='completed' is intentionally excluded from BLOCKED_LMS_LIFECYCLE
+    // (packages/auth/src/lms.ts) specifically so completed students keep transcript/cert access.
+    const completedStudent = await tx.student.create({
+      data: { facilityId: FACILITY, studentCode: uniq('TCC'), fullName: 'Transcript-Cert-Completed', program: 'UCREA', level: 'L1', lifecycle: 'completed' },
+    });
+    completedChildId = completedStudent.id;
+
+    const completedParent = await tx.parentAccount.create({
+      data: { displayName: 'Transcript-Cert-Completed-Parent', email: `${uniq('tccp')}@test.local` },
+    });
+    completedParentId = completedParent.id;
+
+    await tx.guardian.create({ data: { facilityId: FACILITY, parentAccountId: completedParentId, studentId: completedChildId, relation: GuardianRelation.guardian } });
+
+    await tx.finalGrade.create({
+      data: {
+        facilityId: FACILITY,
+        studentId: completedChildId,
+        program: 'UCREA',
+        periodKey: uniq('CP'),
+        homeworkAvg: 9,
+        testScore: 9,
+        attendanceRate: 1,
+        qualitativeScore: 9,
+        finalScore: 9,
+        passed: true,
+        complete: true,
+        computedAt: new Date(),
+      },
+    });
+
+    const completedCert = await tx.certificate.create({
+      data: {
+        facilityId: FACILITY,
+        studentId: completedChildId,
+        program: 'UCREA',
+        title: 'Chứng chỉ hoàn thành',
+      },
+    });
+    completedCertId = completedCert.id;
   });
 });
 
 afterAll(async () => {
   await withRls(SUPER, async (tx) => {
-    await tx.certificate.deleteMany({ where: { studentId: { in: [childId, otherChildId] } } });
-    await tx.finalGrade.deleteMany({ where: { studentId: { in: [childId, otherChildId] } } });
-    await tx.qualitativeAssessment.deleteMany({ where: { studentId: { in: [childId, otherChildId] } } });
-    await tx.guardian.deleteMany({ where: { parentAccountId: { in: [parentId, otherParentId] } } });
-    await tx.parentAccount.deleteMany({ where: { id: { in: [parentId, otherParentId] } } });
-    await tx.student.deleteMany({ where: { id: { in: [childId, otherChildId] } } });
+    await tx.certificate.deleteMany({ where: { studentId: { in: [childId, otherChildId, completedChildId] } } });
+    await tx.finalGrade.deleteMany({ where: { studentId: { in: [childId, otherChildId, completedChildId] } } });
+    await tx.qualitativeAssessment.deleteMany({ where: { studentId: { in: [childId, otherChildId, completedChildId] } } });
+    await tx.guardian.deleteMany({ where: { parentAccountId: { in: [parentId, otherParentId, completedParentId] } } });
+    await tx.parentAccount.deleteMany({ where: { id: { in: [parentId, otherParentId, completedParentId] } } });
+    await tx.student.deleteMany({ where: { id: { in: [childId, otherChildId, completedChildId] } } });
     const staffUser = await tx.appUser.findUnique({ where: { email: staffEmail }, select: { id: true } });
     if (staffUser) {
       await tx.staffNotification.deleteMany({ where: { recipientId: staffUser.id } });
@@ -190,5 +235,27 @@ describe('GET /files/certificate/:id (staff unchanged + LMS parent/student)', ()
   it('unauthenticated request → 401', async () => {
     const res = await app.request(`/files/certificate/${certId}`);
     expect(res.status).toBe(401);
+  });
+});
+
+describe('C3 — lifecycle=completed student keeps transcript/certificate access', () => {
+  it('parent of a completed-lifecycle child can still download transcript', async () => {
+    const token = await parentToken(completedParentId);
+    const res = await app.request(`/files/transcript/${completedChildId}`, {
+      headers: { Cookie: `${LMS_COOKIE_NAME}=${token}` },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Transcript-Cert-Completed');
+  });
+
+  it('parent of a completed-lifecycle child can still download certificate', async () => {
+    const token = await parentToken(completedParentId);
+    const res = await app.request(`/files/certificate/${completedCertId}`, {
+      headers: { Cookie: `${LMS_COOKIE_NAME}=${token}` },
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('Transcript-Cert-Completed');
   });
 });
