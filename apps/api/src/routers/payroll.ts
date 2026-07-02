@@ -652,7 +652,11 @@ export const payrollRouter = router({
           insuranceDeduction: input.insuranceDeduction,
           dependentsInput: input.dependents,
           attendanceDeductionOverride: existing?.attendanceDeductionOverride,
-          // No variablePayOverride → sales auto-feed runs normally.
+          // A persisted commission override (payslipOverrideVariablePay) must survive a plain
+          // recompute — without this, re-running payslipCompute (e.g. to fix workdays) silently
+          // reverted variablePay to the sales auto-feed and wiped the override's audit note.
+          variablePayOverride: existing?.variablePayOverride ?? undefined,
+          variableNoteOverride: existing?.variablePayOverride != null ? (existing.variableNote ?? undefined) : undefined,
         });
 
         const data = {
@@ -947,6 +951,11 @@ export const payrollRouter = router({
           kpiBonus: computed.kpiBonus,
           variablePay: computed.variablePay,
           variableNote: computed.variableNote,
+          // Persisted so a later plain payslipCompute recompute doesn't silently revert
+          // variablePay to the sales auto-feed and lose this override + its audit trail.
+          variablePayOverride: input.amount,
+          variablePayOverrideReason: input.reason,
+          variablePayOverrideById: ctx.session.userId,
           attendanceDeduction: computed.attendanceDeduction,
           grossIncome: computed.grossIncome,
           taxableIncome: computed.taxableIncome,

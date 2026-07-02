@@ -1525,6 +1525,9 @@ model Payslip {
   kpiBonus                          Int           @map("kpi_bonus")
   variablePay                       Int           @default(0) @map("variable_pay")
   variableNote                      String?       @map("variable_note")
+  variablePayOverride               Int?          @map("variable_pay_override")
+  variablePayOverrideReason         String?       @map("variable_pay_override_reason")
+  variablePayOverrideById           String?       @map("variable_pay_override_by_id") @db.Uuid
   insuranceDeduction                Int           @default(0) @map("insurance_deduction")
   attendanceDeduction               Int?          @map("attendance_deduction")
   attendanceDeductionOverride       Int?          @map("attendance_deduction_override")
