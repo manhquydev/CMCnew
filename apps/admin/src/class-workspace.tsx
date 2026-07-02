@@ -883,6 +883,83 @@ function AttendanceTab({ batch, facilityId }: { batch: Batch; facilityId: number
 
 // ─── ClassDetail ──────────────────────────────────────────────────────────────
 
+function EditClassModal({
+  batch,
+  opened,
+  onClose,
+  onSaved,
+}: {
+  batch: Batch;
+  opened: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState(batch.name);
+  const [startDate, setStartDate] = useState<Date | null>(batch.startDate ? new Date(batch.startDate) : null);
+  const [endDate, setEndDate] = useState<Date | null>(batch.endDate ? new Date(batch.endDate) : null);
+  const [capacity, setCapacity] = useState<number | string>(batch.capacity ?? '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    if (!opened) return;
+    setName(batch.name);
+    setStartDate(batch.startDate ? new Date(batch.startDate) : null);
+    setEndDate(batch.endDate ? new Date(batch.endDate) : null);
+    setCapacity(batch.capacity ?? '');
+    setErr('');
+  }, [batch, opened]);
+
+  async function save() {
+    if (!name.trim()) {
+      setErr('Nhập tên lớp');
+      return;
+    }
+    const start = toApiDate(startDate);
+    const end = toApiDate(endDate);
+    if (start && end && start > end) {
+      setErr('Ngày khai giảng phải trước ngày kết thúc');
+      return;
+    }
+    setBusy(true);
+    setErr('');
+    try {
+      await trpc.classBatch.update.mutate({
+        id: batch.id,
+        name: name.trim(),
+        startDate: start,
+        endDate: end,
+        capacity: typeof capacity === 'number' ? capacity : undefined,
+      });
+      notifySuccess('Đã cập nhật lớp học');
+      onClose();
+      onSaved();
+    } catch (e) {
+      notifyError(e, 'Cập nhật lớp thất bại');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal opened={opened} onClose={onClose} title="Sửa lớp học" size="md">
+      <Stack>
+        <TextInput label="Tên lớp" value={name} onChange={(e) => setName(e.currentTarget.value)} />
+        <Group grow align="flex-start">
+          <DateInput label="Ngày khai giảng" value={startDate} onChange={setStartDate} valueFormat="DD/MM/YYYY" clearable />
+          <DateInput label="Ngày kết thúc" value={endDate} onChange={setEndDate} valueFormat="DD/MM/YYYY" clearable />
+        </Group>
+        <NumberInput label="Sĩ số tối đa" value={capacity} onChange={setCapacity} min={1} />
+        {err && <Text c="red" size="sm">{err}</Text>}
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>Hủy</Button>
+          <Button onClick={save} loading={busy}>Lưu</Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
 function ClassDetail({
   batch,
   facilityId,
@@ -900,7 +977,9 @@ function ClassDetail({
 }) {
   const { me } = useSession();
   const canSetStatus = can(me.roles, me.isSuperAdmin, 'classBatch', 'setStatus');
+  const canUpdateClass = can(me.roles, me.isSuperAdmin, 'classBatch', 'update');
   const [cancelOpen, cancel] = useDisclosure(false);
+  const [editOpen, edit] = useDisclosure(false);
   const [reason, setReason] = useState('');
 
   async function doCancel() {
@@ -944,6 +1023,7 @@ function ClassDetail({
         </div>
         {canSetStatus && (
           <Group gap="xs">
+            {canUpdateClass && <Button size="xs" variant="default" onClick={edit.open}>Sửa</Button>}
             {batch.status !== 'cancelled' ? (
               <>
                 <Select
@@ -988,6 +1068,10 @@ function ClassDetail({
           <Chatter entityType="class_batch" entityId={batch.id} />
         </Tabs.Panel>
       </Tabs>
+
+      {canUpdateClass && (
+        <EditClassModal batch={batch} opened={editOpen} onClose={edit.close} onSaved={onChanged} />
+      )}
 
       {canSetStatus && (
         <Modal opened={cancelOpen} onClose={cancel.close} title="Hủy lớp">

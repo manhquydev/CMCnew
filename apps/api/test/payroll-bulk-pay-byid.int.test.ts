@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Role } from '@cmc/auth';
-import { staffCaller, withRls, SUPER, superAdminUserId } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
 
 describe('payslipBulkPay (by-ID) — failed bucket partition + authz', () => {
   const FAC_A = 1;
@@ -8,13 +8,48 @@ describe('payslipBulkPay (by-ID) — failed bucket partition + authz', () => {
   const PERIOD = '2099-05';
 
   let employeeId: string;
+  let eduDirId: string; // education director for bulk pay operations
   let slip1Id: string;
   let slip2Id: string;
   const createdSlipIds: string[] = [];
 
   beforeAll(async () => {
-    employeeId = await superAdminUserId();
     const caller = await staffCaller();
+
+    // Create education director for bulk pay operations (domain-scoped: EDU director manages teacher payroll)
+    const eduDir = await withRls(SUPER, (tx) =>
+      tx.appUser.create({
+        data: {
+          email: 'bulk-pay-edu-dir@cmc.test',
+          displayName: 'Bulk Pay Edu Director',
+          passwordHash: 'dummy',
+          roles: [Role.giam_doc_dao_tao],
+          primaryRole: Role.giam_doc_dao_tao,
+          isActive: true,
+          facilities: { create: [{ facilityId: FAC_A }] },
+        },
+        select: { id: true },
+      }),
+    );
+    eduDirId = eduDir.id;
+
+    // Target employee must be a teacher (EDUCATION_PAYROLL_ROLES) so the edu director can manage
+    // their payroll — a super_admin target is in TOP_PAYROLL_ROLES and unmanageable by any director.
+    const employee = await withRls(SUPER, (tx) =>
+      tx.appUser.create({
+        data: {
+          email: uniq('bulk-pay-teacher@cmc.test'),
+          displayName: 'Bulk Pay Teacher',
+          passwordHash: 'dummy',
+          roles: [Role.giao_vien],
+          primaryRole: Role.giao_vien,
+          isActive: true,
+          facilities: { create: [{ facilityId: FAC_A }] },
+        },
+        select: { id: true },
+      }),
+    );
+    employeeId = employee.id;
 
     await caller.payroll.profileUpsert({
       userId: employeeId,
@@ -70,17 +105,19 @@ describe('payslipBulkPay (by-ID) — failed bucket partition + authz', () => {
         await tx.payslip.deleteMany({ where: { id: { in: createdSlipIds } } });
       }
       await tx.salaryRate.deleteMany({ where: { userId: employeeId, effectiveFrom: new Date('2099-04-01') } });
+      await tx.employmentProfile.deleteMany({ where: { userId: employeeId } });
+      await tx.appUser.deleteMany({ where: { id: { in: [eduDirId, employeeId] } } });
     });
   });
 
-  it('non-HR caller gets FORBIDDEN', async () => {
-    const nonHrCaller = await staffCaller({
+  it('non-director caller gets FORBIDDEN', async () => {
+    const nonDirectorCaller = await staffCaller({
       roles: [Role.giao_vien],
       primaryRole: Role.giao_vien,
       isSuperAdmin: false,
       facilityIds: [FAC_A],
     });
-    await expect(nonHrCaller.payroll.payslipBulkPay({ ids: [slip1Id] })).rejects.toThrow(
+    await expect(nonDirectorCaller.payroll.payslipBulkPay({ ids: [slip1Id] })).rejects.toThrow(
       /FORBIDDEN|UNAUTHORIZED/i,
     );
   });
@@ -94,7 +131,7 @@ describe('payslipBulkPay (by-ID) — failed bucket partition + authz', () => {
       }),
     );
 
-    const caller = await staffCaller({ facilityIds: [FAC_A], roles: [Role.hr], primaryRole: Role.hr, isSuperAdmin: false });
+    const caller = await staffCaller({ userId: eduDirId, facilityIds: [FAC_A], roles: [Role.giam_doc_dao_tao], primaryRole: Role.giam_doc_dao_tao, isSuperAdmin: false });
     const result = await caller.payroll.payslipBulkPay({ ids: [slip1Id, slip2Id] });
     expect(result.succeeded).toHaveLength(2);
     expect(result.failed).toHaveLength(0);
@@ -115,7 +152,7 @@ describe('payslipBulkPay (by-ID) — failed bucket partition + authz', () => {
     );
 
     const bogusId = '00000000-0000-4000-8000-000000000099';
-    const caller = await staffCaller({ facilityIds: [FAC_A], roles: [Role.hr], primaryRole: Role.hr, isSuperAdmin: false });
+    const caller = await staffCaller({ userId: eduDirId, facilityIds: [FAC_A], roles: [Role.giam_doc_dao_tao], primaryRole: Role.giam_doc_dao_tao, isSuperAdmin: false });
     const result = await caller.payroll.payslipBulkPay({ ids: [slip1Id, bogusId] });
     expect(result.succeeded).toHaveLength(0);
     expect(result.failed).toContain(slip1Id);
@@ -129,7 +166,7 @@ describe('payslipBulkPay (by-ID) — failed bucket partition + authz', () => {
 
   it('already-paid IDs go to failed', async () => {
     // slip2 was paid in the happy-path test
-    const caller = await staffCaller({ facilityIds: [FAC_A], roles: [Role.hr], primaryRole: Role.hr, isSuperAdmin: false });
+    const caller = await staffCaller({ userId: eduDirId, facilityIds: [FAC_A], roles: [Role.giam_doc_dao_tao], primaryRole: Role.giam_doc_dao_tao, isSuperAdmin: false });
     const result = await caller.payroll.payslipBulkPay({ ids: [slip2Id] });
     expect(result.succeeded).toHaveLength(0);
     expect(result.failed).toContain(slip2Id);
@@ -165,10 +202,11 @@ describe('payslipBulkPay (by-ID) — failed bucket partition + authz', () => {
     createdSlipIds.push(slip.id);
 
     const scopedCaller = await staffCaller({
+      userId: eduDirId,
       isSuperAdmin: false,
       facilityIds: [FAC_A],
-      roles: [Role.hr],
-      primaryRole: Role.hr,
+      roles: [Role.giam_doc_dao_tao],
+      primaryRole: Role.giam_doc_dao_tao,
     });
     const result = await scopedCaller.payroll.payslipBulkPay({ ids: [slip.id] });
     expect(result.failed).toContain(slip.id);

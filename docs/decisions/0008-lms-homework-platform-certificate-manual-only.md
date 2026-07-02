@@ -14,7 +14,7 @@ Rà spec Phase 2 (`docs/specs/phase-02-assessment-lms.md`) cho thấy phần cò
 
 ## Decision
 
-1. **Certificate chỉ cấp tay** qua `certificate.issue` (head_teacher/quan_ly) cho trường hợp đặc biệt. **Gỡ auto-cấp khỏi luồng duyệt level-up**: duyệt level-up chỉ cập nhật `Student.level` + thông báo `level_up`, không sinh certificate.
+1. **Certificate chỉ cấp tay** qua `certificate.issue` (giam_doc_dao_tao / super_admin) cho trường hợp đặc biệt. **Gỡ auto-cấp khỏi luồng duyệt level-up**: duyệt level-up chỉ cập nhật `Student.level` + thông báo `level_up`, không sinh certificate.
 2. **Gamification (badge + leaderboard) GIỮ** làm động lực làm bài cho học sinh.
 3. Các feature LMS lõi khác (exercise/submission/annotation/grade/QualitativeAssessment/FinalGrade/sao/quà/level-progress) **giữ nguyên** — đã khớp định vị.
 

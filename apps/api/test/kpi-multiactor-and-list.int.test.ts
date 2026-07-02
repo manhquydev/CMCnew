@@ -432,9 +432,9 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
     });
 
     // NOTE: post role-consolidation, kpiEvalConfirm and kpiEvalApprove share the same director
-    // role set (giam_doc_kinh_doanh/giam_doc_dao_tao), so managerId (giam_doc_kinh_doanh) actually
-    // holds the kpiEvalApprove permission. This FORBIDDEN now comes from the separation-of-duties
-    // business rule (confirmedById === ctx.session.userId), not from a role-gate rejection.
+    // role set (giam_doc_kinh_doanh/giam_doc_dao_tao). This FORBIDDEN comes from separation-of-duties
+    // (confirmedById === ctx.session.userId), NOT from domain mismatch—actors must be valid directors
+    // for the target's domain so only SoD blocks.
     it('Manager (as confirmer) cannot approve the KPI it just confirmed (FORBIDDEN — separation of duties)', async () => {
       // First submit and confirm
       const teacher = await teacherCaller();
@@ -446,15 +446,17 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
         ],
       });
 
-      const mgr = await managerCaller();
-      await mgr.payroll.kpiEvalConfirm({
+      // Use education director (eduDirId) to confirm teacherId KPI—domain-scoped guard passes.
+      // Then same eduDir tries to approve → FORBIDDEN by SoD (confirmer ≠ approver).
+      const eduDir = await eduDirCaller();
+      await eduDir.payroll.kpiEvalConfirm({
         userId: teacherId,
         periodKey: PERIOD_OTHER,
       });
 
-      // Manager tries to approve the sheet it just confirmed → FORBIDDEN
+      // Education director tries to approve the sheet it just confirmed → FORBIDDEN
       await expect(
-        mgr.payroll.kpiEvalApprove({
+        eduDir.payroll.kpiEvalApprove({
           userId: teacherId,
           periodKey: PERIOD_OTHER,
         }),

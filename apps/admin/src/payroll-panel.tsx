@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { trpc, notifyError, notifySuccess, useSession } from '@cmc/ui';
+import { notifyError, notifySuccess, useSession } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -16,6 +16,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+import { payrollApi } from './shallow-trpc';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 // Explicit shapes to avoid TS2589 (deep type instantiation from AppRouter).
@@ -30,7 +31,6 @@ type PayslipRow = {
 };
 
 type RosterEntry = { id: string; displayName: string; primaryRole: string | null };
-type BulkPayResult = { succeeded: string[]; failed: string[] };
 type PeriodSummary = {
   periodKey: string;
   count: number;
@@ -42,36 +42,6 @@ type PeriodSummary = {
   finalizedCount: number;
   paidCount: number;
   finalizedNet: number;
-};
-
-// Cast to a typed local interface to keep TS compilation fast across agent merges.
-const payrollApi = trpc.payroll as unknown as {
-  roster: { query: (i: { facilityId: number }) => Promise<RosterEntry[]> };
-  listByStaff: { query: (i: { staffId: string }) => Promise<PayslipRow[]> };
-  payslipCompute: {
-    mutate: (i: {
-      userId: string;
-      facilityId: number;
-      periodKey: string;
-      standardDays: number;
-      workdays: number;
-      kpiScore?: number;
-      variablePay?: number;
-      variableNote?: string;
-      insuranceDeduction?: number;
-    }) => Promise<PayslipRow>;
-  };
-  payslipFinalize: { mutate: (i: { id: string }) => Promise<PayslipRow> };
-  payslipMarkPaid: { mutate: (i: { id: string }) => Promise<PayslipRow> };
-  payslipReopen: { mutate: (i: { id: string }) => Promise<PayslipRow> };
-  payslipBulkPay: { mutate: (i: { ids: string[] }) => Promise<BulkPayResult> };
-  payslipPeriodSummary: {
-    query: (i: { facilityId: number; periodKey: string }) => Promise<PeriodSummary>;
-  };
-  /** Tree-manager commission override (phase-07). Backend enforces tree-authority. */
-  payslipOverrideVariablePay: {
-    mutate: (i: { userId: string; periodKey: string; amount: number; reason: string }) => Promise<PayslipRow>;
-  };
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────

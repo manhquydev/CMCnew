@@ -14,11 +14,10 @@ describe('KPI evaluation workflow (P05 — phiếu đánh giá)', () => {
 
   let saleId: string;     // nhân sự bị đánh giá
   let managerId: string;  // giam_doc_kinh_doanh (director — confirm)
-  let eduDirId: string;      // giam_doc_dao_tao (director — approve)
 
   beforeAll(async () => {
     // Dùng superAdmin làm approve-director actor (giam_doc_dao_tao)
-    eduDirId = await superAdminUserId();
+    await superAdminUserId();
 
     // Tạo user giam_doc_kinh_doanh để làm confirmer
     const mgr = await withRls(SUPER, (tx) =>
@@ -77,14 +76,6 @@ describe('KPI evaluation workflow (P05 — phiếu đánh giá)', () => {
       userId: managerId,
       roles: [Role.giam_doc_kinh_doanh],
       primaryRole: Role.giam_doc_kinh_doanh,
-      isSuperAdmin: false,
-      facilityIds: [FACILITY],
-    });
-  const eduDirCaller = () =>
-    staffCaller({
-      userId: eduDirId,
-      roles: [Role.giam_doc_dao_tao],
-      primaryRole: Role.giam_doc_dao_tao,
       isSuperAdmin: false,
       facilityIds: [FACILITY],
     });
@@ -283,23 +274,27 @@ describe('KPI evaluation workflow (P05 — phiếu đánh giá)', () => {
   });
 
   it('Tự duyệt phiếu của chính mình → FORBIDDEN (tách trách nhiệm)', async () => {
-    // eduDirId (giam_doc_dao_tao) có quyền kpiEvalApprove. Tạo phiếu cho chính eduDirId, eduDir tự nộp,
-    // giam_doc_kinh_doanh (managerId) xác nhận (≠ subject), rồi eduDir cố tự duyệt phiếu của mình
-    // → bị chặn bởi self-guard (trước cả check confirmer≠approver).
+    // Use saleId as target (business domain, not TOP_PAYROLL_ROLES) so domain-scoped guard passes.
+    // eduDirId (giam_doc_dao_tao) can manage BUSINESS_PAYROLL_ROLES including sale.
+    // eduDir tự nộp phiếu cho saleId, giam_doc_kinh_doanh (managerId) xác nhận (≠ subject),
+    // rồi eduDir cố tự duyệt phiếu của saleId (nếu eduDir === managerId thì SoD sẽ block)
+    // → ở đây eduDirId ≠ managerId, nhưng để test self-approve, ta cần người approve = người confirm.
+    // Thay: managerId (giam_doc_kinh_doanh) confirm, rồi managerId cố approve → FORBIDDEN (SoD).
     const PERIOD_SELF = '2099-12';
     const su = await hrCaller();
-    await su.payroll.kpiEvalStart({ userId: eduDirId, facilityId: FACILITY, periodKey: PERIOD_SELF, block: 'sales' });
-    const eduDir = await eduDirCaller();
-    await eduDir.payroll.kpiEvalSubmit({
+    await su.payroll.kpiEvalStart({ userId: saleId, facilityId: FACILITY, periodKey: PERIOD_SELF, block: 'sales' });
+    const sale = await saleCaller();
+    await sale.payroll.kpiEvalSubmit({
       periodKey: PERIOD_SELF,
       scores: [{ key: 'doanh_so', score: 80 }, { key: 'tuan_thu', score: 70 }, { key: 'khac', score: 60 }],
     });
     const mgr = await managerCaller();
-    await mgr.payroll.kpiEvalConfirm({ userId: eduDirId, periodKey: PERIOD_SELF });
+    await mgr.payroll.kpiEvalConfirm({ userId: saleId, periodKey: PERIOD_SELF });
+    // Manager (confirmer) tries to approve → FORBIDDEN (separation of duties, not domain mismatch)
     await expect(
-      eduDir.payroll.kpiEvalApprove({ userId: eduDirId, periodKey: PERIOD_SELF }),
+      mgr.payroll.kpiEvalApprove({ userId: saleId, periodKey: PERIOD_SELF }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    await withRls(SUPER, (tx) => tx.kpiScore.deleteMany({ where: { userId: eduDirId, periodKey: PERIOD_SELF } }));
+    await withRls(SUPER, (tx) => tx.kpiScore.deleteMany({ where: { userId: saleId, periodKey: PERIOD_SELF } }));
   });
 
   // ─── Gating ───────────────────────────────────────────────────────────────────

@@ -67,8 +67,7 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   },
 
   exercise: {
-    create: ['giao_vien', 'giam_doc_dao_tao'],
-    publish: ['giao_vien', 'giam_doc_dao_tao'],
+    upsert: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
 
   sessionEvidence: {
@@ -170,35 +169,32 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   },
 
   payroll: {
-    roster: ['hr', 'ke_toan'],
-    profileUpsert: ['hr', 'ke_toan'],
-    profileList: ['hr', 'ke_toan'],
-    rateCreate: ['hr', 'ke_toan'],
-    rateList: ['hr', 'ke_toan'],
-    commissionForSale: ['hr', 'ke_toan'],
-    payslipCompute: ['hr', 'ke_toan'],
-    payslipList: ['hr', 'ke_toan'],
-    payslipFinalize: ['hr', 'ke_toan'],
-    payslipMarkPaid: ['hr', 'ke_toan'],
-    payslipPeriodSummary: ['hr', 'ke_toan'],
-    payslipBulkMarkPaid: ['hr', 'ke_toan'],
-    listByStaff: ['hr', 'ke_toan'],
-    payslipBulkPay: ['hr', 'ke_toan'],
-    payslipReopen: ['hr', 'ke_toan'],
-    // KPI authority in the 3-heads org: the two directors are the executive board. They confirm
-    // and approve KPI (legacy 'bgd'/'quan_ly' removed — the two directors are the only confirm/
-    // approve authority now), and can load the KPI panel (kpiList/kpiEvalGet). Separation of
-    // duties still holds — kpiEvalApprove blocks the person who confirmed, so a director cannot
-    // both confirm and approve the same sheet. Data prep (start/autoPrefill/setAuto) stays with
-    // hr/ke_toan.
-    kpiEvalStart: ['hr', 'ke_toan'],
+    // Payroll ownership follows the two-director org: both directors can open read surfaces, while
+    // mutating procedures enforce domain-scoped targets (KD: business/support roles; DT: teachers)
+    // and self-write blocks inside apps/api/src/routers/payroll.ts.
+    roster: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    profileUpsert: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    profileList: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    rateCreate: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    rateList: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    commissionForSale: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    payslipCompute: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    payslipList: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    payslipFinalize: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    payslipMarkPaid: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    payslipPeriodSummary: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    payslipBulkMarkPaid: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    listByStaff: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    payslipBulkPay: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    payslipReopen: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    kpiEvalStart: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     kpiEvalConfirm: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     kpiEvalApprove: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
-    kpiEvalGet: ['hr', 'ke_toan', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
-    kpiList: ['hr', 'ke_toan', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
-    kpiAutoPrefill: ['hr', 'ke_toan'],
-    kpiSetAuto: ['hr', 'ke_toan'],
-    syncCallMetrics: ['hr', 'ke_toan'],
+    kpiEvalGet: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    kpiList: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    kpiAutoPrefill: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    kpiSetAuto: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    syncCallMetrics: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
 
   rewards: {

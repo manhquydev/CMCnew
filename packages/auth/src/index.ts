@@ -4,7 +4,6 @@ import { signSession, verifySession, type SessionClaims } from './jwt.js';
 export { signSession, verifySession } from './jwt.js';
 export type { SessionClaims } from './jwt.js';
 export {
-  loginParent,
   loginStudent,
   mintParentSession,
   resolveLmsSession,

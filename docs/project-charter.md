@@ -14,7 +14,7 @@ Nền tảng **ERP + LMS thống nhất** cho Creative Maieutic Center — trung
 ### Trong phạm vi (v1 = parity sạch)
 - **2 app** dùng chung 1 backend + 1 DB:
   - **LMS** — học sinh + phụ huynh
-  - **Staff (apps/admin)** — app nhân viên hợp nhất, nav lọc theo role: giáo viên, kế toán, HR, sale, CSKH, CTV marketing, quản lý, super_admin, BGĐ. _(Trước đây tách thành Teaching/ERP + Admin; apps/teaching đã retire, gộp vào apps/admin.)_
+  - **Staff (apps/admin)** — app nhân viên hợp nhất, nav lọc theo role: giáo viên, kế toán, HR, sale, CSKH, CTV marketing, giám đốc kinh doanh, giám đốc đào tạo, super_admin. _(Trước đây tách thành Teaching/ERP + Admin; apps/teaching đã retire, gộp vào apps/admin. RBAC consolidation 2026-07-01: 12→9 roles, gộp chức năng quản lý vào 2 giám đốc.)_
 - Toàn bộ module nghiệp vụ của hệ cũ (xem §5).
 - Multi-facility (đa cơ sở) + RLS.
 - Seam nhận lead từ website ngoài vào CRM.
@@ -36,15 +36,15 @@ Nền tảng **ERP + LMS thống nhất** cho Creative Maieutic Center — trung
 |---|---|---|
 | `student` (học sinh) | LMS | Nộp bài, xem điểm/điểm danh, sao thưởng (read-only) |
 | `parent` (phụ huynh) | LMS | Xem con: điểm/điểm danh/học bạ, chat CSKH, lịch họp |
-| `giao_vien` (giáo viên) | Teaching | Điểm danh, chấm điểm, feedback. **Không vào LMS** |
-| `sale` (kinh doanh) | Teaching | CRM, enrollment |
-| `cskh` | Teaching | After-sale case, contact |
-| `ctv_mkt` (CTV marketing) | Teaching | CRM (hạn chế, không fork) |
-| `ke_toan` (kế toán) | Teaching | Phiếu thu, voucher/discount; xem payslip (che lương) |
-| `hr` (nhân sự) | Teaching | Employment, payroll đầy đủ |
-| `quan_ly` (quản lý) | Teaching/Admin | Duyệt lớp/enrollment/level-up, KPI decide |
+| `giao_vien` (giáo viên) | Admin | Điểm danh, chấm điểm, feedback. **Không vào LMS** |
+| `sale` (kinh doanh) | Admin | CRM, enrollment |
+| `cskh` | Admin | After-sale case, contact |
+| `ctv_mkt` (CTV marketing) | Admin | CRM (hạn chế, không fork) |
+| `ke_toan` (kế toán) | Admin | Phiếu thu, voucher/discount; xem payslip (che lương) |
+| `hr` (nhân sự) | Admin | Employment, payroll đầy đủ |
+| `giam_doc_kinh_doanh` (Giám đốc KD) | Admin | Quản lý team KD (sale/CSKH/CTV/kế toán/HR), duyệt KPI |
+| `giam_doc_dao_tao` (Giám đốc ĐT) | Admin | Quản lý team ĐT (GV), duyệt level-up, chứng chỉ |
 | `super_admin` | Admin | Toàn quyền, cross-facility (break-glass) |
-| `bgd` (ban giám đốc) | Admin | Dashboard KPI/MAES read-only |
 
 **Quy tắc RBAC bất biến:** facility scope qua RLS (DB-resolved, không nhét trong JWT); `tokenVersion` thu hồi tức thì; che trường lương cho non-HR; teacher không bao giờ truy cập LMS.
 

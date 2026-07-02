@@ -136,18 +136,20 @@ export function StudentShell({ principal }: StudentShellProps) {
             </Text>
           </Group>
           <Group gap="sm">
-            <Button
-              variant="gradient"
-              gradient={{ from: 'orange', to: 'yellow', deg: 60 }}
-              size="xs"
-              radius="xl"
-              component="a"
-              href="showcase"
-              target="_blank"
-              style={{ fontWeight: 800, border: 'none', boxShadow: '0 4px 10px rgba(255, 159, 10, 0.25)' }}
-            >
-              Trải nghiệm UI mới 🚀
-            </Button>
+            {import.meta.env.DEV && (
+              <Button
+                variant="gradient"
+                gradient={{ from: 'orange', to: 'yellow', deg: 60 }}
+                size="xs"
+                radius="xl"
+                component="a"
+                href="showcase"
+                target="_blank"
+                style={{ fontWeight: 800, border: 'none', boxShadow: '0 4px 10px rgba(255, 159, 10, 0.25)' }}
+              >
+                Trải nghiệm UI mới
+              </Button>
+            )}
             <NotificationCenter pulse={notificationPulse} />
             <Button variant="subtle" size="xs" color="gray" onClick={logout}>Đăng xuất</Button>
           </Group>

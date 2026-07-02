@@ -12,9 +12,9 @@ Work-shift registration and punch attendance touch staff timekeeping, leave, pen
 
 ## Decision
 
-Shift registration and manual punch approval are owned by the employee, the employee's direct manager, HR, or super admin.
+Shift registration and manual punch approval are owned by the employee, the employee's direct manager (via `EmploymentProfile.managerId`), HR, or super admin.
 
-Facility managers (`quan_ly`) may configure facility WiFi/IP ranges from Admin UI/API for their assigned facility. This keeps company WiFi policy operational in product UI instead of requiring code changes.
+Facility WiFi/IP network ranges are configured by super_admin or IT operations. This keeps company network policy centralized and secure instead of delegating to facility managers.
 
 ## Alternatives Considered
 
@@ -31,8 +31,8 @@ Positive:
 
 Tradeoffs:
 
-- If business wants only central admins to edit network ranges, hide the `facilityNetwork.create/delete` UI and permissions from `quan_ly`.
-- Employment profile manager assignment becomes critical operational data.
+- Centralizing network config requires ops team involvement for any WiFi/CIDR changes. Future: consider a facility-scoped manager approval workflow if needed.
+- Employment profile manager assignment becomes critical operational data — must be kept accurate for approval chain to work.
 
 ## Follow-Up
 

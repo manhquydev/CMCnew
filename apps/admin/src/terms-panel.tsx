@@ -15,9 +15,6 @@ import {
 } from '@mantine/core';
 import { IconPlus, IconLock, IconLockOpen } from '@tabler/icons-react';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-// Explicit local shape to avoid deep AppRouter type inference.
-
 type TermRow = {
   id: string;
   periodKey: string;
@@ -26,30 +23,6 @@ type TermRow = {
   endDate: Date | string;
   program?: string | null;
   isLocked: boolean;
-};
-
-// Cast assessment sub-router to a minimal typed interface.
-const assessmentApi = trpc.assessment as unknown as {
-  termList: { query: (i: { facilityId: number }) => Promise<TermRow[]> };
-  termCreate: {
-    mutate: (i: {
-      facilityId: number;
-      periodKey: string;
-      name: string;
-      startDate: string;
-      endDate: string;
-    }) => Promise<TermRow>;
-  };
-  termUpdate: {
-    mutate: (i: {
-      id: string;
-      name?: string;
-      startDate?: string;
-      endDate?: string;
-    }) => Promise<TermRow>;
-  };
-  termLock: { mutate: (i: { id: string }) => Promise<TermRow> };
-  termUnlock: { mutate: (i: { id: string }) => Promise<TermRow> };
 };
 
 const fmt = (d: Date | string) =>
@@ -99,7 +72,7 @@ function CreateTermModal({
     setErr('');
     setBusy(true);
     try {
-      await assessmentApi.termCreate.mutate({ facilityId, periodKey: periodKey.trim(), name: name.trim(), startDate, endDate });
+      await trpc.assessment.termCreate.mutate({ facilityId, periodKey: periodKey.trim(), name: name.trim(), startDate, endDate });
       notifySuccess(`Đã tạo kỳ "${name.trim()}"`);
       reset();
       onClose();
@@ -187,7 +160,7 @@ function EditTermModal({
     setErr('');
     setBusy(true);
     try {
-      await assessmentApi.termUpdate.mutate({ id: term.id, name: name.trim(), startDate, endDate });
+      await trpc.assessment.termUpdate.mutate({ id: term.id, name: name.trim(), startDate, endDate });
       notifySuccess('Đã cập nhật kỳ học');
       onClose();
       onUpdated();
@@ -249,7 +222,7 @@ export function TermsPanel({ facilityId }: { facilityId: number }) {
   const load = useCallback(() => {
     setLoading(true);
     setLoadErr('');
-    assessmentApi.termList
+    trpc.assessment.termList
       .query({ facilityId })
       .then((rows) => { setTerms(rows); setLoading(false); })
       .catch((e: unknown) => {
@@ -262,10 +235,10 @@ export function TermsPanel({ facilityId }: { facilityId: number }) {
     setLockingId(term.id);
     try {
       if (term.isLocked) {
-        await assessmentApi.termUnlock.mutate({ id: term.id });
+        await trpc.assessment.termUnlock.mutate({ id: term.id });
         notifySuccess(`Đã mở khóa kỳ "${term.periodKey}"`);
       } else {
-        await assessmentApi.termLock.mutate({ id: term.id });
+        await trpc.assessment.termLock.mutate({ id: term.id });
         notifySuccess(`Đã khóa kỳ "${term.periodKey}" — không thể tính lại điểm khi đang khóa`);
       }
       load();

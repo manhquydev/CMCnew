@@ -117,7 +117,10 @@ export const scheduleRouter = router({
             },
             ...(teacherFilter ? { teacherId: teacherFilter } : {}),
           },
-          include: { batch: { select: { id: true, code: true, name: true } } },
+          include: {
+            batch: { select: { id: true, code: true, name: true } },
+            curriculumUnit: { select: { unitCode: true, theme: true } },
+          },
           orderBy: [{ sessionDate: 'asc' }, { startTime: 'asc' }],
         });
 

@@ -11,6 +11,14 @@ const TH_STYLE: React.CSSProperties = {
 
 type ShiftGroup = { id: string; code: string; name: string; selectionMode: string; templates: ShiftTemplate[] };
 type ShiftTemplate = { id: string; code: string; name: string; startTime: string; endTime: string; hours: number };
+type ShiftRegistrationRow = {
+  id: string;
+  code: string | null;
+  fromDate: string | Date;
+  toDate: string | Date;
+  status: string;
+  entries?: { date: string | Date; shiftTemplateId: string }[];
+};
 
 /// Enumerate dates from fromDate to toDate.
 function enumerateDates(from: string, to: string): string[] {
@@ -26,7 +34,7 @@ function enumerateDates(from: string, to: string): string[] {
 
 export function ShiftRegDetailPanel({ regId, onBack }: { regId: string; onBack: () => void }) {
   const { me } = useSession();
-  const [reg, setReg] = useState<any>(null);
+  const [reg, setReg] = useState<ShiftRegistrationRow | null>(null);
   const [group, setGroup] = useState<ShiftGroup | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -40,8 +48,8 @@ export function ShiftRegDetailPanel({ regId, onBack }: { regId: string; onBack: 
   const loadReg = useCallback(() => {
     if (isNew) { setLoading(false); return; }
     setLoading(true);
-    (trpc.shiftRegistration as any).get.query({ id: regId })
-      .then((r: any) => {
+    trpc.shiftRegistration.get.query({ id: regId })
+      .then((r) => {
         setReg(r);
         // Initialize selected from existing entries
         const map = new Map<string, Set<string>>();
@@ -52,13 +60,13 @@ export function ShiftRegDetailPanel({ regId, onBack }: { regId: string; onBack: 
         }
         setSelected(map);
       })
-      .catch((e: any) => notifyError(e, 'Không tải được phiếu'))
+      .catch((e: unknown) => notifyError(e, 'Không tải được phiếu'))
       .finally(() => setLoading(false));
   }, [regId, isNew]);
 
   const loadGroup = useCallback(() => {
     if (!fid) return;
-    (trpc.shiftConfig as any).list.query({ facilityId: fid })
+    trpc.shiftConfig.list.query({ facilityId: fid })
       .then((groups: ShiftGroup[]) => {
         // Find group matching user's role
         const isSales = me.roles.some((r: string) => ['sale', 'cskh', 'ctv_mkt'].includes(r));
@@ -67,13 +75,14 @@ export function ShiftRegDetailPanel({ regId, onBack }: { regId: string; onBack: 
         const g = groups.find((g: ShiftGroup) => g.code === targetCode) ?? groups[0];
         setGroup(g ?? null);
       })
-      .catch((e: any) => notifyError(e, 'Không tải được danh mục ca'));
+      .catch((e: unknown) => notifyError(e, 'Không tải được danh mục ca'));
   }, [fid, me.roles]);
 
   useEffect(() => { loadReg(); loadGroup(); }, [loadReg, loadGroup]);
 
-    // Toggle a shift for a date — auto-saves to backend with rollback on failure
+  // Toggle a shift for a date — auto-saves to backend with rollback on failure
   function toggle(date: string, tmplId: string) {
+    if (!reg) return;
     if (busy) return; // guard against rapid clicks
     const prevSelected = new Map(selected);
     const current = selected.get(date) ?? new Set();
@@ -108,7 +117,7 @@ export function ShiftRegDetailPanel({ regId, onBack }: { regId: string; onBack: 
     if (!reg?.id) return;
     setBusy(true);
     try {
-      const result = await (trpc.shiftRegistration as any).submit.mutate({ id: reg.id });
+      const result = await trpc.shiftRegistration.submit.mutate({ id: reg.id });
       notifySuccess('Đã gửi phiếu duyệt');
       setReg(result); // update local state so button disappears
     } catch (e) {
@@ -121,7 +130,7 @@ export function ShiftRegDetailPanel({ regId, onBack }: { regId: string; onBack: 
     if (!fid) return;
     setBusy(true);
     try {
-      const r = await (trpc.shiftRegistration as any).create.mutate({
+      const r = await trpc.shiftRegistration.create.mutate({
         facilityId: fid,
         fromDate,
         toDate,

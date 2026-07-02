@@ -1,12 +1,23 @@
-# DEBT - deliberate gate-skips (a loan, written down)
+# Deferred Debt
 
-- [ ] DEBT: MinIO content-addressed object store (spec §3) deferred; S1.7 uses local-disk content-addressed PDF store behind the storage driver -- Dev-only: exercise PDFs live on the API host's local data dir, not a durable/replicated object store -- close before: Before production go-live: swap driver to MinIO/S3, move bucket creds to secrets -- opened 2026-06-23
-  - PARTIALLY PAID 2026-06-23: per-principal access check on the file serve endpoint is DONE — `/files/exercise/:ref` now authorizes via the exercise RLS policy (staff→facility, parent/student→enrolled class) before serving; verified live (staff 200, owner-parent 200, foreign-parent 403, anonymous 401). Remaining: durable object store + secrets.
+Date: 2026-07-02
 
-- [ ] DEBT: Receipt render is print-to-PDF HTML, not a server-generated PDF -- `/files/receipt/:id` returns styled Vietnamese HTML (browser Ctrl+P → Save as PDF); a true server PDF (pdf-lib) needs an embedded Unicode font for Vietnamese diacritics -- close before: if a non-interactive/archival PDF artifact is required, embed a TTF via @pdf-lib/fontkit -- opened 2026-06-24
+This file records backend-ready or identified gaps intentionally left out of the LMS/ERP seam fixes.
 
-- [x] ACCEPTED (security-class, approved by operator 2026-06-24): identity tables `parent_account` / `student_account` opened from super_admin-only to any-staff read/write at the RLS layer (parents/students still excluded). Facilities are linked branches, not silos — these are system-wide identities (docs/specs/facility-model-decision.md). Residual exposure: any staff DB query can read parent/student contact rows; mitigated by (a) router role-gate (guardian mgmt = bgd/quan_ly/super only) and (b) every select excludes passwordHash/login secrets. Verified live: quan_ly (non-super) reads cross-facility parents; giao_vien → FORBIDDEN.
+## Backend-Ready UI Gaps
 
-- [ ] DEBT: CI/CD chưa chạy tự động — GitHub Actions bị chặn do billing tài khoản (repo private). Quyết định chủ dự án (2026-06-24): **dựng CI/CD bằng Jenkins (sau)**. `.github/workflows/ci.yml` giữ làm tham chiếu pipeline (self-contained: Postgres service + env ci-only). Tới khi có Jenkins: verify = chạy local pipeline (`pnpm db:up` → migrate → seed → verify-rls → `pnpm -r typecheck` → `pnpm -r test` → `pnpm --filter @cmc/api test:int` → `pnpm -r build`). -- close before: stand up Jenkins pipeline chạy chuỗi này trên mỗi PR -- opened 2026-06-24
+- Badge administration: backend exists for badge/star mechanics; admin CRUD/review UI remains deferred.
+- Shift registration withdraw/cancel: shift registration flow supports submit/approve paths; employee withdraw UX remains deferred.
+- Room update/archive: room creation/listing is wired; edit/archive UI remains deferred.
+- Facility network update/archive: network list/create exists; full management UX remains deferred.
+- Payroll domain read filtering: P5 keeps director read/list surfaces facility-wide; only writes are domain-scoped.
 
-- [x] DROPPED 2026-06-24 (operator decision): Chat CSKH (AI chatbot via Gemini) removed from roadmap — never built; the `cskh` role + Odoo-style `chatter` activity log stay (unrelated). No code to remove.
+## Cleanup Follow-Up
+
+- Replace the centralized shallow tRPC boundary in `apps/admin/src/shallow-trpc.ts` with direct typed calls after router output types are simplified enough to avoid TS2589.
+- Add focused integration coverage for payroll director domain write guards beyond permission snapshots.
+- Verify production LMS bundle behavior around `/showcase` during the next build/deploy review.
+
+## Unresolved Questions
+
+- Should director read surfaces eventually hide non-domain staff, or is facility-wide executive visibility intentional long term?

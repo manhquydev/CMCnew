@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Role } from '@cmc/auth';
 import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
 
 // Invariant (P06, decision 0011): kpiAutoPrefill computes quantitative KPI criteria from real data
@@ -24,6 +23,8 @@ describe('kpiAutoPrefill (P06 — auto-prefill quantitative KPI criteria)', () =
   let session1Id: string;
   let session2Id: string;
   let enrollment1Id: string;
+  let unit1Id: string;
+  let unit2Id: string;
 
   beforeAll(async () => {
     const su = await staffCaller();
@@ -165,13 +166,43 @@ describe('kpiAutoPrefill (P06 — auto-prefill quantitative KPI criteria)', () =
     );
     batchId = batch.id;
 
+    // Curriculum units for exercises (need 2 distinct units since both are homework - unique constraint on unitId+type)
+    const unit1 = await withRls(SUPER, (tx) =>
+      tx.curriculumUnit.create({
+        data: {
+          courseId: courseForTeacher.id,
+          unitCode: uniq('U'),
+          seqInLevel: 1,
+          orderGlobal: 1,
+          unitType: 'LESSON',
+          theme: 'fixture',
+          sessions: 1,
+        },
+      }),
+    );
+    unit1Id = unit1.id;
+    const unit2 = await withRls(SUPER, (tx) =>
+      tx.curriculumUnit.create({
+        data: {
+          courseId: courseForTeacher.id,
+          unitCode: uniq('U'),
+          seqInLevel: 2,
+          orderGlobal: 2,
+          unitType: 'LESSON',
+          theme: 'fixture',
+          sessions: 1,
+        },
+      }),
+    );
+    unit2Id = unit2.id;
+
     const ex1 = await withRls(SUPER, (tx) =>
       tx.exercise.create({
         data: {
-          facilityId: FACILITY,
-          classBatchId: batchId,
+          curriculumUnitId: unit1.id,
           title: 'Ex1',
           maxScore: 10,
+          type: 'homework',
           status: 'published',
         },
       }),
@@ -179,10 +210,10 @@ describe('kpiAutoPrefill (P06 — auto-prefill quantitative KPI criteria)', () =
     const ex2 = await withRls(SUPER, (tx) =>
       tx.exercise.create({
         data: {
-          facilityId: FACILITY,
-          classBatchId: batchId,
+          curriculumUnitId: unit2.id,
           title: 'Ex2',
           maxScore: 10,
+          type: 'homework',
           status: 'published',
         },
       }),
@@ -340,7 +371,8 @@ describe('kpiAutoPrefill (P06 — auto-prefill quantitative KPI criteria)', () =
       await tx.classSession.deleteMany({ where: { classBatchId: batchId } });
       await tx.grade.deleteMany({ where: { gradedById: teacherUserId } });
       await tx.submission.deleteMany({ where: { facilityId: FACILITY } });
-      await tx.exercise.deleteMany({ where: { classBatchId: batchId } });
+      await tx.exercise.deleteMany({ where: { curriculumUnitId: { in: [unit1Id, unit2Id].filter(Boolean) } } });
+      await tx.curriculumUnit.deleteMany({ where: { id: { in: [unit1Id, unit2Id].filter(Boolean) } } });
       if (enrollment1Id) await tx.enrollment.deleteMany({ where: { id: enrollment1Id } });
       if (batchId) await tx.classBatch.deleteMany({ where: { id: batchId } });
       // Receipts

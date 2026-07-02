@@ -43,8 +43,6 @@ type EnrollmentRow = Awaited<ReturnType<typeof trpc.enrollment.mine.query>>[numb
 type Gradebook = Awaited<ReturnType<typeof trpc.assessment.gradebook.query>>;
 type QualitativeRow = Gradebook['qualitative'][number];
 
-const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleDateString('vi-VN') : '—');
-
 type WorkStatus = 'none' | 'draft' | 'submitted' | 'graded';
 
 const STATUS_LABEL: Record<WorkStatus, string> = {
@@ -213,7 +211,7 @@ export function ExerciseModal({
             </Badge>
           </Group>
           <Text size="sm" c="dimmed">
-            Hạn nộp: {fmtDate(exercise.dueAt)} · Điểm tối đa: {exercise.maxScore}
+            Điểm tối đa: {exercise.maxScore} · Tự mở sau buổi học của unit {exercise.unitCode}
           </Text>
         </Group>
 
@@ -357,13 +355,16 @@ function ExercisesTab({ refreshKey, gradedOnly }: { refreshKey: number; gradedOn
   return (
     <Card radius="lg" style={{ border: '1px solid var(--cmc-border)' }} p={0}>
       {visibleExercises.length === 0 ? (
-        <Text c="dimmed" p="xl">{gradedOnly ? 'Chưa có bài tập nào được chấm điểm.' : 'Chưa có bài tập nào.'}</Text>
+        <Text c="dimmed" p="xl">
+          {gradedOnly
+            ? 'Chưa có bài tập nào được chấm điểm.'
+            : 'Bài tập sẽ tự mở sau khi lớp học xong bài tương ứng.'}
+        </Text>
       ) : (
         <Table striped highlightOnHover withTableBorder={false}>
           <Table.Thead>
             <Table.Tr>
               <Table.Th style={thStyle}>Bài tập</Table.Th>
-              <Table.Th style={thStyle}>Hạn nộp</Table.Th>
               <Table.Th style={thStyle}>Trạng thái</Table.Th>
               <Table.Th style={thStyle}>Điểm</Table.Th>
               <Table.Th style={{ ...thStyle, width: 120 }} />
@@ -379,9 +380,7 @@ function ExercisesTab({ refreshKey, gradedOnly }: { refreshKey: number; gradedOn
                 <Table.Tr key={ex.id}>
                   <Table.Td>
                     <Text fw={600} size="sm">{ex.title}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm">{fmtDate(ex.dueAt)}</Text>
+                    <Text c="dimmed" size="xs">Unit {ex.unitCode} · {ex.courseName}</Text>
                   </Table.Td>
                   <Table.Td>
                     <Group gap={4}>
@@ -718,7 +717,7 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
           <Text c="dimmed" style={{ fontFamily: 'var(--cmc-font-friendly)', fontWeight: 600 }}>Chưa có quà nào trong cửa hàng đổi thưởng.</Text>
         </Card>
       ) : (
-        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} gap="xl">
+        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="xl">
           {gifts.map((g) => {
             const outOfStock = g.stock === 0;
             const notEnough = stars < g.starsRequired;
@@ -804,7 +803,7 @@ function OverviewTab({ principal, refreshKey }: { principal: LmsPrincipal; refre
       <Title order={2} style={{ color: 'var(--cmc-text)', fontSize: 24, fontWeight: 800 }}>
         Xin chào con yêu, {principal.displayName}! 👋
       </Title>
-      <SimpleGrid cols={{ base: 1, sm: 3 }} gap="xl">
+      <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xl">
         <Card className="cmc-clay-card" p="xl">
           <Group justify="space-between" align="center" mb="xs">
             <Text size="xs" fw={800} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--cmc-font-friendly)' }}>Số sao tích lũy</Text>

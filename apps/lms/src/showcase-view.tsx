@@ -15,7 +15,6 @@ import {
   ActionIcon,
   Avatar,
   Progress,
-  Tooltip,
   Box,
 } from '@mantine/core';
 import {
@@ -27,7 +26,6 @@ import {
   IconStars,
   IconChevronRight,
   IconArrowLeft,
-  IconMoodSmile,
   IconCloud,
   IconLock,
   IconCheck,
@@ -66,23 +64,6 @@ function Medal3SVG({ size = 28 }: { size?: number }) {
     </svg>
   );
 }
-
-// Custom inline style utilities for glassmorphism and kid aesthetics
-const kidCardStyle = {
-  background: 'var(--cmc-gradient-card)',
-  backdropFilter: 'blur(10px)',
-  border: '1px solid rgba(255, 255, 255, 0.5)',
-  borderRadius: 'var(--cmc-radius-kid-lg)',
-  boxShadow: 'var(--cmc-kid-shadow)',
-  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-  cursor: 'pointer',
-};
-
-const hoverScaleStyle = (isHovered: boolean) => ({
-  ...kidCardStyle,
-  transform: isHovered ? 'translateY(-4px) scale(1.01)' : 'none',
-  boxShadow: isHovered ? 'var(--cmc-kid-shadow-hover)' : 'var(--cmc-kid-shadow)',
-});
 
 export function ShowcaseView() {
   const [role, setRole] = useState<'student' | 'parent'>('student');
@@ -407,7 +388,7 @@ export function ShowcaseView() {
               </Group>
 
               {/* Stat grid widgets */}
-              <SimpleGrid cols={{ base: 1, sm: 3 }} gap="xl">
+              <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xl">
                 <Card
                   className="cmc-clay-card"
                   onClick={() => setActiveTab('climb')}
@@ -741,7 +722,7 @@ export function ShowcaseView() {
                 </Badge>
               </Group>
 
-              <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} gap="xl">
+              <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="xl">
                 {giftItems.map((gift) => {
                   const notEnough = stars < gift.stars;
                   return (
@@ -805,7 +786,7 @@ export function ShowcaseView() {
               </Group>
 
               {/* Progress Summary */}
-              <SimpleGrid cols={{ base: 1, sm: 2 }} gap="xl">
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xl">
                 <Card className="cmc-clay-card" p="xl">
                   <Text fw={800} c="dimmed" size="xs" style={{ textTransform: 'uppercase', fontFamily: 'var(--cmc-font-friendly)', letterSpacing: '0.08em' }}>Tiến độ tuần này</Text>
                   <Group justify="space-between" mt="sm">

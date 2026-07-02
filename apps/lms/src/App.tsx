@@ -1,7 +1,11 @@
+import { lazy, Suspense } from 'react';
 import { LmsLoginGate, useLmsSession } from '@cmc/ui';
 import { StudentShell } from './student-shell';
 import { ParentShell } from './parent-shell';
-import { ShowcaseView } from './showcase-view';
+
+const ShowcaseView = import.meta.env.DEV
+  ? lazy(() => import('./showcase-view').then((m) => ({ default: m.ShowcaseView })))
+  : null;
 
 function Router() {
   const { principal } = useLmsSession();
@@ -13,9 +17,15 @@ function Router() {
 }
 
 export function App() {
-  const isShowcase = window.location.pathname.endsWith('/showcase') || window.location.hash === '#showcase';
-  if (isShowcase) {
-    return <ShowcaseView />;
+  if (import.meta.env.DEV) {
+    const isShowcase = window.location.pathname.endsWith('/showcase') || window.location.hash === '#showcase';
+    if (isShowcase && ShowcaseView) {
+      return (
+        <Suspense fallback={null}>
+          <ShowcaseView />
+        </Suspense>
+      );
+    }
   }
 
   return (

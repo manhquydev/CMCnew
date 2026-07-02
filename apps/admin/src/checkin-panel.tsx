@@ -86,6 +86,7 @@ export function CheckInPanel() {
   const today = dayjs().format('DD/MM/YYYY (dddd)');
   const isCheckedIn = status?.status === 'checked_in' || status?.status === 'completed';
   const isCompleted = status?.status === 'completed';
+  const activeStatus = status && status.status !== 'not_punched' ? status : null;
 
   return (
     <Stack maw={520}>
@@ -138,22 +139,22 @@ export function CheckInPanel() {
             )}
 
             {/* Shift info */}
-            {(status as any)?.shift && (
+            {activeStatus?.shift && (
               <Group justify="center" mb="md">
                 <Text size="sm" style={{ color: 'var(--cmc-text-muted)' }}>
-                  Ca hôm nay: {(status as any).shift.name} ({(status as any).shift.startTime}–{(status as any).shift.endTime})
+                  Ca hôm nay: {activeStatus.shift.name} ({activeStatus.shift.startTime}–{activeStatus.shift.endTime})
                 </Text>
               </Group>
             )}
 
             {/* Penalty info */}
-            {(status as any)?.penalty && (status as any).penalty.amount > 0 && (
+            {activeStatus?.penalty && activeStatus.penalty.amount > 0 && (
               <Group justify="center" mb="md">
                 <Badge color="red" variant="light" radius="xl">
-                  {(status as any).penalty.lateMinutes > 0 && `Đi muộn ${(status as any).penalty.lateMinutes}p`}
-                  {(status as any).penalty.lateMinutes > 0 && (status as any).penalty.earlyMinutes > 0 && ' — '}
-                  {(status as any).penalty.earlyMinutes > 0 && `Về sớm ${(status as any).penalty.earlyMinutes}p`}
-                  {' — '}{(status as any).penalty.amount.toLocaleString('vi-VN')}đ
+                  {activeStatus.penalty.lateMinutes > 0 && `Đi muộn ${activeStatus.penalty.lateMinutes}p`}
+                  {activeStatus.penalty.lateMinutes > 0 && activeStatus.penalty.earlyMinutes > 0 && ' — '}
+                  {activeStatus.penalty.earlyMinutes > 0 && `Về sớm ${activeStatus.penalty.earlyMinutes}p`}
+                  {' — '}{activeStatus.penalty.amount.toLocaleString('vi-VN')}đ
                 </Badge>
               </Group>
             )}

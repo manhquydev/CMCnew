@@ -73,7 +73,8 @@ Positive:
 
 Tradeoffs:
 
-- Cần "cây quyền" (ai quản ai). v1 dùng role + facility scope; reporting-line `managerId`
-  chi tiết hoãn (mọi `quan_ly`/`bgd` cùng facility coi là cấp trên của giao_vien/sale).
+- Cần "cây quyền" (ai quản ai). v1 dùng role + facility scope + `EmploymentProfile.managerId`
+  để xác định manager. RBAC consolidation (2026-07-01): 2 directors (giám_doc_kinh_doanh, giám_doc_dao_tao) 
+  thay thế chức năng quản lý của các role cũ (quan_ly, bgd); approval chain theo managerId + director role.
 - Công thức "chất lượng giảng dạy" từ điểm HS cần chuẩn hóa thang điểm → rủi ro lệch, mitigate
   bằng override + log.

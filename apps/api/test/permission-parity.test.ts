@@ -221,28 +221,23 @@ describe('Education Director (giam_doc_dao_tao) permissions', () => {
   });
 });
 
-describe('director KPI authority (3-heads executive board)', () => {
+describe('director payroll/KPI authority (3-heads executive board)', () => {
   const KD = 'giam_doc_kinh_doanh';
   const GD = 'giam_doc_dao_tao';
 
-  it('both directors can load the KPI panel (kpiList + kpiEvalGet)', () => {
+  it('both directors own payroll read/write gates', () => {
+    const payrollActions = Object.keys(PERMISSIONS['payroll'] ?? {});
     for (const dir of [KD, GD]) {
-      expect(PERMISSIONS['payroll']!['kpiList'], `kpiList must include ${dir}`).toContain(dir);
-      expect(PERMISSIONS['payroll']!['kpiEvalGet'], `kpiEvalGet must include ${dir}`).toContain(dir);
+      for (const action of payrollActions) {
+        expect(PERMISSIONS['payroll']![action], `payroll.${action} must include ${dir}`).toContain(dir);
+      }
     }
   });
 
-  it('both directors can confirm and approve KPI', () => {
-    for (const dir of [KD, GD]) {
-      expect(PERMISSIONS['payroll']!['kpiEvalConfirm'], `kpiEvalConfirm must include ${dir}`).toContain(dir);
-      expect(PERMISSIONS['payroll']!['kpiEvalApprove'], `kpiEvalApprove must include ${dir}`).toContain(dir);
-    }
-  });
-
-  it('KPI data prep stays with hr/ke_toan (directors do not start/prefill/setAuto)', () => {
-    for (const action of ['kpiEvalStart', 'kpiAutoPrefill', 'kpiSetAuto']) {
-      for (const dir of [KD, GD]) {
-        expect(PERMISSIONS['payroll']![action], `payroll.${action} must not include ${dir}`).not.toContain(dir);
+  it('hr/ke_toan no longer own payroll gates', () => {
+    for (const action of Object.keys(PERMISSIONS['payroll'] ?? {})) {
+      for (const role of ['hr', 'ke_toan']) {
+        expect(PERMISSIONS['payroll']![action], `payroll.${action} must not include ${role}`).not.toContain(role);
       }
     }
   });

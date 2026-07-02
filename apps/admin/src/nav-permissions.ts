@@ -88,12 +88,10 @@ export const NAV_GATES: Record<SectionKey, NavGate> = {
   // rewards: rewards.giftCreate = [giam_doc_kinh_doanh] only.
   rewards:      { kind: 'permission', module: 'rewards', action: 'giftCreate' },
 
-  // hr: payroll.payslipList = [hr, ke_toan]
-  hr:           { kind: 'permission', module: 'payroll', action: 'payslipList' },
+  // hr: payroll.roster = [giam_doc_kinh_doanh, giam_doc_dao_tao]
+  hr:           { kind: 'permission', module: 'payroll', action: 'roster' },
 
-  // kpi: payroll.kpiList = [hr, ke_toan] — panel's primary load query.
-  //   The two directors can confirm/approve (kpiEvalConfirm/kpiEvalApprove) but cannot load the
-  //   list rows themselves — kpiList stays hr/ke_toan-only.
+  // kpi: payroll.kpiList = [giam_doc_kinh_doanh, giam_doc_dao_tao] — panel's primary load query.
   kpi:          { kind: 'permission', module: 'payroll', action: 'kpiList' },
 
   // ── Work Shift & Attendance ────────────────────────────────────────────

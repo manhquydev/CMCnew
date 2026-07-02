@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { setCookie, deleteCookie } from 'hono/cookie';
-import { loginParent, loginStudent, mintParentSession, type LmsSession } from '@cmc/auth';
+import { loginStudent, mintParentSession, type LmsSession } from '@cmc/auth';
 import { router, publicProcedure, lmsProcedure } from '../trpc.js';
 import { LMS_COOKIE_NAME } from '../context.js';
 import { checkLoginLimit, clearLoginLimit, recordLoginFailure, throttle } from '../rate-limit.js';
@@ -33,20 +33,6 @@ function setLmsCookie(c: Parameters<typeof setCookie>[0], token: string) {
 
 // LMS sign-in for parents and students (separate identity domain from staff AppUser).
 export const lmsAuthRouter = router({
-  loginParent: publicProcedure
-    .input(z.object({ emailOrPhone: z.string().min(1), password: z.string().min(1) }))
-    .mutation(async ({ ctx, input }) => {
-      checkLoginLimit(ctx.ip, input.emailOrPhone);
-      const result = await loginParent(input.emailOrPhone, input.password);
-      if (!result) {
-        recordLoginFailure(ctx.ip, input.emailOrPhone);
-        throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sai tài khoản hoặc mật khẩu' });
-      }
-      clearLoginLimit(ctx.ip, input.emailOrPhone);
-      setLmsCookie(ctx.c, result.token);
-      return { principal: publicLms(result.session) };
-    }),
-
   loginStudent: publicProcedure
     .input(z.object({ loginCode: z.string().min(1), password: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {

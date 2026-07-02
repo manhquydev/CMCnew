@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
 import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
+import { assertExerciseOpenForStudent } from '../lib/exercise-open.js';
 import { router, lmsProcedure, studentProcedure, requirePermission } from '../trpc.js';
 import { annotationDataSchema, type AnnotationData } from '../annotation.js';
 
@@ -127,13 +128,7 @@ export const submissionRouter = router({
       withRls(lmsRlsContextOf(ctx.lms), async (tx) => {
         const studentId = ctx.lms.studentIds[0];
         if (!studentId) throw new TRPCError({ code: 'FORBIDDEN' });
-        const ex = await tx.exercise.findUniqueOrThrow({ where: { id: input.exerciseId } });
-        // Students may only save drafts for published exercises. Unpublished exercises
-        // are staff-only previews; accepting submissions would leak the fact the exercise
-        // exists and could later corrupt grade calculations if the exercise changes.
-        if (ex.status !== 'published') {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'Bài tập chưa được công bố' });
-        }
+        const { facilityId } = await assertExerciseOpenForStudent(tx, input.exerciseId, studentId);
         const data = {
           answerText: input.answerText ?? null,
           annotationLayer: (input.annotationLayer ?? undefined) as object | undefined,
@@ -141,7 +136,7 @@ export const submissionRouter = router({
         const saved = await tx.submission.upsert({
           where: { exerciseId_studentId: { exerciseId: input.exerciseId, studentId } },
           update: data,
-          create: { facilityId: ex.facilityId, exerciseId: input.exerciseId, studentId, ...data },
+          create: { facilityId, exerciseId: input.exerciseId, studentId, ...data },
           select: submissionSelect,
         });
         // Redact like mine/forStudent: a student saving their answer must never receive an
@@ -179,21 +174,12 @@ export const submissionRouter = router({
         if (!studentId) throw new TRPCError({ code: 'FORBIDDEN' });
         // Must have a draft to submit; guard so a missing row is a clean NOT_FOUND (not a P2025 500)
         // and a re-submit of an already submitted/graded row is rejected (never silently resets a grade).
-        // Also confirm the exercise is still published — it could have been retracted after the draft was saved.
-        const [current, ex] = await Promise.all([
-          tx.submission.findUnique({
-            where: { exerciseId_studentId: { exerciseId: input.exerciseId, studentId } },
-            select: { status: true },
-          }),
-          tx.exercise.findUniqueOrThrow({
-            where: { id: input.exerciseId },
-            select: { status: true },
-          }),
-        ]);
+        const { facilityId } = await assertExerciseOpenForStudent(tx, input.exerciseId, studentId);
+        const current = await tx.submission.findUnique({
+          where: { exerciseId_studentId: { exerciseId: input.exerciseId, studentId } },
+          select: { status: true },
+        });
         if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: 'Chưa có bài để nộp' });
-        if (ex.status !== 'published') {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'Bài tập chưa được công bố' });
-        }
         if (current.status !== 'draft') {
           throw new TRPCError({ code: 'CONFLICT', message: 'Bài đã nộp hoặc đã chấm' });
         }
@@ -203,7 +189,7 @@ export const submissionRouter = router({
           select: submissionSelect,
         });
         await logEvent(tx, {
-          facilityId: ctx.lms.facilityIds[0] ?? null,
+          facilityId,
           entityType: ENTITY,
           entityId: sub.id,
           type: 'status_changed',

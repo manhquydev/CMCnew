@@ -15,20 +15,21 @@ const FACILITY_1 = 1;
 
 let bizDirId: string;
 let eduDirId: string;
+let otherEduDirId: string; // second education director for SoD
 let teacherId: string;
-
-const bizDirCaller = () =>
-  staffCaller({
-    userId: bizDirId,
-    roles: [Role.giam_doc_kinh_doanh],
-    primaryRole: Role.giam_doc_kinh_doanh,
-    isSuperAdmin: false,
-    facilityIds: [FACILITY_1],
-  });
 
 const eduDirCaller = () =>
   staffCaller({
     userId: eduDirId,
+    roles: [Role.giam_doc_dao_tao],
+    primaryRole: Role.giam_doc_dao_tao,
+    isSuperAdmin: false,
+    facilityIds: [FACILITY_1],
+  });
+
+const otherEduDirCaller = () =>
+  staffCaller({
+    userId: otherEduDirId,
     roles: [Role.giam_doc_dao_tao],
     primaryRole: Role.giam_doc_dao_tao,
     isSuperAdmin: false,
@@ -65,6 +66,7 @@ beforeAll(async () => {
 
   bizDirId = (await mk(Role.giam_doc_kinh_doanh, 'dir-kd')).id;
   eduDirId = (await mk(Role.giam_doc_dao_tao, 'dir-dt')).id;
+  otherEduDirId = (await mk(Role.giam_doc_dao_tao, 'dir-dt2')).id;
   teacherId = (await mk(Role.giao_vien, 'dir-teacher')).id;
 });
 
@@ -72,7 +74,7 @@ afterAll(async () => {
   await withRls(SUPER, async (tx) => {
     await tx.recordEvent.deleteMany({ where: { entityType: 'kpi_score', facilityId: FACILITY_1 } });
     await tx.kpiScore.deleteMany({ where: { userId: teacherId } });
-    await tx.appUser.deleteMany({ where: { id: { in: [bizDirId, eduDirId, teacherId] } } });
+    await tx.appUser.deleteMany({ where: { id: { in: [bizDirId, eduDirId, otherEduDirId, teacherId] } } });
   });
 });
 
@@ -94,11 +96,11 @@ describe('director KPI authority', () => {
     expect(confirmed.status).toBe('confirmed');
     expect(confirmed.confirmedById).toBe(eduDirId);
 
-    // Business Director approves (different person → SoD ok; proves directors may approve).
-    const biz = await bizDirCaller();
-    const approved = await biz.payroll.kpiEvalApprove({ userId: teacherId, periodKey: period });
+    // Second Education Director approves (different person → SoD ok; domain-scoped: EDU director manages EDU target).
+    const otherEdu = await otherEduDirCaller();
+    const approved = await otherEdu.payroll.kpiEvalApprove({ userId: teacherId, periodKey: period });
     expect(approved.status).toBe('approved');
-    expect(approved.approvedById).toBe(bizDirId);
+    expect(approved.approvedById).toBe(otherEduDirId);
   });
 
   it('same director cannot confirm AND approve the same sheet (FORBIDDEN)', async () => {

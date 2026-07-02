@@ -1,96 +1,149 @@
 import { z } from 'zod';
-import { withRls, ExerciseType } from '@cmc/db';
+import { withRls, ExerciseStatus, ExerciseType } from '@cmc/db';
 import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
+import { openedUnitIdsFor } from '../lib/exercise-open.js';
 import { router, protectedProcedure, lmsProcedure, requirePermission } from '../trpc.js';
 
 const ENTITY = 'exercise';
 
+const exerciseSelect = {
+  id: true,
+  curriculumUnitId: true,
+  title: true,
+  description: true,
+  basePdfRef: true,
+  maxScore: true,
+  starReward: true,
+  type: true,
+  status: true,
+  createdById: true,
+  archivedAt: true,
+  createdAt: true,
+  curriculumUnit: {
+    select: {
+      unitCode: true,
+      unitType: true,
+      orderGlobal: true,
+      course: { select: { program: true, name: true } },
+    },
+  },
+} as const;
+
+function flattenExercise<T extends { curriculumUnit: { unitCode: string; unitType: string; course: { program: string; name: string } } }>(
+  exercise: T,
+) {
+  const { curriculumUnit, ...rest } = exercise;
+  return {
+    ...rest,
+    unitCode: curriculumUnit.unitCode,
+    unitType: curriculumUnit.unitType,
+    program: curriculumUnit.course.program,
+    courseName: curriculumUnit.course.name,
+  };
+}
+
 export const exerciseRouter = router({
-  // Staff: exercises of a class (any status).
+  // Staff: exercises attached to units taught by a class.
   listByClass: protectedProcedure
     .input(z.object({ classBatchId: z.string().uuid() }))
     .query(({ ctx, input }) =>
-      withRls(rlsContextOf(ctx.session), (tx) =>
-        tx.exercise.findMany({
-          where: { classBatchId: input.classBatchId, archivedAt: null },
-          orderBy: { createdAt: 'desc' },
-        }),
-      ),
-    ),
-
-  // LMS (parent/student): published exercises. RLS (exercise_isolation) already scopes
-  // these to classes the principal's student(s) are enrolled in.
-  // The batch's course program/name comes along so the student climb can group exercises
-  // by program (BlackHole / BRIGHT I.G / UCREA) without a second round-trip.
-  listForPrincipal: lmsProcedure.query(({ ctx }) =>
-    withRls(lmsRlsContextOf(ctx.lms), (tx) =>
-      tx.exercise.findMany({
-        where: { status: 'published', archivedAt: null },
-        orderBy: { dueAt: 'asc' },
-        include: {
-          batch: { select: { name: true, course: { select: { program: true, name: true } } } },
-        },
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const sessions = await tx.classSession.findMany({
+          where: {
+            classBatchId: input.classBatchId,
+            curriculumUnitId: { not: null },
+            archivedAt: null,
+          },
+          select: { curriculumUnitId: true },
+        });
+        const unitIds = [...new Set(sessions.map((s) => s.curriculumUnitId).filter(Boolean))] as string[];
+        if (unitIds.length === 0) return [];
+        const rows = await tx.exercise.findMany({
+          where: { curriculumUnitId: { in: unitIds }, archivedAt: null },
+          select: exerciseSelect,
+          orderBy: [{ curriculumUnit: { orderGlobal: 'asc' } }, { type: 'asc' }],
+        });
+        return rows.map(flattenExercise);
       }),
     ),
+
+  listByUnit: protectedProcedure
+    .input(z.object({ curriculumUnitId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const rows = await tx.exercise.findMany({
+          where: { curriculumUnitId: input.curriculumUnitId, archivedAt: null },
+          select: exerciseSelect,
+          orderBy: { type: 'asc' },
+        });
+        return rows.map(flattenExercise);
+      }),
+    ),
+
+  // LMS: published exercises open only after one owned student's non-cancelled session
+  // for that curriculum unit has ended in ICT.
+  listForPrincipal: lmsProcedure.query(({ ctx }) =>
+    withRls(lmsRlsContextOf(ctx.lms), async (tx) => {
+      const openedUnitIds = await openedUnitIdsFor(tx, ctx.lms.studentIds);
+      if (openedUnitIds.length === 0) return [];
+      const rows = await tx.exercise.findMany({
+        where: { status: 'published', archivedAt: null, curriculumUnitId: { in: openedUnitIds } },
+        select: exerciseSelect,
+        orderBy: [{ curriculumUnit: { orderGlobal: 'asc' } }, { type: 'asc' }],
+      });
+      return rows.map(flattenExercise);
+    }),
   ),
 
-  create: requirePermission('exercise', 'create')
+  upsert: requirePermission('exercise', 'upsert')
     .input(
       z.object({
-        facilityId: z.number().int().positive(),
-        classBatchId: z.string().uuid(),
+        curriculumUnitId: z.string().uuid(),
+        type: z.nativeEnum(ExerciseType).default('homework'),
         title: z.string().min(1),
         description: z.string().optional(),
         basePdfRef: z.string().optional(),
         maxScore: z.number().positive().optional(),
         starReward: z.number().int().min(0).optional(),
-        dueAt: z.string().datetime().optional(),
-        type: z.nativeEnum(ExerciseType).optional(),
+        status: z.nativeEnum(ExerciseStatus).optional(),
       }),
     )
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
-        const ex = await tx.exercise.create({
-          data: {
-            facilityId: input.facilityId,
-            classBatchId: input.classBatchId,
+        const before = await tx.exercise.findUnique({
+          where: { curriculumUnitId_type: { curriculumUnitId: input.curriculumUnitId, type: input.type } },
+        });
+        const exercise = await tx.exercise.upsert({
+          where: { curriculumUnitId_type: { curriculumUnitId: input.curriculumUnitId, type: input.type } },
+          update: {
+            title: input.title,
+            description: input.description ?? null,
+            basePdfRef: input.basePdfRef ?? null,
+            maxScore: input.maxScore ?? 10,
+            starReward: input.starReward ?? 10,
+            status: input.status ?? 'draft',
+          },
+          create: {
+            curriculumUnitId: input.curriculumUnitId,
+            type: input.type,
             title: input.title,
             description: input.description,
             basePdfRef: input.basePdfRef,
             maxScore: input.maxScore ?? 10,
             starReward: input.starReward ?? 10,
-            dueAt: input.dueAt ? new Date(input.dueAt) : null,
-            type: input.type ?? 'homework',
+            status: input.status ?? 'draft',
             createdById: ctx.session.userId,
           },
         });
         await logEvent(tx, {
-          facilityId: ex.facilityId,
+          facilityId: null,
           entityType: ENTITY,
-          entityId: ex.id,
-          type: 'created',
+          entityId: exercise.id,
+          type: before ? 'updated' : 'created',
           actorId: ctx.session.userId,
         });
-        return ex;
-      }),
-    ),
-
-  publish: requirePermission('exercise', 'publish')
-    .input(z.object({ id: z.string().uuid() }))
-    .mutation(({ ctx, input }) =>
-      withRls(rlsContextOf(ctx.session), async (tx) => {
-        const before = await tx.exercise.findUniqueOrThrow({ where: { id: input.id } });
-        const ex = await tx.exercise.update({ where: { id: input.id }, data: { status: 'published' } });
-        await logEvent(tx, {
-          facilityId: ex.facilityId,
-          entityType: ENTITY,
-          entityId: ex.id,
-          type: 'status_changed',
-          actorId: ctx.session.userId,
-          changes: [{ field: 'status', old: before.status, new: 'published' }],
-        });
-        return ex;
+        return exercise;
       }),
     ),
 });

@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, uploadExercisePdf, PdfAnnotator, type AnnotationData, notifyError, notifySuccess } from '@cmc/ui';
+import { trpc, PdfAnnotator, type AnnotationData, notifyError, notifySuccess } from '@cmc/ui';
 import {
   Badge,
   Button,
   Card,
   Center,
-  FileInput,
   Group,
   Loader,
   Modal,
@@ -50,116 +49,6 @@ const EX_TYPE_LABEL: Record<string, string> = {
   test_entrance: 'KT đầu vào',
   test_periodic: 'KT định kỳ',
 };
-
-function CreateExerciseModal({
-  facilityId,
-  classBatchId,
-  onCreated,
-}: {
-  facilityId: number;
-  classBatchId: string;
-  onCreated: () => void;
-}) {
-  const [opened, { open, close }] = useDisclosure(false);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [maxScore, setMaxScore] = useState<number | string>(10);
-  const [starReward, setStarReward] = useState<number | string>(10);
-  const [type, setType] = useState<string | null>('homework');
-  const [pdf, setPdf] = useState<File | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function create() {
-    if (!title.trim()) {
-      notifyError(new Error('Nhập tiêu đề bài tập'), 'Tạo bài tập thất bại');
-      return;
-    }
-    setBusy(true);
-    try {
-      // Upload the base PDF first (content-addressed) so the exercise carries its basePdfRef.
-      const basePdfRef = pdf ? await uploadExercisePdf(pdf) : undefined;
-      await trpc.exercise.create.mutate({
-        facilityId,
-        classBatchId,
-        title: title.trim(),
-        description: description.trim() || undefined,
-        basePdfRef,
-        maxScore: typeof maxScore === 'number' ? maxScore : undefined,
-        starReward: typeof starReward === 'number' ? starReward : undefined,
-        type: (type as 'homework' | 'test_entrance' | 'test_periodic') ?? undefined,
-      });
-      notifySuccess(`Đã tạo bài tập "${title.trim()}"`);
-      close();
-      setTitle('');
-      setDescription('');
-      setMaxScore(10);
-      setStarReward(10);
-      setType('homework');
-      setPdf(null);
-      onCreated();
-    } catch (e) {
-      notifyError(e, 'Tạo bài tập thất bại');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <>
-      <Button size="xs" onClick={open}>
-        + Tạo bài tập
-      </Button>
-      <Modal opened={opened} onClose={close} title="Tạo bài tập">
-        <Stack>
-          <Textarea
-            label="Tiêu đề"
-            autosize
-            minRows={1}
-            value={title}
-            onChange={(e) => setTitle(e.currentTarget.value)}
-          />
-          <Textarea
-            label="Mô tả (tùy chọn)"
-            autosize
-            minRows={2}
-            value={description}
-            onChange={(e) => setDescription(e.currentTarget.value)}
-          />
-          <Select
-            label="Loại"
-            data={[
-              { value: 'homework', label: 'Bài tập' },
-              { value: 'test_entrance', label: 'KT đầu vào' },
-              { value: 'test_periodic', label: 'KT định kỳ' },
-            ]}
-            value={type}
-            onChange={setType}
-          />
-          <Group grow>
-            <NumberInput label="Điểm tối đa" value={maxScore} onChange={setMaxScore} min={1} />
-            <NumberInput label="Sao thưởng" value={starReward} onChange={setStarReward} min={0} />
-          </Group>
-          <FileInput
-            label="Đề gốc PDF (tùy chọn)"
-            placeholder="Chọn file PDF"
-            accept="application/pdf"
-            value={pdf}
-            onChange={setPdf}
-            clearable
-          />
-          {pdf && pdf.type !== 'application/pdf' && (
-            <Text c="red" size="xs">
-              File phải là PDF.
-            </Text>
-          )}
-          <Button onClick={create} loading={busy} disabled={!title.trim()}>
-            Tạo
-          </Button>
-        </Stack>
-      </Modal>
-    </>
-  );
-}
 
 // Full-page grade-on-PDF: render the student's annotation layer (read-only) under the teacher's
 // editable layer, set score/feedback, save (grade.grade with annotationLayer), then publish.
@@ -504,11 +393,10 @@ function SubmissionsPanel({ exercise }: { exercise: Exercise }) {
   );
 }
 
-function ClassGrading({ facilityId, classBatchId }: { facilityId: number; classBatchId: string }) {
+function ClassGrading({ classBatchId }: { facilityId: number; classBatchId: string }) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [publishingId, setPublishingId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -523,19 +411,6 @@ function ClassGrading({ facilityId, classBatchId }: { facilityId: number; classB
   }, [classBatchId]);
   useEffect(load, [load]);
 
-  async function publish(id: string) {
-    setPublishingId(id);
-    try {
-      await trpc.exercise.publish.mutate({ id });
-      notifySuccess('Đã phát hành bài tập');
-      load();
-    } catch (e) {
-      notifyError(e, 'Phát hành bài tập thất bại');
-    } finally {
-      setPublishingId(null);
-    }
-  }
-
   const selected = exercises.find((e) => e.id === selectedId) ?? null;
 
   return (
@@ -543,7 +418,6 @@ function ClassGrading({ facilityId, classBatchId }: { facilityId: number; classB
       <Card withBorder>
         <Group justify="space-between" mb="sm">
           <Title order={5}>Bài tập ({exercises.length})</Title>
-          <CreateExerciseModal facilityId={facilityId} classBatchId={classBatchId} onCreated={load} />
         </Group>
 
         {loading ? (
@@ -552,7 +426,7 @@ function ClassGrading({ facilityId, classBatchId }: { facilityId: number; classB
           </Center>
         ) : exercises.length === 0 ? (
           <Text c="dimmed" size="sm">
-            Chưa có bài tập. Bấm “+ Tạo bài tập”.
+            Chưa có bài tập theo unit đã dạy. Bài tập được giám đốc upload trong khung chương trình và tự mở sau buổi học.
           </Text>
         ) : (
           <Table highlightOnHover>
@@ -587,21 +461,7 @@ function ClassGrading({ facilityId, classBatchId }: { facilityId: number; classB
                       {EX_STATUS_LABEL[ex.status] ?? ex.status}
                     </Badge>
                   </Table.Td>
-                  <Table.Td w={110}>
-                    {ex.status === 'draft' && (
-                      <Button
-                        size="compact-xs"
-                        variant="light"
-                        loading={publishingId === ex.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          publish(ex.id);
-                        }}
-                      >
-                        Phát hành
-                      </Button>
-                    )}
-                  </Table.Td>
+                  <Table.Td />
                 </Table.Tr>
               ))}
             </Table.Tbody>

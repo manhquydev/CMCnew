@@ -116,6 +116,43 @@ function WorkflowCard({
   );
 }
 
+function SessionExerciseIndicator({ session }: { session: MySession }) {
+  const [rows, setRows] = useState<Awaited<ReturnType<typeof trpc.exercise.listByUnit.query>>>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!session.curriculumUnitId) {
+      setRows([]);
+      return;
+    }
+    setLoading(true);
+    trpc.exercise.listByUnit
+      .query({ curriculumUnitId: session.curriculumUnitId })
+      .then(setRows)
+      .catch((e) => notifyError(e, 'Không tải được trạng thái bài tập'))
+      .finally(() => setLoading(false));
+  }, [session.curriculumUnitId]);
+
+  if (!session.curriculumUnitId) {
+    return <Text size="xs" c="dimmed">Buổi này chưa gắn curriculum unit nên không có bài tập tự mở.</Text>;
+  }
+
+  const published = rows.filter((row) => row.status === 'published');
+  const unitLabel = session.curriculumUnit?.unitCode ?? 'unit hiện tại';
+  return (
+    <Stack gap={4}>
+      <Text size="xs" c="dimmed">
+        Bài tập buổi này ({unitLabel}): {loading ? 'đang kiểm tra...' : published.length > 0 ? 'đã có' : 'chưa upload'} · tự mở sau khi buổi kết thúc.
+      </Text>
+      {published.map((exercise) => (
+        <Badge key={exercise.id} size="sm" color="green" variant="light">
+          {exercise.title}
+        </Badge>
+      ))}
+    </Stack>
+  );
+}
+
 function SessionWorkflowPanel({ session }: { session: MySession }) {
   const { me } = useSession();
   const phase = getSessionPhase(session);
@@ -153,10 +190,7 @@ function SessionWorkflowPanel({ session }: { session: MySession }) {
             description="Mở sau giờ kết thúc buổi học."
             enabled={postClassEnabled}
           >
-            <Group gap="xs">
-              <Button size="xs" variant="light">Chọn bài tập mẫu</Button>
-              <Button size="xs">Phát lên LMS</Button>
-            </Group>
+            <SessionExerciseIndicator session={session} />
           </WorkflowCard>
 
           <WorkflowCard

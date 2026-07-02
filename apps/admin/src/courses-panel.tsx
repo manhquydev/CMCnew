@@ -15,6 +15,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconPlus } from '@tabler/icons-react';
+import { CourseExerciseManager } from './course-exercise-manager.js';
 
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
 type Program = 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE';
@@ -33,6 +34,7 @@ export function CoursesPanel() {
   // (quản lý / GĐ Đào tạo) may create — hide the button for everyone else so they never hit FORBIDDEN.
   const canCreate = me ? can(me.roles, me.isSuperAdmin, 'course', 'create') : false;
   const [courses, setCourses] = useState<Course[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [opened, { open, close }] = useDisclosure(false);
   const [busy, setBusy] = useState(false);
   const form = useForm({
@@ -89,7 +91,12 @@ export function CoursesPanel() {
           </Table.Thead>
           <Table.Tbody>
             {courses.map((c) => (
-              <Table.Tr key={c.id}>
+              <Table.Tr
+                key={c.id}
+                style={{ cursor: 'pointer' }}
+                bg={selectedCourseId === c.id ? 'var(--mantine-color-cmc-0)' : undefined}
+                onClick={() => setSelectedCourseId((cur) => (cur === c.id ? null : c.id))}
+              >
                 <Table.Td>{c.code}</Table.Td>
                 <Table.Td>{c.name}</Table.Td>
                 <Table.Td>{c.program}</Table.Td>
@@ -101,6 +108,10 @@ export function CoursesPanel() {
           <Text c="dimmed" size="sm" mt="sm">Chưa có khóa học.</Text>
         )}
       </Card>
+
+      {selectedCourseId && (
+        <CourseExerciseManager course={courses.find((course) => course.id === selectedCourseId)!} />
+      )}
 
       <Modal opened={opened} onClose={close} title="Tạo khóa học" radius="xl" centered>
         <form onSubmit={form.onSubmit(create)}>

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { trpc, useSession, notifyError, notifySuccess } from '@cmc/ui';
+import { useSession, notifyError, notifySuccess } from '@cmc/ui';
 import {
   Badge,
   Button,
@@ -13,6 +13,7 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
+import { payrollApi } from './shallow-trpc';
 
 const TH_STYLE: React.CSSProperties = {
   fontSize: 11,
@@ -40,24 +41,20 @@ type KpiRow = {
 
 type CriterionConfig = { key: string; label: string; weight: number };
 
+type ScoreEntry = { key: string; score: number };
 type KpiEvalGetResult = {
   row: KpiRow;
   criteriaConfig: CriterionConfig[];
 };
 
-type ScoreEntry = { key: string; score: number };
-
-const payrollApi = trpc.payroll as unknown as {
-  roster: { query: (i: { facilityId: number }) => Promise<RosterEntry[]> };
-  kpiList: { query: (i: { facilityId: number; periodKey: string }) => Promise<KpiRow[]> };
-  kpiEvalStart: { mutate: (i: { userId: string; facilityId: number; periodKey: string; block: 'training' | 'sales' }) => Promise<unknown> };
-  kpiAutoPrefill: { mutate: (i: { userId: string; facilityId: number; periodKey: string }) => Promise<unknown> };
-  kpiEvalSubmit: { mutate: (i: { periodKey: string; scores: ScoreEntry[] }) => Promise<unknown> };
-  kpiEvalConfirm: { mutate: (i: { userId: string; periodKey: string }) => Promise<unknown> };
-  kpiEvalApprove: { mutate: (i: { userId: string; periodKey: string }) => Promise<unknown> };
-  kpiOverride: { mutate: (i: { userId: string; periodKey: string; overrideScore: number; reason: string }) => Promise<unknown> };
-  kpiEvalGet: { query: (i: { userId: string; periodKey: string }) => Promise<KpiEvalGetResult> };
-};
+function isScoreEntry(value: unknown): value is ScoreEntry {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { key?: unknown }).key === 'string' &&
+    typeof (value as { score?: unknown }).score === 'number'
+  );
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -121,7 +118,7 @@ function KpiDetailCard({
       .query({ userId: row.userId, periodKey: row.periodKey })
       .then((d) => {
         setDetail(d);
-        const saved = (d.row.criterionScores as ScoreEntry[] | null) ?? [];
+        const saved = Array.isArray(d.row.criterionScores) ? d.row.criterionScores.filter(isScoreEntry) : [];
         setScores(
           d.criteriaConfig.map((c) => ({
             key: c.key,

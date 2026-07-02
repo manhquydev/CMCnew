@@ -25,7 +25,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Program } from '@cmc/db';
-import { programWeights, computeFinalGrade, type QuantFormula } from '@cmc/domain-grading';
+import { programWeights, type QuantFormula } from '@cmc/domain-grading';
 import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
 
 const FACILITY = 1;
@@ -37,6 +37,7 @@ interface ProgramFixture {
   studentId: string;
   periodKey: string;
   batchId: string;
+  unitId: string;
 }
 
 const fixtures: Partial<Record<Program, ProgramFixture>> = {};
@@ -46,6 +47,7 @@ let overrideTemplateId: string;
 let overrideStudentId: string;
 let overridePeriodKey: string;
 let overrideBatchId: string;
+let overrideUnitId: string;
 
 const PROGRAMS_UNDER_TEST: Program[] = [Program.UCREA, Program.BRIGHT_IG, Program.BLACK_HOLE];
 const OVERRIDE_LEVEL = 'test-override-parity';
@@ -66,9 +68,22 @@ beforeAll(async () => {
         data: { facilityId: FACILITY, code: uniq(`PARB_${program}`), courseId: course.id, name: `Parity Batch ${program}` },
       });
 
+      // Curriculum unit for exercise
+      const unit = await tx.curriculumUnit.create({
+        data: {
+          courseId: course.id,
+          unitCode: uniq('U'),
+          seqInLevel: 1,
+          orderGlobal: 1,
+          unitType: 'LESSON',
+          theme: 'fixture',
+          sessions: 1,
+        },
+      });
+
       // Homework exercise + submitted + published grade (score=6/10 → normalized 6.0).
       const exercise = await tx.exercise.create({
-        data: { facilityId: FACILITY, classBatchId: batch.id, title: uniq('PAR_HW'), type: 'homework', maxScore: 10, status: 'published' },
+        data: { curriculumUnitId: unit.id, title: uniq('PAR_HW'), type: 'homework', maxScore: 10, status: 'published' },
       });
       const submission = await tx.submission.create({
         data: { facilityId: FACILITY, exerciseId: exercise.id, studentId: student.id, status: 'graded' },
@@ -89,7 +104,7 @@ beforeAll(async () => {
         },
       });
 
-      fixtures[program] = { studentId: student.id, periodKey, batchId: batch.id };
+      fixtures[program] = { studentId: student.id, periodKey, batchId: batch.id, unitId: unit.id };
     }
 
     // Override-path: create a template with level='test-override-parity' and explicit weights.
@@ -101,12 +116,6 @@ beforeAll(async () => {
         formula: FORMULA,
         qualitativeWeight: OVERRIDE_WEIGHTS.qualitative,
         quantitativeWeight: OVERRIDE_WEIGHTS.quantitative,
-        thresholds: {
-          create: [
-            { facilityId: FACILITY, minPercent: 0, maxPercent: 49.999, grade: 'Cần cố gắng', result: 'fail', sequence: 0 },
-            { facilityId: FACILITY, minPercent: 50, maxPercent: 100, grade: 'Đạt', result: 'pass', sequence: 1 },
-          ],
-        },
       },
     });
     overrideTemplateId = overrideTpl.id;
@@ -127,8 +136,22 @@ beforeAll(async () => {
     });
     overrideBatchId = overrideBatch.id;
 
+    // Curriculum unit for override exercise
+    const overrideUnit = await tx.curriculumUnit.create({
+      data: {
+        courseId: course.id,
+        unitCode: uniq('U'),
+        seqInLevel: 1,
+        orderGlobal: 1,
+        unitType: 'LESSON',
+        theme: 'fixture',
+        sessions: 1,
+      },
+    });
+    overrideUnitId = overrideUnit.id;
+
     const overrideEx = await tx.exercise.create({
-      data: { facilityId: FACILITY, classBatchId: overrideBatch.id, title: uniq('OVR_HW'), type: 'homework', maxScore: 10, status: 'published' },
+      data: { curriculumUnitId: overrideUnit.id, title: uniq('OVR_HW'), type: 'homework', maxScore: 10, status: 'published' },
     });
     const overrideSubm = await tx.submission.create({
       data: { facilityId: FACILITY, exerciseId: overrideEx.id, studentId: overrideStudentId, status: 'graded' },
@@ -156,7 +179,8 @@ afterAll(async () => {
     await tx.qualitativeAssessment.deleteMany({ where: { studentId: overrideStudentId } });
     await tx.grade.deleteMany({ where: { submission: { studentId: overrideStudentId } } });
     await tx.submission.deleteMany({ where: { studentId: overrideStudentId } });
-    await tx.exercise.deleteMany({ where: { classBatchId: overrideBatchId } });
+    await tx.exercise.deleteMany({ where: { curriculumUnitId: overrideUnitId } });
+    await tx.curriculumUnit.deleteMany({ where: { id: overrideUnitId } });
     await tx.classBatch.deleteMany({ where: { id: overrideBatchId } });
     await tx.gradingTemplate.deleteMany({ where: { id: overrideTemplateId } });
     await tx.student.deleteMany({ where: { id: overrideStudentId } });
@@ -169,7 +193,8 @@ afterAll(async () => {
       await tx.qualitativeAssessment.deleteMany({ where: { studentId: f.studentId } });
       await tx.grade.deleteMany({ where: { submission: { studentId: f.studentId } } });
       await tx.submission.deleteMany({ where: { studentId: f.studentId } });
-      await tx.exercise.deleteMany({ where: { classBatchId: f.batchId } });
+      await tx.exercise.deleteMany({ where: { curriculumUnitId: f.unitId } });
+      await tx.curriculumUnit.deleteMany({ where: { id: f.unitId } });
       await tx.classBatch.deleteMany({ where: { id: f.batchId } });
       await tx.student.deleteMany({ where: { id: f.studentId } });
     }

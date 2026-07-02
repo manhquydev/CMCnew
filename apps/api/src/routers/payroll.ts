@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls } from '@cmc/db';
 import type { Prisma } from '@cmc/db';
-import { rlsContextOf } from '@cmc/auth';
+import { rlsContextOf, type RequestSession } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { enqueueEmail } from '../services/email-outbox.js';
 
@@ -28,6 +28,58 @@ import { callioConfigFromEnv, fetchPeriodCdrs, aggregateValidCalls } from '../li
  * would cause KPI doanh_so to understate the revenue that already earned commission.
  */
 const COMMISSION_RECEIPT_STATUSES = ['approved', 'sent', 'reconciled'] as const;
+const TOP_PAYROLL_ROLES: readonly Role[] = [Role.super_admin, Role.giam_doc_kinh_doanh, Role.giam_doc_dao_tao];
+const BUSINESS_PAYROLL_ROLES: readonly Role[] = [Role.sale, Role.cskh, Role.ctv_mkt, Role.ke_toan, Role.hr];
+const EDUCATION_PAYROLL_ROLES: readonly Role[] = [Role.giao_vien];
+
+function canManagePayrollTarget(session: RequestSession, targetUserId: string, targetRoles: Role[]): boolean {
+  if (session.isSuperAdmin || session.roles.includes(Role.super_admin)) return true;
+  if (session.userId === targetUserId) return false;
+  if (targetRoles.some((r) => TOP_PAYROLL_ROLES.includes(r))) return false;
+
+  const canManageBusiness =
+    session.roles.includes(Role.giam_doc_kinh_doanh) && targetRoles.some((r) => BUSINESS_PAYROLL_ROLES.includes(r));
+  const canManageEducation =
+    session.roles.includes(Role.giam_doc_dao_tao) && targetRoles.some((r) => EDUCATION_PAYROLL_ROLES.includes(r));
+  return canManageBusiness || canManageEducation;
+}
+
+async function assertCanManagePayrollTarget(
+  tx: Prisma.TransactionClient,
+  session: RequestSession,
+  targetUserId: string,
+  facilityId?: number,
+): Promise<Role[]> {
+  const target = await tx.appUser.findFirst({
+    where: {
+      id: targetUserId,
+      ...(facilityId ? { facilities: { some: { facilityId } } } : {}),
+    },
+    select: { roles: true },
+  });
+  if (!target) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy nhân sự' });
+  const targetRoles = target.roles as Role[];
+  if (!canManagePayrollTarget(session, targetUserId, targetRoles)) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Không có quyền cập nhật lương/KPI cho nhân sự này' });
+  }
+  return targetRoles;
+}
+
+async function manageablePayrollTargetIds(
+  tx: Prisma.TransactionClient,
+  session: RequestSession,
+  userIds: string[],
+): Promise<Set<string>> {
+  const uniqueIds = [...new Set(userIds)];
+  if (uniqueIds.length === 0) return new Set();
+  if (session.isSuperAdmin || session.roles.includes(Role.super_admin)) return new Set(uniqueIds);
+
+  const users = await tx.appUser.findMany({
+    where: { id: { in: uniqueIds } },
+    select: { id: true, roles: true },
+  });
+  return new Set(users.filter((u) => canManagePayrollTarget(session, u.id, u.roles as Role[])).map((u) => u.id));
+}
 
 /** Last calendar day of a YYYY-MM period (UTC), used to resolve the effective salary rate. */
 function periodEnd(periodKey: string): Date {
@@ -288,6 +340,7 @@ export const payrollRouter = router({
     )
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
+        await assertCanManagePayrollTarget(tx, ctx.session, input.userId, input.facilityId);
         // A grade change on an existing profile is a sensitive payroll action: it must carry a
         // reason and is audited old→new. Initial create or unchanged grade needs no reason.
         const existing = await tx.employmentProfile.findUnique({
@@ -348,6 +401,7 @@ export const payrollRouter = router({
     )
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
+        await assertCanManagePayrollTarget(tx, ctx.session, input.userId, input.facilityId);
         const rate = await tx.salaryRate.create({
           data: { ...input, effectiveFrom: new Date(input.effectiveFrom), createdById: ctx.session.userId },
         });
@@ -450,6 +504,7 @@ export const payrollRouter = router({
     )
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
+        await assertCanManagePayrollTarget(tx, ctx.session, input.userId, input.facilityId);
         const existing = await tx.payslip.findUnique({ where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } } });
         if (existing && existing.status !== 'draft') {
           throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu lương đã chốt — không tính lại được' });
@@ -520,6 +575,7 @@ export const payrollRouter = router({
       const { slip, staff } = await withRls(rlsContextOf(ctx.session), async (tx) => {
         const before = await tx.payslip.findUniqueOrThrow({ where: { id: input.id } });
         if (before.status !== 'draft') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Chỉ chốt được phiếu nháp' });
+        await assertCanManagePayrollTarget(tx, ctx.session, before.userId, before.facilityId);
         const slip = await tx.payslip.update({ where: { id: input.id }, data: { status: 'finalized', finalizedById: ctx.session.userId, finalizedAt: new Date() } });
         await logEvent(tx, { facilityId: slip.facilityId, entityType: 'payslip', entityId: slip.id, type: 'status_changed', body: `Chốt phiếu lương ${slip.periodKey}`, changes: [{ field: 'status', old: 'draft', new: 'finalized' }], actorId: ctx.session.userId });
         const staff = await tx.appUser.findUnique({ where: { id: slip.userId }, select: { email: true, displayName: true } });
@@ -552,6 +608,7 @@ export const payrollRouter = router({
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const before = await tx.payslip.findUniqueOrThrow({ where: { id: input.id } });
         if (before.status !== 'finalized') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Chỉ đánh dấu trả cho phiếu đã chốt' });
+        await assertCanManagePayrollTarget(tx, ctx.session, before.userId, before.facilityId);
         const slip = await tx.payslip.update({ where: { id: input.id }, data: { status: 'paid', paidAt: new Date() } });
         await logEvent(tx, { facilityId: slip.facilityId, entityType: 'payslip', entityId: slip.id, type: 'status_changed', body: `Đã trả lương ${slip.periodKey}`, changes: [{ field: 'status', old: 'finalized', new: 'paid' }], actorId: ctx.session.userId });
         return slip;
@@ -597,17 +654,20 @@ export const payrollRouter = router({
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const due = await tx.payslip.findMany({
           where: { facilityId: input.facilityId, periodKey: input.periodKey, status: 'finalized' },
-          select: { id: true },
+          select: { id: true, userId: true },
         });
         if (due.length === 0) return { paidCount: 0 };
+        const manageableIds = await manageablePayrollTargetIds(tx, ctx.session, due.map((s) => s.userId));
+        const scopedDue = due.filter((s) => manageableIds.has(s.userId));
+        if (scopedDue.length === 0) return { paidCount: 0 };
         const paidAt = new Date();
-        await tx.payslip.updateMany({ where: { id: { in: due.map((s) => s.id) } }, data: { status: 'paid', paidAt } });
+        await tx.payslip.updateMany({ where: { id: { in: scopedDue.map((s) => s.id) } }, data: { status: 'paid', paidAt } });
         await Promise.all(
-          due.map((s) =>
+          scopedDue.map((s) =>
             logEvent(tx, { facilityId: input.facilityId, entityType: 'payslip', entityId: s.id, type: 'status_changed', body: `Trả lương hàng loạt kỳ ${input.periodKey}`, changes: [{ field: 'status', old: 'finalized', new: 'paid' }], actorId: ctx.session.userId }),
           ),
         );
-        return { paidCount: due.length };
+        return { paidCount: scopedDue.length };
       }),
     ),
 
@@ -641,16 +701,19 @@ export const payrollRouter = router({
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const due = await tx.payslip.findMany({
           where: { id: { in: input.ids }, status: 'finalized' },
-          select: { id: true, facilityId: true, periodKey: true },
+          select: { id: true, facilityId: true, periodKey: true, userId: true },
         });
         if (due.length === 0) return { succeeded: [] as string[], failed: input.ids };
+        const manageableIds = await manageablePayrollTargetIds(tx, ctx.session, due.map((s) => s.userId));
+        const scopedDue = due.filter((s) => manageableIds.has(s.userId));
+        if (scopedDue.length === 0) return { succeeded: [] as string[], failed: input.ids };
         const paidAt = new Date();
         await tx.payslip.updateMany({
-          where: { id: { in: due.map((s) => s.id) } },
+          where: { id: { in: scopedDue.map((s) => s.id) } },
           data: { status: 'paid', paidAt },
         });
         await Promise.all(
-          due.map((s) =>
+          scopedDue.map((s) =>
             logEvent(tx, {
               facilityId: s.facilityId,
               entityType: 'payslip',
@@ -662,9 +725,9 @@ export const payrollRouter = router({
             }),
           ),
         );
-        const succeededSet = new Set(due.map((s) => s.id));
+        const succeededSet = new Set(scopedDue.map((s) => s.id));
         return {
-          succeeded: due.map((s) => s.id),
+          succeeded: scopedDue.map((s) => s.id),
           failed: input.ids.filter((id) => !succeededSet.has(id)),
         };
       }),
@@ -677,6 +740,7 @@ export const payrollRouter = router({
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const before = await tx.payslip.findUniqueOrThrow({ where: { id: input.id } });
         if (before.status !== 'finalized') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Chỉ mở lại phiếu đã chốt (chưa trả)' });
+        await assertCanManagePayrollTarget(tx, ctx.session, before.userId, before.facilityId);
         const slip = await tx.payslip.update({ where: { id: input.id }, data: { status: 'draft', finalizedById: null, finalizedAt: null } });
         await logEvent(tx, { facilityId: slip.facilityId, entityType: 'payslip', entityId: slip.id, type: 'status_changed', body: `Mở lại phiếu lương ${slip.periodKey}`, changes: [{ field: 'status', old: 'finalized', new: 'draft' }], actorId: ctx.session.userId });
         return slip;
@@ -815,6 +879,7 @@ export const payrollRouter = router({
     )
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
+        await assertCanManagePayrollTarget(tx, ctx.session, input.userId, input.facilityId);
         const existing = await tx.kpiScore.findUnique({
           where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
         });
@@ -910,6 +975,7 @@ export const payrollRouter = router({
           where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
         });
         if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
+        await assertCanManagePayrollTarget(tx, ctx.session, row.userId, row.facilityId);
         if (row.status !== 'submitted') throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu KPI chưa được nộp' });
         // Separation of duties (decision 0011): submit is the only self-step. Nobody confirms their
         // own sheet — otherwise a manager who also holds kpiEvalConfirm could rubber-stamp themselves.
@@ -947,6 +1013,7 @@ export const payrollRouter = router({
           where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
         });
         if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
+        await assertCanManagePayrollTarget(tx, ctx.session, row.userId, row.facilityId);
         if (row.status !== 'confirmed') throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu KPI chưa được xác nhận' });
         // Separation of duties (decision 0011): never approve your own sheet, nor one you confirmed.
         if (row.userId === ctx.session.userId) {
@@ -1039,6 +1106,7 @@ export const payrollRouter = router({
           where: { userId_periodKey: { userId: input.userId, periodKey: input.periodKey } },
         });
         if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy phiếu KPI' });
+        await assertCanManagePayrollTarget(tx, ctx.session, row.userId, row.facilityId);
         if (row.status !== 'draft') throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu KPI không ở trạng thái nháp' });
 
         const { start, end } = periodRange(input.periodKey);
@@ -1218,6 +1286,7 @@ export const payrollRouter = router({
     )
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
+        await assertCanManagePayrollTarget(tx, ctx.session, input.userId, input.facilityId);
         const params = await effectiveParamsAt(tx, input.periodKey);
         const criterionScores = params.kpiCriteria[input.block].map((c) => ({ key: c.key, score: 0 }));
         const row = await tx.kpiScore.upsert({
@@ -1274,11 +1343,13 @@ export const payrollRouter = router({
           where: { facilityId: input.facilityId, callioExt: { not: null } },
           select: { userId: true, callioExt: true },
         });
+        const manageableIds = await manageablePayrollTargetIds(tx, ctx.session, profiles.map((p) => p.userId));
 
         let synced = 0;
         const syncedAt = new Date();
 
         for (const profile of profiles) {
+          if (!manageableIds.has(profile.userId)) continue;
           if (!profile.callioExt) continue;
           const tally = talliesByExt.get(profile.callioExt);
           if (!tally) continue;

@@ -42,17 +42,27 @@ function makeStudentSession(): LmsSession {
   };
 }
 
-/** Create a published exercise in classBatchId and register it for cleanup. */
+/** Create a published exercise and register it for cleanup. Requires courseId to be set. */
 async function mkPublishedExercise(maxScore = 10) {
   return withRls(SUPER, async (tx) => {
+    // Exercise is now a global curriculum asset, linked via CurriculumUnit
+    const unit = await tx.curriculumUnit.create({
+      data: {
+        courseId,
+        unitCode: uniq('CU_EX'),
+        seqInLevel: 1,
+        orderGlobal: 1,
+        unitType: 'LESSON',
+        theme: 'Security invariants',
+        sessions: 1,
+      },
+    });
     const ex = await tx.exercise.create({
       data: {
-        facilityId: FACILITY,
-        classBatchId,
+        curriculumUnitId: unit.id,
         title: uniq('EX_PUB'),
         type: 'homework',
         maxScore,
-        starReward: 0,
         status: 'published',
       },
     });
@@ -124,15 +134,24 @@ beforeAll(async () => {
       });
       classSessionId = session.id;
 
-      // Unpublished exercise in batch A (for submission-to-unpublished tests)
+      // Unpublished exercise (for submission-to-unpublished tests)
+      const unpubUnit = await tx.curriculumUnit.create({
+        data: {
+          courseId,
+          unitCode: uniq('CU_UNPUB'),
+          seqInLevel: 1,
+          orderGlobal: 1,
+          unitType: 'LESSON',
+          theme: 'Security invariants',
+          sessions: 1,
+        },
+      });
       const unpubEx = await tx.exercise.create({
         data: {
-          facilityId: FACILITY,
-          classBatchId,
+          curriculumUnitId: unpubUnit.id,
           title: uniq('EX_UNPUB'),
           type: 'homework',
           maxScore: 10,
-          starReward: 0,
           status: 'draft',
         },
       });
@@ -153,7 +172,12 @@ afterAll(async () => {
       await tx.submission.deleteMany({ where: { id: { in: cleanupSubmissions } } });
     }
     if (cleanupExercises.length) {
+      // Delete exercises first, then their parent curriculumUnits
       await tx.exercise.deleteMany({ where: { id: { in: cleanupExercises } } });
+      const units = await tx.curriculumUnit.findMany({
+        where: { courseId },
+      });
+      await tx.curriculumUnit.deleteMany({ where: { id: { in: units.map((u) => u.id) } } });
     }
     await tx.classSession.deleteMany({ where: { classBatchId } });
     await tx.enrollment.deleteMany({ where: { studentId } });
@@ -303,6 +327,23 @@ describe('Invariant 4: submission.save/submit rejected for unpublished exercises
     if (!dbReachable) return;
 
     const ex = await mkPublishedExercise();
+
+    // Create an ENDED session mapped to this exercise's curriculum unit so it auto-opens
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    await withRls(SUPER, async (tx) => {
+      await tx.classSession.create({
+        data: {
+          facilityId: FACILITY,
+          classBatchId,
+          sessionDate: twoDaysAgo,
+          startTime: '18:00',
+          endTime: '19:00',
+          status: 'confirmed',
+          curriculumUnitId: ex.curriculumUnitId,
+        },
+      });
+    });
+
     const lms = lmsCaller(makeStudentSession());
     const saved = await lms.submission.save({ exerciseId: ex.id, answerText: 'valid draft' });
     expect(saved.status).toBe('draft');
@@ -314,6 +355,23 @@ describe('Invariant 4: submission.save/submit rejected for unpublished exercises
 
     // Create an exercise published, have student save a draft, then retract it
     const ex = await mkPublishedExercise();
+
+    // Create an ENDED session mapped to this exercise's curriculum unit so it auto-opens
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    await withRls(SUPER, async (tx) => {
+      await tx.classSession.create({
+        data: {
+          facilityId: FACILITY,
+          classBatchId,
+          sessionDate: twoDaysAgo,
+          startTime: '20:00',
+          endTime: '21:00',
+          status: 'confirmed',
+          curriculumUnitId: ex.curriculumUnitId,
+        },
+      });
+    });
+
     const lms = lmsCaller(makeStudentSession());
     const saved = await lms.submission.save({ exerciseId: ex.id, answerText: 'saved while published' });
     cleanupSubmissions.push(saved.id);

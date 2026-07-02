@@ -19,6 +19,8 @@ describe('computeFinalGrade — term-scoped grade aggregation', () => {
 
   let studentId: string;
   let termId: string;
+  let hwInId: string;
+  let hwOutId: string;
 
   beforeAll(async () => {
     await withRls(SUPER, async (tx) => {
@@ -33,39 +35,56 @@ describe('computeFinalGrade — term-scoped grade aggregation', () => {
       });
       studentId = student.id;
 
-      // Course + batch (needed for exercises)
       const course = await tx.course.findFirst({ select: { id: true } });
       if (!course) throw new Error('No course seeded — run pnpm db:seed first');
-      const batch = await tx.classBatch.create({
+
+      // Two distinct curriculum units (both homework type, so must use different units
+      // due to @@unique([curriculumUnitId, type]) constraint)
+      const hwInUnit = await tx.curriculumUnit.create({
         data: {
-          facilityId: FACILITY,
-          code: uniq('TERMB'),
           courseId: course.id,
-          name: 'Term Scope Batch',
+          unitCode: uniq('U'),
+          seqInLevel: 1,
+          orderGlobal: 1,
+          unitType: 'LESSON',
+          theme: 'fixture',
+          sessions: 1,
         },
       });
 
-      // Two homework exercises
+      const hwOutUnit = await tx.curriculumUnit.create({
+        data: {
+          courseId: course.id,
+          unitCode: uniq('U'),
+          seqInLevel: 2,
+          orderGlobal: 2,
+          unitType: 'LESSON',
+          theme: 'fixture',
+          sessions: 1,
+        },
+      });
+
+      // Two homework exercises (same type, different units)
       const hwIn = await tx.exercise.create({
         data: {
-          facilityId: FACILITY,
-          classBatchId: batch.id,
+          curriculumUnitId: hwInUnit.id,
           title: uniq('HW_IN'),
           type: 'homework',
           maxScore: 10,
           status: 'published',
         },
       });
+      hwInId = hwIn.id;
       const hwOut = await tx.exercise.create({
         data: {
-          facilityId: FACILITY,
-          classBatchId: batch.id,
+          curriculumUnitId: hwOutUnit.id,
           title: uniq('HW_OUT'),
           type: 'homework',
           maxScore: 10,
           status: 'published',
         },
       });
+      hwOutId = hwOut.id;
 
       // Submissions for both exercises
       const submIn = await tx.submission.create({
@@ -119,7 +138,7 @@ describe('computeFinalGrade — term-scoped grade aggregation', () => {
       await tx.finalGrade.deleteMany({ where: { studentId } });
       await tx.grade.deleteMany({ where: { submission: { studentId } } });
       await tx.submission.deleteMany({ where: { studentId } });
-      await tx.exercise.deleteMany({ where: { batch: { code: { startsWith: 'TERMB' } } } });
+      await tx.exercise.deleteMany({ where: { id: { in: [hwInId, hwOutId] } } });
       await tx.classBatch.deleteMany({ where: { code: { startsWith: 'TERMB' } } });
       await tx.academicTerm.deleteMany({ where: { id: termId } });
       await tx.student.deleteMany({ where: { id: studentId } });
@@ -128,7 +147,7 @@ describe('computeFinalGrade — term-scoped grade aggregation', () => {
 
   it('in-term grade (score=8) included, out-of-term grade (score=2) excluded → homeworkAvg=8', async () => {
     const caller = await staffCaller();
-    const result = await caller.assessment.computeFinalGrade({
+    await caller.assessment.computeFinalGrade({
       studentId,
       program: Program.UCREA,
       periodKey: PERIOD_KEY,
@@ -165,7 +184,7 @@ describe('computeFinalGrade — term-scoped grade aggregation', () => {
 
     // computeFinalGrade with a periodKey that has no AcademicTerm → falls back to all-time.
     // Both grades (gradedAt 2099-01-15 and 2099-03-01) are included → homeworkAvg = 5.0.
-    const result = await caller.assessment.computeFinalGrade({
+    await caller.assessment.computeFinalGrade({
       studentId,
       program: Program.UCREA,
       periodKey: UNBOUND_PERIOD,

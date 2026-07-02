@@ -77,23 +77,6 @@ function strip(s: ResolvedLms): LmsSession {
   return rest;
 }
 
-export async function loginParent(
-  emailOrPhone: string,
-  password: string,
-): Promise<{ token: string; session: LmsSession } | null> {
-  const id = emailOrPhone.trim();
-  const acc = await withRls(SYSTEM_RLS, (tx) =>
-    tx.parentAccount.findFirst({ where: { OR: [{ email: id.toLowerCase() }, { phone: id }] } }),
-  );
-  if (!acc || !acc.isActive) return null;
-  // Passwordless (OTP-only) parents have no passwordHash → password login is not available to them.
-  if (!acc.passwordHash || !(await verifyPassword(password, acc.passwordHash))) return null;
-  const resolved = await parentSession(acc.id);
-  if (!resolved) return null;
-  const token = await signLmsSession({ sub: acc.id, kind: 'parent', tokenVersion: acc.tokenVersion });
-  return { token, session: strip(resolved) };
-}
-
 export async function loginStudent(
   loginCode: string,
   password: string,

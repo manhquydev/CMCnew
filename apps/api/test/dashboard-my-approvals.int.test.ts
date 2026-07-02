@@ -284,8 +284,16 @@ describe('dashboard.myApprovals — approval-inbox aggregate', () => {
   });
 
   describe('kpi-pending (both directors) + separation of duties', () => {
-    it('submitted KPI sheet appears for both directors with actionKey kpiEvalConfirm', async () => {
+    // Ensure clean state: delete any existing KPI sheet for this employee/period before the SoD tests
+    let kpiId: string;
+    beforeAll(async () => {
       await withRls(SUPER, (tx) =>
+        tx.kpiScore.deleteMany({ where: { userId: saleId, periodKey: PERIOD } }),
+      );
+    });
+
+    it('submitted KPI sheet appears for both directors with actionKey kpiEvalConfirm', async () => {
+      const created = await withRls(SUPER, (tx) =>
         tx.kpiScore.create({
           data: {
             facilityId: FACILITY, userId: saleId, periodKey: PERIOD, block: 'sales',
@@ -293,13 +301,16 @@ describe('dashboard.myApprovals — approval-inbox aggregate', () => {
           },
         }),
       );
+      kpiId = created.id;
 
       const bizItems = await (await bizDirCaller()).dashboard.myApprovals({ facilityId: FACILITY });
-      const bizItem = bizItems.find((i) => i.domain === 'kpi' && i.actionKey === 'payroll.kpiEvalConfirm');
+      const bizItem = bizItems.find((i) => i.domain === 'kpi' && i.id === kpiId && i.actionKey === 'payroll.kpiEvalConfirm');
       expect(bizItem).toBeDefined();
 
-      const eduItems = await (await eduDirCaller()).dashboard.myApprovals({ facilityId: FACILITY });
-      expect(eduItems.some((i) => i.domain === 'kpi' && i.actionKey === 'payroll.kpiEvalConfirm')).toBe(true);
+      // Domain-scoped: only giam_doc_kinh_doanh can manage BUSINESS domain targets (saleId).
+      // otherBizDir (second giam_doc_kinh_doanh) should also see it.
+      const otherBizItems = await (await otherBizDirCaller()).dashboard.myApprovals({ facilityId: FACILITY });
+      expect(otherBizItems.some((i) => i.domain === 'kpi' && i.id === kpiId && i.actionKey === 'payroll.kpiEvalConfirm')).toBe(true);
     });
 
     it('separation of duties: confirming director does NOT see the sheet in their own approve-queue; a different director does', async () => {
@@ -307,21 +318,21 @@ describe('dashboard.myApprovals — approval-inbox aggregate', () => {
 
       // No longer "chờ xác nhận" for anyone.
       const bizAfterConfirm = await (await bizDirCaller()).dashboard.myApprovals({ facilityId: FACILITY });
-      expect(bizAfterConfirm.some((i) => i.domain === 'kpi' && i.actionKey === 'payroll.kpiEvalConfirm')).toBe(false);
+      expect(bizAfterConfirm.some((i) => i.domain === 'kpi' && i.id === kpiId && i.actionKey === 'payroll.kpiEvalConfirm')).toBe(false);
       // And NOT "chờ duyệt" for the confirmer either (separation of duties).
-      expect(bizAfterConfirm.some((i) => i.domain === 'kpi' && i.actionKey === 'payroll.kpiEvalApprove')).toBe(false);
+      expect(bizAfterConfirm.some((i) => i.domain === 'kpi' && i.id === kpiId && i.actionKey === 'payroll.kpiEvalApprove')).toBe(false);
 
-      // A different director (giam_doc_dao_tao here) sees it as "chờ duyệt".
-      const eduAfterConfirm = await (await eduDirCaller()).dashboard.myApprovals({ facilityId: FACILITY });
-      expect(eduAfterConfirm.some((i) => i.domain === 'kpi' && i.actionKey === 'payroll.kpiEvalApprove')).toBe(true);
+      // A different director (second giam_doc_kinh_doanh) sees it as "chờ duyệt".
+      const otherBizAfterConfirm = await (await otherBizDirCaller()).dashboard.myApprovals({ facilityId: FACILITY });
+      expect(otherBizAfterConfirm.some((i) => i.domain === 'kpi' && i.id === kpiId && i.actionKey === 'payroll.kpiEvalApprove')).toBe(true);
     });
 
     it('approved KPI sheet no longer appears for either director', async () => {
-      await (await eduDirCaller()).payroll.kpiEvalApprove({ userId: saleId, periodKey: PERIOD });
+      await (await otherBizDirCaller()).payroll.kpiEvalApprove({ userId: saleId, periodKey: PERIOD });
       const bizItems = await (await bizDirCaller()).dashboard.myApprovals({ facilityId: FACILITY });
-      const eduItems = await (await eduDirCaller()).dashboard.myApprovals({ facilityId: FACILITY });
-      expect(bizItems.some((i) => i.domain === 'kpi')).toBe(false);
-      expect(eduItems.some((i) => i.domain === 'kpi')).toBe(false);
+      const otherBizItems = await (await otherBizDirCaller()).dashboard.myApprovals({ facilityId: FACILITY });
+      expect(bizItems.some((i) => i.domain === 'kpi' && i.id === kpiId)).toBe(false);
+      expect(otherBizItems.some((i) => i.domain === 'kpi' && i.id === kpiId)).toBe(false);
     });
   });
 
