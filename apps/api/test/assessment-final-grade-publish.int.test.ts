@@ -31,24 +31,38 @@ describe('computeFinalGrade published-only filter (assessment invariant)', () =>
       });
       studentId = student.id;
 
-      // Create a class batch (needed for exercises)
       const course = await tx.course.findFirst({ select: { id: true } });
       if (!course) throw new Error('No course seeded — run pnpm db:seed first');
 
-      const batch = await tx.classBatch.create({
+      // Create curriculum units for exercises (one per type for clarity)
+      const hwUnit = await tx.curriculumUnit.create({
         data: {
-          facilityId: FACILITY,
-          code: uniq('BATCH'),
           courseId: course.id,
-          name: 'Test Batch',
+          unitCode: uniq('U'),
+          seqInLevel: 1,
+          orderGlobal: 1,
+          unitType: 'LESSON',
+          theme: 'fixture',
+          sessions: 1,
+        },
+      });
+
+      const testUnit = await tx.curriculumUnit.create({
+        data: {
+          courseId: course.id,
+          unitCode: uniq('U'),
+          seqInLevel: 2,
+          orderGlobal: 2,
+          unitType: 'LESSON',
+          theme: 'fixture',
+          sessions: 1,
         },
       });
 
       // Create exercises
       const hw = await tx.exercise.create({
         data: {
-          facilityId: FACILITY,
-          classBatchId: batch.id,
+          curriculumUnitId: hwUnit.id,
           title: uniq('HW'),
           type: 'homework',
           maxScore: 10,
@@ -59,8 +73,7 @@ describe('computeFinalGrade published-only filter (assessment invariant)', () =>
 
       const test = await tx.exercise.create({
         data: {
-          facilityId: FACILITY,
-          classBatchId: batch.id,
+          curriculumUnitId: testUnit.id,
           title: uniq('TEST'),
           type: 'test_periodic',
           maxScore: 10,
@@ -153,7 +166,7 @@ describe('computeFinalGrade published-only filter (assessment invariant)', () =>
       await tx.qualitativeAssessment.deleteMany({ where: { studentId } });
       await tx.grade.deleteMany({ where: { submission: { studentId } } });
       await tx.submission.deleteMany({ where: { studentId } });
-      await tx.exercise.deleteMany({ where: { batch: { code: { startsWith: 'BATCH' } } } });
+      await tx.exercise.deleteMany({ where: { id: { in: [exerciseHomeworkId, exerciseTestId].filter(Boolean) as string[] } } });
       await tx.classBatch.deleteMany({ where: { code: { startsWith: 'BATCH' } } });
       await tx.student.deleteMany({ where: { id: studentId } });
     });

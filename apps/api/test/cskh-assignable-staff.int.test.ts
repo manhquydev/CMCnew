@@ -2,17 +2,18 @@
  * Integration tests for user.listAssignableForAfterSale.
  *
  * Invariants:
- *   - Only users with roles cskh or quan_ly are returned (case-owner eligible roles).
+ *   - Only users with roles sale, cskh, or giam_doc_kinh_doanh are returned (case-owner eligible roles).
  *   - RLS (app_user_facility_roster) scopes results to the caller's facility.
- *   - cskh and quan_ly callers can call the endpoint; unrelated roles (e.g. giao_vien) are rejected.
+ *   - sale, cskh, and giam_doc_kinh_doanh callers can call the endpoint; unrelated roles are rejected.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Role, hashPassword } from '@cmc/db';
 import { withRls, SUPER, staffCaller, uniq, prisma } from './helpers.js';
 
 let facilityId: number;
+let saleUserId: string;
 let cskhUserId: string;
-let quanLyUserId: string;
+let bizDirUserId: string;
 let giaovienUserId: string;
 
 beforeAll(async () => {
@@ -26,7 +27,18 @@ beforeAll(async () => {
 
   const pw = await hashPassword('TestPass!123');
 
-  const [cskh, qly, gv] = await withRls(SUPER, async (tx) => {
+  const [sale, cskh, bizDir, gv] = await withRls(SUPER, async (tx) => {
+    const s = await tx.appUser.create({
+      data: {
+        email: `${uniq('sale_asgn')}@cmc.test`,
+        displayName: 'Sale Assignable Test',
+        passwordHash: pw,
+        roles: [Role.sale],
+        primaryRole: Role.sale,
+        facilities: { create: [{ facilityId }] },
+      },
+      select: { id: true },
+    });
     const c = await tx.appUser.create({
       data: {
         email: `${uniq('cskh_asgn')}@cmc.test`,
@@ -40,11 +52,11 @@ beforeAll(async () => {
     });
     const q = await tx.appUser.create({
       data: {
-        email: `${uniq('qly_asgn')}@cmc.test`,
-        displayName: 'QuanLy Assignable Test',
+        email: `${uniq('bizdir_asgn')}@cmc.test`,
+        displayName: 'BizDir Assignable Test',
         passwordHash: pw,
-        roles: [Role.quan_ly],
-        primaryRole: Role.quan_ly,
+        roles: [Role.giam_doc_kinh_doanh],
+        primaryRole: Role.giam_doc_kinh_doanh,
         facilities: { create: [{ facilityId }] },
       },
       select: { id: true },
@@ -60,16 +72,17 @@ beforeAll(async () => {
       },
       select: { id: true },
     });
-    return [c, q, g];
+    return [s, c, q, g];
   });
 
+  saleUserId = sale.id;
   cskhUserId = cskh.id;
-  quanLyUserId = qly.id;
+  bizDirUserId = bizDir.id;
   giaovienUserId = gv.id;
 });
 
 afterAll(async () => {
-  const ids = [cskhUserId, quanLyUserId, giaovienUserId].filter(Boolean);
+  const ids = [saleUserId, cskhUserId, bizDirUserId, giaovienUserId].filter(Boolean);
   await withRls(SUPER, async (tx) => {
     await tx.userFacility.deleteMany({ where: { userId: { in: ids } } });
     await tx.appUser.deleteMany({ where: { id: { in: ids } } });
@@ -77,7 +90,7 @@ afterAll(async () => {
 });
 
 describe('user.listAssignableForAfterSale', () => {
-  it('cskh caller receives cskh and quan_ly staff — not giao_vien', async () => {
+  it('cskh caller receives sale, cskh, and giam_doc_kinh_doanh staff — not giao_vien', async () => {
     const caller = await staffCaller({
       userId: cskhUserId,
       roles: [Role.cskh],
@@ -87,8 +100,9 @@ describe('user.listAssignableForAfterSale', () => {
     });
     const result = await caller.user.listAssignableForAfterSale();
     const ids = result.map((u) => u.id);
+    expect(ids).toContain(saleUserId);
     expect(ids).toContain(cskhUserId);
-    expect(ids).toContain(quanLyUserId);
+    expect(ids).toContain(bizDirUserId);
     // giao_vien is not an eligible case-owner role
     expect(ids).not.toContain(giaovienUserId);
     // Shape: only id and displayName
@@ -98,17 +112,33 @@ describe('user.listAssignableForAfterSale', () => {
     }
   });
 
-  it('quan_ly caller can call the endpoint and gets results', async () => {
+  it('sale caller can call the endpoint and gets eligible staff', async () => {
     const caller = await staffCaller({
-      userId: quanLyUserId,
-      roles: [Role.quan_ly],
-      primaryRole: Role.quan_ly,
+      userId: saleUserId,
+      roles: [Role.sale],
+      primaryRole: Role.sale,
+      isSuperAdmin: false,
+      facilityIds: [facilityId],
+    });
+    const result = await caller.user.listAssignableForAfterSale();
+    const ids = result.map((u) => u.id);
+    expect(ids).toContain(saleUserId);
+    expect(ids).toContain(cskhUserId);
+    expect(ids).toContain(bizDirUserId);
+    expect(ids).not.toContain(giaovienUserId);
+  });
+
+  it('giam_doc_kinh_doanh caller can call the endpoint and gets results', async () => {
+    const caller = await staffCaller({
+      userId: bizDirUserId,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
       isSuperAdmin: false,
       facilityIds: [facilityId],
     });
     const result = await caller.user.listAssignableForAfterSale();
     expect(Array.isArray(result)).toBe(true);
-    expect(result.map((u) => u.id)).toContain(quanLyUserId);
+    expect(result.map((u) => u.id)).toContain(bizDirUserId);
   });
 
   it('giao_vien caller is rejected with FORBIDDEN', async () => {

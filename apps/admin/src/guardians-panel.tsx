@@ -16,6 +16,7 @@ import {
 type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
 type ParentT = Awaited<ReturnType<typeof trpc.guardian.parentList.query>>[number];
 type GuardianT = Awaited<ReturnType<typeof trpc.guardian.listForStudent.query>>[number];
+type LinkRequestT = Awaited<ReturnType<typeof trpc.guardian.linkRequestList.query>>[number];
 
 const RELATIONS = [
   { value: 'father', label: 'Bố' },
@@ -23,6 +24,106 @@ const RELATIONS = [
   { value: 'guardian', label: 'Người giám hộ' },
 ];
 const RELATION_LABEL: Record<string, string> = { father: 'Bố', mother: 'Mẹ', guardian: 'Người giám hộ' };
+
+/**
+ * Staff review queue for parent self-link requests (anti-takeover design — approve is the only
+ * path that creates a Guardian row for a parent-initiated request). Ambiguous rows (no
+ * matched student resolved at request time) carry `candidates`; staff must pick one explicitly.
+ */
+function LinkRequestQueue() {
+  const [requests, setRequests] = useState<LinkRequestT[]>([]);
+  const [picked, setPicked] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    trpc.guardian.linkRequestList
+      .query()
+      .then(setRequests)
+      .catch((e) => notifyError(e, 'Không tải được hàng chờ yêu cầu liên kết'));
+  }, []);
+  useEffect(load, [load]);
+
+  async function review(r: LinkRequestT, decision: 'approved' | 'rejected') {
+    const studentId = r.matchedStudentId ?? picked[r.id];
+    if (decision === 'approved' && !studentId) {
+      notifyError(new Error('Chọn học sinh trước khi duyệt.'), 'Thiếu học sinh');
+      return;
+    }
+    setBusyId(r.id);
+    try {
+      await trpc.guardian.linkRequestReview.mutate({
+        id: r.id,
+        decision,
+        studentId: studentId ?? undefined,
+        relation: 'guardian',
+      });
+      notifySuccess(decision === 'approved' ? 'Đã duyệt liên kết' : 'Đã từ chối yêu cầu');
+      load();
+    } catch (e) {
+      notifyError(e, 'Xử lý yêu cầu thất bại');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (requests.length === 0) return null;
+
+  return (
+    <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+      <Text fw={600} style={{ color: 'var(--cmc-text)' }} mb="md">
+        Yêu cầu tự liên kết từ phụ huynh ({requests.length})
+      </Text>
+      <Stack gap="sm">
+        {requests.map((r) => (
+          <Group key={r.id} align="flex-end" wrap="nowrap" gap="sm">
+            <div style={{ flex: 1 }}>
+              <Text size="sm" fw={600}>{r.requestedBy.displayName}</Text>
+              <Text size="sm" c="dimmed">
+                {r.requestedBy.email ?? r.requestedBy.phone ?? '—'} · Tra cứu: {r.studentCode ?? r.studentPhone}
+              </Text>
+              {r.matchedStudentId ? (
+                <Badge size="sm" color="teal" variant="light" radius="xl" mt={4}>Đã khớp 1 học sinh</Badge>
+              ) : r.candidates.length > 0 ? (
+                <Select
+                  mt={4}
+                  size="xs"
+                  w={300}
+                  placeholder="Chọn học sinh trùng khớp"
+                  data={r.candidates.map((c) => ({ value: c.id, label: `${c.studentCode} — ${c.fullName}` }))}
+                  value={picked[r.id] ?? null}
+                  onChange={(v) => setPicked((m) => ({ ...m, [r.id]: v ?? '' }))}
+                />
+              ) : (
+                <Badge size="sm" color="gray" variant="light" radius="xl" mt={4}>Không tìm thấy học sinh khớp</Badge>
+              )}
+            </div>
+            <Button
+              size="compact-sm"
+              variant="filled"
+              radius={9999}
+              loading={busyId === r.id}
+              disabled={busyId !== null}
+              onClick={() => review(r, 'approved')}
+            >
+              Duyệt
+            </Button>
+            <Button
+              size="compact-sm"
+              variant="subtle"
+              color="red"
+              radius={9999}
+              loading={busyId === r.id}
+              disabled={busyId !== null}
+              onClick={() => review(r, 'rejected')}
+            >
+              Từ chối
+            </Button>
+          </Group>
+        ))}
+      </Stack>
+    </Card>
+  );
+}
 
 export function GuardiansPanel() {
   const [students, setStudents] = useState<StudentT[]>([]);
@@ -128,6 +229,8 @@ export function GuardiansPanel() {
 
   return (
     <Stack>
+      <LinkRequestQueue />
+
       <Select
         label="Học sinh"
         w={360}

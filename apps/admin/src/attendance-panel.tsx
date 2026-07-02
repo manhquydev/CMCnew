@@ -11,7 +11,7 @@ type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[numb
  * Cross-class attendance panel — fetches today's sessions for the active facility,
  * lets the user pick one, then delegates roster marking to AttendanceRoster.
  * Only sessions where the caller is the teacher (giao_vien) or all sessions
- * (quan_ly/head_teacher) are shown, matching the mySessions router authz.
+ * (giam_doc_dao_tao) are shown, matching the mySessions router authz.
  */
 export function AttendancePanel() {
   const today = dayjs().format('YYYY-MM-DD');

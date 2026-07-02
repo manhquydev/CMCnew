@@ -1,0 +1,61 @@
+﻿unit_code,program,level_code,seq_in_level,unit_type,assessment,chu_de,noi_dung,tu_duy_dat_duoc,sessions,duration_month,order_global
+UC-L1-01,UCREA,L1,1,LESSON,,Bạn bè,"Sách: Gum, Gum, Gummy | Play Kit: Bữa ăn phụ",Cặp tương ứng 1-1 (Tư duy toán học),4,1,1
+UC-L1-02,UCREA,L1,2,LESSON,,Bốn mùa I (Mùa Thu),Sách: Gummy và 7 chú vịt con | Play Kit: Táo và Lê,Đếm số (Tư duy Toán học),4,1,2
+UC-L1-03,UCREA,L1,3,LESSON,,Gia đình và Hàng xóm,Sách: Gummy trông trẻ | Play Kit: Một nửa và Một nửa,Một phần và toàn bộ (Tư duy Logic),4,1,3
+UC-L1-04,UCREA,L1,4,LESSON,,Thiên nhiên,Sách: Gummy & những chú sóc con | Play Kit: Hái cherry,Tạo và tách số; Các số từ 0 đến 10 (Tư duy toán học),4,1,4
+UC-L1-05,UCREA,L1,5,LESSON,,Bốn mùa II (Mùa Đông),Sách: Gummy đi tới trung tâm thương mại | Play Kit: Ký hiệu mất tích,Kỹ năng diễn giải - Hiểu ký hiệu và biểu tượng bé thấy hằng ngày,4,1,5
+UC-L1-MID,UCREA,L1,6,REVIEW,Thi giữa kỳ,Ôn tập giữa kỳ (1.5+),Ôn tập chủ đề 1-5,Củng cố + đánh giá giữa kỳ,4,1,6
+UC-L1-06,UCREA,L1,7,LESSON,,Khỏe mạnh và An toàn,Sách: Hành trình giải cứu của Gummy | Play Kit: Cừu nhỏ Baba,Khả năng suy luận (Tư duy Logic) - Sắp xếp sự kiện dựa vào tranh,4,1,7
+UC-L1-07,UCREA,L1,8,LESSON,,Bốn Mùa III (Xuân),Sách: Lâu đài của người khổng lồ | Play Kit: Mê cung Trên – Dưới,"Nhận biết không gian: Trên, dưới (Tư duy Toán học)",4,1,8
+UC-L1-08,UCREA,L1,9,LESSON,,Vòng quanh thế giới,Sách: Gummy tới lễ hội | Play Kit: Đọc lên nào,Kỹ năng linh hoạt (Tư duy sáng tạo),4,1,9
+UC-L1-09,UCREA,L1,10,LESSON,,Công cụ,Sách: Ở cửa hàng bánh gạo | Play Kit: Hình dạng,"Hình dạng hoàn chỉnh & một phần - phân biệt một nửa, tạo hình mới",4,1,10
+UC-L1-10,UCREA,L1,11,LESSON,,Bốn Mùa IV (Mùa Hè),Sách: Gummy và ông lão Hodgepodge | Play Kit: Kỳ nghỉ hè,Thiết lập tiêu chuẩn (Tư duy Logic) - phân loại theo thuộc tính giống nhau,4,1,11
+UC-L1-FIN,UCREA,L1,12,REVIEW,Thi cuối kỳ,Ôn tập cuối kỳ (1.10+),Ôn tập chủ đề 6-10,Củng cố + đánh giá cuối kỳ,4,1,12
+UC-L2-01,UCREA,L2,1,LESSON,,Bạn bè,Sách: Anky hay bắt chước | Play Kit: Kiểu mẫu vui nhộn,Nhận dạng kiểu mẫu (Tư duy toán học),4,1,13
+UC-L2-02,UCREA,L2,2,LESSON,,Bốn mùa I (Mùa Thu),Sách: Những cuộc phiêu lưu mùa thu | Play Kit: Xe tải chở hoa,So sánh chiều dài (Tư duy Toán học),4,1,14
+UC-L2-03,UCREA,L2,3,LESSON,,Gia đình và Hàng xóm,Sách: Rex và chiếc xe đẩy thần kỳ | Play Kit: Đi bắt khủng long,Phép toán (Tư duy Toán học),4,1,15
+UC-L2-04,UCREA,L2,4,LESSON,,Thiên nhiên,Sách: Bữa tiệc Giáng sinh của Rex | Play Kit: Sao vàng,"Luật bắc cầu (Tư duy Logic): A=B,B=C⇒A=C; A<B,B<C⇒A<C",4,1,16
+UC-L2-05,UCREA,L2,5,LESSON,,Bốn mùa II (Mùa Đông),Sách: Anh có phải là anh trai em? | Play Kit: Gia đình tôi,Nhận diện đặc điểm chung (Tư duy Logic) - tìm vật khác biệt,4,1,17
+UC-L2-MID,UCREA,L2,6,REVIEW,Thi giữa kỳ,Ôn tập giữa kỳ (2.5+),Ôn tập chủ đề 1-5,Củng cố + đánh giá giữa kỳ,4,1,18
+UC-L2-06,UCREA,L2,7,LESSON,,Khỏe mạnh và An toàn,Sách: Rex đi cắm trại | Play Kit: Đoán xem đây là gì?,Phép loại suy (Tư duy Logic) - loại suy với ngôn ngữ,4,1,19
+UC-L2-07,UCREA,L2,8,LESSON,,Bốn Mùa III (Xuân),Sách: Ngày hội cánh đồng vui vẻ | Play Kit: Ngôi sao lấp lánh,Đóng và Mở (Tư duy Toán học) - hình đóng và hình mở,4,1,20
+UC-L2-08,UCREA,L2,9,LESSON,,Vòng quanh thế giới,Sách: Công viên giải trí toàn cầu Rex | Play Kit: Chuyến du lịch vòng quanh thế giới,Khả năng làm việc tỉ mỉ (Tư duy sáng tạo),4,1,21
+UC-L2-09,UCREA,L2,10,LESSON,,Công cụ,Sách: Giúp đỡ thầy Dino | Play Kit: Đi chợ,Giá trị theo hệ cơ số 10 (Tư duy Toán học) - VD: 10+1=11,4,1,22
+UC-L2-10,UCREA,L2,11,LESSON,,Bốn Mùa IV (Mùa Hè),Sách: Tiệm kem của Rex | Play Kit: Chấm chậm,Phân loại phức hợp (Tư duy Logic) - theo hai tiêu chí,4,1,23
+UC-L2-FIN,UCREA,L2,12,REVIEW,Thi cuối kỳ,Ôn tập cuối kỳ (2.10+),Ôn tập chủ đề 6-10,Củng cố + đánh giá cuối kỳ,4,1,24
+UC-L3-01,UCREA,L3,1,LESSON,,Bạn bè,Sách: Truy tìm chìa khóa | Play Kit: Bên trái và Bên phải,"Nhận diện không gian (Tư duy toán học) - Trái, Phải",4,1,25
+UC-L3-02,UCREA,L3,2,LESSON,,Bốn mùa I (Mùa Thu),Sách: Bibbity-Boop Cùng di chuyển | Play Kit: Táo và Lê,"Lý thuyết số (Tư duy Toán học) - chẵn/lẻ, đếm theo nhóm, cơ số phép nhân",4,1,26
+UC-L3-03,UCREA,L3,3,LESSON,,Gia đình và Hàng xóm,Sách: Lớp học nấu ăn của bà Wanda | Play Kit: Thu hoạch,Sự nhạy cảm (Tư duy sáng tạo) - hiểu cảm xúc người khác,4,1,27
+UC-L3-04,UCREA,L3,4,LESSON,,Thiên nhiên,Sách: Phép thuật quả là khó khăn! | Play Kit: Trái tim mình,Hình 3D hoàn chỉnh và một phần (Tư duy toán học),4,1,28
+UC-L3-05,UCREA,L3,5,LESSON,,Bốn mùa II (Mùa Đông),Sách: Phù thủy Wanda bị ốm | Play Kit: Khối lập phương,Kiểm tra khả năng thống kê (Tư duy Toán học),4,1,29
+UC-L3-MID,UCREA,L3,6,REVIEW,Thi giữa kỳ,Ôn tập giữa kỳ (3.5+),Ôn tập chủ đề 1-5,Củng cố + đánh giá giữa kỳ,4,1,30
+UC-L3-06,UCREA,L3,7,LESSON,,Khỏe mạnh và An toàn,Sách: Ổ bánh mỳ khổng lồ | Play Kit: Phép toán khỏe khoắn,"Phép cộng và trừ (Tư duy Toán học) - đặt phép toán 3 số, dấu +/-",4,1,31
+UC-L3-07,UCREA,L3,8,LESSON,,Bốn Mùa III (Xuân),Sách: Lọ thuốc phép thuật | Play Kit: Sự kết hợp,Kết hợp thuộc tính khác nhau (Tư duy Logic),4,1,32
+UC-L3-08,UCREA,L3,9,LESSON,,Vòng quanh thế giới,Sách: Bay trên cán chổi | Play Kit: Toán học trên thế giới,Phân loại theo cấp độ (Tư duy Logic) - 2-3 cấp độ,4,1,33
+UC-L3-09,UCREA,L3,10,LESSON,,Công cụ,Sách: Luna cáu kỉnh | Play Kit: Thuật toán ma thuật,Giải quyết vấn đề (Tư duy Logic) - phân loại theo tiêu chí 2-3 cấp độ,4,1,34
+UC-L3-10,UCREA,L3,11,LESSON,,Bốn Mùa IV (Mùa Hè),Sách: Giải cứu Luna! | Play Kit: Quái vật,Hiểu các mẫu phức hợp (Tư duy Toán học),4,1,35
+UC-L3-FIN,UCREA,L3,12,REVIEW,Thi cuối kỳ,Ôn tập cuối kỳ (3.10+),Ôn tập chủ đề 6-10,Củng cố + đánh giá cuối kỳ,4,1,36
+IG-J1,Bright I.G,J,1,LESSON,,Pooka Wooka + Làm quen với hình dạng,Pooka Wooka [Con số và phép toán] || Làm quen với hình dạng [Hình học],"Nguyên tắc hệ thập phân; Số có hai chữ số; Số nguyên và phân số || Hình tam giác, tứ giác, tròn; Vẽ và tạo hình dạng",4,1,37
+IG-J2,Bright I.G,J,2,LESSON,,Tìm bạn + Học viện vương quốc động vật,Tìm bạn [Phân loại] || Học viện vương quốc động vật [Kiểu mẫu và giải quyết vấn đề],Nhận biết điểm giống nhau; Phân loại theo thuộc tính || Nhận diện kiểu mẫu; Đoán hình dạng tiếp theo,4,1,38
+IG-J3,Bright I.G,J,3,LESSON,,Vùng đất của những con số + Ghép hình,Vùng đất của những con số [Con số và các phép toán] || Ghép hình [Hình học],"Số đếm đến 100; Cộng, trừ và mối quan hệ giữa chúng || Hình dạng bộ phận và toàn phần; Tổng thể và bộ phận",4,1,39
+IG-J-REV,Bright I.G,J,4,REVIEW,Thi lên level,Ôn tập & kiểm tra cuối level J,Ôn tập toàn bộ level J,Đánh giá năng lực để lên level kế tiếp,4,1,40
+IG-T1,Bright I.G,T,1,LESSON,,Hãy đến và cùng chơi! + Tôi thuộc về nơi nào?,Hãy đến và cùng chơi! [Nhận thức về không gian] || Tôi thuộc về nơi nào? [Hình học],"Trái, Phải, Lên, Xuống; Tuân theo chỉ dẫn || Sự chuyển động và xoay của hình khối; Giải đố dựa trên hình khối",4,1,41
+IG-T2,Bright I.G,T,2,LESSON,,Trăng và sao + Các hình dạng khác nhau,Trăng và sao [Suy luận logic] || Các hình dạng khác nhau [Nhận thức về không gian],Xác định đặc điểm yếu tố trong nhóm; Khái niệm 'giả thiết' || Thuộc tính đơn giản của hình 3D; Quan sát 3D từ nhiều góc,4,1,42
+IG-T3,Bright I.G,T,3,LESSON,,"Chúng ta cần tính toán + Những bông hoa, những vì sao và tôi","Chúng ta cần tính toán [Con số và các phép toán] || Những bông hoa, những vì sao và tôi [Kiểu mẫu và giải quyết vấn đề]",Số nguyên và phân tách số; Biểu đồ cộng và trừ || Phân tích kiểu mẫu đơn/ghép trên đường thẳng; Dự đoán đối tượng tiếp theo,4,1,43
+IG-T-REV,Bright I.G,T,4,REVIEW,Thi lên level,Ôn tập & kiểm tra cuối level T,Ôn tập toàn bộ level T,Đánh giá năng lực để lên level kế tiếp,4,1,44
+IG-C1,Bright I.G,C,1,LESSON,,Thị trấn yêu tinh + Duhduh và Daedae,Thị trấn yêu tinh [Sự phân loại] || Duhduh và Daedae [Phép đo lường],"Tính chất của đồ vật; Tương đồng và khác biệt || Đo độ dài, diện tích, khối lượng, trọng lượng; Đo và so sánh",4,1,45
+IG-C2,Bright I.G,C,2,LESSON,,Toto và 100 hạt sồi + Sao bạn lại biết?,Toto và 100 hạt sồi [Con số và các phép toán] || Sao bạn lại biết? [Suy luận logic],Giá trị chữ số theo vị trí; Cộng và trừ || Tính bắc cầu của bất đẳng thức; Giải quyết vấn đề logic và giải đố,4,1,46
+IG-C3,Bright I.G,C,3,LESSON,,Bạn là ai? + Đặt câu hỏi,Bạn là ai? [Nhận thức về không gian] || Đặt câu hỏi [Khả năng phân loại],"Quan sát hình dạng khối; Tái tạo 3D từ mặt trước và bên || Tập hợp dữ liệu, sắp xếp bằng đồ thị/biểu đồ; Xem dữ liệu và đoán khả năng",4,1,47
+IG-C-REV,Bright I.G,C,4,REVIEW,Thi lên level,Ôn tập & kiểm tra cuối level C,Ôn tập toàn bộ level C,Đánh giá năng lực để lên level kế tiếp,4,1,48
+IG-W1,Bright I.G,W,1,LESSON,,Chúng giống nhau như thế nào? + Jiji và Nani,Chúng giống nhau như thế nào? [Hình học] || Jiji và Nani [Kiểu mẫu và giải quyết vấn đề],Sự đối xứng quanh ta; Học đối xứng qua hoạt động giấy màu || Kiểu mẫu đơn/ghép trên đường tròn; Giải đố bằng quy tắc kiểu mẫu,4,1,49
+IG-W2,Bright I.G,W,2,LESSON,,Không cần hỏi đâu + Đi chợ,Không cần hỏi đâu [Lý luận Logic] || Đi chợ [Con số và các phép toán],Hiểu suy luận loại suy; Các mối quan hệ suy luận || Thay thế và chuyển đổi; Thay thế và loại bỏ,4,1,50
+IG-W3,Bright I.G,W,3,LESSON,,Hoàng tử Zzino + Thực đơn hôm nay,Hoàng tử Zzino [Kiểu mẫu và giải quyết vấn đề] || Thực đơn hôm nay [Lý luận logic],Quan sát 3D từ nhiều góc; Tạo hình khối mới bằng kết hợp 3D || Đếm số trường hợp; Đếm số con đường khác nhau,4,1,51
+IG-W-REV,Bright I.G,W,4,REVIEW,Thi lên level,Ôn tập & kiểm tra cuối level W,Ôn tập toàn bộ level W,Đánh giá năng lực để lên level kế tiếp,4,1,52
+IG-Q1,Bright I.G,Q,1,LESSON,,Hình khối một phần + Trò chơi số học vui vẻ,Hình khối một phần [Hình học] || Trò chơi số học vui vẻ [Con số và các phép toán],Tạo hình mới từ hình khối khác nhau; Tạo hình từ mảnh ghép Pentomino || Tạo giá trị giống nhau từ hai số khác nhau; Domino và trò chơi con số,4,1,53
+IG-Q2,Bright I.G,Q,2,LESSON,,Công viên giải trí + Chia và Chia,Công viên giải trí [Kiểu mẫu và giải quyết vấn đề] || Chia và Chia [Khả năng phân loại],Các kiểu mẫu khác nhau; Dự đoán đối tượng ngày thứ N || Tập hợp thuộc tính tương tự; Quan hệ Từng phần và Toàn bộ,4,1,54
+IG-Q3,Bright I.G,Q,3,LESSON,,Xứ sở thần tiên + Trốn tìm,Xứ sở thần tiên [Lý luận logic] || Trốn tìm [Hình học],Giải câu đố logic khác nhau; Chiến lược giải đố || Khám phá hình khối bằng cách lật và xoay,4,1,55
+IG-Q-REV,Bright I.G,Q,4,REVIEW,Thi lên level,Ôn tập & kiểm tra cuối level Q,Ôn tập toàn bộ level Q,Đánh giá năng lực để lên level kế tiếp,4,1,56
+IG-U1,Bright I.G,U,1,LESSON,,Hành tinh kiểu mẫu + Cuộc săn tìm kho báu của Tiny và Red,Hành tinh kiểu mẫu [Kiểu mẫu và giải quyết vấn đề] || Cuộc săn tìm kho báu của Tiny và Red [Hình học],Kiểu mẫu ghép trên đường thẳng/tròn; Dự đoán đối tượng tiếp theo || Đối xứng của hình khối/ảnh sau khi xoay; Giải đố bằng đối xứng và phép xoay,4,1,57
+IG-U2,Bright I.G,U,2,LESSON,,Sue thích gì + Họ đã nhìn thấy như thế nào,Sue thích gì [Lý luận logic] || Họ đã nhìn thấy như thế nào [Nhận thức về không gian],Thuộc tính chung của một dãy; Vấn đề và câu đố logic || Mối quan hệ không gian; Quan sát 3D từ nhiều hướng,4,1,58
+IG-U3,Bright I.G,U,3,LESSON,,Tính toán vui vẻ + Chuẩn bị cho bữa tiệc vui vẻ,Tính toán vui vẻ [Con số và các phép toán] || Chuẩn bị cho bữa tiệc vui vẻ [Kiểu mẫu và giải quyết vấn đề],Phép cộng và trừ; Trò chơi/câu đố về cộng-trừ || Giải câu đố về logic và không gian khác nhau,4,1,59
+IG-U-REV,Bright I.G,U,4,REVIEW,Thi lên level,Ôn tập & kiểm tra cuối level U,Ôn tập toàn bộ level U,Đánh giá năng lực để lên level kế tiếp,4,1,60

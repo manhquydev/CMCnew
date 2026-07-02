@@ -53,15 +53,13 @@ docker compose -f docker/docker-compose.prod.yml --env-file .env.production up -
 
 ## 3. Bootstrap: Tạo Ban Giám Đốc từ IT Head
 
-### Mô hình tổ chức (3 trụ cột)
+### Mô hình tổ chức (3 vai trò chính)
 
-Hệ thống chạy dựa trên **3 vai trò quản lý chính**:
+Hệ thống chạy dựa trên **3 vai trò quản lý**:
 
 1. **IT Head** (`super_admin`) — tạo 2 giám đốc & quản lý cấu hình hệ thống
-2. **Giám Đốc Kinh Doanh** (`giam_doc_kinh_doanh`) — quản lý sales, CSKH, CTV marketing
-3. **Giám Đốc Đào Tạo** (`giam_doc_dao_tao`) — quản lý giáo viên, chương trình học, chứng chỉ
-
-Và một **Quản Lý Cơ Sở** (`quan_ly`) — vận hành hàng ngày (lớp học, ghi danh, tài chính).
+2. **Giám Đốc Kinh Doanh** (`giam_doc_kinh_doanh`) — quản lý sales, CSKH, CTV marketing, kế toán, HR
+3. **Giám Đốc Đào Tạo** (`giam_doc_dao_tao`) — quản lý giáo viên, chương trình học, chứng chỉ, cơ sở
 
 ### Bước 1: IT Head đăng nhập
 
@@ -109,7 +107,7 @@ Password: ChangeMe123!
 
 > **Lưu ý**: Giám Đốc Kinh Doanh chỉ có quyền tạo 3 vai trò này. Nếu muốn tạo vai trò khác, hãy về IT Head.
 
-### Bước 5: Giám Đốc Đào Tạo tạo team giáo dục
+### Bước 5: Giám Đốc Đào Tạo tạo team giáo viên
 
 Đăng xuất, rồi đăng nhập lại với:
 ```
@@ -117,14 +115,15 @@ Email:    giam_doc_dao_tao@cmc.local
 Password: ChangeMe123!
 ```
 
-**Menu → Cơ Sở & Users → Quản Lý User**, tạo các tài khoản sau:
+**Menu → Cơ Sở & Users → Quản Lý User**, tạo tài khoản giáo viên:
 
 | Email | Tên | Vai Trò |
 |-------|-----|---------|
 | `giaovien@cmc.local` | Giáo Viên | **Giáo Viên** |
-| `headteacher@cmc.local` | Trưởng Bộ Môn | **Trưởng Bộ Môn** |
 
-### Bước 6: IT Head tạo Quản Lý Cơ Sở & những vai trò còn lại
+> **Lưu ý**: Giáo viên nào làm Trưởng Bộ Môn hoặc Quản Lý Cơ Sở vẫn có vai trò **Giáo Viên**. Quyền bổ sung (duyệt level-up, tạo lớp) được ghi vào hệ thống qua quyền cấp chức vụ.
+
+### Bước 6: IT Head tạo các vai trò chuyên môn
 
 Đăng nhập lại bằng `admin@cmc.local` (IT Head):
 
@@ -132,10 +131,10 @@ Password: ChangeMe123!
 
 | Email | Tên | Vai Trò |
 |-------|-----|---------|
-| `quanly@cmc.local` | Quản Lý Cơ Sở | **Quản Lý Cơ Sở** |
 | `ketoan@cmc.local` | Kế Toán | **Kế Toán** |
 | `hr@cmc.local` | Nhân Sự (HR) | **Nhân Sự** |
-| `bgd@cmc.local` | Ban Giám Đốc | **Ban Giám Đốc** |
+
+> **Lưu ý**: Kế Toán và HR được tạo bởi IT Head. Các vai trò sale/CSKH/CTV marketing được Giám Đốc Kinh Doanh tạo; giáo viên được Giám Đốc Đào Tạo tạo.
 
 ---
 
@@ -143,7 +142,7 @@ Password: ChangeMe123!
 
 ### A. Mảng Tuyển Sinh & Tài Chính
 
-**Người tham gia**: Sale (`sale@cmc.local`), CSKH (`cskh@cmc.local`), Kế Toán (`ketoan@cmc.local`), Quản Lý (`quanly@cmc.local`)
+**Người tham gia**: Sale (`sale@cmc.local`), CSKH (`cskh@cmc.local`), Kế Toán (`ketoan@cmc.local`)
 
 #### Lịch sự kiện thường
 1. **Sale tạo Cơ Hội CRM**
@@ -173,44 +172,56 @@ Password: ChangeMe123!
 
 ### B. Mảng Giáo Dục (Lớp, Dạy, Chấm)
 
-**Người tham gia**: Quản Lý (`quanly@cmc.local`), Giáo Viên (`giaovien@cmc.local`), Trưởng Bộ Môn (`headteacher@cmc.local`)
+**Người tham gia**: Giáo Viên (`giaovien@cmc.local`), Giám Đốc Đào Tạo hoặc nhân viên được phân công (tạo lớp/lịch dạy)
 
-#### Tạo Chương Trình & Lớp
-1. **Quản Lý tạo Khóa Học**
-   - Menu → **Khóa Học** → **+ Tạo khóa**
-   - Nhập: Mã (vd `UCREA-01`), Tên khóa, Chương trình
-   - Lưu
+#### Khung Chương Trình (khóa cứng) & seed
+- Khung chương trình (UCREA L1/L2/L3, Bright I.G J/T/C/W/Q/U) là **dữ liệu khóa cứng**:
+  mỗi level là một `Course` (`UCREA-L1`, `BRIGHT_IG-J`, …) gắn danh sách `CurriculumUnit`
+  (chủ đề / nội dung / sách-play-kit / tư duy / assessment) theo `order_global`.
+- Nạp/refresh khung: `pnpm --filter @cmc/db seed:curriculum` (idempotent — chạy lại không nhân bản).
+  Chạy trước `seed:demo` khi dựng dữ liệu mẫu. Prod nạp qua `DIRECT_URL` (chủ sở hữu DB).
+- Khung **không sửa qua UI** vòng này (chỉ seed + xem). Danh sách unit hiển thị read-only ở modal tạo lớp.
 
-2. **Quản Lý tạo Lớp Học**
-   - Menu → **Lớp Học** → **+ Tạo lớp**
-   - Chọn Khóa (vd `UCREA-01`)
-   - Nhập: Mã lớp, Tên, Thời gian bắt đầu/kết thúc
-   - Lưu
+#### Tạo Lớp 1-Click (khung khóa cứng + nhiều thứ/tuần)
+1. **Giám Đốc Đào Tạo tạo Lớp Học**: Menu → **Lớp Học** → **+ Tạo lớp**
+   - Chọn **Khung chương trình** (chương trình → level, vd `UCREA-L1`) → xem preview khung khóa cứng
+     (số unit / số buổi + danh sách chủ đề).
+   - Nhập: Tên lớp, ngày khai giảng/kết thúc, sĩ số.
+   - Thêm **nhiều khung giờ trong tuần** (nút **+ Thêm thứ**): mỗi khung = Thứ + giờ + phòng + GV.
+     Không được trùng (thứ, giờ bắt đầu) — hệ thống báo lỗi.
+   - Bấm **Tạo lớp (1 click)** → lớp + tất cả khung lịch được tạo trong một thao tác.
 
-#### Tạo Lịch Dạy (Khung Lịch & Buổi Học)
-1. **Quản Lý mở Lớp → Tab "Lịch"**
-   - Bấm **+ Thêm Khung Lịch**
-   - Chọn: Thứ (Monday, Tuesday, v.v.), Giờ bắt đầu (vd 09:00), Giờ kết thúc (10:00)
-   - Lưu
-   
-2. **Bấm "Sinh Buổi Học"**
-   - Chọn khoảng ngày (từ ngày đầu → ngày cuối khóa)
-   - Hệ thống tự sinh các buổi học theo khung lịch
-   
+#### Sinh Buổi Học (gán nội dung curriculum theo buổi)
+1. **Mở Lớp → Tab "Lịch"** → **Sinh Buổi Học** → chọn khoảng ngày → hệ thống sinh buổi theo khung.
+   - Mỗi buổi được **gán `curriculumUnitId`** theo thứ tự thời gian: unit #1 phủ `sessions` buổi đầu,
+     unit #2 các buổi kế, … (mỗi unit = N buổi thật).
+   - Buổi dư (vượt tổng số buổi của khung) → không gắn unit (null). Buổi thiếu → phần unit cuối chưa phủ.
+   - **Sửa/Xóa khung lịch** ngay trong tab: nút **Sửa** (đổi thứ/giờ/phòng/GV, tùy chọn *áp dụng buổi
+     tương lai*) và **Xóa** (lưu trữ khung — buổi đã sinh vẫn giữ). Mọi thay đổi ghi vào tab **Nhật ký**.
+   - ⚠️ **Lưu ý vận hành:** hệ thống **tính lại toàn bộ** ánh xạ un↔buổi mỗi lần sinh/sửa khung để giữ
+     đúng thứ tự thời gian. Nếu sinh buổi cho khoảng ngày **sau** rồi mới sinh khoảng **trước**, nội dung
+     curriculum hiển thị của các buổi cũ có thể dịch lại cho đúng thứ tự. Nên sinh buổi theo thứ tự thời gian.
+
 #### Ghi Danh Học Sinh
-1. **Quản Lý mở Lớp → Tab "Ghi Danh"** → **+ Ghi Danh**
+1. **Giám Đốc Đào Tạo mở Lớp → Tab "Ghi Danh"** → **+ Ghi Danh**
 2. Tìm kiếm học sinh (nhập mã hoặc tên)
 3. Chọn từ danh sách → **Lưu**
 
 #### Điểm Danh & Chấm Bài (Giáo Viên)
 1. **Menu → Lịch Dạy** → xem danh sách buổi dạy hôm nay/tuần
-2. Chọn buổi → **Điểm Danh**
+2. Chọn buổi → mở màn hình **Buổi học 360**
+   - Trước buổi: xem thông tin lớp, phòng, giáo viên, roster
+   - Từ 15 phút trước giờ bắt đầu: hệ thống mở luồng điểm danh
+   - Sau giờ kết thúc: hệ thống hiển thị các việc sau buổi học
+3. **Điểm Danh**
    - Kiểm tra từng học sinh (Có mặt / Vắng)
    - **Lưu**
    
-3. **Menu → Chấm Bài**
+4. **Menu → Chấm Bài**
    - Chọn bài tập → Chấm điểm từng học sinh
    - **Phát Hành** bài tập để học sinh thấy kết quả
+
+> Ghi chú: Các thẻ sau buổi học trong Buổi học 360 hiện là mock cho phase tiếp theo: phát bài tập LMS, nhận xét theo form, upload ảnh lớp, publish cho phụ huynh. Dữ liệu ảnh/nhận xét thật chưa được lưu và chưa hiển thị ở LMS trong slice này.
 
 #### Học Bạ & Đánh Giá
 1. **Giáo Viên → Menu → Học Bạ** (Assessment)
@@ -226,7 +237,7 @@ Password: ChangeMe123!
 
 ### C. Mảng Nhân Sự & Lương
 
-**Người tham gia**: Nhân Sự (`hr@cmc.local`), Quản Lý (`quanly@cmc.local`), Ban Giám Đốc (`bgd@cmc.local`)
+**Người tham gia**: Nhân Sự (`hr@cmc.local`), Giám Đốc Kinh Doanh hoặc Giám Đốc Đào Tạo (duyệt KPI)
 
 #### Tính & Duyệt Lương
 1. **HR → Menu → Nhân Sự & Lương → Hồ Sơ**
@@ -280,6 +291,9 @@ Password: ChangeMe123!
 
 3. **Nội dung sau khi đăng nhập**:
    - **Khóa Học**: Xem các lớp đang học
+   - **Lịch học & Nội dung**: Danh sách buổi học của lớp + nội dung khung chương trình theo từng buổi
+     (chủ đề / nội dung-sách-play-kit / tư duy đạt được / assessment) — kể cả buổi chưa có ảnh/nhận xét
+   - **Buổi học (ảnh & nhận xét)**: Ảnh + nhận xét giáo viên đã publish
    - **Bài Tập**: Xem bài giáo viên phát hành → Làm → **Nộp Bài**
    - **Điểm & Huy Hiệu**: Xem điểm sau khi giáo viên chấm, sao/huy hiệu đạt được
    - **Bảng Xếp Hạng**: Xem xếp hạng so với bạn cùng lớp
@@ -292,6 +306,7 @@ Password: ChangeMe123!
 
 3. **Nội dung sau khi đăng nhập**:
    - **Tiến Trình Con**: Xem học sinh được gắn với tài khoản (nếu có)
+   - **Lịch học & Nội dung**: Buổi học của con + nội dung khung chương trình theo từng buổi
    - **Điểm & Huy Hiệu**: Xem điểm của con
    - **Lịch Họp Phụ Huynh**: Xem lịch họp sắp tới & đã qua (thông báo T-1 qua email)
    - **Thông Báo**: Nhận thông báo từ hệ thống (cập nhật điểm, sự kiện, v.v.)
@@ -337,7 +352,7 @@ Cấu hình: `SSO_ENABLED=true` + `ENTRA_*` biến môi trường
    - Ghi danh `TEST-002` vào lớp (hôm nay hoặc khoảng ngày)
 
 5. **Giáo Viên điểm danh & chấm bài**
-   - Menu → Lịch Dạy → chọn buổi → Điểm Danh
+   - Menu → Lịch Dạy → chọn buổi → Buổi học 360 → Điểm Danh
    - Menu → Chấm Bài → Chấm & Phát Hành
 
 6. **Phụ Huynh theo dõi LMS** (`parent@cmc.local`)

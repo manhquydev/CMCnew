@@ -20,8 +20,8 @@ async function ensureTeacher(email: string, displayName: string, facilityId: num
       email,
       displayName,
       passwordHash: await hashPassword(TEACHER_PW),
-      roles: [Role.giao_vien, Role.head_teacher],
-      primaryRole: Role.head_teacher,
+      roles: [Role.giao_vien, Role.giam_doc_dao_tao],
+      primaryRole: Role.giam_doc_dao_tao,
       facilities: { create: { facilityId } },
     },
   });
@@ -35,8 +35,8 @@ async function ensureLeader(email: string, displayName: string, facilityId: numb
       email,
       displayName,
       passwordHash: await hashPassword(TEACHER_PW),
-      roles: [Role.quan_ly],
-      primaryRole: Role.quan_ly,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
       facilities: { create: { facilityId } },
     },
   });
@@ -71,6 +71,30 @@ async function linkGuardian(facilityId: number, parentAccountId: string, student
   });
 }
 
+async function ensureExerciseUnit(courseId: string, courseCode: string) {
+  const existing = await prisma.curriculumUnit.findFirst({
+    where: { courseId },
+    orderBy: { orderGlobal: 'asc' },
+  });
+  if (existing) return existing;
+  return prisma.curriculumUnit.upsert({
+    where: { unitCode: `${courseCode}-SEED-REVIEW` },
+    update: {},
+    create: {
+      courseId,
+      unitCode: `${courseCode}-SEED-REVIEW`,
+      seqInLevel: 1,
+      orderGlobal: 9999,
+      unitType: 'REVIEW',
+      assessment: 'Seed verification',
+      theme: 'Seed verification exercise unit',
+      content: 'Dev-only LMS grading verification unit',
+      thinkingGoal: 'Verification',
+      sessions: 1,
+    },
+  });
+}
+
 // A graded class for one student: batch + enrollment + 2 sessions w/ attendance + a homework and
 // a periodic-test exercise, each submitted and published — the quant inputs FinalGrade needs.
 async function seedGradedClass(opts: {
@@ -84,6 +108,7 @@ async function seedGradedClass(opts: {
   testScore: number;
 }) {
   const course = await prisma.course.findUniqueOrThrow({ where: { code: opts.courseCode } });
+  const exerciseUnit = await ensureExerciseUnit(course.id, course.code);
   const batch = await prisma.classBatch.upsert({
     where: { facilityId_code: { facilityId: opts.facilityId, code: opts.batchCode } },
     update: {},
@@ -122,6 +147,7 @@ async function seedGradedClass(opts: {
         sessionDate: s.sessionDate,
         startTime: s.startTime,
         endTime: s.endTime,
+        curriculumUnitId: exerciseUnit.id,
         teacherId: opts.teacherId,
         status: 'confirmed',
       },
@@ -149,13 +175,12 @@ async function seedGradedClass(opts: {
   ];
   for (const ex of exercises) {
     let exercise = await prisma.exercise.findFirst({
-      where: { classBatchId: batch.id, title: ex.title },
+      where: { curriculumUnitId: exerciseUnit.id, type: ex.type },
     });
     if (!exercise) {
       exercise = await prisma.exercise.create({
         data: {
-          facilityId: opts.facilityId,
-          classBatchId: batch.id,
+          curriculumUnitId: exerciseUnit.id,
           title: ex.title,
           type: ex.type,
           status: 'published',
@@ -238,7 +263,7 @@ async function main(): Promise<void> {
   const cs2 = await prisma.facility.findUniqueOrThrow({ where: { code: 'CS2' } });
 
   const teacher = await ensureTeacher('gv@cmc.local', 'Cô Lan (GV)', hq.id);
-  // Leadership account (quan_ly) — verifies system-wide parent/identity management without super.
+  // Leadership account (giam_doc_kinh_doanh) — verifies system-wide parent/identity management without super.
   await ensureLeader('ld@cmc.local', 'Trưởng cơ sở (QL)', hq.id);
   await seedBadges(hq.id);
   await seedBadges(cs2.id);
@@ -260,7 +285,7 @@ async function main(): Promise<void> {
 
   await seedGradedClass({
     facilityId: hq.id,
-    courseCode: 'UCREA-01',
+    courseCode: 'UCREA-L1',
     batchCode: 'B-2026-9001',
     batchName: 'UCREA lớp demo',
     studentId: an.id,
@@ -270,7 +295,7 @@ async function main(): Promise<void> {
   });
   await seedGradedClass({
     facilityId: hq.id,
-    courseCode: 'BIG-01',
+    courseCode: 'BRIGHT_IG-J',
     batchCode: 'B-2026-9002',
     batchName: 'Bright I.G lớp demo',
     studentId: cuong.id,

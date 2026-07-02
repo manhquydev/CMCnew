@@ -1,11 +1,21 @@
 import { z } from 'zod';
-import { withRls, hashPassword, GuardianRelation } from '@cmc/db';
-import { rlsContextOf } from '@cmc/auth';
+import { TRPCError } from '@trpc/server';
+import { withRls, hashPassword, GuardianRelation, Prisma, type RlsContext } from '@cmc/db';
+import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, requirePermission } from '../trpc.js';
+import { router, requirePermission, parentProcedure } from '../trpc.js';
+import { throttle } from '../rate-limit.js';
+
+// System-context read used only for request-time candidate resolution (requestLink) — a parent's
+// own RLS context cannot see students outside its own guardianed children, but resolving a match
+// requires searching across all students. This mirrors the identity-resolution pattern in
+// packages/auth/src/lms.ts (SYSTEM_RLS) — read-only, never used to write.
+const SYSTEM_CTX: RlsContext = { facilityIds: [], isSuperAdmin: true };
+
+const LINK_REQUEST_LIMIT = Number(process.env.LINK_REQUEST_RATE_LIMIT ?? 5);
 
 // Parent/student accounts are SYSTEM-WIDE identities (no facility_id) — facilities are linked
-// branches, not silos (docs/specs/facility-model-decision.md). Leadership (bgd/quan_ly, super)
+// branches, not silos (docs/specs/facility-model-decision.md). Leadership (the two directors, super)
 // manages them at the system level; RLS now allows any staff to read these identity rows, while
 // linking a guardian to a student still respects that student's facility (operational scoping).
 export const guardianRouter = router({
@@ -111,6 +121,201 @@ export const guardianRouter = router({
           actorId: ctx.session.userId,
         });
         return { ok: true };
+      }),
+    ),
+
+  // ── Parent self-service (anti-takeover: parent can never write `guardian` directly) ─────────
+
+  // Parent edits their own ParentAccount row only — RLS additionally pins id = accountId.
+  profileUpdate: parentProcedure
+    .input(
+      z.object({
+        displayName: z.string().min(1).optional(),
+        email: z.string().email().optional(),
+        phone: z.string().min(6).optional(),
+        emailNotifications: z.boolean().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const data: Prisma.ParentAccountUpdateInput = {};
+      if (input.displayName !== undefined) data.displayName = input.displayName;
+      if (input.email !== undefined) data.email = input.email.trim().toLowerCase();
+      if (input.phone !== undefined) data.phone = input.phone.trim();
+      if (input.emailNotifications !== undefined) data.emailNotifications = input.emailNotifications;
+      try {
+        return await withRls(lmsRlsContextOf(ctx.lms), (tx) =>
+          tx.parentAccount.update({
+            where: { id: ctx.lms.accountId },
+            data,
+            select: { id: true, displayName: true, email: true, phone: true, emailNotifications: true },
+          }),
+        );
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Email hoặc số điện thoại đã được sử dụng' });
+        }
+        throw err;
+      }
+    }),
+
+  // Self-link REQUEST only — never creates a Guardian row. facilityId/matchedStudentId are
+  // resolved here, at request time, under a system-context read (best-effort; ambiguous ⇒ null).
+  // Rate-limited per account AND per IP (mirrors the OTP pattern) so an authenticated parent
+  // cannot spam the staff review queue. Response is always the same generic shape — no
+  // match/no-match oracle for an attacker probing phone numbers.
+  requestLink: parentProcedure
+    .input(
+      z
+        .object({
+          studentPhone: z.string().min(6).optional(),
+          studentCode: z.string().min(1).optional(),
+        })
+        .refine((v) => v.studentPhone || v.studentCode, { message: 'Cần số điện thoại hoặc mã học sinh' }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      throttle(`linkreq:acct:${ctx.lms.accountId}`, LINK_REQUEST_LIMIT);
+      throttle(`linkreq:ip:${ctx.ip}`, LINK_REQUEST_LIMIT);
+
+      const candidates = await withRls(SYSTEM_CTX, (tx) =>
+        input.studentCode
+          ? tx.student.findMany({
+              where: { studentCode: input.studentCode },
+              select: { id: true, facilityId: true },
+            })
+          : tx.student.findMany({
+              where: { guardians: { some: { parent: { phone: input.studentPhone } } } },
+              select: { id: true, facilityId: true },
+            }),
+      );
+      const unique = candidates.length === 1 ? candidates[0] : null;
+
+      await withRls(lmsRlsContextOf(ctx.lms), (tx) =>
+        tx.guardianLinkRequest.create({
+          data: {
+            requestedByAccountId: ctx.lms.accountId,
+            studentPhone: input.studentPhone,
+            studentCode: input.studentCode,
+            matchedStudentId: unique?.id,
+            facilityId: unique?.facilityId,
+          },
+        }),
+      );
+
+      return { ok: true as const };
+    }),
+
+  // Parent's own request history — RLS additionally pins requestedByAccountId = accountId.
+  linkRequestListMine: parentProcedure.query(({ ctx }) =>
+    withRls(lmsRlsContextOf(ctx.lms), (tx) =>
+      tx.guardianLinkRequest.findMany({
+        where: { requestedByAccountId: ctx.lms.accountId },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        select: { id: true, studentPhone: true, studentCode: true, status: true, reason: true, createdAt: true },
+      }),
+    ),
+  ),
+
+  // ── Staff review queue ────────────────────────────────────────────────────────────────────
+
+  // Pending queue: facility-scoped resolved rows + the director-global unresolved bucket (RLS
+  // grants any staff read access to facility_id IS NULL rows; the permission grant above narrows
+  // who can actually call this procedure to the two directors). Ambiguous rows (no matchedStudentId)
+  // are annotated with candidate students so staff can pick one explicitly at review.
+  linkRequestList: requirePermission('guardian', 'linkRequestList').query(({ ctx }) =>
+    withRls(rlsContextOf(ctx.session), async (tx) => {
+      const rows = await tx.guardianLinkRequest.findMany({
+        where: { status: 'pending' },
+        orderBy: { createdAt: 'asc' },
+        take: 200,
+        include: { requestedBy: { select: { id: true, displayName: true, email: true, phone: true } } },
+      });
+      return Promise.all(
+        rows.map(async (r) => {
+          if (r.matchedStudentId) return { ...r, candidates: [] };
+          const candidates = r.studentCode
+            ? await tx.student.findMany({
+                where: { studentCode: r.studentCode },
+                select: { id: true, fullName: true, studentCode: true, facilityId: true },
+              })
+            : r.studentPhone
+              ? await tx.student.findMany({
+                  where: { guardians: { some: { parent: { phone: r.studentPhone } } } },
+                  select: { id: true, fullName: true, studentCode: true, facilityId: true },
+                })
+              : [];
+          return { ...r, candidates };
+        }),
+      );
+    }),
+  ),
+
+  // Approve creates exactly one Guardian (reusing `link`'s upsert logic) and closes the request;
+  // reject just closes it. `studentId` is required only when the request is ambiguous
+  // (matchedStudentId null) — staff explicitly picks from `linkRequestList`'s candidates.
+  linkRequestReview: requirePermission('guardian', 'linkRequestReview')
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        decision: z.enum(['approved', 'rejected']),
+        studentId: z.string().uuid().optional(),
+        relation: z.nativeEnum(GuardianRelation).default(GuardianRelation.guardian),
+        reason: z.string().optional(),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const reqRow = await tx.guardianLinkRequest.findUniqueOrThrow({ where: { id: input.id } });
+        if (reqRow.status !== 'pending') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Yêu cầu đã được xử lý' });
+        }
+
+        if (input.decision === 'rejected') {
+          const updated = await tx.guardianLinkRequest.update({
+            where: { id: input.id },
+            data: {
+              status: 'rejected',
+              reviewedById: ctx.session.userId,
+              reviewedAt: new Date(),
+              reason: input.reason,
+            },
+          });
+          return { ok: true as const, guardianId: null, request: updated };
+        }
+
+        const studentId = reqRow.matchedStudentId ?? input.studentId;
+        if (!studentId) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cần chọn học sinh để duyệt yêu cầu này' });
+        }
+        const student = await tx.student.findUniqueOrThrow({ where: { id: studentId } });
+        const guardian = await tx.guardian.upsert({
+          where: { parentAccountId_studentId: { parentAccountId: reqRow.requestedByAccountId, studentId } },
+          update: { relation: input.relation },
+          create: {
+            facilityId: student.facilityId,
+            parentAccountId: reqRow.requestedByAccountId,
+            studentId,
+            relation: input.relation,
+          },
+        });
+        const updated = await tx.guardianLinkRequest.update({
+          where: { id: input.id },
+          data: {
+            status: 'approved',
+            reviewedById: ctx.session.userId,
+            reviewedAt: new Date(),
+            reason: input.reason,
+          },
+        });
+        await logEvent(tx, {
+          facilityId: guardian.facilityId,
+          entityType: 'guardian',
+          entityId: guardian.id,
+          type: 'created',
+          body: `Duyệt yêu cầu tự liên kết phụ huynh ↔ ${student.fullName} (${input.relation})`,
+          actorId: ctx.session.userId,
+        });
+        return { ok: true as const, guardianId: guardian.id, request: updated };
       }),
     ),
 });

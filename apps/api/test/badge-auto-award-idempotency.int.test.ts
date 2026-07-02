@@ -1,6 +1,4 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { randomUUID } from 'node:crypto';
-import { Program } from '@cmc/db';
 import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
 
 // Invariant: badge auto-award on grade publish is idempotent. Publishing a qualifying grade
@@ -54,6 +52,21 @@ describe('badge auto-award idempotency on grade publish', () => {
     );
     classBatchId = batch.id;
 
+    // Create a curriculum unit for the exercise.
+    const unit = await withRls(SUPER, async (tx) =>
+      tx.curriculumUnit.create({
+        data: {
+          courseId,
+          unitCode: uniq('U'),
+          seqInLevel: 1,
+          orderGlobal: 1,
+          unitType: 'LESSON',
+          theme: 'fixture',
+          sessions: 1,
+        },
+      }),
+    );
+
     // Create a badge with stars_total criterion (e.g. 50 stars = unlock).
     const badge = await withRls(SUPER, async (tx) =>
       tx.badge.create({
@@ -73,8 +86,7 @@ describe('badge auto-award idempotency on grade publish', () => {
     const exercise = await withRls(SUPER, async (tx) =>
       tx.exercise.create({
         data: {
-          facilityId: FACILITY,
-          classBatchId,
+          curriculumUnitId: unit.id,
           title: uniq('EX_BADGE'),
           type: 'homework',
           maxScore: 10,
@@ -110,7 +122,8 @@ describe('badge auto-award idempotency on grade publish', () => {
       await tx.notification.deleteMany({ where: { recipientId: studentId } });
       await tx.grade.deleteMany({ where: { submission: { studentId } } });
       await tx.submission.deleteMany({ where: { studentId } });
-      await tx.exercise.deleteMany({ where: { classBatchId } });
+      await tx.exercise.deleteMany({ where: { id: exerciseId } });
+      await tx.curriculumUnit.deleteMany({ where: { courseId } });
       await tx.classBatch.deleteMany({ where: { id: classBatchId } });
       await tx.course.deleteMany({ where: { id: courseId } });
       await tx.badge.deleteMany({ where: { id: badgeId } });

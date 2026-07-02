@@ -32,13 +32,7 @@ export default tseslint.config(
 
   // ─── Backend / Node packages (no React) ──────────────────────────────────────
   {
-    files: [
-      'apps/api/**/*.ts',
-      'packages/**/*.ts',
-      '*.ts',
-      '*.mts',
-      '*.cts',
-    ],
+    files: ['apps/api/**/*.ts', 'packages/**/*.ts', '*.ts', '*.mts', '*.cts'],
     languageOptions: {
       globals: {
         ...globals.node,
@@ -47,7 +41,7 @@ export default tseslint.config(
     },
     rules: {
       // TS overrides — pragmatic for a greenfield codebase still being built out
-      '@typescript-eslint/no-explicit-any': 'warn',       // warn, not error; tighten later
+      '@typescript-eslint/no-explicit-any': 'warn', // warn, not error; tighten later
       '@typescript-eslint/no-unused-vars': [
         'error',
         {
@@ -71,7 +65,6 @@ export default tseslint.config(
   // ─── React / Frontend apps ───────────────────────────────────────────────────
   {
     files: [
-      'apps/teaching/src/**/*.{ts,tsx}',
       'apps/lms/src/**/*.{ts,tsx}',
       'apps/admin/src/**/*.{ts,tsx}',
       'packages/ui/src/**/*.{ts,tsx}',
@@ -94,8 +87,8 @@ export default tseslint.config(
     },
     rules: {
       // React rules
-      'react/react-in-jsx-scope': 'off',     // React 17+ JSX transform
-      'react/prop-types': 'off',              // We use TypeScript for prop types
+      'react/react-in-jsx-scope': 'off', // React 17+ JSX transform
+      'react/prop-types': 'off', // We use TypeScript for prop types
       'react/display-name': 'warn',
       // Hooks rules
       'react-hooks/rules-of-hooks': 'error',
@@ -108,6 +101,30 @@ export default tseslint.config(
           argsIgnorePattern: '^_',
           varsIgnorePattern: '^_',
           caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+    },
+  },
+
+  // ─── RLS-bypass guard (app source only — packages/db construction + apps/api/test harness
+  // are the intended raw-client sites and are excluded by not matching these globs) ────────────
+  {
+    files: ['apps/api/src/**/*.ts', 'apps/{admin,lms}/src/**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@prisma/client',
+              message: 'Use withRls from @cmc/db — raw prisma bypasses RLS.',
+            },
+            {
+              name: '@cmc/db',
+              importNames: ['prisma'],
+              message: 'Import withRls, not the raw prisma singleton — it bypasses RLS.',
+            },
+          ],
         },
       ],
     },

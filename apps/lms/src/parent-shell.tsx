@@ -13,22 +13,28 @@ import {
   IconReport,
   IconBell,
   IconStar,
+  IconPhoto,
+  IconCalendarEvent,
+  IconUserCircle,
 } from '@tabler/icons-react';
 import { NotificationCenter, useLmsSession, type LmsPrincipal } from '@cmc/ui';
 import { ParentView, type ParentTab } from './parent-view';
 
 const PARENT_NAV: { tab: ParentTab; label: string; icon: React.ReactNode }[] = [
   { tab: 'overview', label: 'Tổng quan', icon: <IconHome size={18} stroke={1.5} /> },
+  { tab: 'schedule', label: 'Lịch học & Nội dung', icon: <IconCalendarEvent size={18} stroke={1.5} /> },
+  { tab: 'sessions', label: 'Buổi học (ảnh & nhận xét)', icon: <IconPhoto size={18} stroke={1.5} /> },
   { tab: 'gradebook', label: 'Học bạ', icon: <IconReport size={18} stroke={1.5} /> },
   { tab: 'notifications', label: 'Tiến trình', icon: <IconBell size={18} stroke={1.5} /> },
   { tab: 'rewards', label: 'Phần thưởng', icon: <IconStar size={18} stroke={1.5} /> },
+  { tab: 'profile', label: 'Hồ sơ & liên kết', icon: <IconUserCircle size={18} stroke={1.5} /> },
 ];
 
 interface ParentShellProps {
   principal: LmsPrincipal;
 }
 
-const ALL_PARENT_TABS = new Set<string>(['overview', 'gradebook', 'notifications', 'rewards']);
+const ALL_PARENT_TABS = new Set<string>(['overview', 'schedule', 'sessions', 'gradebook', 'notifications', 'rewards', 'profile']);
 
 export function ParentShell({ principal }: ParentShellProps) {
   const { logout } = useLmsSession();
@@ -63,13 +69,13 @@ export function ParentShell({ principal }: ParentShellProps) {
         }}
       >
         <Group h="100%" px="lg" justify="space-between">
-          <Group gap={0}>
+          <Group gap="xs">
             <ActionIcon
               variant="subtle"
               hiddenFrom="sm"
               onClick={() => setMobileOpened((o) => !o)}
               aria-label="Mở menu"
-              mr={8}
+              mr={4}
             >
               <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                 <line x1="3" y1="6" x2="21" y2="6" />
@@ -77,12 +83,13 @@ export function ParentShell({ principal }: ParentShellProps) {
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </ActionIcon>
+            <img src="brand/cmc-logo.jpg" alt="CMC EDU Logo" style={{ height: 32, borderRadius: 6 }} />
             <Text
-              fw={700}
+              fw={800}
               size="md"
-              style={{ color: 'var(--cmc-brand)', letterSpacing: '-0.01em' }}
+              style={{ color: 'var(--cmc-brand-ink)', letterSpacing: '-0.01em', fontFamily: 'var(--cmc-font-bubble)' }}
             >
-              CMC
+              CMC EDU
             </Text>
             <Text
               size="sm"

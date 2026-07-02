@@ -1,22 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { trpc, notifyError, notifySuccess } from '@cmc/ui';
+import { notifyError, notifySuccess } from '@cmc/ui';
 import { Badge, Button, Card, Group, JsonInput, Stack, Table, Text, TextInput } from '@mantine/core';
-
-// Minimal shape the list view needs — avoids inferring the deep params JSON type (TS2589).
-type Policy = { id: string; effectiveFrom: string | Date; note: string | null; createdAt: string | Date; params: unknown };
-
-// The compensation procedures carry a deep Zod-inferred params type that blows tsc's instantiation
-// depth (TS2589) at every call site. Re-type the client surface loosely; the SERVER still validates.
-const compensationApi = trpc.compensation as unknown as {
-  list: { query: () => Promise<Policy[]> };
-  defaults: { query: () => Promise<unknown> };
-  create: { mutate: (input: { effectiveFrom: string; params: unknown; note?: string }) => Promise<unknown> };
-};
+import { compensationApi, type CompensationPolicyRow } from './shallow-trpc';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
 export function CompensationConfigPanel() {
-  const [policies, setPolicies] = useState<Policy[]>([]);
+  const [policies, setPolicies] = useState<CompensationPolicyRow[]>([]);
   const [paramsText, setParamsText] = useState('');
   const [effectiveFrom, setEffectiveFrom] = useState(todayISO());
   const [note, setNote] = useState('');
@@ -68,7 +58,7 @@ export function CompensationConfigPanel() {
     setBusy(true);
     try {
       // Server re-validates params against the Zod schema; an invalid shape throws here.
-      await compensationApi.create.mutate({ effectiveFrom, params: params as never, note: note || undefined });
+      await compensationApi.create.mutate({ effectiveFrom, params, note: note || undefined });
       notifySuccess(`Đã tạo chính sách hiệu lực từ ${effectiveFrom} (áp dụng kỳ sau, không đổi lương đã chốt).`);
       setNote('');
       loadList();

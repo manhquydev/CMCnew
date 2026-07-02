@@ -112,8 +112,8 @@ export const afterSaleRouter = router({
       }),
     ),
 
-  // A case can change a student's lifecycle (e.g. on_hold / withdrawn). quan_ly only; audited
-  // on both the case and the student so the timeline links the decision to the case.
+  // A case can change a student's lifecycle (e.g. on_hold / withdrawn). giam_doc_kinh_doanh
+  // only; audited on both the case and the student so the timeline links the decision to the case.
   setStudentLifecycle: requirePermission('afterSale', 'setStudentLifecycle')
     .input(
       z.object({

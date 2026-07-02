@@ -62,28 +62,28 @@ describe('permission registry parity', () => {
     }
     expect(drift, `Permission drift detected:\n${drift.join('\n')}`).toHaveLength(0);
   });
+
+  it('quan_ly/head_teacher/bgd never appear in any registry entry (retired roles)', () => {
+    const leakage: string[] = [];
+    for (const [mod, actions] of Object.entries(PERMISSIONS)) {
+      for (const [action, roles] of Object.entries(actions)) {
+        for (const retired of ['quan_ly', 'head_teacher', 'bgd']) {
+          if ((roles as string[]).includes(retired)) leakage.push(`${mod}.${action} still has ${retired}`);
+        }
+      }
+    }
+    expect(leakage, `Retired role leaked into registry:\n${leakage.join('\n')}`).toHaveLength(0);
+  });
 });
 
 // ── Named invariant tests (document intentional design decisions) ──────────────────────────────
 
-describe('head_teacher class/schedule access', () => {
-  it('head_teacher may create classes and build timetables', () => {
-    expect(PERMISSIONS['classBatch']!['create']).toContain('head_teacher');
-    expect(PERMISSIONS['schedule']!['addSlot']).toContain('head_teacher');
-    expect(PERMISSIONS['schedule']!['generateSessions']).toContain('head_teacher');
-  });
-
-  it('head_teacher cannot change class status/cancel/reopen (financial impact)', () => {
-    expect(PERMISSIONS['classBatch']!['setStatus']).not.toContain('head_teacher');
-    expect(PERMISSIONS['classBatch']!['cancel']).not.toContain('head_teacher');
-    expect(PERMISSIONS['classBatch']!['reopen']).not.toContain('head_teacher');
-  });
-});
-
 describe('ctv_mkt CRM access (O1 only)', () => {
-  it('ctv_mkt may read and create opportunities only', () => {
-    expect(PERMISSIONS['crm']!['opportunityList']).toContain('ctv_mkt');
-    expect(PERMISSIONS['crm']!['opportunityCreate']).toContain('ctv_mkt');
+  it('ctv_mkt may read/create opportunities and resolve owner context only', () => {
+    const allowed = ['opportunityList', 'opportunityGet', 'opportunityCreate', 'assignableOwners', 'assignmentHistory'];
+    for (const action of allowed) {
+      expect(PERMISSIONS['crm']![action], `ctv_mkt must have crm.${action}`).toContain('ctv_mkt');
+    }
   });
 
   it('ctv_mkt cannot transition, mark lost, reopen, or manage tests/contacts', () => {
@@ -111,7 +111,8 @@ describe('Business Director (giam_doc_kinh_doanh) permissions', () => {
 
   it('has full CRM access to run the KD team', () => {
     const crmActions = ['contactList', 'contactCreate', 'opportunityList', 'opportunityCreate',
-      'opportunityTransition', 'opportunityMarkLost', 'opportunityReopen', 'testList', 'testCreate'];
+      'opportunityGet', 'assignableOwners', 'opportunityTransition', 'opportunityMarkLost',
+      'opportunityReopen', 'opportunityReassign', 'assignmentHistory', 'testList', 'testCreate'];
     for (const a of crmActions) {
       expect(PERMISSIONS['crm']![a], `crm.${a} must include ${KD}`).toContain(KD);
     }
@@ -126,19 +127,16 @@ describe('Business Director (giam_doc_kinh_doanh) permissions', () => {
     expect(PERMISSIONS['afterSale']!['create']).toContain(KD);
     expect(PERMISSIONS['afterSale']!['transition']).toContain(KD);
     expect(PERMISSIONS['afterSale']!['assign']).toContain(KD);
-    // setStudentLifecycle stays quan_ly-only (financial lifecycle)
-    expect(PERMISSIONS['afterSale']!['setStudentLifecycle']).not.toContain(KD);
+    // setStudentLifecycle moves fully to KD (quan_ly retired — sole financial-lifecycle owner)
+    expect(PERMISSIONS['afterSale']!['setStudentLifecycle']).toContain(KD);
   });
 
-  it('has read-only finance visibility (list only, no write)', () => {
-    expect(PERMISSIONS['finance']!['receiptList']).toContain(KD);
-    expect(PERMISSIONS['finance']!['priceList']).toContain(KD);
-    expect(PERMISSIONS['finance']!['voucherList']).toContain(KD);
-    // Write actions stay ke_toan/quan_ly
-    const writeActions = ['receiptCreate', 'receiptApprove', 'receiptMarkSent',
-      'receiptReconcile', 'receiptCancel', 'priceCreate', 'voucherCreate'];
-    for (const a of writeActions) {
-      expect(PERMISSIONS['finance']![a], `finance.${a} must not include ${KD}`).not.toContain(KD);
+  it('has finance write access alongside ke_toan (quan_ly retired — KD is the compensating oversight)', () => {
+    const financeActions = ['receiptList', 'priceList', 'voucherList', 'receiptCreate',
+      'receiptApprove', 'receiptMarkSent', 'receiptReconcile', 'receiptCancel',
+      'priceCreate', 'voucherCreate'];
+    for (const a of financeActions) {
+      expect(PERMISSIONS['finance']![a], `finance.${a} must include ${KD}`).toContain(KD);
     }
   });
 
@@ -208,10 +206,11 @@ describe('Education Director (giam_doc_dao_tao) permissions', () => {
     expect(PERMISSIONS['user']!['listTeachers']).toContain(GD);
   });
 
-  it('does not appear in any KD/finance/CRM module', () => {
+  it('does not appear in KD/finance/CRM modules, except crm.testGrade (teaching oversight)', () => {
     const bizModules = ['crm', 'afterSale', 'rewards'];
     for (const mod of bizModules) {
       for (const [action, roles] of Object.entries(PERMISSIONS[mod] ?? {})) {
+        if (mod === 'crm' && action === 'testGrade') continue; // GD retains teaching-oversight grading
         expect(roles as string[], `${mod}.${action} must not include ${GD}`).not.toContain(GD);
       }
     }
@@ -222,29 +221,47 @@ describe('Education Director (giam_doc_dao_tao) permissions', () => {
   });
 });
 
-describe('director KPI authority (3-heads executive board)', () => {
+describe('director payroll/KPI authority (3-heads executive board)', () => {
   const KD = 'giam_doc_kinh_doanh';
   const GD = 'giam_doc_dao_tao';
 
-  it('both directors can load the KPI panel (kpiList + kpiEvalGet)', () => {
+  it('both directors own payroll read/write gates', () => {
+    const payrollActions = Object.keys(PERMISSIONS['payroll'] ?? {});
     for (const dir of [KD, GD]) {
-      expect(PERMISSIONS['payroll']!['kpiList'], `kpiList must include ${dir}`).toContain(dir);
-      expect(PERMISSIONS['payroll']!['kpiEvalGet'], `kpiEvalGet must include ${dir}`).toContain(dir);
-    }
-  });
-
-  it('both directors can confirm and approve KPI', () => {
-    for (const dir of [KD, GD]) {
-      expect(PERMISSIONS['payroll']!['kpiEvalConfirm'], `kpiEvalConfirm must include ${dir}`).toContain(dir);
-      expect(PERMISSIONS['payroll']!['kpiEvalApprove'], `kpiEvalApprove must include ${dir}`).toContain(dir);
-    }
-  });
-
-  it('KPI data prep stays with hr/ke_toan (directors do not start/prefill/setAuto)', () => {
-    for (const action of ['kpiEvalStart', 'kpiAutoPrefill', 'kpiSetAuto']) {
-      for (const dir of [KD, GD]) {
-        expect(PERMISSIONS['payroll']![action], `payroll.${action} must not include ${dir}`).not.toContain(dir);
+      for (const action of payrollActions) {
+        expect(PERMISSIONS['payroll']![action], `payroll.${action} must include ${dir}`).toContain(dir);
       }
     }
+  });
+
+  it('hr/ke_toan no longer own payroll gates', () => {
+    for (const action of Object.keys(PERMISSIONS['payroll'] ?? {})) {
+      for (const role of ['hr', 'ke_toan']) {
+        expect(PERMISSIONS['payroll']![action], `payroll.${action} must not include ${role}`).not.toContain(role);
+      }
+    }
+  });
+});
+
+describe('shift registration delegated approval', () => {
+  it('staff roles can call approve/reject; router still enforces assigned approver and self-block', () => {
+    for (const action of ['approve', 'reject']) {
+      for (const role of ['giao_vien', 'sale', 'cskh']) {
+        expect(PERMISSIONS['shiftRegistration']![action], `shiftRegistration.${action} must include ${role}`).toContain(role);
+      }
+    }
+  });
+});
+
+describe('sale afterSale facility-scoped handling', () => {
+  it('sale can operate normal afterSale case flow and assignment picker', () => {
+    for (const action of ['list', 'create', 'transition', 'assign']) {
+      expect(PERMISSIONS['afterSale']![action], `afterSale.${action} must include sale`).toContain('sale');
+    }
+    expect(PERMISSIONS['user']!['listAssignableForAfterSale']).toContain('sale');
+  });
+
+  it('sale cannot change student lifecycle from afterSale', () => {
+    expect(PERMISSIONS['afterSale']!['setStudentLifecycle']).not.toContain('sale');
   });
 });

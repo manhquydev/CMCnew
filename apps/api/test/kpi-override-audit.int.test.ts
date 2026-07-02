@@ -2,9 +2,12 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Role } from '@cmc/auth';
 import { staffCaller, withRls, SUPER, uniq, superAdminUserId } from './helpers.js';
 
-// Invariant (decision 0011): KPI is auto-computed then tree-overridable. A manager (rank above the
-// target) may override a subordinate's KPI with a mandatory reason; the change is logged old→new;
-// nobody overrides their own KPI; and payslipCompute reads the final (override ?? auto) score.
+// Invariant (decision 0011, post role-consolidation): KPI is auto-computed then override-able only
+// by the facility's executive board. canOverrideKpi (apps/api/src/lib/kpi-authz.ts) now grants
+// override authority to super_admin and to giam_doc_kinh_doanh/giam_doc_dao_tao — never to a mid-tier
+// role, and never to a director overriding a peer director/super_admin. A director may override a
+// subordinate's KPI with a mandatory reason; the change is logged old→new; nobody overrides their
+// own KPI; and payslipCompute reads the final (override ?? auto) score.
 describe('KPI override + audit + payslip wiring (decision 0011)', () => {
   const FACILITY = 1;
   const PERIOD = '2099-04';
@@ -48,9 +51,15 @@ describe('KPI override + audit + payslip wiring (decision 0011)', () => {
   });
 
   const managerCaller = () =>
-    staffCaller({ userId: managerId, roles: [Role.quan_ly], primaryRole: Role.quan_ly, isSuperAdmin: false, facilityIds: [FACILITY] });
+    staffCaller({
+      userId: managerId,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
+      isSuperAdmin: false,
+      facilityIds: [FACILITY],
+    });
 
-  it('manager (tree) overrides a subordinate KPI and logs old→new + reason', async () => {
+  it('director (giam_doc_kinh_doanh) overrides a subordinate KPI and logs old→new + reason', async () => {
     const mgr = await managerCaller();
     await mgr.payroll.kpiOverride({ userId: saleId, periodKey: PERIOD, overrideScore: 85, reason: 'Bù điểm dự giờ thực tế' });
 
@@ -64,8 +73,15 @@ describe('KPI override + audit + payslip wiring (decision 0011)', () => {
   });
 
   it('nobody can override their own KPI', async () => {
-    // Actor whose userId == target, even with manager role → forbidden by the own-guard.
-    const selfAsManager = await staffCaller({ userId: saleId, roles: [Role.quan_ly], primaryRole: Role.quan_ly, isSuperAdmin: false, facilityIds: [FACILITY] });
+    // Actor whose userId == target, even with director role → forbidden by the own-guard
+    // (canOverrideKpi checks self-identity before rank).
+    const selfAsManager = await staffCaller({
+      userId: saleId,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
+      isSuperAdmin: false,
+      facilityIds: [FACILITY],
+    });
     await expect(
       selfAsManager.payroll.kpiOverride({ userId: saleId, periodKey: PERIOD, overrideScore: 100, reason: 'tự nâng' }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });

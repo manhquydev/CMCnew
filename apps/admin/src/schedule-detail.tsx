@@ -7,7 +7,8 @@
 
 import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
-import { trpc, Chatter, notifyError } from '@cmc/ui';
+import { trpc, useSession, Chatter, notifyError } from '@cmc/ui';
+import { can } from '@cmc/auth/permissions';
 import {
   ActionIcon,
   Badge,
@@ -15,6 +16,7 @@ import {
   Card,
   Group,
   Loader,
+  SimpleGrid,
   Stack,
   Table,
   Text,
@@ -23,6 +25,9 @@ import {
 import { IconArrowLeft, IconExternalLink, IconUser } from '@tabler/icons-react';
 import { AttendanceRoster } from './attendance-roster.js';
 import { StudentDetailPanel } from './student-detail.js';
+import { SessionEvidencePanel } from './session-evidence-panel.js';
+import { GradingPanel } from './grading.js';
+import { MeetingsPanel } from './meetings-panel.js';
 
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
 type Enrollment = Awaited<ReturnType<typeof trpc.enrollment.listByBatch.query>>[number];
@@ -36,6 +41,41 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 const fmtDate = (d: string | Date) => dayjs(d).format('DD/MM/YYYY');
+const sessionMoment = (d: string | Date, time: string) => dayjs(`${dayjs(d).format('YYYY-MM-DD')}T${time}:00`);
+
+type SessionPhase = 'before' | 'attendance_open' | 'running' | 'post_class';
+
+function getSessionPhase(session: MySession, now = dayjs()): SessionPhase {
+  const start = sessionMoment(session.sessionDate, session.startTime);
+  const end = sessionMoment(session.sessionDate, session.endTime);
+  if (now.isBefore(start.subtract(15, 'minute'))) return 'before';
+  if (now.isBefore(start)) return 'attendance_open';
+  if (now.isBefore(end)) return 'running';
+  return 'post_class';
+}
+
+const PHASE_META: Record<SessionPhase, { label: string; color: string; hint: string }> = {
+  before: {
+    label: 'Chưa tới giờ',
+    color: 'gray',
+    hint: 'GV xem thông tin lớp, roster và chuẩn bị nội dung.',
+  },
+  attendance_open: {
+    label: 'Mở điểm danh',
+    color: 'blue',
+    hint: 'Trong 15 phút trước giờ học, hệ thống mở điểm danh.',
+  },
+  running: {
+    label: 'Đang học',
+    color: 'green',
+    hint: 'GV cập nhật điểm danh và ghi chú vận hành trong buổi.',
+  },
+  post_class: {
+    label: 'Sau buổi học',
+    color: 'teal',
+    hint: 'Hết giờ học, hệ thống mở các việc sau buổi: bài tập, nhận xét, ảnh lớp, publish LMS.',
+  },
+};
 
 /** Two-column read-only field row (matches student/staff detail visual language). */
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
@@ -44,6 +84,150 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
       <Text size="sm" c="dimmed">{label}</Text>
       <Text size="sm" style={{ textAlign: 'right' }}>{value ?? '—'}</Text>
     </Group>
+  );
+}
+
+function WorkflowCard({
+  title,
+  description,
+  enabled,
+  children,
+}: {
+  title: string;
+  description: string;
+  enabled: boolean;
+  children?: React.ReactNode;
+}) {
+  return (
+    <Card withBorder radius="md" p="md" style={{ opacity: enabled ? 1 : 0.62 }}>
+      <Stack gap="xs">
+        <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <div>
+            <Text fw={600} size="sm">{title}</Text>
+            <Text size="xs" c="dimmed">{description}</Text>
+          </div>
+          <Badge size="sm" color={enabled ? 'teal' : 'gray'} variant="light">
+            {enabled ? 'Đã mở' : 'Chưa mở'}
+          </Badge>
+        </Group>
+        {enabled && children}
+      </Stack>
+    </Card>
+  );
+}
+
+function SessionExerciseIndicator({ session }: { session: MySession }) {
+  const [rows, setRows] = useState<Awaited<ReturnType<typeof trpc.exercise.listByUnit.query>>>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!session.curriculumUnitId) {
+      setRows([]);
+      return;
+    }
+    setLoading(true);
+    trpc.exercise.listByUnit
+      .query({ curriculumUnitId: session.curriculumUnitId })
+      .then(setRows)
+      .catch((e) => notifyError(e, 'Không tải được trạng thái bài tập'))
+      .finally(() => setLoading(false));
+  }, [session.curriculumUnitId]);
+
+  if (!session.curriculumUnitId) {
+    return <Text size="xs" c="dimmed">Buổi này chưa gắn curriculum unit nên không có bài tập tự mở.</Text>;
+  }
+
+  const published = rows.filter((row) => row.status === 'published');
+  const unitLabel = session.curriculumUnit?.unitCode ?? 'unit hiện tại';
+  return (
+    <Stack gap={4}>
+      <Text size="xs" c="dimmed">
+        Bài tập buổi này ({unitLabel}): {loading ? 'đang kiểm tra...' : published.length > 0 ? 'đã có' : 'chưa upload'} · tự mở sau khi buổi kết thúc.
+      </Text>
+      {published.map((exercise) => (
+        <Badge key={exercise.id} size="sm" color="green" variant="light">
+          {exercise.title}
+        </Badge>
+      ))}
+    </Stack>
+  );
+}
+
+function SessionWorkflowPanel({ session }: { session: MySession }) {
+  const { me } = useSession();
+  const phase = getSessionPhase(session);
+  const meta = PHASE_META[phase];
+  const attendanceEnabled = phase !== 'before';
+  const postClassEnabled = phase === 'post_class';
+  const canGrade = can(me.roles, me.isSuperAdmin, 'grade', 'grade');
+  const canSetMeetingStatus = can(me.roles, me.isSuperAdmin, 'parentMeeting', 'setStatus');
+
+  return (
+    <Stack gap="md">
+      <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
+      <Stack gap="md">
+        <Group justify="space-between" align="flex-start">
+          <div>
+            <Text fw={600}>Quy trình buổi học 360</Text>
+            <Text size="sm" c="dimmed">{meta.hint}</Text>
+          </div>
+          <Badge color={meta.color} variant="light" radius="xl">{meta.label}</Badge>
+        </Group>
+
+        <SimpleGrid cols={{ base: 1, md: 2 }}>
+          <WorkflowCard
+            title="Điểm danh"
+            description="Tự mở từ 15 phút trước giờ bắt đầu."
+            enabled={attendanceEnabled}
+          >
+            <Text size="xs" c="dimmed">
+              Dùng bảng điểm danh thật bên dưới. Trạng thái này chỉ điều khiển luồng thao tác, không thay quyền backend.
+            </Text>
+          </WorkflowCard>
+
+          <WorkflowCard
+            title="Phát bài tập LMS"
+            description="Mở sau giờ kết thúc buổi học."
+            enabled={postClassEnabled}
+          >
+            <SessionExerciseIndicator session={session} />
+          </WorkflowCard>
+
+          <WorkflowCard
+            title="Ảnh & nhận xét LMS"
+            description="Mở sau giờ kết thúc buổi học."
+            enabled={postClassEnabled}
+          >
+            <Text size="xs" c="dimmed">
+              Dùng panel thật bên dưới để upload ảnh, lưu nhận xét từng học sinh và publish cho PH/HS.
+            </Text>
+          </WorkflowCard>
+
+          {canGrade && (
+            <WorkflowCard
+              title="Chấm bài"
+              description="Mở sau giờ kết thúc buổi học."
+              enabled={postClassEnabled}
+            >
+              <GradingPanel initialFacilityId={session.facilityId} initialBatchId={session.classBatchId} />
+            </WorkflowCard>
+          )}
+
+          {canSetMeetingStatus && (
+            <WorkflowCard
+              title="Họp PH"
+              description="Mở sau giờ kết thúc buổi học."
+              enabled={postClassEnabled}
+            >
+              <MeetingsPanel initialFacilityId={session.facilityId} />
+            </WorkflowCard>
+          )}
+        </SimpleGrid>
+      </Stack>
+      </Card>
+
+      <SessionEvidencePanel classSessionId={session.id} enabled={postClassEnabled} />
+    </Stack>
   );
 }
 
@@ -168,6 +352,8 @@ export function ScheduleDetailPanel({
           <Field label="Phòng" value={session.roomName ?? '—'} />
         </Stack>
       </Card>
+
+      <SessionWorkflowPanel session={session} />
 
       {/* Roster — deep-links to student detail */}
       <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>

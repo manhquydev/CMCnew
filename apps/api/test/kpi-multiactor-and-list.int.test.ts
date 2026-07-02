@@ -19,8 +19,8 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
   const PERIOD_NODATA = '2098-12';
 
   // Actors
-  let bgdId: string; // approve (N+2)
-  let managerId: string; // confirm (N+1)
+  let eduDirId: string; // giam_doc_dao_tao — approve
+  let managerId: string; // giam_doc_kinh_doanh — confirm
   let saleId: string; // submit own KPI
   let teacherId: string; // training block
   let saleNoDataId: string; // zero revenue scenario
@@ -32,17 +32,17 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
   let studentId: string;
 
   beforeAll(async () => {
-    bgdId = await superAdminUserId();
+    eduDirId = await superAdminUserId();
 
-    // Create manager (quản_ly) for FACILITY_1
+    // Create manager (giam_doc_kinh_doanh) for FACILITY_1
     const mgr = await withRls(SUPER, (tx) =>
       tx.appUser.create({
         data: {
           email: uniq('kpi-mgr@cmc.test'),
           displayName: 'KPI Manager',
           passwordHash: 'dummy',
-          primaryRole: Role.quan_ly,
-          roles: [Role.quan_ly],
+          primaryRole: Role.giam_doc_kinh_doanh,
+          roles: [Role.giam_doc_kinh_doanh],
           isActive: true,
           facilities: { create: [{ facilityId: FACILITY_1 }] },
         },
@@ -281,17 +281,17 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
   const managerCaller = () =>
     staffCaller({
       userId: managerId,
-      roles: [Role.quan_ly],
-      primaryRole: Role.quan_ly,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
       isSuperAdmin: false,
       facilityIds: [FACILITY_1],
     });
 
-  const bgdCaller = () =>
+  const eduDirCaller = () =>
     staffCaller({
-      userId: bgdId,
-      roles: [Role.bgd],
-      primaryRole: Role.bgd,
+      userId: eduDirId,
+      roles: [Role.giam_doc_dao_tao],
+      primaryRole: Role.giam_doc_dao_tao,
       isSuperAdmin: true, // superAdmin passes all role checks
       facilityIds: [FACILITY_1],
     });
@@ -323,7 +323,7 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
       facilityIds: [FACILITY_1],
     });
 
-  const teacherNoDataCaller = () =>
+  const _teacherNoDataCaller = () =>
     staffCaller({
       userId: teacherNoDataId,
       roles: [Role.giao_vien],
@@ -332,7 +332,7 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
       facilityIds: [FACILITY_1],
     });
 
-  describe('Multi-actor workflow: HR → employee → manager → BGD', () => {
+  describe('Multi-actor workflow: HR → employee → giam_doc_kinh_doanh (confirm) → giam_doc_dao_tao (approve)', () => {
     it('HR creates draft KPI for sale (kpiEvalStart)', async () => {
       const su = await staffCaller(); // super_admin
       const row = await su.payroll.kpiEvalStart({
@@ -382,13 +382,13 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
     });
 
     it('BGD approves confirmed KPI (kpiEvalApprove)', async () => {
-      const bgd = await bgdCaller();
-      const row = await bgd.payroll.kpiEvalApprove({
+      const eduDir = await eduDirCaller();
+      const row = await eduDir.payroll.kpiEvalApprove({
         userId: saleId,
         periodKey: PERIOD_MAIN,
       });
       expect(row.status).toBe('approved');
-      expect(row.approvedById).toBe(bgdId);
+      expect(row.approvedById).toBe(eduDirId);
       expect(row.approvedAt).not.toBeNull();
     });
 
@@ -431,7 +431,11 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
       ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     });
 
-    it('Manager cannot approve KPI (FORBIDDEN — needs bgd)', async () => {
+    // NOTE: post role-consolidation, kpiEvalConfirm and kpiEvalApprove share the same director
+    // role set (giam_doc_kinh_doanh/giam_doc_dao_tao). This FORBIDDEN comes from separation-of-duties
+    // (confirmedById === ctx.session.userId), NOT from domain mismatch—actors must be valid directors
+    // for the target's domain so only SoD blocks.
+    it('Manager (as confirmer) cannot approve the KPI it just confirmed (FORBIDDEN — separation of duties)', async () => {
       // First submit and confirm
       const teacher = await teacherCaller();
       await teacher.payroll.kpiEvalSubmit({
@@ -442,15 +446,17 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
         ],
       });
 
-      const mgr = await managerCaller();
-      await mgr.payroll.kpiEvalConfirm({
+      // Use education director (eduDirId) to confirm teacherId KPI—domain-scoped guard passes.
+      // Then same eduDir tries to approve → FORBIDDEN by SoD (confirmer ≠ approver).
+      const eduDir = await eduDirCaller();
+      await eduDir.payroll.kpiEvalConfirm({
         userId: teacherId,
         periodKey: PERIOD_OTHER,
       });
 
-      // Manager tries to approve → FORBIDDEN
+      // Education director tries to approve the sheet it just confirmed → FORBIDDEN
       await expect(
-        mgr.payroll.kpiEvalApprove({
+        eduDir.payroll.kpiEvalApprove({
           userId: teacherId,
           periodKey: PERIOD_OTHER,
         }),
@@ -511,7 +517,7 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
     });
 
     it('Different approver can approve after manager confirms', async () => {
-      // Use BGD (different from manager)
+      // Use the other director (giam_doc_dao_tao, different from the confirming giam_doc_kinh_doanh manager)
       const su = await staffCaller();
       const period = '2099-14';
       await su.payroll.kpiEvalStart({
@@ -538,13 +544,13 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
       });
 
       // BGD (different user) approves → SUCCESS
-      const bgd = await bgdCaller();
-      const row = await bgd.payroll.kpiEvalApprove({
+      const eduDir = await eduDirCaller();
+      const row = await eduDir.payroll.kpiEvalApprove({
         userId: saleId,
         periodKey: period,
       });
       expect(row.status).toBe('approved');
-      expect(row.approvedById).toBe(bgdId);
+      expect(row.approvedById).toBe(eduDirId);
       expect(row.confirmedById).toBe(managerId); // Different from approver
     });
   });
@@ -722,7 +728,7 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
       const su = await staffCaller();
 
       // saleId has 35M revenue with 50M quota in PERIOD_OTHER (35/50 = 0.7 ratio)
-      const kpiRow = await su.payroll.kpiEvalStart({
+      await su.payroll.kpiEvalStart({
         userId: saleId,
         facilityId: FACILITY_1,
         periodKey: PERIOD_OTHER,
@@ -778,7 +784,7 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
       const period = '2099-16';
 
       // Create KPI and manually set some scores
-      const kpiRow = await su.payroll.kpiEvalStart({
+      await su.payroll.kpiEvalStart({
         userId: saleId,
         facilityId: FACILITY_1,
         periodKey: period,
@@ -831,8 +837,8 @@ describe('KPI multi-actor workflow + list + zero-data edge cases', () => {
         periodKey: period,
       });
 
-      const bgd = await bgdCaller();
-      await bgd.payroll.kpiEvalApprove({
+      const eduDir = await eduDirCaller();
+      await eduDir.payroll.kpiEvalApprove({
         userId: saleId,
         periodKey: period,
       });

@@ -8,6 +8,7 @@ interface TimelineEvent {
   type: string;
   body: string | null;
   changes: unknown;
+  actorName?: string | null;
   createdAt: string | Date;
 }
 type Change = { field: string; old: unknown; new: unknown };
@@ -109,6 +110,7 @@ export function Chatter({
                   <Badge size="sm" variant="light" color={e.type === 'status_changed' ? 'orange' : 'cmc'}>
                     {TYPE_LABEL[e.type] ?? e.type}
                   </Badge>
+                  <Text size="xs" fw={500}>{e.actorName || 'Hệ thống'}</Text>
                   <Text size="xs" c="dimmed">
                     {fmt(e.createdAt)}
                   </Text>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, notifyError } from '@cmc/ui';
-import { Checkbox, Loader, SegmentedControl, Stack, Table, Text } from '@mantine/core';
+import { trpc, notifyError, notifySuccess } from '@cmc/ui';
+import { Button, Checkbox, Group, Loader, SegmentedControl, Stack, Table, Text } from '@mantine/core';
 
 type Enrollment = Awaited<ReturnType<typeof trpc.enrollment.listByBatch.query>>[number];
 
@@ -21,6 +21,7 @@ export function AttendanceRoster({ classSessionId, batchId, facilityId }: Attend
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [marks, setMarks] = useState<Record<string, { status: string; excused: boolean }>>({});
   const [loading, setLoading] = useState(true);
+  const [markingAll, setMarkingAll] = useState(false);
 
   const loadData = useCallback(() => {
     setLoading(true);
@@ -56,6 +57,32 @@ export function AttendanceRoster({ classSessionId, batchId, facilityId }: Attend
     }
   }
 
+  // "Điểm danh tất cả có mặt": mọi học sinh chưa có override riêng (giữ trạng thái/có phép hiện
+  // tại nếu đã điểm danh trước đó) nhận "present" trong 1 lần gọi thay vì bấm từng dòng.
+  async function markAllPresent() {
+    setMarkingAll(true);
+    try {
+      const overrides = enrollments
+        .filter((e) => marks[e.id]?.status)
+        .map((e) => ({
+          enrollmentId: e.id,
+          status: marks[e.id]!.status as 'present' | 'absent' | 'late',
+          excused: marks[e.id]!.excused,
+        }));
+      await trpc.attendance.markAll.mutate({
+        classSessionId,
+        defaultStatus: 'present',
+        overrides,
+      });
+      notifySuccess('Đã điểm danh tất cả học sinh có mặt');
+      loadData();
+    } catch (e) {
+      notifyError(e, 'Điểm danh tất cả thất bại');
+    } finally {
+      setMarkingAll(false);
+    }
+  }
+
   if (loading) return <Loader size="sm" />;
   if (enrollments.length === 0) {
     return (
@@ -67,6 +94,11 @@ export function AttendanceRoster({ classSessionId, batchId, facilityId }: Attend
 
   return (
     <Stack gap="xs">
+      <Group justify="flex-end">
+        <Button size="xs" variant="light" loading={markingAll} onClick={markAllPresent}>
+          Điểm danh tất cả có mặt
+        </Button>
+      </Group>
       <Table>
         <Table.Thead>
           <Table.Tr>

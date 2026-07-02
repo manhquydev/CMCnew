@@ -85,9 +85,9 @@ describe('sendViaGraph', () => {
 });
 
 describe('templates', () => {
-  it('renders otp_login with the code in subject + body', () => {
+  it('renders otp_login with the code in the body but NOT the subject (security: avoids leaking the OTP into inbox/notification previews)', () => {
     const r = renderTemplate('otp_login', { code: '123456', expiresMinutes: 5 });
-    expect(r.subject).toContain('123456');
+    expect(r.subject).not.toContain('123456');
     expect(r.html).toContain('123456');
   });
 

@@ -6,14 +6,18 @@ import { test, expect } from '@playwright/test';
 // Seed: student loginCode TEST-001, password = SEED_SUPERADMIN_PASSWORD (default ChangeMe!123).
 const STUDENT_CODE = process.env.TEST_LMS_STUDENT_CODE ?? 'TEST-001';
 const STUDENT_PASSWORD = process.env.TEST_LMS_STUDENT_PASSWORD ?? 'ChangeMe!123';
-const PARENT_EMAIL = process.env.TEST_LMS_PARENT_EMAIL ?? 'parent@cmc.local';
+const PARENT_EMAIL = process.env.TEST_LMS_PARENT_EMAIL ?? 'otp-probe@cmc.local';
 
 test.use({ baseURL: 'http://localhost:5175' });
 
 test.describe('lms smoke', () => {
+  test.beforeEach(async ({ context }) => {
+    await context.clearCookies();
+  });
+
   test('login gate is visible on first load', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByText('CMC · Học tập')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /Học tập cùng CMC/i })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Phụ huynh', { exact: true })).toBeVisible();
     await expect(page.getByText('Học sinh', { exact: true })).toBeVisible();
   });
@@ -25,9 +29,8 @@ test.describe('lms smoke', () => {
     await page.getByLabel('Mật khẩu').fill(STUDENT_PASSWORD);
     await page.getByRole('button', { name: 'Đăng nhập' }).click();
 
-    // After login the submit button is gone and a logout control appears.
-    await expect(page.getByRole('button', { name: 'Đăng nhập' })).not.toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole('button', { name: 'Đăng xuất' })).toBeVisible({ timeout: 8_000 });
+    // After login the app shell renders with a logout control.
+    await expect(page.getByRole('button', { name: 'Đăng xuất' })).toBeVisible({ timeout: 30_000 });
   });
 
   test('student wrong password shows error', async ({ page }) => {
@@ -47,7 +50,7 @@ test.describe('lms smoke', () => {
     await page.getByRole('button', { name: 'Gửi mã đăng nhập' }).click();
 
     // Step 2 view: the code-entry field + "sent to" confirmation appear.
-    await expect(page.getByText(/Mã đã gửi đến/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Mã đã gửi đến/i)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByLabel('Mã đăng nhập')).toBeVisible();
   });
 });

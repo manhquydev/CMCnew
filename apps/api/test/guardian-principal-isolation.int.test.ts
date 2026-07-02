@@ -6,31 +6,27 @@
  *   - Không xuyên facility: link nhiều cơ sở → thấy đủ con; non-child bị chặn.
  *
  * Ma trận G1–G6 (plan 260624-1746-guardian-link-verify/plan.md):
- *   G1 loginParent(P.email, matkhau) trả đúng {S1,S2}, không có S3 (test resolver thật)
+ *   G1 mintParentSession(P) trả đúng {S1,S2}, không có S3 (same resolver used after OTP)
  *   G2 lmsCaller(P) đọc dữ liệu con mình (S1) qua từng portal query → OK (có data hoặc 0 hợp lệ)
  *   G3 lmsCaller(P) đọc dữ liệu con người khác (S3) → bị chặn (rỗng theo RLS)
  *   G4 xuyên facility: P link S1@fac1 + S2@fac2 → thấy cả hai; S4 vẫn bị chặn
- *   G5 link/unlink: loginParent re-resolve tập con → {S1,S2,S3}→{S1,S2}
- *   G6 role-gate: giao_vien → FORBIDDEN trên guardian.parentList/link; bgd → được
+ *   G5 link/unlink: mintParentSession re-resolve tập con → {S1,S2,S3}→{S1,S2}
+ *   G6 role-gate: giao_vien → FORBIDDEN trên guardian.parentList/link; giam_doc_kinh_doanh → được
  *
  * QUAN TRỌNG: nếu G3 không rỗng (PH đọc được dữ liệu con người khác) → đây là
  * defect bảo mật thật. Không sửa test cho pass, báo lại controller.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { Role, type LmsSession, loginParent } from '@cmc/auth';
-import { GuardianRelation, StarTxnType, hashPassword } from '@cmc/db';
+import { Role, type LmsSession, mintParentSession } from '@cmc/auth';
+import { GuardianRelation, StarTxnType } from '@cmc/db';
 import { staffCaller, lmsCaller, withRls, SUPER, uniq } from './helpers.js';
 
 // ── fixtures ──────────────────────────────────────────────────────────────────
 const FAC1 = 1;
 const FAC2 = 2; // second facility for cross-facility (G4)
-const PASSWORD = 'Test1234!'; // fixed password for testing loginParent
-
 let parentAId: string; // PH P: owns S1 (fac1) + S2 (fac2)
 let parentBId: string; // PH Q: owns S3 (fac1) — isolation target
-let parentAEmail: string; // P's email for loginParent
-let parentBEmail: string; // Q's email for loginParent
 
 let s1Id: string; // child of P, fac1
 let s2Id: string; // child of P, fac2
@@ -41,9 +37,15 @@ let s4Id: string; // unlinked student fac1 (G4 cross-facility non-child check)
 let classBatchP_S1S2: string; // class for S1, S2 (P's children)
 let classBatchQ_S3: string; // class for S3 (Q's child)
 
+async function resolveParentSession(parentAccountId: string): Promise<LmsSession> {
+  const result = await mintParentSession(parentAccountId);
+  expect(result).not.toBeNull();
+  if (!result) throw new Error('mintParentSession failed');
+  return result.session;
+}
+
 // ── setup ─────────────────────────────────────────────────────────────────────
 beforeAll(async () => {
-  const pw = await hashPassword(PASSWORD);
   const admin = await staffCaller();
 
   await withRls(SUPER, async (tx) => {
@@ -72,18 +74,16 @@ beforeAll(async () => {
       })
     ).id;
 
-    // Parent accounts with email for loginParent
-    parentAEmail = `${uniq('pa')}@test.local`;
+    // Parent accounts with email for OTP login; passwordHash intentionally null.
     parentAId = (
       await tx.parentAccount.create({
-        data: { displayName: 'Parent-A', email: parentAEmail, passwordHash: pw },
+        data: { displayName: 'Parent-A', email: `${uniq('pa')}@test.local` },
       })
     ).id;
 
-    parentBEmail = `${uniq('pb')}@test.local`;
     parentBId = (
       await tx.parentAccount.create({
-        data: { displayName: 'Parent-B', email: parentBEmail, passwordHash: pw },
+        data: { displayName: 'Parent-B', email: `${uniq('pb')}@test.local` },
       })
     ).id;
 
@@ -116,7 +116,7 @@ beforeAll(async () => {
     });
   });
 
-  // Link using guardian router (role-gate: need bgd/quan_ly/super)
+  // Link using guardian router (role-gate: need giam_doc_kinh_doanh/giam_doc_dao_tao/super)
   await admin.guardian.link({ parentAccountId: parentAId, studentId: s1Id, relation: GuardianRelation.guardian });
   await admin.guardian.link({ parentAccountId: parentAId, studentId: s2Id, relation: GuardianRelation.guardian });
   await admin.guardian.link({ parentAccountId: parentBId, studentId: s3Id, relation: GuardianRelation.guardian });
@@ -134,14 +134,10 @@ afterAll(async () => {
   });
 });
 
-// ── G1: loginParent resolver scope (REAL resolver, not mirror) ─────────────────
-describe('G1 — loginParent(email, pw) returns exactly owned children, excludes others', () => {
-  it('[G1-P-resolver] loginParent(P.email, pw) → studentIds = {S1, S2}, NOT {S3,S4}', async () => {
-    const result = await loginParent(parentAEmail, PASSWORD);
-    expect(result).not.toBeNull();
-    if (!result) throw new Error('loginParent failed');
-
-    const session = result.session;
+// ── G1: parent session resolver scope (same resolver used after OTP) ──────────
+describe('G1 — mintParentSession(parentId) returns exactly owned children, excludes others', () => {
+  it('[G1-P-resolver] mintParentSession(P) → studentIds = {S1, S2}, NOT {S3,S4}', async () => {
+    const session = await resolveParentSession(parentAId);
     const ids = new Set(session.studentIds);
 
     expect(ids.has(s1Id)).toBe(true);
@@ -151,12 +147,9 @@ describe('G1 — loginParent(email, pw) returns exactly owned children, excludes
     expect(session.studentIds).toHaveLength(2);
   });
 
-  it('[G1-Q-resolver] loginParent(Q.email, pw) → studentIds = {S3} only', async () => {
-    const result = await loginParent(parentBEmail, PASSWORD);
-    expect(result).not.toBeNull();
-    if (!result) throw new Error('loginParent failed');
-
-    expect(result.session.studentIds).toEqual([s3Id]);
+  it('[G1-Q-resolver] mintParentSession(Q) → studentIds = {S3} only', async () => {
+    const session = await resolveParentSession(parentBId);
+    expect(session.studentIds).toEqual([s3Id]);
   });
 });
 
@@ -165,9 +158,7 @@ describe('G2 — lmsCaller(P) reads own child S1 via portal queries (happy path)
   let sessionP: LmsSession;
 
   beforeAll(async () => {
-    const result = await loginParent(parentAEmail, PASSWORD);
-    expect(result).not.toBeNull();
-    sessionP = result!.session;
+    sessionP = await resolveParentSession(parentAId);
   });
 
   it('assessment.gradebook for S1 returns valid shape (empty ok, no error)', async () => {
@@ -204,15 +195,13 @@ describe('G2 — lmsCaller(P) reads own child S1 via portal queries (happy path)
 // Each assert must FAIL if the RLS filter is removed (the data would appear).
 // Per plan: if any case unexpectedly returns non-empty/non-zero for foreign child → DEFECT.
 describe('G3 — lmsCaller(P) with S3 (foreign child) → RLS blocks (empty results)', () => {
-  let sessionP: LmsSession; // session from loginParent(P), scoped to {S1, S2}
+  let sessionP: LmsSession; // session from mintParentSession(P), scoped to {S1, S2}
 
   beforeAll(async () => {
     // Seed substantial data for S3 so tests have teeth:
     // if RLS were absent, these would return non-empty/non-zero results.
     const admin = await staffCaller();
-    const pwResult = await loginParent(parentBEmail, PASSWORD);
-    expect(pwResult).not.toBeNull();
-    const sessionQ = pwResult!.session;
+    const sessionQ = await resolveParentSession(parentBId);
 
     await withRls(SUPER, async (tx) => {
       // Enroll S3 in its class (Q's class)
@@ -273,12 +262,27 @@ describe('G3 — lmsCaller(P) with S3 (foreign child) → RLS blocks (empty resu
       });
 
       // seed a submission for S3 (with exercise)
+      const courseQ = await tx.classBatch.findUniqueOrThrow({
+        where: { id: classBatchQ_S3 },
+        select: { courseId: true },
+      });
+      const unit = await tx.curriculumUnit.create({
+        data: {
+          courseId: courseQ.courseId,
+          unitCode: uniq('G3-U'),
+          orderGlobal: 1,
+          unitType: 'LESSON',
+          theme: 'Isolation fixture',
+          seqInLevel: 1,
+          sessions: 1,
+        },
+      });
       const exercise = await tx.exercise.create({
         data: {
-          facilityId: FAC1,
-          classBatchId: classBatchQ_S3,
+          curriculumUnitId: unit.id,
           title: 'G3-Exercise',
           type: 'homework',
+          status: 'published',
           maxScore: 10,
         },
       });
@@ -336,10 +340,8 @@ describe('G3 — lmsCaller(P) with S3 (foreign child) → RLS blocks (empty resu
       });
     });
 
-    // Resolve P's session via real loginParent
-    const resultP = await loginParent(parentAEmail, PASSWORD);
-    expect(resultP).not.toBeNull();
-    sessionP = resultP!.session;
+    // Resolve P's session through the same parent resolver used after OTP verification.
+    sessionP = await resolveParentSession(parentAId);
     void admin; void sessionQ;
   });
 
@@ -351,7 +353,8 @@ describe('G3 — lmsCaller(P) with S3 (foreign child) → RLS blocks (empty resu
       await tx.levelProgress.deleteMany({ where: { studentId: s3Id } });
       await tx.starTransaction.deleteMany({ where: { studentId: s3Id } });
       await tx.submission.deleteMany({ where: { studentId: s3Id } });
-      await tx.exercise.deleteMany({ where: { classBatchId: classBatchQ_S3 } });
+      await tx.exercise.deleteMany({ where: { title: 'G3-Exercise' } });
+      await tx.curriculumUnit.deleteMany({ where: { unitCode: { contains: 'G3-U' } } });
       await tx.finalGrade.deleteMany({ where: { studentId: s3Id } });
       await tx.qualitativeAssessment.deleteMany({ where: { studentId: s3Id } });
       await tx.parentMeeting.deleteMany({ where: { classBatchId: classBatchQ_S3 } });
@@ -457,9 +460,7 @@ describe('G4 — cross-facility: P sees S1@fac1 and S2@fac2; S4 (fac1, unlinked)
         data: { facilityId: FAC1, studentId: s4Id, fromLevel: 'L1', toLevel: 'L2', status: 'pending' },
       });
     });
-    const result = await loginParent(parentAEmail, PASSWORD);
-    expect(result).not.toBeNull();
-    sessionP = result!.session;
+    sessionP = await resolveParentSession(parentAId);
   });
 
   afterAll(async () => {
@@ -486,19 +487,18 @@ describe('G4 — cross-facility: P sees S1@fac1 and S2@fac2; S4 (fac1, unlinked)
   });
 });
 
-// ── G5: link/unlink changes resolved child set (via real loginParent) ─────────
-describe('G5 — link P→S3 then unlink: loginParent resolver reflects DB changes', () => {
+// ── G5: link/unlink changes resolved child set (via parent resolver) ──────────
+describe('G5 — link P→S3 then unlink: mintParentSession resolver reflects DB changes', () => {
   let extraGuardId: string;
 
-  it('[G5-before-link] loginParent(P) does not contain S3 yet', async () => {
-    const result = await loginParent(parentAEmail, PASSWORD);
-    expect(result).not.toBeNull();
-    expect(result!.session.studentIds).not.toContain(s3Id);
-    expect(result!.session.studentIds).toContain(s1Id);
-    expect(result!.session.studentIds).toContain(s2Id);
+  it('[G5-before-link] mintParentSession(P) does not contain S3 yet', async () => {
+    const session = await resolveParentSession(parentAId);
+    expect(session.studentIds).not.toContain(s3Id);
+    expect(session.studentIds).toContain(s1Id);
+    expect(session.studentIds).toContain(s2Id);
   });
 
-  it('[G5-after-link] after linking P→S3, loginParent re-resolves → includes S3', async () => {
+  it('[G5-after-link] after linking P→S3, mintParentSession re-resolves → includes S3', async () => {
     const admin = await staffCaller();
     const g = await admin.guardian.link({
       parentAccountId: parentAId,
@@ -507,31 +507,29 @@ describe('G5 — link P→S3 then unlink: loginParent resolver reflects DB chang
     });
     extraGuardId = g.id;
 
-    // Re-resolve: loginParent reads fresh Guardian rows from DB
-    const result = await loginParent(parentAEmail, PASSWORD);
-    expect(result).not.toBeNull();
-    expect(result!.session.studentIds).toContain(s3Id);
-    expect(result!.session.studentIds).toContain(s1Id);
-    expect(result!.session.studentIds).toContain(s2Id);
-    expect(result!.session.studentIds).toHaveLength(3);
+    // Re-resolve: mintParentSession reads fresh Guardian rows from DB.
+    const session = await resolveParentSession(parentAId);
+    expect(session.studentIds).toContain(s3Id);
+    expect(session.studentIds).toContain(s1Id);
+    expect(session.studentIds).toContain(s2Id);
+    expect(session.studentIds).toHaveLength(3);
   });
 
-  it('[G5-after-unlink] after unlinking P→S3, loginParent re-resolves → excludes S3', async () => {
+  it('[G5-after-unlink] after unlinking P→S3, mintParentSession re-resolves → excludes S3', async () => {
     const admin = await staffCaller();
     await admin.guardian.unlink({ id: extraGuardId });
 
-    // Re-resolve: loginParent reads fresh Guardian rows from DB
-    const result = await loginParent(parentAEmail, PASSWORD);
-    expect(result).not.toBeNull();
-    expect(result!.session.studentIds).not.toContain(s3Id);
-    expect(result!.session.studentIds).toContain(s1Id);
-    expect(result!.session.studentIds).toContain(s2Id);
-    expect(result!.session.studentIds).toHaveLength(2);
+    // Re-resolve: mintParentSession reads fresh Guardian rows from DB.
+    const session = await resolveParentSession(parentAId);
+    expect(session.studentIds).not.toContain(s3Id);
+    expect(session.studentIds).toContain(s1Id);
+    expect(session.studentIds).toContain(s2Id);
+    expect(session.studentIds).toHaveLength(2);
   });
 });
 
 // ── G6: role gate ─────────────────────────────────────────────────────────────
-describe('G6 — role gate: giao_vien → FORBIDDEN; bgd → allowed', () => {
+describe('G6 — role gate: giao_vien → FORBIDDEN; giam_doc_kinh_doanh → allowed', () => {
   const teacher = () =>
     staffCaller({
       isSuperAdmin: false,
@@ -540,12 +538,12 @@ describe('G6 — role gate: giao_vien → FORBIDDEN; bgd → allowed', () => {
       primaryRole: Role.giao_vien,
     });
 
-  const bgd = () =>
+  const bizDirector = () =>
     staffCaller({
       isSuperAdmin: false,
       facilityIds: [FAC1],
-      roles: [Role.bgd],
-      primaryRole: Role.bgd,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
     });
 
   it('giao_vien guardian.parentList → FORBIDDEN', async () => {
@@ -562,14 +560,14 @@ describe('G6 — role gate: giao_vien → FORBIDDEN; bgd → allowed', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
-  it('bgd guardian.parentList → OK (returns array)', async () => {
-    const result = await (await bgd()).guardian.parentList();
+  it('giam_doc_kinh_doanh guardian.parentList → OK (returns array)', async () => {
+    const result = await (await bizDirector()).guardian.parentList();
     expect(Array.isArray(result)).toBe(true);
   });
 
-  it('bgd guardian.link (idempotent re-link P→S1) → OK', async () => {
+  it('giam_doc_kinh_doanh guardian.link (idempotent re-link P→S1) → OK', async () => {
     // Already linked (idempotent upsert), so this just updates relation and returns the row.
-    const result = await (await bgd()).guardian.link({
+    const result = await (await bizDirector()).guardian.link({
       parentAccountId: parentAId,
       studentId: s1Id,
       relation: GuardianRelation.guardian,

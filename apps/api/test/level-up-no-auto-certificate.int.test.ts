@@ -4,7 +4,7 @@ import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
 
 // Invariant (decision 0008): Approving a level-up proposal only updates Student.level and
 // creates a level_up Notification. It does NOT create a Certificate row.
-// Certificates are issued manually via certificate.issue (head_teacher/quan_ly only).
+// Certificates are issued manually via certificate.issue (giam_doc_dao_tao only).
 // Mutation-proof: certificate count must stay 0 across the approve call.
 describe('level-up approve: updates level, does NOT auto-issue certificate (decision 0008)', () => {
   const FACILITY = 1;
@@ -16,8 +16,8 @@ describe('level-up approve: updates level, does NOT auto-issue certificate (deci
     staffCaller({
       isSuperAdmin: false,
       facilityIds: [FACILITY],
-      roles: [Role.head_teacher],
-      primaryRole: Role.head_teacher,
+      roles: [Role.giam_doc_dao_tao],
+      primaryRole: Role.giam_doc_dao_tao,
     });
 
   beforeAll(async () => {
@@ -67,7 +67,7 @@ describe('level-up approve: updates level, does NOT auto-issue certificate (deci
     expect(certs).toHaveLength(0);
   });
 
-  it('head_teacher approves level-up → Student.level updated to L2, certificate count stays 0', async () => {
+  it('giam_doc_dao_tao approves level-up → Student.level updated to L2, certificate count stays 0', async () => {
     await (await headTeacher()).levelProgress.decide({
       id: levelProgressId,
       decision: 'approve',
@@ -86,7 +86,7 @@ describe('level-up approve: updates level, does NOT auto-issue certificate (deci
     expect(certs).toHaveLength(0);
   });
 
-  it('manual certificate.issue (head_teacher) → creates exactly 1 certificate, cert count 0 → 1', async () => {
+  it('manual certificate.issue (giam_doc_dao_tao) → creates exactly 1 certificate, cert count 0 → 1', async () => {
     const caller = await headTeacher();
     const cert = await caller.certificate.issue({
       studentId,

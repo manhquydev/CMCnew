@@ -52,3 +52,6 @@ apps/api/email-previews/
 # repomix packed-context output (regenerable, not source)
 repomix-output.*
 repomix-product-source.md
+
+# Local DB backups / dumps — never commit (may contain data)
+backups/

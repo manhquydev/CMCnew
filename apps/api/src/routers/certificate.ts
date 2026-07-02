@@ -1,10 +1,33 @@
 import { z } from 'zod';
-import { withRls, Program } from '@cmc/db';
+import { TRPCError } from '@trpc/server';
+import { withRls, Program, type RlsContext } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { router, requirePermission } from '../trpc.js';
+import { router, requirePermission, lmsProcedure } from '../trpc.js';
+
+// certificate RLS is staff-only (principal_kind='staff') — see forStudent below for the LMS
+// read path, which enforces ownership in application code instead.
+const SYSTEM_RLS: RlsContext = { facilityIds: [], isSuperAdmin: true };
 
 export const certificateRouter = router({
+  // LMS parent/student: certificates issued to one owned student. Ownership is checked against
+  // ctx.lms.studentIds BEFORE the bypass read — never trust the input studentId alone (same
+  // invariant as submission.layerForGuardian).
+  forStudent: lmsProcedure
+    .input(z.object({ studentId: z.string().uuid() }))
+    .query(({ ctx, input }) => {
+      if (!ctx.lms.studentIds.includes(input.studentId)) {
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
+      return withRls(SYSTEM_RLS, (tx) =>
+        tx.certificate.findMany({
+          where: { studentId: input.studentId, archivedAt: null },
+          orderBy: { issuedAt: 'desc' },
+          select: { id: true, title: true, program: true, level: true, issuedAt: true },
+        }),
+      );
+    }),
+
   list: requirePermission('certificate', 'list')
     .input(z.object({ facilityId: z.number().int().positive(), studentId: z.string().uuid().optional() }))
     .query(({ ctx, input }) =>

@@ -201,7 +201,7 @@ function StudentAssessment({ student }: { student: StudentT }) {
   );
 }
 
-// Teacher proposes a level-up for the selected student → head_teacher approves elsewhere.
+// Teacher proposes a level-up for the selected student → giam_doc_dao_tao approves elsewhere.
 function LevelProposeCard({ studentId, program }: { studentId: string; program: string }) {
   const [toLevel, setToLevel] = useState('');
   const [reason, setReason] = useState('');
@@ -215,7 +215,7 @@ function LevelProposeCard({ studentId, program }: { studentId: string; program: 
     setBusy(true);
     try {
       await trpc.levelProgress.propose.mutate({ studentId, toLevel: toLevel.trim(), reason: reason.trim() || undefined });
-      notifySuccess('Đã gửi đề xuất, chờ head_teacher duyệt');
+      notifySuccess('Đã gửi đề xuất, chờ giám đốc đào tạo duyệt');
       setToLevel('');
       setReason('');
     } catch (e) {

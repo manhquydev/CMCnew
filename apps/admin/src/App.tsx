@@ -31,6 +31,11 @@ import { useDisclosure } from '@mantine/hooks';
 import { IconCircleX, IconCircleCheck, IconPlus } from '@tabler/icons-react';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import { DesignShowcase } from './design-showcase';
+import { CoursesPanel } from './courses-panel';
+import { StudentManagementPanel } from './student-management-panel';
+import { PayrollCheckinPanel } from './payroll-checkin-panel';
+import { BizDirectorCockpitPanel } from './biz-director-cockpit-panel';
+import { EduDirectorCockpitPanel } from './edu-director-cockpit-panel';
 
 // Panels — admin-native
 import { GuardiansPanel } from './guardians-panel';
@@ -39,10 +44,14 @@ import { CompensationConfigPanel } from './compensation-panel';
 import { PayrollPanel } from './payroll-panel';
 import { KpiEvaluationPanel } from './kpi-evaluation-panel';
 import { FinancePanel } from './finance-panel';
+import { EmailOutboxPanel } from './email-outbox-panel';
+import { RevenueReportPanel } from './revenue-report';
+import { ReconcileWorklistPanel } from './reconcile-worklist';
 import { CrmPanel } from './crm-panel';
 import { CskhPanel } from './cskh-panel';
 import { StudentsPanel } from './students-panel';
 import { RewardsPanel } from './rewards-panel';
+import { BadgePanel } from './badge-panel';
 import { TermsPanel } from './terms-panel';
 // Panels — ported from teaching
 import { GradingPanel } from './grading';
@@ -53,6 +62,11 @@ import { MeetingsPanel } from './meetings-panel';
 import { LevelApprovalPanel } from './level-approval-panel';
 import { CertificatePanel } from './certificate-panel';
 import { MyPayslipsPanel } from './my-payslips-panel';
+import { CheckInPanel } from './checkin-panel';
+import { ShiftRegListPanel } from './shift-reg-list-panel';
+import { ShiftRegDetailPanel } from './shift-reg-detail-panel';
+import { FacilityNetworkPanel } from './facility-network-panel';
+import { ShiftConfigPanel } from './shift-config-panel';
 import { Workspace, type NavAction } from './class-workspace';
 
 import { Shell, buildNavGroups, SECTION_TITLES, type SectionKey } from './shell';
@@ -62,9 +76,7 @@ import { ScheduleDetailPanel } from './schedule-detail';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type User = Awaited<ReturnType<typeof trpc.user.list.query>>[number];
-type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
-type Program = 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE';
 type Session = ReturnType<typeof useSession>['me'];
 
 // ─── Table header style ────────────────────────────────────────────────────────
@@ -80,115 +92,23 @@ const TH_STYLE: React.CSSProperties = {
 // ─── Persona → default landing ─────────────────────────────────────────────────
 
 function defaultSection(me: Session): SectionKey {
-  if (me.isSuperAdmin || me.roles.includes('quan_ly')) return 'overview';
-  if (me.roles.includes('giao_vien') || me.roles.includes('head_teacher')) return 'schedule';
+  if (me.isSuperAdmin) return 'overview';
+  if (me.roles.includes('giao_vien')) return 'schedule';
   if (me.roles.includes('sale') || me.roles.includes('ctv_mkt')) return 'crm';
   if (me.roles.includes('ke_toan')) return 'finance';
   if (me.roles.includes('hr')) return 'hr';
   if (me.roles.includes('cskh')) return 'cskh';
+  // Biz-director-only lands on the Executive Cockpit (replaces 'overview' for this persona —
+  // mirrors the isBizDirectorOnly strict single-role check in shell.tsx/buildNavGroups()).
+  if (me.roles.length === 1 && me.roles[0] === 'giam_doc_kinh_doanh') return 'biz-director-cockpit';
+  // Edu-director-only lands on its own Executive Cockpit — mirrors the isEduDirectorOnly strict
+  // single-role check in shell.tsx/buildNavGroups().
+  if (me.roles.length === 1 && me.roles[0] === 'giam_doc_dao_tao') return 'edu-director-cockpit';
   // Exec roles can see the dashboard (dashboard.summary); land them there. Any other role
   // falls back to an always-open section so the landing never 403s.
-  if (me.roles.includes('bgd') || me.roles.includes('giam_doc_kinh_doanh') || me.roles.includes('giam_doc_dao_tao'))
+  if (me.roles.includes('giam_doc_kinh_doanh') || me.roles.includes('giam_doc_dao_tao'))
     return 'overview';
   return 'schedule';
-}
-
-// ─── Courses ──────────────────────────────────────────────────────────────────
-
-function Courses() {
-  const { me } = useSession();
-  // Any staff may browse the catalogue (course.list is open), but only roles with course.create
-  // (quản lý / GĐ Đào tạo) may create — hide the button for everyone else so they never hit FORBIDDEN.
-  const canCreate = me ? can(me.roles, me.isSuperAdmin, 'course', 'create') : false;
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [opened, { open, close }] = useDisclosure(false);
-  const [busy, setBusy] = useState(false);
-  const form = useForm({
-    initialValues: { code: '', name: '', program: 'UCREA' as Program },
-    validate: {
-      code: combine(required('Nhập mã khóa'), minLength(2, 'Mã cần tối thiểu 2 ký tự')),
-      name: required('Nhập tên khóa'),
-      program: required('Chọn chương trình'),
-    },
-  });
-
-  const load = () =>
-    trpc.course.list
-      .query()
-      .then(setCourses)
-      .catch((e) => notifyError(e, 'Không tải được danh sách khóa học'));
-
-  useEffect(() => { load(); }, []);
-
-  async function create(values: typeof form.values) {
-    setBusy(true);
-    try {
-      await trpc.course.create.mutate(values);
-      notifySuccess(`Đã tạo khóa "${values.name}"`);
-      close();
-      form.reset();
-      load();
-    } catch (e) {
-      notifyError(e, 'Tạo khóa học thất bại');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Stack>
-      <Group justify="space-between" mb="xs">
-        <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }}>Khóa học</Text>
-        {canCreate && (
-          <Button variant="filled" radius={9999} leftSection={<IconPlus size={16} />} onClick={open}>
-            Tạo khóa
-          </Button>
-        )}
-      </Group>
-
-      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-        <Table striped highlightOnHover withTableBorder={false}>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th style={TH_STYLE}>Mã</Table.Th>
-              <Table.Th style={TH_STYLE}>Tên</Table.Th>
-              <Table.Th style={TH_STYLE}>Chương trình</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {courses.map((c) => (
-              <Table.Tr key={c.id}>
-                <Table.Td>{c.code}</Table.Td>
-                <Table.Td>{c.name}</Table.Td>
-                <Table.Td>{c.program}</Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-        {courses.length === 0 && (
-          <Text c="dimmed" size="sm" mt="sm">Chưa có khóa học.</Text>
-        )}
-      </Card>
-
-      <Modal opened={opened} onClose={close} title="Tạo khóa học" radius="xl" centered>
-        <form onSubmit={form.onSubmit(create)}>
-          <Stack>
-            <TextInput label="Mã" withAsterisk {...form.getInputProps('code')} />
-            <TextInput label="Tên" withAsterisk {...form.getInputProps('name')} />
-            <Select
-              label="Chương trình" withAsterisk
-              data={['UCREA', 'BRIGHT_IG', 'BLACK_HOLE']}
-              {...form.getInputProps('program')}
-            />
-            <Group justify="flex-end" mt="xs">
-              <Button variant="subtle" onClick={close}>Hủy</Button>
-              <Button type="submit" variant="filled" radius={9999} loading={busy}>Tạo</Button>
-            </Group>
-          </Stack>
-        </form>
-      </Modal>
-    </Stack>
-  );
 }
 
 // ─── Facilities ───────────────────────────────────────────────────────────────
@@ -366,7 +286,7 @@ function UserCreateModal({
   const [facilityIds, setFacilityIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const form = useForm({
-    initialValues: { email: '', displayName: '' },
+    initialValues: { email: '', displayName: '', phone: '' },
     validate: {
       email: email('Email không hợp lệ'),
       displayName: required('Nhập tên hiển thị'),
@@ -417,6 +337,7 @@ function UserCreateModal({
             {...form.getInputProps('email')}
           />
           <TextInput label="Tên hiển thị" withAsterisk {...form.getInputProps('displayName')} />
+          <TextInput label="Số điện thoại" {...form.getInputProps('phone')} />
           <MultiSelect
             label="Vai trò" data={roleOptions}
             value={roles}
@@ -571,12 +492,26 @@ function HrPayrollSection() {
 
 const ALL_SECTION_KEYS = new Set<string>([
   'overview', 'courses', 'students', 'org', 'guardians',
-  'hr', 'kpi', 'compensation', 'finance', 'crm', 'cskh', 'rewards',
+  'hr', 'kpi', 'compensation', 'finance', 'email-outbox', 'revenue-report', 'reconcile-worklist', 'crm', 'cskh', 'rewards', 'badges',
   'schedule', 'attendance', 'grading', 'assessment',
   // 'certificate' intentionally omitted: the feature is hidden from nav (shell.tsx visible:false),
   // so #certificate is not a reachable hash route either. Re-add when the feature is re-enabled.
   'classes', 'meetings', 'levelup', 'my-payslips',
+  'checkin', 'shift-registration', 'facility-network', 'shift-config',
+  'student-mgmt', 'payroll-checkin',
+  'biz-director-cockpit', 'edu-director-cockpit',
 ]);
+
+// ─── Work Shift Section ──────────────────────────────────────────────────────
+
+function ShiftRegSection() {
+  const [selectedRegId, setSelectedRegId] = useState<string | null>(null);
+
+  if (selectedRegId) {
+    return <ShiftRegDetailPanel regId={selectedRegId} onBack={() => setSelectedRegId(null)} />;
+  }
+  return <ShiftRegListPanel onSelect={(id) => setSelectedRegId(id)} />;
+}
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
@@ -610,13 +545,16 @@ function Dashboard() {
     applyAdminMetadata(getAdminMetadata(activeSection, Boolean(oppId)));
   }, [activeSection, oppId]);
 
-  // goToClass: navigate to the class workspace with a pre-selected batch + tab
+  // goToClass: navigate to the class workspace with a pre-selected batch + tab.
+  // Teachers see the classes workspace nested inside the consolidated "Quản lý học sinh" screen
+  // (student-mgmt), not the standalone /classes route which is hidden from their nav.
+  const isTeacherOnly = me.roles.length === 1 && me.roles.includes('giao_vien');
   const goToClass = useCallback(
     (batchId: string | undefined, tab: string) => {
       setNavAction({ batchId, tab, ts: Date.now() });
-      navigate('/classes');
+      navigate(isTeacherOnly ? '/student-mgmt' : '/classes');
     },
-    [navigate],
+    [navigate, isTeacherOnly],
   );
 
   function handleSectionChange(key: SectionKey) {
@@ -633,13 +571,26 @@ function Dashboard() {
       case 'overview':
         return <OverviewPanel />;
 
+      // Executive Cockpit (Phase 3): giam_doc_kinh_doanh-only landing — summary widget +
+      // approval-inbox widget. KPI items route to the full 'kpi' panel (see
+      // biz-director-cockpit-panel.tsx for why: the aggregate item lacks the composite
+      // userId+periodKey key kpiEvalConfirm/kpiEvalApprove require).
+      case 'biz-director-cockpit':
+        return <BizDirectorCockpitPanel onNavigateToKpi={() => handleSectionChange('kpi')} />;
+
+      // Executive Cockpit (Phase 4): giam_doc_dao_tao-only landing — summary widget +
+      // approval-inbox widget. KPI items route to the full 'kpi' panel, same resolution as
+      // biz-director-cockpit-panel.tsx (see edu-director-cockpit-panel.tsx for why).
+      case 'edu-director-cockpit':
+        return <EduDirectorCockpitPanel onNavigateToKpi={() => handleSectionChange('kpi')} />;
+
       case 'courses':
         return (
           <Stack>
-            <Courses />
+            <CoursesPanel />
             {/* TermsPanel is a term-MANAGEMENT surface (create/edit/lock kỳ học). Only render it
-                for roles that can actually manage terms (assessment.termCreate = head_teacher/
-                quản lý/GĐĐT) — teachers can read terms elsewhere but here would only see dead,
+                for roles that can actually manage terms (assessment.termCreate = GĐĐT) —
+                teachers can read terms elsewhere but here would only see dead,
                 FORBIDDEN-on-click buttons. */}
             {can(me.roles, me.isSuperAdmin, 'assessment', 'termCreate') &&
               (me.facilityIds[0] ?? (me.isSuperAdmin ? 1 : null)) != null && (
@@ -708,6 +659,10 @@ function Dashboard() {
       case 'classes':
         return <Workspace navAction={navAction} />;
 
+      // Teacher nav consolidation: Lớp học + Khóa học + Học bạ in one tabbed screen.
+      case 'student-mgmt':
+        return <StudentManagementPanel navAction={navAction} />;
+
       case 'meetings':
         return (
           <Stack>
@@ -741,6 +696,30 @@ function Dashboard() {
           </Stack>
         );
 
+      case 'email-outbox':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Hộp thư gửi đi</Text>
+            <EmailOutboxPanel />
+          </Stack>
+        );
+
+      case 'revenue-report':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Báo cáo doanh thu</Text>
+            <RevenueReportPanel />
+          </Stack>
+        );
+
+      case 'reconcile-worklist':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Đối soát theo kỳ</Text>
+            <ReconcileWorklistPanel />
+          </Stack>
+        );
+
       case 'crm':
         return <CrmPanel selectedOppId={oppId} />;
 
@@ -757,6 +736,14 @@ function Dashboard() {
           <Stack>
             <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Đổi quà</Text>
             <RewardsPanel />
+          </Stack>
+        );
+
+      case 'badges':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Huy hiệu</Text>
+            <BadgePanel />
           </Stack>
         );
 
@@ -785,6 +772,38 @@ function Dashboard() {
           <Stack>
             <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Phiếu lương của tôi</Text>
             <MyPayslipsPanel />
+          </Stack>
+        );
+
+      // Teacher nav consolidation: Phiếu lương + Chấm công in one tabbed screen.
+      case 'payroll-checkin':
+        return <PayrollCheckinPanel />;
+
+      // ── Work Shift & Attendance ──────────────────────────────────────────
+      case 'checkin':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Chấm công</Text>
+            <CheckInPanel />
+          </Stack>
+        );
+
+      case 'shift-registration':
+        return <ShiftRegSection />;
+
+      case 'facility-network':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">IP WiFi chấm công</Text>
+            <FacilityNetworkPanel />
+          </Stack>
+        );
+
+      case 'shift-config':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Danh mục ca</Text>
+            <ShiftConfigPanel />
           </Stack>
         );
 

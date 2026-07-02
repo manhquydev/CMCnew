@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@cmc/ui": "workspace:*",
+    "@fontsource-variable/fredoka": "^5.2.10",
+    "@fontsource-variable/quicksand": "^5.2.10",
     "@mantine/core": "^7.15.2",
     "@mantine/hooks": "^7.15.2",
     "@tabler/icons-react": "^3.44.0",

@@ -139,7 +139,7 @@ export const studentRouter = router({
   // Create-or-reset a student's LMS login. If the student has no account yet (created before
   // auto-provisioning, or matched via dedupe), one is created with loginCode = studentCode;
   // otherwise the password is regenerated and tokenVersion bumped (invalidates live LMS JWTs).
-  // A new temp password is returned ONCE for staff to relay. Gate: quan_ly + both directors.
+  // A new temp password is returned ONCE for staff to relay. Gate: both directors.
   resetLmsPassword: requirePermission('student', 'resetLmsPassword')
     .input(z.object({ studentId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>

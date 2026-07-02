@@ -9,21 +9,33 @@ import { cors } from 'hono/cors';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { streamSSE } from 'hono/streaming';
 import { trpcServer } from '@hono/trpc-server';
-import { resolveLmsSession, resolveSession, rlsContextOf, lmsRlsContextOf, mintStaffSession } from '@cmc/auth';
+import { resolveLmsSession, resolveSession, rlsContextOf, lmsRlsContextOf, mintStaffSession, can } from '@cmc/auth';
 import { ssoConfigFromEnv, buildAuthUrl, redeemCode } from './lib/sso.js';
-import { withRls } from '@cmc/db';
+import { withRls, type RlsContext } from '@cmc/db';
 import { appRouter } from './routers/index.js';
 import { createContext, COOKIE_NAME, LMS_COOKIE_NAME } from './context.js';
 import { onNotification } from './events.js';
 import { onStaffNotification } from './staff-notification.js';
-import { putPdf, readPdf, pdfExists, PdfStoreError, MAX_PDF_BYTES } from './services/pdf-store.js';
+import {
+  putPdf,
+  readPdf,
+  pdfExists,
+  PdfStoreError,
+  PdfStoreConfigError,
+  MAX_PDF_BYTES,
+} from './services/pdf-store.js';
+import { putSessionPhoto, readSessionPhoto, PhotoStoreError, MAX_SESSION_PHOTO_BYTES } from './services/photo-store.js';
 import { renderReceiptHtml } from './services/receipt-html.js';
 import { runParentMeetingReminders } from './services/parent-meeting-reminder.js';
 import { generateParentMeetings } from './services/parent-meeting-cadence.js';
 import { renderCertificateHtml } from './services/certificate-html.js';
+import { renderTranscriptHtml } from './services/transcript-html.js';
 import { runEmailOutbox } from './services/email-outbox.js';
+import { runExerciseOpenNotifications } from './services/exercise-open-notify.js';
+import { logger } from './lib/logger.js';
+import { recordError, maybeAlert } from './lib/error-alert.js';
 
-const app = new Hono();
+export const app = new Hono();
 
 // Allowed origins from env (comma-separated); defaults to the dev Vite ports.
 // credentials:true so the session cookie flows. In production, set CORS_ORIGINS.
@@ -41,6 +53,16 @@ const corsOrigins = (
 
 app.use('*', cors({ origin: corsOrigins, credentials: true }));
 
+// Global error boundary: log every uncaught handler error with request context, count it toward
+// the rolling error-rate window, and fire an ops alert once the window crosses threshold. The
+// alert path is fire-and-forget and internally guarded — it must never mask the original error.
+app.onError((err, c) => {
+  logger.error({ method: c.req.method, path: c.req.path, err }, 'unhandled request error');
+  recordError();
+  void maybeAlert(logger);
+  return c.json({ error: 'internal_error' }, 500);
+});
+
 // Health + deploy marker: `commit`/`builtAt` come from env injected at deploy
 // time (Jenkins passes the git SHA + build time); default 'unknown' locally so
 // the response is additive and the deploy smoke check stays a plain 200.
@@ -53,28 +75,91 @@ app.get('/health', (c) =>
 );
 
 // ── Exercise base-PDF storage (S1.7) ───────────────────────────────────────────────────────
-// Upload: staff only (a teacher attaches the base PDF when creating an exercise). Raw PDF body.
-// Returns the content-address ref to store in exercise.basePdfRef.
+// Upload: gated to the same roles that author exercises (exercise.upsert) — only the two
+// director roles create exercises post-seam-fixes, so upload authority must match write
+// authority. Raw PDF body. Returns the content-address ref to store in exercise.basePdfRef.
 app.post('/upload/exercise-pdf', async (c) => {
   const token = getCookie(c, COOKIE_NAME);
   const session = token ? await resolveSession(token) : null;
   if (!session) return c.text('unauthorized', 401);
+  if (!can(session.roles, session.isSuperAdmin, 'exercise', 'upsert')) {
+    return c.text('forbidden', 403);
+  }
   const body = await c.req.arrayBuffer();
   if (body.byteLength > MAX_PDF_BYTES) return c.text('file too large', 413);
   try {
     const ref = await putPdf(Buffer.from(body));
     return c.json({ ref });
   } catch (e) {
+    if (e instanceof PdfStoreConfigError) throw e; // server misconfig — surface as 500, not a client-facing 400
     if (e instanceof PdfStoreError) return c.text(e.message, 400);
     throw e;
   }
 });
 
-// Serve: per-principal access. Authorization reuses the exercise RLS policy as the single source
-// of truth — staff see their facility's exercises, a parent/student only exercises in a class their
-// owned student is enrolled in. We look for an RLS-visible exercise that uses this base PDF; if none
-// is visible the principal may not see it. Authorization is checked BEFORE existence on disk so the
-// endpoint never reveals whether a ref exists to a principal who is not entitled to it.
+// Upload session evidence photos. Read access is intentionally NOT handled here;
+// session photos must be served only after the published evidence ownership check.
+// Gated to the same roles as sessionEvidence.upsertDraft (unlike exercise-pdf, a student
+// photo is more sensitive than a worksheet — restrict who can write blobs at all, not
+// only who can later link them).
+app.post('/upload/session-photo', async (c) => {
+  const token = getCookie(c, COOKIE_NAME);
+  const session = token ? await resolveSession(token) : null;
+  if (!session) return c.text('unauthorized', 401);
+  if (!can(session.roles, session.isSuperAdmin, 'sessionEvidence', 'upsertDraft')) {
+    return c.text('forbidden', 403);
+  }
+  const body = await c.req.arrayBuffer();
+  if (body.byteLength > MAX_SESSION_PHOTO_BYTES) return c.text('file too large', 413);
+  try {
+    const ref = await putSessionPhoto(Buffer.from(body));
+    return c.json({ ref });
+  } catch (e) {
+    if (e instanceof PhotoStoreError) return c.text(e.message, 400);
+    throw e;
+  }
+});
+
+app.get('/files/session-photo/:ref', async (c) => {
+  const staffTok = getCookie(c, COOKIE_NAME);
+  const lmsTok = getCookie(c, LMS_COOKIE_NAME);
+  const staff = staffTok ? await resolveSession(staffTok) : null;
+  const lms = !staff && lmsTok ? await resolveLmsSession(lmsTok) : null;
+  if (!staff && !lms) return c.text('unauthorized', 401);
+
+  const ref = c.req.param('ref');
+  const rlsCtx = staff ? rlsContextOf(staff) : lmsRlsContextOf(lms!);
+  const visible = await withRls(rlsCtx, (tx) =>
+    tx.sessionEvidencePhoto.findFirst({
+      where: {
+        photoRef: ref,
+        sessionEvidence: staff
+          ? { archivedAt: null }
+          : { status: 'published', publishedAt: { not: null }, archivedAt: null },
+      },
+      select: { id: true },
+    }),
+  );
+  if (!visible) return c.text('forbidden', 403);
+
+  try {
+    const { buffer, contentType } = await readSessionPhoto(ref);
+    c.header('Content-Type', contentType);
+    c.header('Cache-Control', 'private, max-age=3600');
+    return c.body(buffer as unknown as ArrayBuffer);
+  } catch {
+    return c.text('not found', 404);
+  }
+});
+
+// Serve: exercise PDFs are a GLOBAL curriculum asset — RLS is DISABLED on the exercise table
+// (decision 0022), so this findFirst matches for ANY authenticated principal (staff or LMS),
+// regardless of facility, enrollment, or exercise status. In effect any logged-in principal can
+// fetch any non-archived exercise PDF by ref, INCLUDING drafts/closed. That was accepted with the
+// global-asset decision: worksheets carry no PII, and the only gate is "must be authenticated"
+// (anonymous → 401 below). No status='published' filter is applied on purpose — staff preview
+// drafts before publishing and LMS reads are already gated upstream by the unit-open check. The
+// existence-on-disk check runs only after this authz so an unauthenticated caller learns nothing.
 app.get('/files/exercise/:ref', async (c) => {
   const staffTok = getCookie(c, COOKIE_NAME);
   const lmsTok = getCookie(c, LMS_COOKIE_NAME);
@@ -142,22 +227,39 @@ app.get('/files/receipt/:id', async (c) => {
   return c.html(html);
 });
 
-// Printable certificate (chứng chỉ) — staff only, authorized via the certificate RLS policy.
+// Printable certificate (chứng chỉ) — staff (facility RLS) OR LMS parent/student who owns the
+// certificate's student. The certificate table's RLS policy is staff-only (principal_kind='staff'),
+// so the LMS branch reads under a system (bypass) context and enforces ownership explicitly in code —
+// never trust the :id path param alone (same invariant as submission.layerForGuardian).
+const SYSTEM_RLS: RlsContext = { facilityIds: [], isSuperAdmin: true };
+
 app.get('/files/certificate/:id', async (c) => {
   const staffTok = getCookie(c, COOKIE_NAME);
+  const lmsTok = getCookie(c, LMS_COOKIE_NAME);
   const staff = staffTok ? await resolveSession(staffTok) : null;
-  if (!staff) return c.text('unauthorized', 401);
+  const lms = !staff && lmsTok ? await resolveLmsSession(lmsTok) : null;
+  if (!staff && !lms) return c.text('unauthorized', 401);
 
   const id = c.req.param('id');
-  const data = await withRls(rlsContextOf(staff), async (tx) => {
-    const cert = await tx.certificate.findUnique({ where: { id } });
-    if (!cert) return null;
-    const [student, facility] = await Promise.all([
-      tx.student.findUnique({ where: { id: cert.studentId }, select: { fullName: true } }),
-      tx.facility.findUnique({ where: { id: cert.facilityId }, select: { name: true } }),
-    ]);
-    return { cert, student, facility };
-  });
+  const data = staff
+    ? await withRls(rlsContextOf(staff), async (tx) => {
+        const cert = await tx.certificate.findUnique({ where: { id } });
+        if (!cert) return null;
+        const [student, facility] = await Promise.all([
+          tx.student.findUnique({ where: { id: cert.studentId }, select: { fullName: true } }),
+          tx.facility.findUnique({ where: { id: cert.facilityId }, select: { name: true } }),
+        ]);
+        return { cert, student, facility };
+      })
+    : await withRls(SYSTEM_RLS, async (tx) => {
+        const cert = await tx.certificate.findUnique({ where: { id } });
+        if (!cert || !lms!.studentIds.includes(cert.studentId)) return null; // ownership check — the security boundary for this branch
+        const [student, facility] = await Promise.all([
+          tx.student.findUnique({ where: { id: cert.studentId }, select: { fullName: true } }),
+          tx.facility.findUnique({ where: { id: cert.facilityId }, select: { name: true } }),
+        ]);
+        return { cert, student, facility };
+      });
   if (!data) return c.text('forbidden', 403);
 
   const { cert, student, facility } = data;
@@ -169,6 +271,60 @@ app.get('/files/certificate/:id', async (c) => {
     level: cert.level,
     title: cert.title,
     issuedAt: cert.issuedAt,
+  });
+  c.header('Content-Type', 'text/html; charset=utf-8');
+  return c.html(html);
+});
+
+// Printable học bạ (transcript) — LMS parent/student only, scoped to an owned student.
+// finalGrade/qualitativeAssessment/student RLS already support parent/student ownership
+// (studentId ∈ app.student_ids), so lmsRlsContextOf is sufficient here — no bypass needed,
+// unlike the certificate branch above.
+app.get('/files/transcript/:studentId', async (c) => {
+  const lmsTok = getCookie(c, LMS_COOKIE_NAME);
+  const lms = lmsTok ? await resolveLmsSession(lmsTok) : null;
+  if (!lms) return c.text('unauthorized', 401);
+
+  const studentId = c.req.param('studentId');
+  if (!lms.studentIds.includes(studentId)) return c.text('forbidden', 403);
+
+  const data = await withRls(lmsRlsContextOf(lms), async (tx) => {
+    const student = await tx.student.findUnique({ where: { id: studentId }, select: { fullName: true, facilityId: true } });
+    if (!student) return null;
+    const [facility, finalGrades, qualitative] = await Promise.all([
+      tx.facility.findUnique({ where: { id: student.facilityId }, select: { name: true } }),
+      tx.finalGrade.findMany({
+        where: { studentId },
+        orderBy: { periodKey: 'desc' },
+        select: {
+          id: true,
+          program: true,
+          level: true,
+          periodKey: true,
+          homeworkAvg: true,
+          testScore: true,
+          attendanceRate: true,
+          qualitativeScore: true,
+          finalScore: true,
+          passed: true,
+          complete: true,
+        },
+      }),
+      tx.qualitativeAssessment.findMany({
+        where: { studentId, archivedAt: null },
+        orderBy: { periodKey: 'desc' },
+        select: { id: true, period: true, periodKey: true, criteria: true, narrative: true },
+      }),
+    ]);
+    return { student, facility, finalGrades, qualitative };
+  });
+  if (!data) return c.text('forbidden', 403);
+
+  const html = renderTranscriptHtml({
+    facilityName: data.facility?.name ?? '',
+    studentName: data.student.fullName,
+    finalGrades: data.finalGrades,
+    qualitative: data.qualitative.map((q) => ({ ...q, criteria: q.criteria as Record<string, number> })),
   });
   c.header('Content-Type', 'text/html; charset=utf-8');
   return c.html(html);
@@ -319,9 +475,13 @@ app.use(
   }),
 );
 
-const port = Number(process.env.API_PORT ?? 4000);
-serve({ fetch: app.fetch, port });
-console.log(`✓ CMCnew API on http://localhost:${port}`);
+// Skip binding a real port under Vitest (NODE_ENV=test by default) so integration tests can
+// import `app` and drive routes via `app.request(...)` without starting a listener.
+if (process.env.NODE_ENV !== 'test') {
+  const port = Number(process.env.API_PORT ?? 4000);
+  serve({ fetch: app.fetch, port });
+  logger.info({ port }, '✓ CMCnew API listening');
+}
 
 // Embedded reminder cron (docs/specs/parent-meeting.md): every 30 min, remind parents of
 // meetings within T-1 day. Idempotent via parent_meeting.remindedAt — re-ticks never double-send.
@@ -330,9 +490,9 @@ if (process.env.DISABLE_CRON !== '1') {
   cron.schedule('*/30 * * * *', () => {
     runParentMeetingReminders()
       .then((r) => {
-        if (r.meetingsReminded) console.log(`↳ parent-meeting reminders: ${r.meetingsReminded} meetings → ${r.notificationsCreated} notifications`);
+        if (r.meetingsReminded) logger.info({ meetings: r.meetingsReminded, notifications: r.notificationsCreated }, 'parent-meeting reminders');
       })
-      .catch((e) => console.error('parent-meeting reminder tick failed', e));
+      .catch((e) => logger.error({ err: e }, 'parent-meeting reminder tick failed'));
   });
 
   // Auto-cadence generation (charter §4): daily at 02:00, generate per-program meetings for running
@@ -340,9 +500,9 @@ if (process.env.DISABLE_CRON !== '1') {
   cron.schedule('0 2 * * *', () => {
     generateParentMeetings()
       .then((r) => {
-        if (r.meetingsCreated) console.log(`↳ parent-meeting cadence: +${r.meetingsCreated} meetings across ${r.classesScanned} running classes`);
+        if (r.meetingsCreated) logger.info({ created: r.meetingsCreated, classesScanned: r.classesScanned }, 'parent-meeting cadence');
       })
-      .catch((e) => console.error('parent-meeting cadence tick failed', e));
+      .catch((e) => logger.error({ err: e }, 'parent-meeting cadence tick failed'));
   });
 
   // Email outbox drain (decision: email-graph-integration): every minute, send up to 20 queued
@@ -351,8 +511,20 @@ if (process.env.DISABLE_CRON !== '1') {
   cron.schedule('* * * * *', () => {
     runEmailOutbox()
       .then((r) => {
-        if (!r.disabled && (r.sent || r.failed)) console.log(`↳ email outbox: ${r.sent} sent, ${r.failed} failed, ${r.rescheduled} rescheduled`);
+        if (!r.disabled && (r.sent || r.failed)) logger.info({ sent: r.sent, failed: r.failed, rescheduled: r.rescheduled }, 'email outbox tick');
       })
-      .catch((e) => console.error('email outbox tick failed', e));
+      .catch((e) => logger.error({ err: e }, 'email outbox tick failed'));
+  });
+
+  // Exercise-open notification, Trigger B: every 30 min, catch the reverse ordering where a
+  // published exercise already existed and a session has just ended.
+  // Trigger A (exercise.upsert) covers publish-after-session-end inline; per-(student,
+  // exercise) dedup makes tick overlap with Trigger A free of duplicates.
+  cron.schedule('*/30 * * * *', () => {
+    runExerciseOpenNotifications()
+      .then((r) => {
+        if (r.notificationsCreated) logger.info({ sessions: r.sessionsScanned, notifications: r.notificationsCreated }, 'exercise-open notifications');
+      })
+      .catch((e) => logger.error({ err: e }, 'exercise-open notification tick failed'));
   });
 }

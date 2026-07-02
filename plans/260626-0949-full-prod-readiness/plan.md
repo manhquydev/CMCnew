@@ -12,6 +12,12 @@ createdBy: "ck:plan"
 source: skill
 ---
 
+> **Status note (2026-07-02, ops-hardening P5):** NOT superseded by `260628-0147-prod-deployment`. The
+> live `erp+hoc.cmcvn.edu.vn` environment is an interim/test deployment only — operator will clear and
+> redeploy the real production environment after the 6-plan completeness pipeline
+> (`plans/260702-1109-*`, `plans/260702-1007-*`, `plans/260702-1030-*`) ships. This plan's scope remains
+> relevant work; re-check against actual shipped state before closing.
+
 # Full Prod Readiness: Bell + HR Panel + Design Sweep + Docker
 
 ## Overview

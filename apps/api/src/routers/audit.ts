@@ -40,7 +40,18 @@ export const auditRouter = router({
         const entity = await resolve(tx, input.entityId);
         if (!entity)
           throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy bản ghi (hoặc ngoài phạm vi cơ sở)' });
-        return getTimeline(tx, input.entityType, input.entityId);
+        const rows = await getTimeline(tx, input.entityType, input.entityId);
+        // Resolve actor names (same pattern as staffTimeline below) so every Chatter-backed
+        // timeline shows "ai làm gì" instead of leaving the caller to trace a raw actorId.
+        const actorIds = [...new Set(rows.map((r) => r.actorId).filter((x): x is string => !!x))];
+        const actors = actorIds.length
+          ? await tx.appUser.findMany({ where: { id: { in: actorIds } }, select: { id: true, displayName: true } })
+          : [];
+        const nameById = new Map(actors.map((a) => [a.id, a.displayName]));
+        return rows.map((r) => ({
+          ...r,
+          actorName: r.actorId ? (nameById.get(r.actorId) ?? 'Người dùng khác') : 'Hệ thống',
+        }));
       }),
     ),
 

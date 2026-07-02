@@ -82,12 +82,12 @@ describe('payslipOverrideVariablePay — tree-manager commission correction', ()
     });
   });
 
-  // quan_ly has tree-authority over sale staff (canOverrideKpi: quan_ly > non-management).
+  // giam_doc_kinh_doanh has tree-authority over sale staff (canOverrideKpi: directors > non-management).
   const managerCaller = () =>
     staffCaller({
       userId: managerId,
-      roles: [Role.quan_ly],
-      primaryRole: Role.quan_ly,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
       isSuperAdmin: false,
       facilityIds: [FAC],
     });
@@ -132,12 +132,43 @@ describe('payslipOverrideVariablePay — tree-manager commission correction', ()
     expect(log?.body).toContain('Lý do:');
   });
 
+  it('override survives a plain payslipCompute recompute (regression: was silently wiped)', async () => {
+    const mgr = await managerCaller();
+    const before = await withRls(SUPER, (tx) =>
+      tx.payslip.findUniqueOrThrow({ where: { userId_periodKey: { userId: saleId, periodKey: PERIOD } } }),
+    );
+    // Previous test already applied an override — confirm it's actually in place before recomputing.
+    expect(before.variablePayOverride).not.toBeNull();
+
+    // Recompute via the same procedure HR would call to fix e.g. workdays — with NO override
+    // input, and NO indication this is meant to touch commission at all.
+    await mgr.payroll.payslipCompute({
+      userId: saleId,
+      facilityId: FAC,
+      periodKey: PERIOD,
+      standardDays: 22,
+      workdays: 21, // simulate a legitimate workdays correction
+      kpiScore: 75,
+      insuranceDeduction: 0,
+    });
+
+    const after = await withRls(SUPER, (tx) =>
+      tx.payslip.findUniqueOrThrow({ where: { userId_periodKey: { userId: saleId, periodKey: PERIOD } } }),
+    );
+    // The override must survive — variablePay must NOT revert to the sales auto-feed (0, no receipts).
+    expect(after.variablePay).toBe(before.variablePayOverride);
+    expect(after.variablePayOverride).toBe(before.variablePayOverride);
+    expect(after.variableNote).toBe(before.variableNote);
+    // The unrelated field actually being corrected must still apply.
+    expect(after.workdays).toBe(21);
+  });
+
   it('self-override is rejected with FORBIDDEN', async () => {
     // Actor whose userId == target → always blocked by canOverrideKpi's self-guard.
     const selfCaller = await staffCaller({
       userId: saleId,
-      roles: [Role.quan_ly],
-      primaryRole: Role.quan_ly,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
       isSuperAdmin: false,
       facilityIds: [FAC],
     });

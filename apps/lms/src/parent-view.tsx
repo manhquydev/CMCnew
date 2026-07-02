@@ -2,33 +2,57 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   trpc,
   useNotificationStream,
+  API_URL,
   BadgeShelf,
   Leaderboard,
   NotificationCenter,
+  PdfAnnotator,
   notifyError,
+  notifySuccess,
   type LmsPrincipal,
   type LiveNotification,
+  type AnnotationData,
 } from '@cmc/ui';
 import {
   Alert,
   Badge,
+  Button,
   Card,
   Center,
   Group,
   Loader,
+  Modal,
   Select,
   Stack,
+  Switch,
   Table,
   Text,
+  TextInput,
   Title,
 } from '@mantine/core';
-import { IconCircleCheck, IconClock, IconCircleX, IconAlertCircle } from '@tabler/icons-react';
+import { useDisclosure } from '@mantine/hooks';
+import { IconCircleCheck, IconClock, IconCircleX, IconAlertCircle, IconStar } from '@tabler/icons-react';
+import { SessionEvidenceTab } from './session-evidence-tab';
+import { CurriculumSessionsTab } from './curriculum-sessions-tab';
 
-export type ParentTab = 'overview' | 'gradebook' | 'notifications' | 'rewards';
+export type ParentTab = 'overview' | 'schedule' | 'sessions' | 'gradebook' | 'notifications' | 'rewards' | 'profile';
 
 type Submission = Awaited<ReturnType<typeof trpc.submission.forStudent.query>>[number];
 type Gradebook = Awaited<ReturnType<typeof trpc.assessment.gradebook.query>>;
 type FinalGrade = Gradebook['finalGrades'][number];
+type Exercise = Awaited<ReturnType<typeof trpc.exercise.listForPrincipal.query>>[number];
+type AttendanceRow = Awaited<ReturnType<typeof trpc.attendance.forStudent.query>>[number];
+
+const ATTENDANCE_STATUS_LABEL: Record<AttendanceRow['status'], string> = {
+  present: 'Có mặt',
+  late: 'Muộn',
+  absent: 'Vắng',
+};
+const ATTENDANCE_STATUS_COLOR: Record<AttendanceRow['status'], string> = {
+  present: 'teal',
+  late: 'yellow',
+  absent: 'red',
+};
 
 const PROGRAM_LABEL: Record<string, string> = {
   UCREA: 'UCREA',
@@ -116,19 +140,19 @@ function LevelHistoryCard({ childId, refreshKey }: { childId: string; refreshKey
   if (!rows || rows.length === 0) return null;
 
   return (
-    <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-      <Text size="sm" fw={600} mb="sm" style={{ color: 'var(--cmc-text-2)' }}>
-        Tiến trình cấp độ
+    <Card className="cmc-clay-card" p="xl">
+      <Text size="sm" fw={800} mb="sm" style={{ color: 'var(--cmc-text-2)', fontFamily: 'var(--cmc-font-bubble)' }}>
+        Tiến trình cấp độ của con
       </Text>
       <Stack gap="xs">
         {rows.map((r) => (
           <Group key={r.id} gap="xs">
-            <Badge variant="light" radius="xl">{r.fromLevel ?? '—'} → {r.toLevel}</Badge>
-            <Badge size="sm" color={LEVEL_STATUS[r.status]?.color} variant="light" radius="xl">
+            <Badge variant="light" radius="xl" size="md" style={{ fontFamily: 'var(--cmc-font-bubble)' }}>{r.fromLevel ?? '—'} → {r.toLevel}</Badge>
+            <Badge size="sm" color={LEVEL_STATUS[r.status]?.color} variant="light" radius="xl" style={{ fontFamily: 'var(--cmc-font-friendly)', fontWeight: 700 }}>
               {LEVEL_STATUS[r.status]?.label ?? r.status}
             </Badge>
             {r.reason && (
-              <Text size="sm" c="dimmed">{r.reason}</Text>
+              <Text size="sm" c="dimmed" style={{ fontFamily: 'var(--cmc-font-friendly)', fontWeight: 500 }}>{r.reason}</Text>
             )}
           </Group>
         ))}
@@ -230,6 +254,10 @@ function describeNotif(n: ParentNotif): { icon: string; text: string } {
       return { icon: '🏅', text: `Con đạt huy hiệu "${p.badge ?? ''}"` };
     case 'level_up':
       return { icon: '🎉', text: `Con lên cấp độ ${p.toLevel ?? ''}` };
+    case 'new_exercise_open':
+      return { icon: '📚', text: 'Bài tập mới đã mở cho con' };
+    case 'parent_meeting_reminder':
+      return { icon: '📅', text: `Sắp có buổi họp phụ huynh${p.title ? `: ${p.title}` : ''}` };
     default:
       return { icon: '🔔', text: 'Thông báo mới' };
   }
@@ -304,6 +332,343 @@ function ParentNotifCard({ refreshKey }: { refreshKey: number }) {
   );
 }
 
+/**
+ * Read-only drawn-work view for a parent: the child's marks plus the published teacher
+ * correction, if any. Reuses PdfAnnotator's existing `editable={false}` + `readOnlyLayers`
+ * contract (same one student-view.tsx uses for a graded exercise) — no annotator changes.
+ * No draft/save controls; this is a viewer, never an editing surface.
+ */
+function DrawnWorkModal({
+  opened,
+  onClose,
+  exercise,
+  studentId,
+}: {
+  opened: boolean;
+  onClose: () => void;
+  exercise: Exercise | null;
+  studentId: string;
+}) {
+  const [student, setStudent] = useState<AnnotationData | null>(null);
+  const [teacher, setTeacher] = useState<AnnotationData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!opened || !exercise) return;
+    setLoading(true);
+    setError('');
+    setStudent(null);
+    setTeacher(null);
+    trpc.submission.layerForGuardian
+      .query({ exerciseId: exercise.id, studentId })
+      .then((layers) => {
+        setStudent(layers.student);
+        setTeacher(layers.teacher);
+      })
+      .catch((e) => {
+        setError('Không tải được bài làm: ' + (e instanceof Error ? e.message : ''));
+        notifyError(e, 'Tải bài làm thất bại');
+      })
+      .finally(() => setLoading(false));
+  }, [opened, exercise, studentId]);
+
+  return (
+    <Modal opened={opened} onClose={onClose} title={exercise?.title ?? 'Bài làm'} size="lg" radius="xl" centered>
+      {loading && (
+        <Center py="xl">
+          <Loader />
+        </Center>
+      )}
+      {!loading && error && <Alert color="red">{error}</Alert>}
+      {!loading && !error && exercise?.basePdfRef && (
+        <PdfAnnotator
+          pdfRef={exercise.basePdfRef}
+          value={student}
+          editable={false}
+          readOnlyLayers={teacher ? [{ items: teacher.items, opacity: 1 }] : []}
+        />
+      )}
+    </Modal>
+  );
+}
+
+/**
+ * Per-session điểm danh cho phụ huynh: mỗi buổi kèm badge trạng thái, thay vì chỉ tỷ lệ tổng hợp
+ * (vốn đã có ở tab "Học bạ"). Nguồn dữ liệu riêng (attendance.forStudent) — không đụng vào
+ * SessionEvidenceTab (nhật ký học tập) hiển thị ngay bên dưới trong cùng tab "sessions".
+ */
+function AttendanceHistoryCard({ studentId, refreshKey }: { studentId: string; refreshKey: number }) {
+  const [rows, setRows] = useState<AttendanceRow[] | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setRows(null);
+    setError('');
+    trpc.attendance.forStudent
+      .query({ studentId })
+      .then(setRows)
+      .catch((e) => {
+        setError('Không tải được lịch sử điểm danh: ' + (e instanceof Error ? e.message : ''));
+        notifyError(e, 'Tải điểm danh thất bại');
+      });
+  }, [studentId, refreshKey]);
+
+  if (error) return <Alert color="red">{error}</Alert>;
+  if (rows === null) return <Center py="md"><Loader size="sm" /></Center>;
+  if (rows.length === 0) return null;
+
+  return (
+    <Card radius="lg" p={0} style={{ border: '1px solid var(--cmc-border)' }}>
+      <Text size="sm" fw={600} p="md" style={{ color: 'var(--cmc-text-2)', borderBottom: '1px solid var(--cmc-border-faint)' }}>
+        Điểm danh ({rows.length})
+      </Text>
+      <Table striped highlightOnHover withTableBorder={false}>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th style={thStyle}>Ngày</Table.Th>
+            <Table.Th style={thStyle}>Lớp</Table.Th>
+            <Table.Th style={thStyle}>Trạng thái</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {rows.map((r) => (
+            <Table.Tr key={r.id}>
+              <Table.Td>
+                <Text size="sm">
+                  {new Date(r.session.sessionDate).toLocaleDateString('vi-VN')} · {r.session.startTime}-{r.session.endTime}
+                </Text>
+              </Table.Td>
+              <Table.Td>
+                <Group gap={4}>
+                  <Text size="sm">{r.session.batch.name}</Text>
+                  {r.session.isMakeup && (
+                    <Badge size="xs" color="grape" variant="light" radius="xl">Học bù</Badge>
+                  )}
+                </Group>
+              </Table.Td>
+              <Table.Td>
+                <Group gap={4}>
+                  <Badge size="sm" color={ATTENDANCE_STATUS_COLOR[r.status]} variant="light" radius="xl">
+                    {ATTENDANCE_STATUS_LABEL[r.status]}
+                  </Badge>
+                  {r.excused && (
+                    <Badge size="xs" color="cmc" variant="outline" radius="xl">Có phép</Badge>
+                  )}
+                </Group>
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Card>
+  );
+}
+
+type LinkRequestRow = Awaited<ReturnType<typeof trpc.guardian.linkRequestListMine.query>>[number];
+
+const LINK_REQUEST_STATUS: Record<LinkRequestRow['status'], { label: string; color: string }> = {
+  pending: { label: 'Chờ duyệt', color: 'yellow' },
+  approved: { label: 'Đã duyệt', color: 'teal' },
+  rejected: { label: 'Từ chối', color: 'red' },
+};
+
+/**
+ * Account-level self-service: profile edit (scoped server-side to the parent's own row) and a
+ * staff-reviewed self-link request. Anti-takeover: submitting a phone/student-code only queues a
+ * request — it never creates a Guardian row directly, so this tab cannot grant access by itself.
+ */
+function ProfileTab({ principal }: { principal: LmsPrincipal }) {
+  const [displayName, setDisplayName] = useState(principal.displayName);
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [emailNotifications, setEmailNotifications] = useState(true);
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  const [linkCode, setLinkCode] = useState('');
+  const [linkPhone, setLinkPhone] = useState('');
+  const [submittingLink, setSubmittingLink] = useState(false);
+  const [requests, setRequests] = useState<LinkRequestRow[] | null>(null);
+
+  const loadRequests = useCallback(() => {
+    trpc.guardian.linkRequestListMine
+      .query()
+      .then(setRequests)
+      .catch((e) => notifyError(e, 'Không tải được danh sách yêu cầu liên kết'));
+  }, []);
+  useEffect(loadRequests, [loadRequests]);
+
+  async function saveProfile() {
+    if (!displayName.trim()) {
+      notifyError(new Error('Nhập họ tên.'), 'Thông tin chưa đủ');
+      return;
+    }
+    setSavingProfile(true);
+    try {
+      await trpc.guardian.profileUpdate.mutate({
+        displayName: displayName.trim(),
+        email: email.trim() || undefined,
+        phone: phone.trim() || undefined,
+        emailNotifications,
+      });
+      notifySuccess('Đã cập nhật thông tin cá nhân');
+    } catch (e) {
+      notifyError(e, 'Cập nhật thất bại');
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  async function submitLinkRequest() {
+    if (!linkCode.trim() && !linkPhone.trim()) {
+      notifyError(new Error('Nhập mã học sinh hoặc số điện thoại đăng ký của con.'), 'Thông tin chưa đủ');
+      return;
+    }
+    setSubmittingLink(true);
+    try {
+      await trpc.guardian.requestLink.mutate({
+        studentCode: linkCode.trim() || undefined,
+        studentPhone: linkPhone.trim() || undefined,
+      });
+      notifySuccess('Đã gửi yêu cầu liên kết. Nhà trường sẽ xét duyệt trong ít ngày.');
+      setLinkCode('');
+      setLinkPhone('');
+      loadRequests();
+    } catch (e) {
+      notifyError(e, 'Gửi yêu cầu thất bại');
+    } finally {
+      setSubmittingLink(false);
+    }
+  }
+
+  return (
+    <Stack gap="xl">
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} mb="md" style={{ color: 'var(--cmc-text)' }}>Thông tin cá nhân</Text>
+        <Stack gap="sm">
+          <TextInput label="Họ tên" value={displayName} onChange={(e) => setDisplayName(e.currentTarget.value)} />
+          <Group grow>
+            <TextInput label="Email" placeholder="Không đổi nếu để trống" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
+            <TextInput label="Số điện thoại" placeholder="Không đổi nếu để trống" value={phone} onChange={(e) => setPhone(e.currentTarget.value)} />
+          </Group>
+          <Switch
+            label="Nhận email thông báo"
+            checked={emailNotifications}
+            onChange={(e) => setEmailNotifications(e.currentTarget.checked)}
+          />
+          <Group justify="flex-end">
+            <Button variant="filled" radius={9999} loading={savingProfile} onClick={saveProfile}>
+              Lưu thay đổi
+            </Button>
+          </Group>
+        </Stack>
+      </Card>
+
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} mb="xs" style={{ color: 'var(--cmc-text)' }}>Liên kết thêm con</Text>
+        <Text size="sm" c="dimmed" mb="md">
+          Nhập mã học sinh hoặc số điện thoại đã đăng ký của con. Yêu cầu sẽ được nhà trường xét duyệt trước khi liên kết.
+        </Text>
+        <Group grow align="flex-end">
+          <TextInput label="Mã học sinh" value={linkCode} onChange={(e) => setLinkCode(e.currentTarget.value)} />
+          <TextInput label="Số điện thoại đã đăng ký" value={linkPhone} onChange={(e) => setLinkPhone(e.currentTarget.value)} />
+        </Group>
+        <Group justify="flex-end" mt="md">
+          <Button variant="filled" radius={9999} loading={submittingLink} onClick={submitLinkRequest}>
+            Gửi yêu cầu
+          </Button>
+        </Group>
+      </Card>
+
+      {requests && requests.length > 0 && (
+        <Card radius="lg" p={0} style={{ border: '1px solid var(--cmc-border)' }}>
+          <Text size="sm" fw={600} p="md" style={{ color: 'var(--cmc-text-2)', borderBottom: '1px solid var(--cmc-border-faint)' }}>
+            Yêu cầu liên kết đã gửi ({requests.length})
+          </Text>
+          <Stack gap={0}>
+            {requests.map((r) => (
+              <Group key={r.id} justify="space-between" px="md" py="xs" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
+                <Text size="sm">{r.studentCode ?? r.studentPhone} · {fmtDateTime(r.createdAt)}</Text>
+                <Badge size="sm" color={LINK_REQUEST_STATUS[r.status].color} variant="light" radius="xl">
+                  {LINK_REQUEST_STATUS[r.status].label}
+                </Badge>
+              </Group>
+            ))}
+          </Stack>
+        </Card>
+      )}
+    </Stack>
+  );
+}
+
+type CertificateRow = Awaited<ReturnType<typeof trpc.certificate.forStudent.query>>[number];
+
+/**
+ * Certificates issued to the child, each with its own PDF download link — served by the
+ * LMS-authorized `/files/certificate/:id` route (ownership checked server-side against the
+ * parent's session, never the client-supplied id alone).
+ */
+function CertificatesCard({ studentId, refreshKey }: { studentId: string; refreshKey: number }) {
+  const [rows, setRows] = useState<CertificateRow[] | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setRows(null);
+    setError('');
+    trpc.certificate.forStudent
+      .query({ studentId })
+      .then(setRows)
+      .catch((e) => {
+        setError('Không tải được danh sách chứng chỉ: ' + (e instanceof Error ? e.message : ''));
+        notifyError(e, 'Tải chứng chỉ thất bại');
+      });
+  }, [studentId, refreshKey]);
+
+  if (error) return <Alert color="red">{error}</Alert>;
+  if (rows === null) return <Center py="md"><Loader size="sm" /></Center>;
+  if (rows.length === 0) return null;
+
+  return (
+    <Card radius="lg" p={0} style={{ border: '1px solid var(--cmc-border)' }}>
+      <Text size="sm" fw={600} p="md" style={{ color: 'var(--cmc-text-2)', borderBottom: '1px solid var(--cmc-border-faint)' }}>
+        Chứng chỉ ({rows.length})
+      </Text>
+      <Table striped highlightOnHover withTableBorder={false}>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th style={thStyle}>Chứng chỉ</Table.Th>
+            <Table.Th style={thStyle}>Ngày cấp</Table.Th>
+            <Table.Th style={{ ...thStyle, width: 120 }} />
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {rows.map((cert) => (
+            <Table.Tr key={cert.id}>
+              <Table.Td>
+                <Text size="sm">{cert.title}</Text>
+              </Table.Td>
+              <Table.Td>
+                <Text size="sm">{new Date(cert.issuedAt).toLocaleDateString('vi-VN')}</Text>
+              </Table.Td>
+              <Table.Td>
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  color="cmc"
+                  radius={9999}
+                  onClick={() => window.open(`${API_URL}/files/certificate/${cert.id}`, '_blank', 'noopener')}
+                >
+                  Tải PDF
+                </Button>
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Card>
+  );
+}
+
 function ChildDashboard({
   childId,
   refreshKey,
@@ -316,8 +681,11 @@ function ChildDashboard({
   const [balance, setBalance] = useState<number | null>(null);
   const [submissions, setSubmissions] = useState<Submission[] | null>(null);
   const [gradebook, setGradebook] = useState<Gradebook | null>(null);
+  const [exercisesById, setExercisesById] = useState<Map<string, Exercise>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [drawnWorkExercise, setDrawnWorkExercise] = useState<Exercise | null>(null);
+  const [drawnWorkOpened, { open: openDrawnWork, close: closeDrawnWork }] = useDisclosure(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -329,11 +697,13 @@ function ChildDashboard({
       trpc.rewards.balance.query({ studentId: childId }),
       trpc.submission.forStudent.query({ studentId: childId }),
       trpc.assessment.gradebook.query({ studentId: childId }),
+      trpc.exercise.listForPrincipal.query(),
     ])
-      .then(([bal, subs, gb]) => {
+      .then(([bal, subs, gb, exercises]) => {
         setBalance(bal);
         setSubmissions(sortNewestFirst(subs));
         setGradebook(gb);
+        setExercisesById(new Map(exercises.map((ex) => [ex.id, ex])));
       })
       .catch((e) => {
         setError('Không tải được dữ liệu: ' + (e instanceof Error ? e.message : ''));
@@ -343,6 +713,13 @@ function ChildDashboard({
   }, [childId]);
 
   useEffect(load, [load, refreshKey]);
+
+  function openDrawnWorkFor(exerciseId: string) {
+    const exercise = exercisesById.get(exerciseId);
+    if (!exercise?.basePdfRef) return;
+    setDrawnWorkExercise(exercise);
+    openDrawnWork();
+  }
 
   if (loading) {
     return (
@@ -368,18 +745,24 @@ function ChildDashboard({
     ).length;
 
     return (
-      <Stack>
+      <Stack gap="xl">
         <Group grow>
-          <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-            <Text size="sm" c="dimmed" mb={4}>Sao tích lũy</Text>
-            <Text size="xl" fw={700} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-warn-text)' }}>
-              {balance ?? 0}
+          <Card className="cmc-clay-card" p="xl">
+            <Group justify="space-between" align="center" mb="xs">
+              <Text size="xs" fw={800} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--cmc-font-friendly)' }}>Sao tích lũy của con</Text>
+              <IconStar size={20} fill="#f59e0b" color="#d97706" />
+            </Group>
+            <Text size="32px" fw={900} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-warn-text)', fontFamily: 'var(--cmc-font-bubble)' }}>
+              {balance ?? 0} <Text span size="sm" fw={700} c="dimmed">sao</Text>
             </Text>
           </Card>
-          <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-            <Text size="sm" c="dimmed" mb={4}>Đã nộp / Đã chấm</Text>
-            <Text size="xl" fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>
-              {submitted} / {graded}
+          <Card className="cmc-clay-card" p="xl">
+            <Group justify="space-between" align="center" mb="xs">
+              <Text size="xs" fw={800} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--cmc-font-friendly)' }}>Đã nộp / Đã chấm</Text>
+              <IconCircleCheck size={20} color="var(--cmc-ok-text)" />
+            </Group>
+            <Text size="32px" fw={900} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-ok-text)', fontFamily: 'var(--cmc-font-bubble)' }}>
+              {submitted} <Text span size="md" fw={700} c="dimmed">/</Text> {graded}
             </Text>
           </Card>
         </Group>
@@ -388,10 +771,35 @@ function ChildDashboard({
     );
   }
 
+  if (tab === 'schedule') {
+    return <CurriculumSessionsTab studentId={childId} refreshKey={refreshKey} />;
+  }
+
+  if (tab === 'sessions') {
+    return (
+      <Stack gap="xl">
+        <AttendanceHistoryCard studentId={childId} refreshKey={refreshKey} />
+        <SessionEvidenceTab studentId={childId} refreshKey={refreshKey} />
+      </Stack>
+    );
+  }
+
   // ── Học bạ ────────────────────────────────────────────────────────────────
   if (tab === 'gradebook') {
     return (
       <Stack>
+        <Group justify="flex-end">
+          <Button
+            size="xs"
+            variant="light"
+            color="cmc"
+            radius={9999}
+            onClick={() => window.open(`${API_URL}/files/transcript/${childId}`, '_blank', 'noopener')}
+          >
+            Tải học bạ (PDF)
+          </Button>
+        </Group>
+
         <Card radius="lg" p={0} style={{ border: '1px solid var(--cmc-border)' }}>
           <Text size="sm" fw={600} p="md" style={{ color: 'var(--cmc-text-2)', borderBottom: '1px solid var(--cmc-border-faint)' }}>
             Bài tập &amp; kết quả ({submissions?.length ?? 0})
@@ -405,11 +813,13 @@ function ChildDashboard({
                   <Table.Th style={thStyle}>Điểm</Table.Th>
                   <Table.Th style={thStyle}>Nhận xét</Table.Th>
                   <Table.Th style={thStyle}>Thời gian nộp</Table.Th>
+                  <Table.Th style={{ ...thStyle, width: 120 }} />
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
                 {submissions.map((s) => {
                   const published = s.grade && s.grade.isPublished;
+                  const hasDrawnWork = exercisesById.get(s.exerciseId)?.basePdfRef;
                   return (
                     <Table.Tr key={s.id}>
                       <Table.Td>
@@ -437,6 +847,19 @@ function ChildDashboard({
                       </Table.Td>
                       <Table.Td>
                         <Text size="sm">{fmtDateTime(s.submittedAt)}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        {hasDrawnWork && (
+                          <Button
+                            size="xs"
+                            variant="subtle"
+                            color="cmc"
+                            radius={9999}
+                            onClick={() => openDrawnWorkFor(s.exerciseId)}
+                          >
+                            Xem bài làm
+                          </Button>
+                        )}
                       </Table.Td>
                     </Table.Tr>
                   );
@@ -556,6 +979,15 @@ function ChildDashboard({
             </Stack>
           </Card>
         )}
+
+        <CertificatesCard studentId={childId} refreshKey={refreshKey} />
+
+        <DrawnWorkModal
+          opened={drawnWorkOpened}
+          onClose={closeDrawnWork}
+          exercise={drawnWorkExercise}
+          studentId={childId}
+        />
       </Stack>
     );
   }
@@ -573,19 +1005,22 @@ function ChildDashboard({
   // ── Phần thưởng ───────────────────────────────────────────────────────────
   if (tab === 'rewards') {
     return (
-      <Stack>
-        <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-          <Text size="sm" c="dimmed" mb={4}>Sao tích lũy</Text>
-          <Text size="xl" fw={700} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-warn-text)' }}>
-            {balance ?? 0}
+      <Stack gap="xl">
+        <Card className="cmc-clay-card" p="xl">
+          <Group gap="xs" align="center" mb={4}>
+            <Text size="xs" fw={800} c="dimmed" style={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: 'var(--cmc-font-friendly)' }}>Sao tích lũy của con</Text>
+            <IconStar size={16} fill="#f59e0b" color="#d97706" />
+          </Group>
+          <Text size="32px" fw={900} style={{ fontVariantNumeric: 'tabular-nums', color: 'var(--cmc-warn-text)', fontFamily: 'var(--cmc-font-bubble)' }}>
+            {balance ?? 0} <Text span size="sm" fw={700} c="dimmed">sao</Text>
           </Text>
         </Card>
-        <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-          <Text size="sm" fw={600} mb="sm" style={{ color: 'var(--cmc-text-2)' }}>Huy hiệu</Text>
+        <Card className="cmc-clay-card" p="xl">
+          <Text size="sm" fw={800} mb="md" style={{ color: 'var(--cmc-text-2)', fontFamily: 'var(--cmc-font-bubble)' }}>Huy hiệu của con</Text>
           <BadgeShelf studentId={childId} refreshKey={refreshKey} />
         </Card>
-        <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-          <Text size="sm" fw={600} mb="sm" style={{ color: 'var(--cmc-text-2)' }}>Bảng xếp hạng</Text>
+        <Card className="cmc-clay-card" p="xl">
+          <Text size="sm" fw={800} mb="md" style={{ color: 'var(--cmc-text-2)', fontFamily: 'var(--cmc-font-bubble)' }}>Bảng xếp hạng lớp học</Text>
           <Leaderboard studentId={childId} refreshKey={refreshKey} />
         </Card>
       </Stack>
@@ -634,12 +1069,31 @@ export function ParentView({ principal, activeTab, onTabChange: _onTabChange, on
     onNotification?.();
   });
 
+  // Profile/link-request is account-level, not child-scoped — must stay reachable even for a
+  // parent with zero linked children (that's exactly who most needs the self-link request form).
+  if (currentTab === 'profile') {
+    return (
+      <Stack>
+        {!isControlled && (
+          <Group justify="space-between" align="flex-end">
+            <div>
+              <Title order={4}>Hồ sơ &amp; liên kết</Title>
+              <Text c="dimmed" size="sm">Xin chào {principal.displayName}.</Text>
+            </div>
+            <NotificationCenter pulse={refreshKey} />
+          </Group>
+        )}
+        <ProfileTab principal={principal} />
+      </Stack>
+    );
+  }
+
   if (students.length === 0) {
     return (
       <Card radius="lg" p="xl" maw={520} style={{ border: '1px solid var(--cmc-border)' }}>
         <Text fw={600} mb="xs">Theo dõi học tập</Text>
         <Text c="dimmed" size="sm">
-          Chưa có học sinh được liên kết với tài khoản này.
+          Chưa có học sinh được liên kết với tài khoản này. Vào mục "Hồ sơ &amp; liên kết" để gửi yêu cầu liên kết con.
         </Text>
       </Card>
     );

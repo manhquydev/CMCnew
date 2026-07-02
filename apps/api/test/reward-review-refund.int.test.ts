@@ -6,7 +6,7 @@ import { starBalance } from '@cmc/domain-rewards';
 import type { LmsSession } from '@cmc/auth';
 import { lmsCaller, staffCaller, withRls, SUPER, uniq } from './helpers.js';
 
-// Invariant (spec Phase 2 §2.8): a staff reviewer (quan_ly) deciding a PENDING reward redemption
+// Invariant (spec Phase 2 §2.8): a staff reviewer (giam_doc_kinh_doanh) deciding a PENDING reward redemption
 // must reconcile both ledgers. decision 'rejected' → REFUND the student's stars (one
 // gift_rejected_refund row restoring balance) AND restore gift stock +1. decision 'approved'
 // keeps the spend (stock stays down). Re-reviewing an already-decided reward → BAD_REQUEST
@@ -69,12 +69,12 @@ describe('reward review refund (rewards invariant)', () => {
     expect(afterRedeem.stock).toBe(0);
     expect(afterRedeem.balance).toBe(100 - COST);
 
-    // 2. Staff (quan_ly, facility-scoped, not super) rejects the pending redemption.
+    // 2. Staff (giam_doc_kinh_doanh, facility-scoped, not super) rejects the pending redemption.
     const staff = await staffCaller({
       isSuperAdmin: false,
       facilityIds: [FACILITY],
-      roles: [Role.quan_ly],
-      primaryRole: Role.quan_ly,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
     });
     const reviewed = await staff.rewards.review({ id: rewardId, decision: 'rejected', reason: uniq('whoops') });
     expect(reviewed.status).toBe('rejected');

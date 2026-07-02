@@ -36,7 +36,7 @@ ARG VITE_API_URL=/api
 ARG VITE_BASE_URL=/lms/
 ENV VITE_API_URL=${VITE_API_URL}
 
-RUN pnpm --filter @cmc/lms run build -- --base=${VITE_BASE_URL}
+RUN pnpm --filter @cmc/lms run build --base=${VITE_BASE_URL}
 
 # ── Nginx runner ──────────────────────────────────────────────────────────────
 FROM nginx:alpine AS runner

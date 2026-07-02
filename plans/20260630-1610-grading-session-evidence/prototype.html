@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prototype - /grading session evidence</title>
+  <style>
+    :root {
+      --ink: #1f2933;
+      --muted: #65758b;
+      --line: #d7dee8;
+      --paper: #f7f9fc;
+      --surface: #ffffff;
+      --brand: #0f766e;
+      --brand-soft: #d9f3ee;
+      --accent: #b45309;
+      --danger: #b42318;
+      --good: #16794c;
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); }
+    button, input, textarea, select { font: inherit; }
+    .app { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+    .side { background: #14213d; color: #f8fafc; padding: 18px; }
+    .brand { font-weight: 700; margin-bottom: 22px; }
+    .nav { display: grid; gap: 6px; }
+    .nav button {
+      border: 0; border-radius: 6px; padding: 10px 12px; text-align: left;
+      color: #dbeafe; background: transparent; cursor: pointer;
+    }
+    .nav button.active { background: #203861; color: #fff; }
+    .main { padding: 22px; display: grid; gap: 16px; align-content: start; }
+    .toolbar, .panel, .lms-shell {
+      background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+    }
+    .toolbar { padding: 14px; display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+    label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+    select, input, textarea {
+      border: 1px solid var(--line); border-radius: 6px; padding: 9px 10px; background: white; color: var(--ink);
+    }
+    textarea { min-height: 74px; resize: vertical; }
+    .tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); padding: 8px 10px 0; }
+    .tabs button {
+      border: 0; background: transparent; padding: 10px 12px; cursor: pointer; border-radius: 6px 6px 0 0;
+      color: var(--muted); font-weight: 600;
+    }
+    .tabs button.active { background: var(--brand-soft); color: var(--brand); }
+    .panel-body { padding: 16px; display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
+    .session-list { display: grid; gap: 8px; align-content: start; }
+    .session {
+      border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: #fff; cursor: pointer;
+    }
+    .session.active { border-color: var(--brand); background: #f0fdfa; }
+    .session strong { display: block; font-size: 14px; }
+    .meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .status { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 3px 8px; font-size: 12px; font-weight: 700; }
+    .draft { color: var(--accent); background: #fff7ed; }
+    .published { color: var(--good); background: #ecfdf3; }
+    .work { display: grid; gap: 14px; align-content: start; }
+    .head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    h1, h2, h3 { margin: 0; }
+    h1 { font-size: 22px; }
+    h2 { font-size: 18px; }
+    h3 { font-size: 15px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .photos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .photo {
+      min-height: 100px; border-radius: 8px; border: 1px solid var(--line); overflow: hidden;
+      background: linear-gradient(135deg, #e0f2fe, #fef3c7); position: relative;
+    }
+    .photo::after { content: attr(data-label); position: absolute; left: 8px; bottom: 8px; font-size: 12px; font-weight: 700; color: #0f172a; }
+    table { width: 100%; border-collapse: collapse; background: white; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+    th, td { border-bottom: 1px solid var(--line); padding: 10px; text-align: left; vertical-align: top; }
+    th { color: var(--muted); text-transform: uppercase; font-size: 11px; letter-spacing: .04em; }
+    td textarea { width: 100%; min-height: 54px; }
+    .actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .btn {
+      border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 9px 12px; cursor: pointer;
+      font-weight: 700; color: var(--ink);
+    }
+    .btn.primary { background: var(--brand); color: white; border-color: var(--brand); }
+    .btn.warn { color: var(--danger); }
+    .lms-shell { padding: 16px; display: grid; gap: 14px; }
+    .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .lesson-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 8px; background: white; }
+    .hidden { display: none; }
+    @media (max-width: 900px) {
+      .app { grid-template-columns: 1fr; }
+      .side { min-height: auto; }
+      .panel-body, .grid2, .cards { grid-template-columns: 1fr; }
+      .photos { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <div class="brand">CMC Staff</div>
+      <div class="nav">
+        <button>Lịch dạy</button>
+        <button class="active">Chấm bài</button>
+        <button>Điểm danh</button>
+        <button>Học bạ</button>
+      </div>
+    </aside>
+    <main class="main">
+      <div class="head">
+        <div>
+          <h1>Chấm bài</h1>
+          <div class="meta">Prototype: mở rộng /grading thành nơi GV hoàn tất hồ sơ buổi học.</div>
+        </div>
+        <button class="btn" id="toggleLms">Xem LMS của PH</button>
+      </div>
+
+      <section id="staffView">
+        <div class="toolbar">
+          <label>Cơ sở
+            <select><option>CS1 - CMC HQ</option></select>
+          </label>
+          <label>Lớp học
+            <select><option>B-2026-0001 - UCREA Sáng T2/T4</option></select>
+          </label>
+          <label>Chế độ
+            <select id="mode">
+              <option value="lesson">Nhật ký buổi học</option>
+              <option value="class">Nhận xét lớp</option>
+              <option value="exercise">Bài tập</option>
+            </select>
+          </label>
+        </div>
+
+        <section class="panel">
+          <div class="tabs">
+            <button class="tab active" data-mode="lesson">Nhật ký buổi học</button>
+            <button class="tab" data-mode="class">Nhận xét lớp</button>
+            <button class="tab" data-mode="exercise">Bài tập</button>
+          </div>
+          <div class="panel-body" id="lessonPanel">
+            <div class="session-list">
+              <div class="session active" data-session="0">
+                <strong>Buổi 12 - Tư duy hình khối</strong>
+                <div class="meta">30/06/2026 · 08:00-10:00</div>
+                <span class="status draft">Nháp</span>
+              </div>
+              <div class="session" data-session="1">
+                <strong>Buổi 11 - Quan sát vật thể</strong>
+                <div class="meta">28/06/2026 · 08:00-10:00</div>
+                <span class="status published">Đã publish</span>
+              </div>
+              <div class="session" data-session="2">
+                <strong>Buổi 10 - Lắp ghép ý tưởng</strong>
+                <div class="meta">26/06/2026 · 08:00-10:00</div>
+                <span class="status published">Đã publish</span>
+              </div>
+            </div>
+            <div class="work">
+              <div class="head">
+                <div>
+                  <h2 id="sessionTitle">Buổi 12 - Tư duy hình khối</h2>
+                  <div class="meta">Publish xong PH sẽ thấy ảnh, tóm tắt, và nhận xét riêng của con.</div>
+                </div>
+                <span class="status draft" id="sessionStatus">Nháp</span>
+              </div>
+              <div class="grid2">
+                <label>Tóm tắt buổi học
+                  <textarea id="summary">Học sinh luyện quan sát hình khối, dựng mô hình bằng giấy và trình bày ý tưởng theo nhóm.</textarea>
+                </label>
+                <label>Ghi chú nội bộ
+                  <textarea>2 bạn cần nhắc chuẩn bị dụng cụ trước giờ học. Không hiển thị LMS.</textarea>
+                </label>
+              </div>
+              <div>
+                <h3>Ảnh buổi học</h3>
+                <div class="photos" id="photos">
+                  <div class="photo" data-label="Hoạt động nhóm"></div>
+                  <div class="photo" data-label="Sản phẩm mẫu"></div>
+                  <button class="btn" id="addPhoto" type="button">+ Thêm ảnh</button>
+                </div>
+              </div>
+              <div>
+                <h3>Nhận xét theo học sinh</h3>
+                <table>
+                  <thead><tr><th>Học sinh</th><th>Điểm danh</th><th>Nhận xét GV</th><th>Hiển thị LMS</th></tr></thead>
+                  <tbody>
+                    <tr><td><strong>An</strong><div class="meta">TEST-001</div></td><td>Có mặt</td><td><textarea>An chủ động chia sẻ ý tưởng, cần luyện diễn đạt ngắn hơn.</textarea></td><td><input type="checkbox" checked /></td></tr>
+                    <tr><td><strong>Bình</strong><div class="meta">TEST-002</div></td><td>Đi muộn</td><td><textarea>Bình hoàn thành mô hình tốt sau khi được gợi ý bước đầu.</textarea></td><td><input type="checkbox" checked /></td></tr>
+                    <tr><td><strong>Chi</strong><div class="meta">TEST-003</div></td><td>Có phép</td><td><textarea>Không có mặt, GV sẽ giao bài bù ở buổi sau.</textarea></td><td><input type="checkbox" /></td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="actions">
+                <button class="btn">Lưu nháp</button>
+                <button class="btn primary" id="publishBtn">Publish lên LMS</button>
+              </div>
+            </div>
+          </div>
+          <div class="panel-body hidden" id="classPanel">
+            <div class="session-list">
+              <div class="session active"><strong>Tháng 06/2026</strong><div class="meta">Nhận xét lớp theo kỳ</div></div>
+              <div class="session"><strong>Cuối level 1</strong><div class="meta">Chuẩn bị học bạ</div></div>
+            </div>
+            <div class="work">
+              <h2>Nhận xét lớp</h2>
+              <table>
+                <thead><tr><th>Học sinh</th><th>Nhận xét tổng quan</th><th>Hành động tiếp theo</th></tr></thead>
+                <tbody>
+                  <tr><td>An</td><td><textarea>An hợp tác tốt, tiến bộ rõ trong quan sát.</textarea></td><td><textarea>Rèn trình bày 60 giây.</textarea></td></tr>
+                  <tr><td>Bình</td><td><textarea>Bình cần thêm thời gian khởi động nhưng làm chắc.</textarea></td><td><textarea>Giao nhiệm vụ chuẩn bị vật liệu.</textarea></td></tr>
+                </tbody>
+              </table>
+              <div class="actions"><button class="btn">Lưu</button><button class="btn primary">Gửi vào học bạ</button></div>
+            </div>
+          </div>
+          <div class="panel-body hidden" id="exercisePanel">
+            <div class="session-list"><div class="session active"><strong>Bài tập hiện có</strong><div class="meta">Giữ workflow cũ</div></div></div>
+            <div class="work">
+              <h2>Bài tập / chấm bài</h2>
+              <table>
+                <thead><tr><th>Bài tập</th><th>Trạng thái</th><th>Bài nộp</th><th>Chấm</th></tr></thead>
+                <tbody>
+                  <tr><td>Phiếu tư duy hình khối</td><td>Đã phát hành</td><td>12/15</td><td><button class="btn">Mở chấm</button></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="lms-shell hidden" id="lmsView">
+        <div class="head">
+          <div>
+            <h2>LMS PH - Buổi học của An</h2>
+            <div class="meta">PH chỉ thấy buổi đã publish và nhận xét của con mình.</div>
+          </div>
+          <button class="btn" id="backStaff">Quay lại GV</button>
+        </div>
+        <div class="cards">
+          <article class="lesson-card">
+            <div class="head"><h3>Buổi 12 - Tư duy hình khối</h3><span class="status published">Mới</span></div>
+            <div class="photos"><div class="photo" data-label="Hoạt động nhóm"></div><div class="photo" data-label="Sản phẩm mẫu"></div></div>
+            <p id="lmsSummary">Học sinh luyện quan sát hình khối, dựng mô hình bằng giấy và trình bày ý tưởng theo nhóm.</p>
+            <strong>Nhận xét của GV</strong>
+            <p>An chủ động chia sẻ ý tưởng, cần luyện diễn đạt ngắn hơn.</p>
+          </article>
+          <article class="lesson-card">
+            <h3>Buổi 11 - Quan sát vật thể</h3>
+            <div class="photos"><div class="photo" data-label="Bài thực hành"></div></div>
+            <p>Con luyện quan sát vật thể quanh lớp và mô tả bằng 3 đặc điểm chính.</p>
+            <strong>Nhận xét của GV</strong>
+            <p>An tập trung tốt, biết đặt câu hỏi khi chưa chắc.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script>
+    const panels = { lesson: lessonPanel, class: classPanel, exercise: exercisePanel };
+    function setMode(mode) {
+      document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x.dataset.mode === mode));
+      Object.entries(panels).forEach(([key, el]) => el.classList.toggle('hidden', key !== mode));
+      document.getElementById('mode').value = mode;
+    }
+    document.querySelectorAll('.tab').forEach((btn) => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
+    document.getElementById('mode').addEventListener('change', (e) => setMode(e.target.value));
+    document.querySelectorAll('.session[data-session]').forEach((row) => row.addEventListener('click', () => {
+      document.querySelectorAll('.session[data-session]').forEach((x) => x.classList.remove('active'));
+      row.classList.add('active');
+      sessionTitle.textContent = row.querySelector('strong').textContent;
+      const published = row.querySelector('.published');
+      sessionStatus.textContent = published ? 'Đã publish' : 'Nháp';
+      sessionStatus.className = 'status ' + (published ? 'published' : 'draft');
+    }));
+    addPhoto.addEventListener('click', () => {
+      const div = document.createElement('div');
+      div.className = 'photo';
+      div.dataset.label = 'Ảnh mới';
+      photos.insertBefore(div, addPhoto);
+    });
+    publishBtn.addEventListener('click', () => {
+      sessionStatus.textContent = 'Đã publish';
+      sessionStatus.className = 'status published';
+      lmsSummary.textContent = summary.value;
+    });
+    toggleLms.addEventListener('click', () => {
+      staffView.classList.add('hidden');
+      lmsView.classList.remove('hidden');
+    });
+    backStaff.addEventListener('click', () => {
+      lmsView.classList.add('hidden');
+      staffView.classList.remove('hidden');
+    });
+  </script>
+</body>
+</html>

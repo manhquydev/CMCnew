@@ -29,3 +29,16 @@ export async function uploadExercisePdf(file: File): Promise<string> {
   const { ref } = (await res.json()) as { ref: string };
   return ref;
 }
+
+/** Upload a session evidence photo (staff session). Returns its content-address photo ref. */
+export async function uploadSessionPhoto(file: File): Promise<string> {
+  const res = await fetch(`${API_URL}/upload/session-photo`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    body: file,
+  });
+  if (!res.ok) throw new Error(`Tải ảnh buổi học thất bại (${res.status}): ${await res.text()}`);
+  const { ref } = (await res.json()) as { ref: string };
+  return ref;
+}

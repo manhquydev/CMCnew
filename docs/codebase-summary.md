@@ -6,7 +6,7 @@
 > For roadmap/status, read [roadmap.md](roadmap.md). This file describes *what
 > exists today* and *where to find it*.
 
-Last reviewed: 2026-06-29 (branch `develop`).
+Last reviewed: 2026-07-02 (branch `develop`).
 
 ## What this is
 
@@ -48,11 +48,11 @@ Two workspace roots (`pnpm-workspace.yaml`): `apps/*` and `packages/*`.
 
 | Package | Responsibility |
 | --- | --- |
-| `@cmc/db` | Prisma schema (**53 models**, ~62 migrations), client, seeds, RLS verify scripts. |
-| `@cmc/auth` | JWT sessions, `Role` enum, and the central **PERMISSIONS registry** (`./permissions` subpath, browser-safe). |
+| `@cmc/db` | Prisma schema (**64 models**, ~55 migrations), client, seeds (incl. `seed-curriculum`), RLS verify scripts. |
+| `@cmc/auth` | JWT sessions, `Role` enum (9 roles after consolidation: `super_admin`, `giao_vien`, `ke_toan`, `hr`, `sale`, `cskh`, `ctv_mkt`, `giam_doc_kinh_doanh`, `giam_doc_dao_tao`), and the central **PERMISSIONS registry** (`./permissions` subpath, browser-safe). |
 | `@cmc/audit` | Audit-log write helpers (product records, distinct from app logs). |
 | `@cmc/ui` | Shared React components, tRPC client, design tokens (`tokens.css`), notify/validators conventions. |
-| `@cmc/domain-academic` | Courses, classes, terms, attendance, scheduling. |
+| `@cmc/domain-academic` | Courses, classes, terms, attendance, scheduling, curriculum-unit → session mapping (`assign-units`). |
 | `@cmc/domain-finance` | Receipts, revenue, commission. |
 | `@cmc/domain-grading` | Final-grade computation (per term). |
 | `@cmc/domain-payroll` | Salary, compensation policy, KPI/quota (heaviest domain). |
@@ -72,7 +72,17 @@ routes. This is the anti-"chắp vá" (anti-patchwork) rule from the charter.
 - `routers/` — ~40 feature routers (`index.ts` composes the app router). One
   file per feature: `auth`, `student`, `enrollment`, `schedule`, `finance`,
   `payroll`, `grade`, `assessment`, `crm`, `aftersale`, `rewards`, `badge`,
-  `certificate`, `parent-meeting`, `notification`, `staff-notif`, `dashboard`, …
+  `certificate`, `parent-meeting`, `notification`, `staff-notif`, `dashboard`,
+  `shift-config`, `shift-registration`, `check-in-out`, `facility-ip`,
+  `curriculum`, …
+- `class-batch.ts` supports **1-click multi-slot class creation**: create a class
+  and multiple weekly `ScheduleSlot`s (each optionally mapped to a
+  `CurriculumUnit`) in one transaction; slots can be edited/removed later in the
+  class schedule tab, with cascade + activity-log.
+- `curriculum.ts` — read-only for the hard-coded curriculum framework
+  (`CurriculumUnit`, a **global, no-RLS** table; see decision 0021). Seeded via
+  `packages/db/src/seed-curriculum.ts`; any future write path must be app-layer
+  permission-gated (no DB backstop).
 - `services/` — cross-router workflows: `email-outbox`, `email-templates`,
   `login-otp`, `student-provisioning`, `parent-meeting-cadence/-reminder`,
   `receipt-html`/`certificate-html`, `pdf-store`, code generators.
@@ -119,6 +129,9 @@ Local URLs: API `:4000`, admin `:5173`, lms `:5175`. Full operating procedure:
 | Add an API endpoint | `apps/api/src/routers/<feature>.ts` + register in `routers/index.ts` |
 | Add/restrict a permission | `packages/auth/src/permissions.ts` + `requirePermission` in the router |
 | Change business math | the relevant `packages/domain-*` package (+ its vitest) |
+| Change class setup or multi-slot schedule creation | `apps/api/src/routers/class-batch.ts` + `apps/admin/src/class-workspace.tsx` |
+| Change the curriculum framework or its seed | `packages/db/src/seed-curriculum.ts` + `apps/api/src/routers/curriculum.ts` |
+| Change Session 360 lesson workflow | `apps/admin/src/schedule-detail.tsx` |
 | Change the schema | `packages/db/prisma/schema.prisma` → new migration |
 | Add a shared UI component | `packages/ui/src/` (export from `index.tsx`) |
 | Trace a flow / impact | GitNexus tools (see `CLAUDE.md`) |

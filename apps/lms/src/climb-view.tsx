@@ -81,7 +81,7 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
   const groups = useMemo(() => {
     const byProgram = new Map<ProgramKey, Exercise[]>();
     for (const ex of exercises) {
-      const program = ex.batch?.course?.program as ProgramKey | undefined;
+      const program = ex.program as ProgramKey | undefined;
       if (!program) continue;
       const list = byProgram.get(program) ?? [];
       list.push(ex);
@@ -171,7 +171,7 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
 
         {visible.length === 0 ? (
           <div className="climb-empty">
-            Chưa có bài tập nào trên hành trình của bạn. Khi thầy cô giao bài, các tầng mây sẽ xuất hiện ở đây.
+            Bài tập sẽ tự mở sau khi lớp học xong bài tương ứng. Khi có bài đã mở, các tầng mây sẽ xuất hiện ở đây.
           </div>
         ) : (
           <>

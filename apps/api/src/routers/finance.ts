@@ -1,7 +1,7 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { withRls, hashPassword, type Program } from '@cmc/db';
+import { withRls, hashPassword, type Program, type Prisma } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import {
@@ -11,6 +11,7 @@ import {
   effectiveDiscountPercent,
   netAmount,
   DEFAULT_DISCOUNT_TIERS,
+  DISCOUNT_CAP_PERCENT,
   type DiscountTier,
 } from '@cmc/domain-finance';
 import { nextReceiptCode } from '../services/receipt-code.js';
@@ -34,6 +35,243 @@ async function tiersFor(
     select: { years: true, percent: true },
   });
   return rows.length ? rows : DEFAULT_DISCOUNT_TIERS;
+}
+
+/** Shape consumed by dashboard.myApprovals — mirrors the type in payroll.ts (structurally
+ *  compatible; not re-exported to avoid a cross-router import for a single type alias). */
+type ApprovalInboxItem = {
+  domain: string;
+  id: string;
+  title: string;
+  submittedAt: Date;
+  actionKey: string;
+};
+
+/** Approval-inbox source: draft receipts awaiting ke_toan/giam_doc_kinh_doanh approval
+ *  (receiptApprove, :272 — expects status 'draft'). */
+export async function receiptPendingItems(
+  tx: Prisma.TransactionClient,
+  facilityId: number,
+): Promise<ApprovalInboxItem[]> {
+  const rows = await tx.receipt.findMany({
+    where: { facilityId, status: 'draft' },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      netAmount: true,
+      createdAt: true,
+      studentName: true,
+      student: { select: { fullName: true } },
+    },
+  });
+  return rows.map((r) => ({
+    domain: 'receipt',
+    id: r.id,
+    title: `Phiếu thu ${r.netAmount.toLocaleString('vi-VN')}đ — ${r.student?.fullName ?? r.studentName ?? 'học sinh mới'}`,
+    submittedAt: r.createdAt,
+    actionKey: 'finance.receiptApprove',
+  }));
+}
+
+// ── Revenue report + reconciliation worklist (P3) ────────────────────────────
+// Read-only aggregation over Receipt + RefundRecord — no schema, no new money path.
+// Period key = Receipt.approvedAt (money accepted + code allocated), NOT createdAt (draft time)
+// and NOT issuedAt (does not exist on Receipt). This is a LIVE ledger view, not an immutable
+// snapshot: a receipt cancelled after its approval month retroactively drops from that month's
+// gross on re-run (status no longer qualifies) — intended accounting behavior, not a bug.
+const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
+
+const revenueReportInput = z
+  .object({
+    from: z.string().regex(dateOnly),
+    to: z.string().regex(dateOnly), // exclusive upper bound
+    groupBy: z.enum(['month', 'facility', 'course']),
+  })
+  .refine((d) => new Date(d.from) < new Date(d.to), {
+    message: 'from phải trước to',
+    path: ['to'],
+  })
+  .refine(
+    (d) => new Date(d.to).getTime() - new Date(d.from).getTime() <= 1096 * 24 * 60 * 60 * 1000,
+    { message: 'Khoảng thời gian tối đa 3 năm', path: ['to'] },
+  );
+
+type RevenueBucket = {
+  key: string;
+  label: string;
+  gross: number;
+  refunds: number;
+  net: number;
+  count: number;
+};
+
+// Gross = SUM(netAmount) of qualifying receipts bucketed by approvedAt; refunds = SUM(RefundRecord.
+// amount) bucketed by the refund's OWN createdAt (the actual cash-out event), not the receipt's
+// approvedAt — a refund issued in a later month must land in that later month's bucket.
+// Raw SQL: RLS applies automatically (same session-scoped tx as every other query in this router).
+async function computeRevenueBuckets(
+  tx: Parameters<Parameters<typeof withRls>[1]>[0],
+  input: { from: string; to: string; groupBy: 'month' | 'facility' | 'course' },
+): Promise<RevenueBucket[]> {
+  const from = new Date(input.from);
+  const to = new Date(input.to);
+
+  let grossRows: Array<{ key: string; gross: bigint; count: bigint }>;
+  let refundRows: Array<{ key: string; refunds: bigint }>;
+
+  if (input.groupBy === 'month') {
+    grossRows = await tx.$queryRaw`
+      SELECT to_char("approved_at", 'YYYY-MM') AS key,
+             COALESCE(SUM("net_amount"), 0)::bigint AS gross,
+             COUNT(*)::bigint AS count
+      FROM "receipt"
+      WHERE "status" IN ('approved','sent','reconciled')
+        AND "approved_at" >= ${from} AND "approved_at" < ${to}
+      GROUP BY 1`;
+    refundRows = await tx.$queryRaw`
+      SELECT to_char("created_at", 'YYYY-MM') AS key,
+             COALESCE(SUM("amount"), 0)::bigint AS refunds
+      FROM "refund_record"
+      WHERE "created_at" >= ${from} AND "created_at" < ${to}
+      GROUP BY 1`;
+  } else if (input.groupBy === 'facility') {
+    grossRows = await tx.$queryRaw`
+      SELECT "facility_id"::text AS key,
+             COALESCE(SUM("net_amount"), 0)::bigint AS gross,
+             COUNT(*)::bigint AS count
+      FROM "receipt"
+      WHERE "status" IN ('approved','sent','reconciled')
+        AND "approved_at" >= ${from} AND "approved_at" < ${to}
+      GROUP BY "facility_id"`;
+    refundRows = await tx.$queryRaw`
+      SELECT "facility_id"::text AS key,
+             COALESCE(SUM("amount"), 0)::bigint AS refunds
+      FROM "refund_record"
+      WHERE "created_at" >= ${from} AND "created_at" < ${to}
+      GROUP BY "facility_id"`;
+  } else {
+    grossRows = await tx.$queryRaw`
+      SELECT "course_id"::text AS key,
+             COALESCE(SUM("net_amount"), 0)::bigint AS gross,
+             COUNT(*)::bigint AS count
+      FROM "receipt"
+      WHERE "status" IN ('approved','sent','reconciled')
+        AND "approved_at" >= ${from} AND "approved_at" < ${to}
+      GROUP BY "course_id"`;
+    refundRows = await tx.$queryRaw`
+      SELECT r."course_id"::text AS key,
+             COALESCE(SUM(rr."amount"), 0)::bigint AS refunds
+      FROM "refund_record" rr
+      JOIN "receipt" r ON r."id" = rr."receipt_id"
+      WHERE rr."created_at" >= ${from} AND rr."created_at" < ${to}
+      GROUP BY r."course_id"`;
+  }
+
+  const refundByKey = new Map(refundRows.map((r) => [r.key, Number(r.refunds)]));
+  const grossByKey = new Map(grossRows.map((r) => [r.key, Number(r.gross)]));
+  const countByKey = new Map(grossRows.map((r) => [r.key, Number(r.count)]));
+  // Union of both sides: a bucket with refund activity but zero approved-receipt gross in the
+  // period (e.g. a receipt approved in an earlier period, refunded in this one) must still show
+  // up — iterating grossRows alone would silently drop that refund from the report entirely.
+  const keys = [...new Set([...grossByKey.keys(), ...refundByKey.keys()])];
+  const buckets: RevenueBucket[] = [];
+
+  if (input.groupBy === 'month') {
+    for (const key of keys) {
+      const [y, m] = key.split('-');
+      const gross = grossByKey.get(key) ?? 0;
+      const refunds = refundByKey.get(key) ?? 0;
+      buckets.push({
+        key,
+        label: `Tháng ${m}/${y}`,
+        gross,
+        refunds,
+        net: gross - refunds,
+        count: countByKey.get(key) ?? 0,
+      });
+    }
+  } else if (input.groupBy === 'facility') {
+    const ids = keys.map((k) => Number(k));
+    const facilities = ids.length
+      ? await tx.facility.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, name: true, code: true },
+        })
+      : [];
+    const labelMap = new Map(facilities.map((f) => [String(f.id), `${f.code} — ${f.name}`]));
+    for (const key of keys) {
+      const gross = grossByKey.get(key) ?? 0;
+      const refunds = refundByKey.get(key) ?? 0;
+      buckets.push({
+        key,
+        label: labelMap.get(key) ?? `#${key}`,
+        gross,
+        refunds,
+        net: gross - refunds,
+        count: countByKey.get(key) ?? 0,
+      });
+    }
+  } else {
+    const courses = keys.length
+      ? await tx.course.findMany({
+          where: { id: { in: keys } },
+          select: { id: true, name: true, code: true },
+        })
+      : [];
+    const labelMap = new Map(courses.map((c) => [c.id, `${c.code} — ${c.name}`]));
+    for (const key of keys) {
+      const gross = grossByKey.get(key) ?? 0;
+      const refunds = refundByKey.get(key) ?? 0;
+      buckets.push({
+        key,
+        label: labelMap.get(key) ?? key,
+        gross,
+        refunds,
+        net: gross - refunds,
+        count: countByKey.get(key) ?? 0,
+      });
+    }
+  }
+
+  buckets.sort((a, b) => a.key.localeCompare(b.key));
+  return buckets;
+}
+
+// Formula-injection guard: a cell starting with =/+/-/@ is prefixed with a literal quote so
+// spreadsheet apps render it as text instead of evaluating it as a formula. Applied only to the
+// text (label) column — gross/refunds/net/count are always emitted as plain integers, so a
+// legitimately negative "net" bucket is never mistaken for an injection attempt.
+//
+// Applied unconditionally to the whole label (not just the entity name) — course/facility codes
+// are staff-entered free text (course.create has no character restriction beyond non-empty), not
+// system-assigned, so a code itself could start with a guarded char at cell position 0. The guard
+// is the real boundary here, not the "code — name" label format; covered by a unit test.
+export function csvText(value: string): string {
+  const guarded = /^[=+\-@]/.test(value) ? `'${value}` : value;
+  return /["\r\n,]/.test(guarded) ? `"${guarded.replace(/"/g, '""')}"` : guarded;
+}
+
+function csvNumber(n: number): string {
+  return String(Math.trunc(n));
+}
+
+// UTF-8 BOM so Excel (vi locale) renders Vietnamese diacritics correctly; CRLF line endings for
+// broad spreadsheet-app compatibility.
+function buildRevenueCsv(buckets: RevenueBucket[]): string {
+  const lines = ['key,label,gross,refunds,net,count'];
+  for (const b of buckets) {
+    lines.push(
+      [
+        csvText(b.key),
+        csvText(b.label),
+        csvNumber(b.gross),
+        csvNumber(b.refunds),
+        csvNumber(b.net),
+        csvNumber(b.count),
+      ].join(','),
+    );
+  }
+  return '﻿' + lines.join('\r\n');
 }
 
 export const financeRouter = router({
@@ -89,8 +327,14 @@ export const financeRouter = router({
         code: z.string().min(1),
         percent: z.number().int().min(1).max(100),
         maxUses: z.number().int().positive().default(1),
-        validFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-        validTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        validFrom: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
+        validTo: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/)
+          .optional(),
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -128,6 +372,72 @@ export const financeRouter = router({
       ),
     ),
 
+  // ── Config: discount tier (per-facility year-prepaid discount %) ────────────
+  discountTierList: requirePermission('finance', 'discountTierList')
+    .input(z.object({ facilityId: z.number().int().positive() }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const tiers = await tx.discountTier.findMany({
+          where: { facilityId: input.facilityId, archivedAt: null },
+          orderBy: { years: 'asc' },
+        });
+        // 0 active rows → tiersFor() falls back to DEFAULT_DISCOUNT_TIERS at pricing time.
+        return { tiers, usingDefaults: tiers.length === 0 };
+      }),
+    ),
+
+  // Upsert on the (facilityId, years) unique constraint, which also covers archived rows —
+  // re-adding a previously-archived year must reactivate the SAME row (clear archivedAt +
+  // overwrite percent), never insert a second row. Archive is therefore not a per-row history:
+  // the audit trail for a past receipt's discount is receipt.tierPercent (frozen at receipt
+  // time, schema.prisma) plus the audit log below — not DiscountTier row history.
+  discountTierUpsert: requirePermission('finance', 'discountTierUpsert')
+    .input(
+      z.object({
+        facilityId: z.number().int().positive(),
+        years: z.number().int().min(1),
+        percent: z.number().int().min(1).max(DISCOUNT_CAP_PERCENT),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const tier = await tx.discountTier.upsert({
+          where: { facilityId_years: { facilityId: input.facilityId, years: input.years } },
+          create: { facilityId: input.facilityId, years: input.years, percent: input.percent },
+          update: { percent: input.percent, archivedAt: null },
+        });
+        await logEvent(tx, {
+          facilityId: tier.facilityId,
+          entityType: 'discount_tier',
+          entityId: tier.id,
+          type: 'updated',
+          body: `Bậc giảm giá ${tier.years} năm → ${tier.percent}%`,
+          actorId: ctx.session.userId,
+        });
+        return tier;
+      }),
+    ),
+
+  discountTierArchive: requirePermission('finance', 'discountTierArchive')
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const tier = await tx.discountTier.update({
+          where: { id: input.id },
+          data: { archivedAt: new Date() },
+        });
+        await logEvent(tx, {
+          facilityId: tier.facilityId,
+          entityType: 'discount_tier',
+          entityId: tier.id,
+          type: 'archived',
+          body: `Lưu trữ bậc giảm giá ${tier.years} năm (${tier.percent}%)`,
+          actorId: ctx.session.userId,
+        });
+        return tier;
+      }),
+    ),
+
   // ── Receipt: draft → approve → cancel ────────────────────────────────────────
   receiptList: requirePermission('finance', 'receiptList')
     .input(z.object({ studentId: z.string().uuid().optional() }).optional())
@@ -135,6 +445,21 @@ export const financeRouter = router({
       withRls(rlsContextOf(ctx.session), (tx) =>
         tx.receipt.findMany({
           where: { ...(input?.studentId ? { studentId: input.studentId } : {}) },
+          orderBy: { createdAt: 'desc' },
+          take: 100,
+        }),
+      ),
+    ),
+
+  receiptListOwn: requirePermission('finance', 'receiptListOwn')
+    .input(z.object({ opportunityId: z.string().uuid().optional() }).optional())
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.receipt.findMany({
+          where: {
+            collectedById: ctx.session.userId,
+            ...(input?.opportunityId ? { opportunityId: input.opportunityId } : {}),
+          },
           orderBy: { createdAt: 'desc' },
           take: 100,
         }),
@@ -151,27 +476,29 @@ export const financeRouter = router({
   //                        The receipt is a draft commitment; the student becomes "real" at approve.
   receiptCreate: requirePermission('finance', 'receiptCreate')
     .input(
-      z.object({
-        facilityId: z.number().int().positive(),
-        // Existing-student path: set studentId.
-        studentId: z.string().uuid().optional(),
-        courseId: z.string().uuid(),
-        yearsPrepaid: z.number().int().min(1).max(3),
-        period: z.string().optional(),
-        voucherCode: z.string().optional(),
-        opportunityId: z.string().uuid().optional(),
-        // New-student provisioning fields (F1).
-        parentPhone: z.string().min(1).optional(),
-        parentName: z.string().min(1).optional(),
-        // Optional: captured at intake; enables OTP login + lms_account_ready notification at approve.
-        parentEmail: z.string().email().optional(),
-        studentName: z.string().min(1).optional(),
-        studentDob: z.string().date().optional(),
-        classBatchId: z.string().uuid().optional(),
-      }).refine(
-        (d) => d.studentId || (d.parentPhone && d.studentName),
-        { message: 'Cung cấp studentId (học sinh có sẵn) hoặc parentPhone + studentName (học sinh mới)' },
-      ),
+      z
+        .object({
+          facilityId: z.number().int().positive(),
+          // Existing-student path: set studentId.
+          studentId: z.string().uuid().optional(),
+          courseId: z.string().uuid(),
+          yearsPrepaid: z.number().int().min(1).max(3),
+          period: z.string().optional(),
+          voucherCode: z.string().optional(),
+          opportunityId: z.string().uuid().optional(),
+          // New-student provisioning fields (F1).
+          parentPhone: z.string().min(1).optional(),
+          parentName: z.string().min(1).optional(),
+          // Optional: captured at intake; enables OTP login + lms_account_ready notification at approve.
+          parentEmail: z.string().email().optional(),
+          studentName: z.string().min(1).optional(),
+          studentDob: z.string().date().optional(),
+          classBatchId: z.string().uuid().optional(),
+        })
+        .refine((d) => d.studentId || (d.parentPhone && d.studentName), {
+          message:
+            'Cung cấp studentId (học sinh có sẵn) hoặc parentPhone + studentName (học sinh mới)',
+        }),
     )
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
@@ -184,13 +511,21 @@ export const financeRouter = router({
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Khóa học chưa có giá hiệu lực' });
         }
         const gross = grossForYears(annualPrice, input.yearsPrepaid);
-        const tierPercent = tierPercentForYears(input.yearsPrepaid, await tiersFor(tx, input.facilityId));
+        const tierPercent = tierPercentForYears(
+          input.yearsPrepaid,
+          await tiersFor(tx, input.facilityId),
+        );
 
         let voucherId: string | null = null;
         let voucherPercent = 0;
         if (input.voucherCode) {
           const v = await tx.voucher.findFirst({
-            where: { facilityId: input.facilityId, code: input.voucherCode, active: true, archivedAt: null },
+            where: {
+              facilityId: input.facilityId,
+              code: input.voucherCode,
+              active: true,
+              archivedAt: null,
+            },
           });
           if (!v) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Voucher không hợp lệ' });
           // Fail early: reject an out-of-window voucher at create, not as a surprise at approve.
@@ -237,16 +572,26 @@ export const financeRouter = router({
           body: `Phiếu thu nháp: ${receipt.netAmount.toLocaleString('vi-VN')}đ (giảm ${effective}%)`,
           actorId: ctx.session.userId,
         });
-        // Notify ke_toan of this facility that a receipt is pending approval.
+        // Notify the UNION of approvers (ke_toan ∪ giam_doc_kinh_doanh — mirrors the
+        // receiptApprove grant) that a receipt is pending approval. Dedupe by userId so an
+        // account holding both roles is not double-notified.
         const facilityUsers = await tx.userFacility.findMany({
           where: { facilityId: input.facilityId },
           select: { userId: true, user: { select: { roles: true } } },
         });
-        const keToanIds = facilityUsers
-          .filter((uf) => uf.user.roles.includes('ke_toan'))
-          .map((uf) => uf.userId);
+        const approverIds = [
+          ...new Set(
+            facilityUsers
+              .filter(
+                (uf) =>
+                  uf.user.roles.includes('ke_toan') ||
+                  uf.user.roles.includes('giam_doc_kinh_doanh'),
+              )
+              .map((uf) => uf.userId),
+          ),
+        ];
         const pushNotifs = await emitStaffNotif(tx, {
-          recipientIds: keToanIds,
+          recipientIds: approverIds,
           event: 'receipt_pending_approval',
           title: 'Phiếu thu chờ duyệt',
           body: `Phiếu thu ${receipt.netAmount.toLocaleString('vi-VN')}đ vừa được tạo, chờ kế toán duyệt`,
@@ -254,7 +599,10 @@ export const financeRouter = router({
           facilityId: input.facilityId,
         });
         return { receipt, pushNotifs };
-      }).then(({ pushNotifs, receipt }) => { pushNotifs(); return receipt; }),
+      }).then(({ pushNotifs, receipt }) => {
+        pushNotifs();
+        return receipt;
+      }),
     ),
 
   // Approve: ATOMICALLY voucher consume + receipt code + student provisioning + enrollment.
@@ -280,7 +628,10 @@ export const financeRouter = router({
           },
         });
         if (receipt.status !== 'draft') {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Phiếu thu không ở trạng thái nháp' });
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Phiếu thu không ở trạng thái nháp',
+          });
         }
         if (receipt.voucherId) {
           const consumed = await tx.$executeRaw`
@@ -306,10 +657,18 @@ export const financeRouter = router({
         // work (voucher consume, code allocation) is rolled back on throw.
         const claimed = await tx.receipt.updateMany({
           where: { id: input.id, status: 'draft' },
-          data: { status: 'approved', code, approvedById: ctx.session.userId, approvedAt: new Date() },
+          data: {
+            status: 'approved',
+            code,
+            approvedById: ctx.session.userId,
+            approvedAt: new Date(),
+          },
         });
         if (claimed.count === 0) {
-          throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu thu đã được duyệt bởi yêu cầu đồng thời' });
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'Phiếu thu đã được duyệt bởi yêu cầu đồng thời',
+          });
         }
 
         // ── Student provisioning ────────────────────────────────────────────────────
@@ -321,11 +680,22 @@ export const financeRouter = router({
           resolvedStudentId = receipt.studentId;
           // If parent info was also supplied, ensure guardian link exists (idempotent upsert).
           if (receipt.parentPhone) {
-            const parentAcc = await tx.parentAccount.findFirst({ where: { phone: receipt.parentPhone } });
+            const parentAcc = await tx.parentAccount.findFirst({
+              where: { phone: receipt.parentPhone },
+            });
             if (parentAcc) {
               await tx.guardian.upsert({
-                where: { parentAccountId_studentId: { parentAccountId: parentAcc.id, studentId: resolvedStudentId } },
-                create: { facilityId: receipt.facilityId, parentAccountId: parentAcc.id, studentId: resolvedStudentId },
+                where: {
+                  parentAccountId_studentId: {
+                    parentAccountId: parentAcc.id,
+                    studentId: resolvedStudentId,
+                  },
+                },
+                create: {
+                  facilityId: receipt.facilityId,
+                  parentAccountId: parentAcc.id,
+                  studentId: resolvedStudentId,
+                },
                 update: {},
               });
             }
@@ -335,13 +705,16 @@ export const financeRouter = router({
           if (!receipt.parentPhone || !receipt.studentName) {
             throw new TRPCError({
               code: 'BAD_REQUEST',
-              message: 'Phiếu không có studentId hoặc parentPhone+studentName — không thể tạo học sinh',
+              message:
+                'Phiếu không có studentId hoặc parentPhone+studentName — không thể tạo học sinh',
             });
           }
           const program = receipt.course.program as Program;
 
           // Find or create the ParentAccount by phone.
-          let parentAcc = await tx.parentAccount.findFirst({ where: { phone: receipt.parentPhone } });
+          let parentAcc = await tx.parentAccount.findFirst({
+            where: { phone: receipt.parentPhone },
+          });
           if (!parentAcc) {
             parentAcc = await tx.parentAccount.create({
               data: {
@@ -374,7 +747,9 @@ export const financeRouter = router({
           // so we never auto-reuse without a name match.
           const matchedStudent =
             activeGuardians.find(
-              (g) => g.student.fullName.trim().toLowerCase() === receipt.studentName!.trim().toLowerCase(),
+              (g) =>
+                g.student.fullName.trim().toLowerCase() ===
+                receipt.studentName!.trim().toLowerCase(),
             )?.student ?? null;
 
           if (matchedStudent) {
@@ -437,8 +812,17 @@ export const financeRouter = router({
 
           // Ensure Guardian link (idempotent).
           await tx.guardian.upsert({
-            where: { parentAccountId_studentId: { parentAccountId: parentAcc.id, studentId: resolvedStudentId } },
-            create: { facilityId: receipt.facilityId, parentAccountId: parentAcc.id, studentId: resolvedStudentId },
+            where: {
+              parentAccountId_studentId: {
+                parentAccountId: parentAcc.id,
+                studentId: resolvedStudentId,
+              },
+            },
+            create: {
+              facilityId: receipt.facilityId,
+              parentAccountId: parentAcc.id,
+              studentId: resolvedStudentId,
+            },
             update: {},
           });
         }
@@ -449,7 +833,10 @@ export const financeRouter = router({
           select: { lifecycle: true, fullName: true, studentCode: true },
         });
         if (student.lifecycle !== 'active') {
-          await tx.student.update({ where: { id: resolvedStudentId }, data: { lifecycle: 'active' } });
+          await tx.student.update({
+            where: { id: resolvedStudentId },
+            data: { lifecycle: 'active' },
+          });
           await logEvent(tx, {
             facilityId: receipt.facilityId,
             entityType: 'student',
@@ -473,12 +860,17 @@ export const financeRouter = router({
           if (batchForCourseCheck.courseId !== receipt.courseId) {
             throw new TRPCError({
               code: 'BAD_REQUEST',
-              message: 'Lớp học không thuộc khóa học trong phiếu thu (batch.courseId ≠ receipt.courseId)',
+              message:
+                'Lớp học không thuộc khóa học trong phiếu thu (batch.courseId ≠ receipt.courseId)',
             });
           }
 
           const existing = await tx.enrollment.findFirst({
-            where: { classBatchId: receipt.classBatchId, studentId: resolvedStudentId, archivedAt: null },
+            where: {
+              classBatchId: receipt.classBatchId,
+              studentId: resolvedStudentId,
+              archivedAt: null,
+            },
             select: { id: true },
           });
           if (!existing) {
@@ -576,7 +968,14 @@ export const financeRouter = router({
         const opp = receipt.opportunityId
           ? await tx.opportunity.findUnique({
               where: { id: receipt.opportunityId },
-              select: { ownerId: true, stage: true, studentName: true },
+              select: {
+                id: true,
+                ownerId: true,
+                stage: true,
+                studentName: true,
+                closedAt: true,
+                lostReason: true,
+              },
             })
           : null;
 
@@ -593,7 +992,9 @@ export const financeRouter = router({
             select: { fullName: true },
           });
           const oppName = opp.studentName.trim().toLowerCase();
-          const receiptStudentName = (student?.fullName ?? receipt.studentName ?? '').trim().toLowerCase();
+          const receiptStudentName = (student?.fullName ?? receipt.studentName ?? '')
+            .trim()
+            .toLowerCase();
           if (!receiptStudentName || oppName !== receiptStudentName) {
             attributedOpp = null; // unrelated opportunity → no commission credit
             await logEvent(tx, {
@@ -606,10 +1007,33 @@ export const financeRouter = router({
             });
           }
         }
+        if (attributedOpp?.closedAt && attributedOpp.lostReason) {
+          attributedOpp = null;
+        }
         const priorCollected = await tx.receipt.count({
-          where: { studentId: resolvedStudentId, id: { not: receipt.id }, status: { in: ['approved', 'sent', 'reconciled'] } },
+          where: {
+            studentId: resolvedStudentId,
+            id: { not: receipt.id },
+            status: { in: ['approved', 'sent', 'reconciled'] },
+          },
         });
-        const kind = attributedOpp?.stage === 'O5_ENROLLED' ? 'new' : priorCollected > 0 ? 'renewal' : 'new';
+        const kind = attributedOpp ? 'new' : priorCollected > 0 ? 'renewal' : 'new';
+
+        if (attributedOpp && attributedOpp.stage !== 'O5_ENROLLED') {
+          await tx.opportunity.update({
+            where: { id: attributedOpp.id },
+            data: { stage: 'O5_ENROLLED', closedAt: new Date(), lostReason: null, lostNote: null },
+          });
+          await logEvent(tx, {
+            facilityId: receipt.facilityId,
+            entityType: 'opportunity',
+            entityId: attributedOpp.id,
+            type: 'status_changed',
+            body: `Cơ hội tự chuyển O5 khi duyệt phiếu ${code}`,
+            changes: [{ field: 'stage', old: attributedOpp.stage, new: 'O5_ENROLLED' }],
+            actorId: ctx.session.userId,
+          });
+        }
 
         // status, code, approvedById, approvedAt were already stamped by the conditional claim above.
         // Only stamp fields that depend on provisioning results.
@@ -669,7 +1093,10 @@ export const financeRouter = router({
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const r = await tx.receipt.findUniqueOrThrow({ where: { id: input.id } });
         if (r.status !== 'approved' && r.status !== 'sent') {
-          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Chỉ đối soát phiếu đã duyệt/đã gửi' });
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Chỉ đối soát phiếu đã duyệt/đã gửi',
+          });
         }
         const rec = await tx.receipt.update({
           where: { id: r.id },
@@ -708,7 +1135,10 @@ export const financeRouter = router({
         }
 
         // Was this receipt ever approved? (affects voucher refund + student rollback)
-        const wasApproved = receipt.status === 'approved' || receipt.status === 'sent' || receipt.status === 'reconciled';
+        const wasApproved =
+          receipt.status === 'approved' ||
+          receipt.status === 'sent' ||
+          receipt.status === 'reconciled';
 
         const hadConsumed = receipt.voucherId && receipt.status !== 'draft';
         if (hadConsumed) {
@@ -730,6 +1160,37 @@ export const financeRouter = router({
           actorId: ctx.session.userId,
         });
 
+        if (wasApproved && receipt.opportunityId) {
+          const opp = await tx.opportunity.findUnique({
+            where: { id: receipt.opportunityId },
+            select: { id: true, stage: true, closedAt: true, lostReason: true },
+          });
+          if (opp?.stage === 'O5_ENROLLED' && opp.closedAt && !opp.lostReason) {
+            const approvedOnOpp = await tx.receipt.count({
+              where: {
+                opportunityId: receipt.opportunityId,
+                id: { not: receipt.id },
+                status: { in: ['approved', 'sent', 'reconciled'] },
+              },
+            });
+            if (approvedOnOpp === 0) {
+              await tx.opportunity.update({
+                where: { id: receipt.opportunityId },
+                data: { stage: 'O4_TESTED', closedAt: null },
+              });
+              await logEvent(tx, {
+                facilityId: cancelled.facilityId,
+                entityType: 'opportunity',
+                entityId: receipt.opportunityId,
+                type: 'status_changed',
+                body: `Cơ hội quay về O4 khi hủy phiếu ${cancelled.code ?? receipt.id}`,
+                changes: [{ field: 'stage', old: 'O5_ENROLLED', new: 'O4_TESTED' }],
+                actorId: ctx.session.userId,
+              });
+            }
+          }
+        }
+
         // ── Student/enrollment rollback (only when receipt was previously approved) ──────
         if (wasApproved && receipt.studentId) {
           // Fetch the enrollments created by this receipt (provenance-scoped).
@@ -739,9 +1200,12 @@ export const financeRouter = router({
           });
 
           // Count attendance on those specific enrollments only.
-          const attendanceCount = provEnrollments.length > 0
-            ? await tx.attendance.count({ where: { enrollmentId: { in: provEnrollments.map((e) => e.id) } } })
-            : 0;
+          const attendanceCount =
+            provEnrollments.length > 0
+              ? await tx.attendance.count({
+                  where: { enrollmentId: { in: provEnrollments.map((e) => e.id) } },
+                })
+              : 0;
 
           // Count other approved receipts for this student (excluding the one being cancelled).
           const otherApprovedCount = await tx.receipt.count({
@@ -805,5 +1269,229 @@ export const financeRouter = router({
 
         return cancelled;
       }),
+    ),
+
+  // Append-only refund ledger (money-out), decision 0028. Never mutates receipt.netAmount.
+  // Guard folded into ONE atomic critical section (SELECT ... FOR UPDATE on the receipt row,
+  // not read-then-check): status must be 'cancelled' AND approvedAt must be set (a draft
+  // cancelled before ever being approved never took money in, so it gets no refund row), and
+  // the running sum of refunds for this receipt must stay <= receipt.netAmount. The row lock
+  // serializes concurrent refundCreate calls on the same receipt: the second call blocks on
+  // FOR UPDATE until the first commits, then re-reads the sum including the first's insert.
+  refundCreate: requirePermission('finance', 'refundCreate')
+    .input(
+      z.object({
+        receiptId: z.string().uuid(),
+        amount: z.number().int().min(1),
+        reason: z.string().min(1),
+      }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        // RLS-filtered: a cross-facility caller gets 0 rows here, same as any other receipt read.
+        const locked = await tx.$queryRaw<
+          Array<{
+            id: string;
+            facility_id: number;
+            net_amount: number;
+            status: string;
+            approved_at: Date | null;
+          }>
+        >`
+          SELECT id, facility_id, net_amount, status, approved_at
+          FROM "receipt"
+          WHERE id = ${input.receiptId}::uuid
+          FOR UPDATE
+        `;
+        const receipt = locked[0];
+        if (!receipt || receipt.status !== 'cancelled' || receipt.approved_at === null) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Chỉ ghi hoàn tiền cho phiếu đã hủy và đã từng được duyệt',
+          });
+        }
+        const sumRows = await tx.$queryRaw<Array<{ sum: number }>>`
+          SELECT COALESCE(SUM(amount), 0)::int AS sum
+          FROM "refund_record"
+          WHERE receipt_id = ${input.receiptId}::uuid
+        `;
+        const alreadyRefunded = sumRows[0]?.sum ?? 0;
+        if (alreadyRefunded + input.amount > receipt.net_amount) {
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: `Vượt số tiền phiếu: đã hoàn ${alreadyRefunded.toLocaleString('vi-VN')}đ / ${receipt.net_amount.toLocaleString('vi-VN')}đ`,
+          });
+        }
+        const refund = await tx.refundRecord.create({
+          data: {
+            receiptId: input.receiptId,
+            facilityId: receipt.facility_id,
+            amount: input.amount,
+            reason: input.reason,
+            recordedById: ctx.session.userId,
+          },
+        });
+        await logEvent(tx, {
+          facilityId: refund.facilityId,
+          entityType: 'receipt',
+          entityId: refund.receiptId,
+          type: 'note',
+          body: `Hoàn tiền ${refund.amount.toLocaleString('vi-VN')}đ: ${refund.reason}`,
+          actorId: ctx.session.userId,
+        });
+        return refund;
+      }),
+    ),
+
+  refundList: requirePermission('finance', 'refundList')
+    .input(z.object({ receiptId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.refundRecord.findMany({
+          where: { receiptId: input.receiptId },
+          orderBy: { createdAt: 'desc' },
+        }),
+      ),
+    ),
+
+  // Send an approved receipt to the payer by email. Recipient defaults to the resolved payer
+  // (receipt.parentEmail for new-student receipts; guardian→parentAccount.email for renewals,
+  // scoped to this receipt's facility so a cross-facility guardian link can't leak); an explicit
+  // `to` override is available to the same approver roles and is audited as a note. The dedupKey
+  // embeds a hash of the target address so a resend to a CORRECTED address always enqueues a
+  // fresh row, while a same-address resend stays a no-op via enqueueEmail's existing dedup swallow.
+  sendReceiptEmail: requirePermission('finance', 'sendReceiptEmail')
+    .input(z.object({ receiptId: z.string().uuid(), to: z.string().email().optional() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const receipt = await tx.receipt.findUniqueOrThrow({
+          where: { id: input.receiptId },
+          include: { student: { select: { fullName: true } } },
+        });
+        if (!(['approved', 'sent', 'reconciled'] as string[]).includes(receipt.status)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Chỉ gửi email cho phiếu đã duyệt' });
+        }
+        let to = input.to;
+        if (!to) {
+          if (receipt.parentEmail) {
+            to = receipt.parentEmail;
+          } else if (receipt.studentId) {
+            const guardian = await tx.guardian.findFirst({
+              where: {
+                studentId: receipt.studentId,
+                facilityId: receipt.facilityId,
+                parent: { email: { not: null } },
+              },
+              select: { parent: { select: { email: true } } },
+              orderBy: { createdAt: 'asc' },
+            });
+            to = guardian?.parent.email ?? undefined;
+          }
+        }
+        if (!to) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Không tìm được email người nhận — nhập email thủ công',
+          });
+        }
+        const facility = await tx.facility.findUniqueOrThrow({
+          where: { id: receipt.facilityId },
+          select: { name: true },
+        });
+        const targetHash = createHash('sha256')
+          .update(to.trim().toLowerCase())
+          .digest('hex')
+          .slice(0, 16);
+        // enqueueEmail is deliberately the LAST statement before the conditional logEvent: a
+        // dedupKey collision (automatic resend to the same address, a true no-op) aborts the
+        // underlying Postgres transaction even though the JS exception is caught inside
+        // enqueueEmail — no further query may run in this tx once that happens, so logEvent
+        // only fires when a row was actually inserted.
+        const inserted = await enqueueEmail(tx, {
+          facilityId: receipt.facilityId,
+          dedupKey: `receipt:${receipt.id}:${targetHash}`,
+          to,
+          mailbox: 'notify',
+          kind: 'receipt',
+          data: {
+            receiptCode: receipt.code ?? receipt.id.slice(0, 8),
+            netAmount: receipt.netAmount,
+            studentName: receipt.student?.fullName ?? receipt.studentName ?? 'học sinh',
+            facilityName: facility.name,
+            approvedAt: receipt.approvedAt ? receipt.approvedAt.toLocaleDateString('vi-VN') : '—',
+          },
+        });
+        if (!inserted) return { to };
+        await logEvent(tx, {
+          facilityId: receipt.facilityId,
+          entityType: 'receipt',
+          entityId: receipt.id,
+          type: 'note',
+          body: `Gửi phiếu thu qua email tới ${to}`,
+          actorId: ctx.session.userId,
+        });
+        return { to };
+      }),
+    ),
+
+  // Revenue report grouped by month / facility / course — gross − refunds = net (P3).
+  revenueReport: requirePermission('finance', 'revenueReport')
+    .input(revenueReportInput)
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) => computeRevenueBuckets(tx, input)),
+    ),
+
+  // Same aggregation as revenueReport, serialized to CSV (BOM + gross/refunds/net/count columns,
+  // formula-injection guarded). A single server-side string keeps VND/date formatting consistent
+  // and avoids a client-side CSV dependency.
+  revenueReportCsv: requirePermission('finance', 'revenueReport')
+    .input(revenueReportInput)
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const buckets = await computeRevenueBuckets(tx, input);
+        return { csv: buildRevenueCsv(buckets), rowCount: buckets.length };
+      }),
+    ),
+
+  // "Chưa đối soát kỳ này": approved/sent (not yet reconciled, not cancelled) receipts in a
+  // period, bucketed by the same approvedAt key as revenueReport. Reuses the EXISTING
+  // receiptReconcile mutation per row — no new money mutation here.
+  reconcileWorklist: requirePermission('finance', 'reconcileWorklist')
+    .input(
+      z
+        .object({
+          from: z.string().regex(dateOnly),
+          to: z.string().regex(dateOnly),
+          facilityId: z.number().int().positive().optional(),
+        })
+        .refine((d) => new Date(d.from) < new Date(d.to), {
+          message: 'from phải trước to',
+          path: ['to'],
+        })
+        .refine(
+          (d) => new Date(d.to).getTime() - new Date(d.from).getTime() <= 1096 * 24 * 60 * 60 * 1000,
+          { message: 'Khoảng thời gian tối đa 3 năm', path: ['to'] },
+        ),
+    )
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.receipt.findMany({
+          where: {
+            status: { in: ['approved', 'sent'] },
+            approvedAt: { gte: new Date(input.from), lt: new Date(input.to) },
+            ...(input.facilityId ? { facilityId: input.facilityId } : {}),
+          },
+          orderBy: { approvedAt: 'asc' },
+          take: 500,
+          select: {
+            id: true,
+            code: true,
+            netAmount: true,
+            facilityId: true,
+            approvedAt: true,
+            status: true,
+          },
+        }),
+      ),
     ),
 });

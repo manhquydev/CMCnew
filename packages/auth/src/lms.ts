@@ -1,5 +1,9 @@
-import { withRls, verifyPassword, type RlsContext } from '@cmc/db';
+import { withRls, verifyPassword, type RlsContext, type StudentLifecycle } from '@cmc/db';
 import { signLmsSession, verifyLmsToken } from './jwt.js';
+
+/** Lifecycle states that revoke LMS access. `completed` intentionally excluded — those students
+ * still read transcripts/certificates. `active`/`admitted` are unaffected (normal access). */
+export const BLOCKED_LMS_LIFECYCLE = new Set<StudentLifecycle>(['on_hold', 'withdrawn', 'transferred']);
 
 /** Fully-resolved LMS identity (parent or student) for the current request. */
 export interface LmsSession {
@@ -21,6 +25,7 @@ export function lmsRlsContextOf(s: LmsSession): RlsContext {
     isSuperAdmin: false,
     principalKind: s.kind,
     studentIds: s.studentIds,
+    accountId: s.accountId,
   };
 }
 
@@ -36,11 +41,17 @@ async function parentSession(accountId: string): Promise<ResolvedLms | null> {
     const acc = await tx.parentAccount.findUnique({
       where: { id: accountId },
       include: {
-        guardians: { include: { student: { select: { id: true, fullName: true, facilityId: true } } } },
+        guardians: {
+          include: { student: { select: { id: true, fullName: true, facilityId: true, lifecycle: true } } },
+        },
       },
     });
     if (!acc || !acc.isActive) return null;
-    const students = acc.guardians.map((g) => g.student);
+    // Per-child filter, not whole-session reject: a parent with any non-blocked child must still
+    // log in. Only when EVERY child is blocked does the session resolve with zero accessible children.
+    const students = acc.guardians
+      .map((g) => g.student)
+      .filter((s) => !BLOCKED_LMS_LIFECYCLE.has(s.lifecycle));
     return {
       kind: 'parent' as const,
       accountId: acc.id,
@@ -57,9 +68,10 @@ async function studentSession(accountId: string): Promise<ResolvedLms | null> {
   return withRls(SYSTEM_RLS, async (tx) => {
     const acc = await tx.studentAccount.findUnique({
       where: { id: accountId },
-      include: { student: { select: { id: true, fullName: true, facilityId: true } } },
+      include: { student: { select: { id: true, fullName: true, facilityId: true, lifecycle: true } } },
     });
     if (!acc || !acc.isActive) return null;
+    if (BLOCKED_LMS_LIFECYCLE.has(acc.student.lifecycle)) return null;
     return {
       kind: 'student' as const,
       accountId: acc.id,
@@ -75,23 +87,6 @@ async function studentSession(accountId: string): Promise<ResolvedLms | null> {
 function strip(s: ResolvedLms): LmsSession {
   const { _tokenVersion: _t, ...rest } = s;
   return rest;
-}
-
-export async function loginParent(
-  emailOrPhone: string,
-  password: string,
-): Promise<{ token: string; session: LmsSession } | null> {
-  const id = emailOrPhone.trim();
-  const acc = await withRls(SYSTEM_RLS, (tx) =>
-    tx.parentAccount.findFirst({ where: { OR: [{ email: id.toLowerCase() }, { phone: id }] } }),
-  );
-  if (!acc || !acc.isActive) return null;
-  // Passwordless (OTP-only) parents have no passwordHash → password login is not available to them.
-  if (!acc.passwordHash || !(await verifyPassword(password, acc.passwordHash))) return null;
-  const resolved = await parentSession(acc.id);
-  if (!resolved) return null;
-  const token = await signLmsSession({ sub: acc.id, kind: 'parent', tokenVersion: acc.tokenVersion });
-  return { token, session: strip(resolved) };
 }
 
 export async function loginStudent(

@@ -19,6 +19,7 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { IconRefresh } from '@tabler/icons-react';
+import { DISCOUNT_CAP_PERCENT } from '@cmc/domain-finance';
 
 type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
 type CourseT = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
@@ -26,6 +27,8 @@ type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Receipt = Awaited<ReturnType<typeof trpc.finance.receiptList.query>>[number];
 type CoursePrice = Awaited<ReturnType<typeof trpc.finance.priceList.query>>[number];
 type Voucher = Awaited<ReturnType<typeof trpc.finance.voucherList.query>>[number];
+type DiscountTierListResult = Awaited<ReturnType<typeof trpc.finance.discountTierList.query>>;
+type DiscountTier = DiscountTierListResult['tiers'][number];
 
 const vnd = (n: number) => n.toLocaleString('vi-VN') + 'đ';
 const YEARS = [
@@ -45,13 +48,7 @@ const RECEIPT_PAGE_SIZE = 20;
 
 // ─── Course Price Card ────────────────────────────────────────────────────────
 
-function CoursePriceCard({
-  courses,
-  facilities,
-}: {
-  courses: CourseT[];
-  facilities: Facility[];
-}) {
+function CoursePriceCard({ courses, facilities }: { courses: CourseT[]; facilities: Facility[] }) {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [prices, setPrices] = useState<CoursePrice[]>([]);
   const [priceLoad, setPriceLoad] = useState<'idle' | 'loading' | 'error'>('idle');
@@ -127,7 +124,10 @@ function CoursePriceCard({
             <Select
               label="Cơ sở"
               withAsterisk
-              data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
+              data={facilities.map((f) => ({
+                value: String(f.id),
+                label: `${f.code} — ${f.name}`,
+              }))}
               {...priceForm.getInputProps('facilityId')}
             />
             <Select
@@ -219,7 +219,9 @@ function CoursePriceCard({
                 return (
                   <Table.Tr key={p.id}>
                     <Table.Td>{new Date(p.effectiveFrom).toLocaleDateString('vi-VN')}</Table.Td>
-                    <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(p.amount)}</Table.Td>
+                    <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {vnd(p.amount)}
+                    </Table.Td>
                     <Table.Td>{fac?.code ?? `#${p.facilityId}`}</Table.Td>
                   </Table.Tr>
                 );
@@ -311,7 +313,10 @@ function VoucherCard({ facilities }: { facilities: Facility[] }) {
             <Select
               label="Cơ sở"
               withAsterisk
-              data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
+              data={facilities.map((f) => ({
+                value: String(f.id),
+                label: `${f.code} — ${f.name}`,
+              }))}
               {...form.getInputProps('facilityId')}
             />
             <TextInput
@@ -322,12 +327,31 @@ function VoucherCard({ facilities }: { facilities: Facility[] }) {
             />
           </Group>
           <Group grow align="flex-end">
-            <NumberInput label="Giảm (%)" withAsterisk min={1} max={100} {...form.getInputProps('percent')} />
-            <NumberInput label="Số lượt tối đa" withAsterisk min={1} {...form.getInputProps('maxUses')} />
+            <NumberInput
+              label="Giảm (%)"
+              withAsterisk
+              min={1}
+              max={100}
+              {...form.getInputProps('percent')}
+            />
+            <NumberInput
+              label="Số lượt tối đa"
+              withAsterisk
+              min={1}
+              {...form.getInputProps('maxUses')}
+            />
           </Group>
           <Group grow align="flex-end">
-            <TextInput label="Hiệu lực từ (tùy chọn)" placeholder="YYYY-MM-DD" {...form.getInputProps('validFrom')} />
-            <TextInput label="Hết hạn (tùy chọn)" placeholder="YYYY-MM-DD" {...form.getInputProps('validTo')} />
+            <TextInput
+              label="Hiệu lực từ (tùy chọn)"
+              placeholder="YYYY-MM-DD"
+              {...form.getInputProps('validFrom')}
+            />
+            <TextInput
+              label="Hết hạn (tùy chọn)"
+              placeholder="YYYY-MM-DD"
+              {...form.getInputProps('validTo')}
+            />
           </Group>
           <Group>
             <Button type="submit" loading={busy}>
@@ -360,10 +384,20 @@ function VoucherCard({ facilities }: { facilities: Facility[] }) {
             </Button>
           )}
         </Group>
-        {vLoad === 'loading' && <Text c="dimmed" size="sm">Đang tải...</Text>}
-        {vLoad === 'error' && <Alert color="red" title="Lỗi">{vError}</Alert>}
+        {vLoad === 'loading' && (
+          <Text c="dimmed" size="sm">
+            Đang tải...
+          </Text>
+        )}
+        {vLoad === 'error' && (
+          <Alert color="red" title="Lỗi">
+            {vError}
+          </Alert>
+        )}
         {vLoad === 'idle' && facilityId && vouchers.length === 0 && (
-          <Text c="dimmed" size="sm">Chưa có voucher nào.</Text>
+          <Text c="dimmed" size="sm">
+            Chưa có voucher nào.
+          </Text>
         )}
         {vouchers.length > 0 && (
           <Table striped withTableBorder={false} fz="sm">
@@ -400,16 +434,214 @@ function VoucherCard({ facilities }: { facilities: Facility[] }) {
   );
 }
 
+// ─── Discount Tier Card ───────────────────────────────────────────────────────
+
+// Server re-validates on every write; this import is only the input's max for immediate feedback.
+const DISCOUNT_TIER_PERCENT_CAP = DISCOUNT_CAP_PERCENT;
+
+function DiscountTierCard({ facilities }: { facilities: Facility[] }) {
+  const [facilityId, setFacilityId] = useState<string | null>(null);
+  const [tiers, setTiers] = useState<DiscountTier[]>([]);
+  const [usingDefaults, setUsingDefaults] = useState(false);
+  const [tLoad, setTLoad] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [tError, setTError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<DiscountTier | null>(null);
+
+  const form = useForm({
+    initialValues: { years: 1, percent: 15 },
+    validate: {
+      years: (v) => (v < 1 ? 'Số năm tối thiểu 1' : null),
+      percent: (v) =>
+        v <= 0 || v > DISCOUNT_TIER_PERCENT_CAP
+          ? `Phần trăm 1–${DISCOUNT_TIER_PERCENT_CAP}`
+          : null,
+    },
+  });
+
+  const loadTiers = useCallback((fid: string) => {
+    setTLoad('loading');
+    setTError('');
+    trpc.finance.discountTierList
+      .query({ facilityId: Number(fid) })
+      .then((res) => {
+        setTiers(res.tiers);
+        setUsingDefaults(res.usingDefaults);
+        setTLoad('idle');
+      })
+      .catch((e: unknown) => {
+        setTError(e instanceof Error ? e.message : 'Lỗi tải bậc giảm giá');
+        setTLoad('error');
+      });
+  }, []);
+
+  function handleFacilitySelect(v: string | null) {
+    setFacilityId(v);
+    setTiers([]);
+    setUsingDefaults(false);
+    form.reset();
+    if (v) loadTiers(v);
+  }
+
+  async function upsertTier(values: typeof form.values) {
+    if (!facilityId) return;
+    setBusy(true);
+    try {
+      await trpc.finance.discountTierUpsert.mutate({
+        facilityId: Number(facilityId),
+        years: values.years,
+        percent: values.percent,
+      });
+      notifySuccess(`Đã lưu bậc giảm giá ${values.years} năm → −${values.percent}%`);
+      form.reset();
+      loadTiers(facilityId);
+    } catch (e) {
+      notifyError(e, 'Lưu bậc giảm giá thất bại');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function archiveTier() {
+    if (!archiveTarget || !facilityId) return;
+    try {
+      await trpc.finance.discountTierArchive.mutate({ id: archiveTarget.id });
+      notifySuccess(`Đã lưu trữ bậc ${archiveTarget.years} năm`);
+      setArchiveTarget(null);
+      loadTiers(facilityId);
+    } catch (e) {
+      notifyError(e, 'Lưu trữ bậc giảm giá thất bại');
+    }
+  }
+
+  return (
+    <Card withBorder>
+      <Title order={5} mb="sm">
+        Bậc giảm giá theo năm đóng trước
+      </Title>
+
+      <Select
+        label="Cơ sở"
+        placeholder="Chọn cơ sở để cấu hình"
+        data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
+        value={facilityId}
+        onChange={handleFacilitySelect}
+        clearable
+        w={280}
+        mb="sm"
+      />
+
+      {facilityId && (
+        <Stack gap="sm">
+          {tLoad === 'idle' && usingDefaults && (
+            <Alert color="yellow" title="Đang dùng mặc định">
+              Cơ sở này chưa cấu hình bậc giảm giá riêng — đang áp dụng mặc định 1 năm −15%, 2 năm
+              −20%, 3 năm −30%. Thêm một bậc bên dưới để chuyển sang cấu hình riêng.
+            </Alert>
+          )}
+
+          <form onSubmit={form.onSubmit(upsertTier)}>
+            <Group grow align="flex-end">
+              <NumberInput
+                label="Số năm đóng trước"
+                withAsterisk
+                min={1}
+                {...form.getInputProps('years')}
+              />
+              <NumberInput
+                label="Giảm (%)"
+                withAsterisk
+                min={1}
+                max={DISCOUNT_TIER_PERCENT_CAP}
+                {...form.getInputProps('percent')}
+              />
+              <Button type="submit" loading={busy}>
+                Lưu bậc
+              </Button>
+            </Group>
+          </form>
+
+          {tLoad === 'loading' && (
+            <Text c="dimmed" size="sm">
+              Đang tải...
+            </Text>
+          )}
+          {tLoad === 'error' && (
+            <Alert color="red" title="Lỗi">
+              {tError}
+            </Alert>
+          )}
+          {tiers.length > 0 && (
+            <Table striped withTableBorder={false} fz="sm">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Số năm</Table.Th>
+                  <Table.Th>Giảm</Table.Th>
+                  <Table.Th />
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {tiers.map((t) => (
+                  <Table.Tr key={t.id}>
+                    <Table.Td>{t.years}</Table.Td>
+                    <Table.Td>−{t.percent}%</Table.Td>
+                    <Table.Td>
+                      <Group justify="flex-end">
+                        <Button
+                          size="compact-xs"
+                          variant="light"
+                          color="red"
+                          onClick={() => setArchiveTarget(t)}
+                        >
+                          Lưu trữ
+                        </Button>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          )}
+        </Stack>
+      )}
+
+      <Modal
+        opened={!!archiveTarget}
+        onClose={() => setArchiveTarget(null)}
+        title="Lưu trữ bậc giảm giá"
+      >
+        <Stack>
+          <Text size="sm">
+            Lưu trữ bậc {archiveTarget?.years} năm (−{archiveTarget?.percent}%)? Phiếu thu đã tạo
+            trước đó không đổi (giá lưu tại thời điểm lập phiếu); chỉ ảnh hưởng phiếu mới lập sau
+            khi lưu trữ.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setArchiveTarget(null)}>
+              Đóng
+            </Button>
+            <Button color="red" onClick={archiveTier}>
+              Xác nhận lưu trữ
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Card>
+  );
+}
+
 // ─── Receipts Card ────────────────────────────────────────────────────────────
 
 function ReceiptsCard({
   students,
   courses,
   facilities,
+  onStudentsChanged,
 }: {
   students: StudentT[];
   courses: CourseT[];
   facilities: Facility[];
+  onStudentsChanged: () => void;
 }) {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [rLoad, setRLoad] = useState<'loading' | 'error' | 'ok'>('loading');
@@ -418,12 +650,21 @@ function ReceiptsCard({
   const [page, setPage] = useState(1);
   const [cancelTarget, setCancelTarget] = useState<Receipt | null>(null);
   const [cancelReason, setCancelReason] = useState('');
+  const [cancelRefundAmount, setCancelRefundAmount] = useState<number>(0);
   const [detailTarget, setDetailTarget] = useState<Receipt | null>(null);
   // LMS credential surfaced once when approving a NEW-student receipt, so staff can relay it to the
   // parent (backend returns it plaintext exactly once; it is also emailed). Shown in a dismissible modal.
   const [cred, setCred] = useState<{ loginCode: string; tempPassword: string } | null>(null);
+  // Standalone "Ghi hoàn tiền" on an already-cancelled row (also reached right after a cancel that
+  // included a refund amount fails to record — cancel already committed, refund is addable here).
+  const [refundTarget, setRefundTarget] = useState<Receipt | null>(null);
+  const [refundAmount, setRefundAmount] = useState<number>(0);
+  const [refundReason, setRefundReason] = useState('');
+  // Refund total per receipt id — fetched lazily for cancelled rows on the current page.
+  const [refundTotals, setRefundTotals] = useState<Record<string, number>>({});
 
-  const studentName = (id: string | null) => id ? (students.find((s) => s.id === id)?.fullName ?? id.slice(0, 8)) : '—';
+  const studentName = (id: string | null) =>
+    id ? (students.find((s) => s.id === id)?.fullName ?? id.slice(0, 8)) : '—';
   const courseName = (id: string) => courses.find((c) => c.id === id)?.code ?? id.slice(0, 8);
 
   const loadReceipts = useCallback(() => {
@@ -460,6 +701,9 @@ function ReceiptsCard({
       notifySuccess(`Đã duyệt phiếu ${r.code}`);
       if (r.lmsAccount) setCred(r.lmsAccount);
       loadReceipts();
+      // Approve can auto-provision a new student (new-student receipt) — refresh the students
+      // list so the receipts table's name column doesn't show a truncated id for that row.
+      onStudentsChanged();
     } catch (e) {
       notifyError(e, 'Duyệt phiếu thu thất bại');
     }
@@ -490,13 +734,69 @@ function ReceiptsCard({
     try {
       await trpc.finance.receiptCancel.mutate({ id: cancelTarget.id, reason: cancelReason.trim() });
       notifySuccess('Đã hủy phiếu thu');
+      // Refund is a separate call after cancel commits — a refund failure must not look like the
+      // cancel itself failed. The refund can be added later via "Ghi hoàn tiền" on the cancelled row.
+      if (cancelRefundAmount > 0) {
+        try {
+          await trpc.finance.refundCreate.mutate({
+            receiptId: cancelTarget.id,
+            amount: cancelRefundAmount,
+            reason: cancelReason.trim(),
+          });
+          notifySuccess(`Đã ghi hoàn tiền ${vnd(cancelRefundAmount)}`);
+        } catch (e) {
+          notifyError(
+            e,
+            'Đã hủy phiếu nhưng ghi hoàn tiền thất bại — dùng "Ghi hoàn tiền" trên dòng phiếu để thử lại',
+          );
+        }
+      }
       setCancelTarget(null);
       setCancelReason('');
+      setCancelRefundAmount(0);
       loadReceipts();
     } catch (e) {
       notifyError(e, 'Hủy phiếu thu thất bại');
     }
   }
+
+  async function doRefund() {
+    if (!refundTarget || refundAmount <= 0 || !refundReason.trim()) return;
+    try {
+      await trpc.finance.refundCreate.mutate({
+        receiptId: refundTarget.id,
+        amount: refundAmount,
+        reason: refundReason.trim(),
+      });
+      notifySuccess(`Đã ghi hoàn tiền ${vnd(refundAmount)}`);
+      setRefundTotals((prev) => ({
+        ...prev,
+        [refundTarget.id]: (prev[refundTarget.id] ?? 0) + refundAmount,
+      }));
+      setRefundTarget(null);
+      setRefundAmount(0);
+      setRefundReason('');
+    } catch (e) {
+      notifyError(e, 'Ghi hoàn tiền thất bại');
+    }
+  }
+
+  // Lazily fetch the refund total for cancelled rows visible on the current page.
+  useEffect(() => {
+    const missing = paged
+      .filter((r) => r.status === 'cancelled' && !(r.id in refundTotals))
+      .map((r) => r.id);
+    if (missing.length === 0) return;
+    missing.forEach((id) => {
+      trpc.finance.refundList
+        .query({ receiptId: id })
+        .then((rows) => {
+          const sum = rows.reduce((s, x) => s + x.amount, 0);
+          setRefundTotals((prev) => ({ ...prev, [id]: sum }));
+        })
+        .catch(() => {});
+    });
+  }, [paged, refundTotals]);
 
   return (
     <Card withBorder>
@@ -507,11 +807,21 @@ function ReceiptsCard({
       <Modal opened={!!cred} onClose={() => setCred(null)} title="Tài khoản LMS học sinh" centered>
         {cred && (
           <Stack gap="xs">
-            <Text size="sm">Đã tạo tài khoản LMS cho học sinh. Gửi thông tin này cho phụ huynh:</Text>
-            <Text>Mã đăng nhập: <b data-testid="lms-login-code">{cred.loginCode}</b></Text>
-            <Text>Mật khẩu tạm: <b>{cred.tempPassword}</b></Text>
-            <Text size="xs" c="dimmed">Mật khẩu chỉ hiển thị một lần; phụ huynh đổi sau khi đăng nhập.</Text>
-            <Button onClick={() => setCred(null)} mt="sm">Đã ghi nhận</Button>
+            <Text size="sm">
+              Đã tạo tài khoản LMS cho học sinh. Gửi thông tin này cho phụ huynh:
+            </Text>
+            <Text>
+              Mã đăng nhập: <b data-testid="lms-login-code">{cred.loginCode}</b>
+            </Text>
+            <Text>
+              Mật khẩu tạm: <b>{cred.tempPassword}</b>
+            </Text>
+            <Text size="xs" c="dimmed">
+              Mật khẩu chỉ hiển thị một lần; phụ huynh đổi sau khi đăng nhập.
+            </Text>
+            <Button onClick={() => setCred(null)} mt="sm">
+              Đã ghi nhận
+            </Button>
           </Stack>
         )}
       </Modal>
@@ -522,7 +832,10 @@ function ReceiptsCard({
           placeholder="Tất cả"
           data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
           value={filterFacilityId}
-          onChange={(v) => { setFilterFacilityId(v); setPage(1); }}
+          onChange={(v) => {
+            setFilterFacilityId(v);
+            setPage(1);
+          }}
           clearable
           w={220}
         />
@@ -540,16 +853,22 @@ function ReceiptsCard({
       </Group>
 
       {rLoad === 'loading' && (
-        <Text c="dimmed" ta="center" py="xl">Đang tải...</Text>
+        <Text c="dimmed" ta="center" py="xl">
+          Đang tải...
+        </Text>
       )}
       {rLoad === 'error' && (
         <Alert color="red" title="Lỗi tải phiếu thu">
           {rError}
-          <Button size="xs" variant="subtle" mt="sm" onClick={loadReceipts}>Thử lại</Button>
+          <Button size="xs" variant="subtle" mt="sm" onClick={loadReceipts}>
+            Thử lại
+          </Button>
         </Alert>
       )}
       {rLoad === 'ok' && filtered.length === 0 && (
-        <Text c="dimmed" size="sm">Chưa có phiếu thu.</Text>
+        <Text c="dimmed" size="sm">
+          Chưa có phiếu thu.
+        </Text>
       )}
       {rLoad === 'ok' && filtered.length > 0 && (
         <>
@@ -562,6 +881,7 @@ function ReceiptsCard({
                 <Table.Th>Giảm</Table.Th>
                 <Table.Th>Thành tiền</Table.Th>
                 <Table.Th>Trạng thái</Table.Th>
+                <Table.Th>Đã hoàn</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>
@@ -574,23 +894,42 @@ function ReceiptsCard({
                     <Table.Td>{studentName(r.studentId)}</Table.Td>
                     <Table.Td>{courseName(r.courseId)}</Table.Td>
                     <Table.Td>{r.effectiveDiscountPercent}%</Table.Td>
-                    <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(r.netAmount)}</Table.Td>
+                    <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {vnd(r.netAmount)}
+                    </Table.Td>
                     <Table.Td>
                       <Badge color={st.color}>{st.label}</Badge>
                     </Table.Td>
+                    <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {r.status === 'cancelled' ? vnd(refundTotals[r.id] ?? 0) : '—'}
+                    </Table.Td>
                     <Table.Td>
                       <Group gap={4} justify="flex-end">
-                        <Button size="compact-xs" variant="subtle" color="gray" onClick={() => setDetailTarget(r)}>
+                        <Button
+                          size="compact-xs"
+                          variant="subtle"
+                          color="gray"
+                          onClick={() => setDetailTarget(r)}
+                        >
                           Nhật ký
                         </Button>
                         {r.status === 'draft' && (
-                          <Button size="compact-xs" onClick={() => approve(r.id)}>Duyệt</Button>
+                          <Button size="compact-xs" onClick={() => approve(r.id)}>
+                            Duyệt
+                          </Button>
                         )}
                         {r.status === 'approved' && (
-                          <Button size="compact-xs" variant="light" onClick={() => markSent(r.id)}>Gửi</Button>
+                          <Button size="compact-xs" variant="light" onClick={() => markSent(r.id)}>
+                            Gửi
+                          </Button>
                         )}
                         {(r.status === 'approved' || r.status === 'sent') && (
-                          <Button size="compact-xs" variant="light" color="green" onClick={() => reconcile(r.id)}>
+                          <Button
+                            size="compact-xs"
+                            variant="light"
+                            color="green"
+                            onClick={() => reconcile(r.id)}
+                          >
                             Đối soát
                           </Button>
                         )}
@@ -598,14 +937,33 @@ function ReceiptsCard({
                           <Button
                             size="compact-xs"
                             variant="subtle"
-                            onClick={() => window.open(`${API_URL}/files/receipt/${r.id}`, '_blank', 'noopener')}
+                            onClick={() =>
+                              window.open(`${API_URL}/files/receipt/${r.id}`, '_blank', 'noopener')
+                            }
                           >
                             In
                           </Button>
                         )}
                         {(r.status === 'draft' || r.status === 'approved') && (
-                          <Button size="compact-xs" variant="light" color="red" onClick={() => setCancelTarget(r)}>
+                          <Button
+                            size="compact-xs"
+                            variant="light"
+                            color="red"
+                            onClick={() => setCancelTarget(r)}
+                          >
                             Hủy
+                          </Button>
+                        )}
+                        {/* approvedAt gate: a draft cancelled before ever being approved never took
+                            money in, so it never gets a refund action (mirrors the server guard). */}
+                        {r.status === 'cancelled' && r.approvedAt && (
+                          <Button
+                            size="compact-xs"
+                            variant="light"
+                            color="orange"
+                            onClick={() => setRefundTarget(r)}
+                          >
+                            Ghi hoàn tiền
                           </Button>
                         )}
                       </Group>
@@ -623,11 +981,18 @@ function ReceiptsCard({
         </>
       )}
 
-      <Modal opened={!!cancelTarget} onClose={() => setCancelTarget(null)} title="Hủy phiếu thu">
+      <Modal
+        opened={!!cancelTarget}
+        onClose={() => {
+          setCancelTarget(null);
+          setCancelRefundAmount(0);
+        }}
+        title="Hủy phiếu thu"
+      >
         <Stack>
           <Text size="sm">
-            Hủy phiếu {cancelTarget?.code ?? 'nháp'} ({cancelTarget ? vnd(cancelTarget.netAmount) : ''})?
-            Voucher (nếu có) sẽ được hoàn lượt.
+            Hủy phiếu {cancelTarget?.code ?? 'nháp'} (
+            {cancelTarget ? vnd(cancelTarget.netAmount) : ''})? Voucher (nếu có) sẽ được hoàn lượt.
           </Text>
           <Textarea
             label="Lý do hủy"
@@ -636,10 +1001,85 @@ function ReceiptsCard({
             value={cancelReason}
             onChange={(e) => setCancelReason(e.currentTarget.value)}
           />
+          {/* Refund field only makes sense for a receipt that actually took money in — matches
+              receiptCancel's own wasApproved check (approved/sent/reconciled), not just 'approved'.
+              Manual amount — no auto pro-rata (D-P4a). Left blank = no refund recorded now; can be
+              added later via "Ghi hoàn tiền" on the cancelled row. */}
+          {cancelTarget && ['approved', 'sent', 'reconciled'].includes(cancelTarget.status) && (
+            <NumberInput
+              label="Hoàn tiền (tùy chọn, VNĐ)"
+              placeholder="Để trống nếu không hoàn tiền ngay"
+              min={0}
+              step={100000}
+              value={cancelRefundAmount}
+              onChange={(v) => setCancelRefundAmount(Number(v) || 0)}
+            />
+          )}
           <Group justify="flex-end">
-            <Button variant="default" onClick={() => setCancelTarget(null)}>Đóng</Button>
+            <Button
+              variant="default"
+              onClick={() => {
+                setCancelTarget(null);
+                setCancelRefundAmount(0);
+              }}
+            >
+              Đóng
+            </Button>
             <Button color="red" disabled={!cancelReason.trim()} onClick={doCancel}>
               Xác nhận hủy
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={!!refundTarget}
+        onClose={() => {
+          setRefundTarget(null);
+          setRefundAmount(0);
+          setRefundReason('');
+        }}
+        title="Ghi hoàn tiền"
+      >
+        <Stack>
+          <Text size="sm">
+            Ghi hoàn tiền cho phiếu {refundTarget?.code ?? ''} (
+            {refundTarget ? vnd(refundTarget.netAmount) : ''}, đã hoàn{' '}
+            {refundTarget ? vnd(refundTotals[refundTarget.id] ?? 0) : ''}).
+          </Text>
+          <NumberInput
+            label="Số tiền hoàn (VNĐ)"
+            withAsterisk
+            min={1}
+            step={100000}
+            value={refundAmount}
+            onChange={(v) => setRefundAmount(Number(v) || 0)}
+          />
+          <Textarea
+            label="Lý do hoàn tiền"
+            withAsterisk
+            autosize
+            minRows={2}
+            value={refundReason}
+            onChange={(e) => setRefundReason(e.currentTarget.value)}
+          />
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => {
+                setRefundTarget(null);
+                setRefundAmount(0);
+                setRefundReason('');
+              }}
+            >
+              Đóng
+            </Button>
+            <Button
+              color="orange"
+              disabled={refundAmount <= 0 || !refundReason.trim()}
+              onClick={doRefund}
+            >
+              Xác nhận hoàn tiền
             </Button>
           </Group>
         </Stack>
@@ -666,11 +1106,18 @@ function ReceiptCreateCard({
   courses,
   facilities,
   onCreated,
+  opportunityContext,
 }: {
   students: StudentT[];
   courses: CourseT[];
   facilities: Facility[];
   onCreated: () => void;
+  opportunityContext?: {
+    opportunityId: string;
+    studentName?: string | null;
+    courseId?: string | null;
+    facilityId?: number | null;
+  };
 }) {
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [batches, setBatches] = useState<BatchT[]>([]);
@@ -694,8 +1141,20 @@ function ReceiptCreateCard({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    trpc.classBatch.list.query().then(setBatches).catch(() => {});
+    trpc.classBatch.list
+      .query()
+      .then(setBatches)
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!opportunityContext) return;
+    setMode(opportunityContext.courseId ? 'existing' : 'new');
+    setNewFacilityId(opportunityContext.facilityId ? String(opportunityContext.facilityId) : null);
+    setNewCourseId(opportunityContext.courseId ?? null);
+    setCourseId(opportunityContext.courseId ?? null);
+    setStudentName(opportunityContext.studentName ?? '');
+  }, [opportunityContext]);
 
   const filteredBatches = newFacilityId
     ? batches.filter((b) => String(b.facilityId) === newFacilityId)
@@ -718,10 +1177,14 @@ function ReceiptCreateCard({
           yearsPrepaid: Number(years),
           period: period.trim() || undefined,
           voucherCode: voucherCode.trim() || undefined,
+          opportunityId: opportunityContext?.opportunityId,
         });
       } else {
         if (!newFacilityId || !newCourseId || !parentPhone.trim() || !studentName.trim()) {
-          notifyError('Vui lòng điền: cơ sở, khóa học, SĐT phụ huynh và tên học sinh.', 'Thiếu thông tin');
+          notifyError(
+            'Vui lòng điền: cơ sở, khóa học, SĐT phụ huynh và tên học sinh.',
+            'Thiếu thông tin',
+          );
           return;
         }
         r = await trpc.finance.receiptCreate.mutate({
@@ -734,16 +1197,24 @@ function ReceiptCreateCard({
           studentName: studentName.trim(),
           studentDob: studentDob.trim() || undefined,
           classBatchId: classBatchId ?? undefined,
+          opportunityId: opportunityContext?.opportunityId,
         });
       }
       notifySuccess(
         `Đã tạo phiếu nháp: gốc ${vnd(r.grossAmount)} → giảm ${r.effectiveDiscountPercent}% → còn ${vnd(r.netAmount)}`,
         'Tạo phiếu thu thành công',
       );
-      setStudentId(null); setCourseId(null);
-      setNewFacilityId(null); setNewCourseId(null);
-      setParentPhone(''); setStudentName(''); setStudentDob(''); setClassBatchId(null);
-      setYears('1'); setVoucherCode(''); setPeriod('');
+      setStudentId(null);
+      setCourseId(null);
+      setNewFacilityId(null);
+      setNewCourseId(null);
+      setParentPhone('');
+      setStudentName('');
+      setStudentDob('');
+      setClassBatchId(null);
+      setYears('1');
+      setVoucherCode('');
+      setPeriod('');
       onCreated();
     } catch (e) {
       notifyError(e, 'Tạo phiếu thu thất bại');
@@ -760,10 +1231,18 @@ function ReceiptCreateCard({
 
       {/* Mode toggle: existing student vs. new student */}
       <Group mb="sm">
-        <Button size="xs" variant={mode === 'existing' ? 'filled' : 'subtle'} onClick={() => setMode('existing')}>
+        <Button
+          size="xs"
+          variant={mode === 'existing' ? 'filled' : 'subtle'}
+          onClick={() => setMode('existing')}
+        >
           Học sinh hiện có
         </Button>
-        <Button size="xs" variant={mode === 'new' ? 'filled' : 'subtle'} onClick={() => setMode('new')}>
+        <Button
+          size="xs"
+          variant={mode === 'new' ? 'filled' : 'subtle'}
+          onClick={() => setMode('new')}
+        >
           Học sinh mới
         </Button>
       </Group>
@@ -794,9 +1273,15 @@ function ReceiptCreateCard({
               label="Cơ sở"
               withAsterisk
               placeholder="Chọn cơ sở"
-              data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
+              data={facilities.map((f) => ({
+                value: String(f.id),
+                label: `${f.code} — ${f.name}`,
+              }))}
               value={newFacilityId}
-              onChange={(v) => { setNewFacilityId(v); setClassBatchId(null); }}
+              onChange={(v) => {
+                setNewFacilityId(v);
+                setClassBatchId(null);
+              }}
             />
             <Select
               label="Khóa học"
@@ -866,7 +1351,8 @@ function ReceiptCreateCard({
         />
       </Group>
       <Text size="xs" c="dimmed" mt={6}>
-        Giảm theo số năm cộng voucher, tổng tối đa 35%. Giá lấy theo bảng giá hiệu lực ngày lập phiếu.
+        Giảm theo số năm cộng voucher, tổng tối đa 35%. Giá lấy theo bảng giá hiệu lực ngày lập
+        phiếu.
       </Text>
       <Group mt="md">
         <Button onClick={createDraft} loading={busy}>
@@ -886,11 +1372,15 @@ export function FinancePanel() {
   // receipts are managed inside ReceiptsCard via a ref reload callback
   const [reloadKey, setReloadKey] = useState(0);
 
-  useEffect(() => {
+  const loadStudents = useCallback(() => {
     trpc.student.list
       .query()
       .then(setStudents)
       .catch((e) => notifyError(e, 'Không tải được danh sách học sinh'));
+  }, []);
+
+  useEffect(() => {
+    loadStudents();
     trpc.course.list
       .query()
       .then(setCourses)
@@ -899,12 +1389,13 @@ export function FinancePanel() {
       .query()
       .then(setFacilities)
       .catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
-  }, []);
+  }, [loadStudents]);
 
   return (
     <Stack>
       <CoursePriceCard courses={courses} facilities={facilities} />
       <VoucherCard facilities={facilities} />
+      <DiscountTierCard facilities={facilities} />
       <ReceiptCreateCard
         students={students}
         courses={courses}
@@ -917,6 +1408,7 @@ export function FinancePanel() {
         students={students}
         courses={courses}
         facilities={facilities}
+        onStudentsChanged={loadStudents}
       />
     </Stack>
   );

@@ -33,16 +33,15 @@ export const userRouter = router({
     ),
   ),
 
-  // Assignee picker for the CSKH assign workflow. Returns active staff whose primary role is
-  // cskh or quan_ly — the only roles eligible to own an after-sale case — within the caller's
-  // facility. RLS (app_user_facility_roster) enforces the facility boundary automatically;
-  // the roles filter here prevents directors from appearing in the dropdown as case owners.
+  // Assignee picker for the CSKH assign workflow. Returns active sale/cskh/giam_doc_kinh_doanh
+  // staff — the roles eligible to own an after-sale case — within the caller's facility. RLS
+  // (app_user_facility_roster) enforces the facility boundary automatically.
   listAssignableForAfterSale: requirePermission('user', 'listAssignableForAfterSale').query(({ ctx }) =>
     withRls(rlsContextOf(ctx.session), (tx) =>
       tx.appUser.findMany({
         where: {
           isActive: true,
-          roles: { hasSome: [Role.cskh, Role.quan_ly] },
+          roles: { hasSome: [Role.sale, Role.cskh, Role.giam_doc_kinh_doanh] },
         },
         orderBy: { displayName: 'asc' },
         select: { id: true, displayName: true },
@@ -51,7 +50,7 @@ export const userRouter = router({
   ),
 
   // Teacher picker for scheduling. RLS (app_user_facility_roster) scopes this to staff
-  // sharing a facility with the caller — a quan_ly cannot enumerate teachers elsewhere.
+  // sharing a facility with the caller.
   listTeachers: requirePermission('user', 'listTeachers')
     .input(z.object({ facilityId: z.number().int().positive().optional() }).optional())
     .query(({ ctx, input }) =>
@@ -72,7 +71,7 @@ export const userRouter = router({
   // roles fall within their grant set AND whose facilities are a subset of their own facilities.
   //
   // The insert runs under an elevated RLS context (SYSTEM_CTX) because app_user INSERT has
-  // WITH CHECK (app_is_super_admin()) — a director session would be rejected at the DB layer.
+  // WITH CHECK (app_is_super_admin()) — a director session would be rejected at the DB layer.
   // The app-layer checks above (role scope + facility subset) are the load-bearing constraint;
   // SYSTEM_CTX is the bypass that makes the DB write succeed after those checks pass.
   create: requirePermission('user', 'create')
@@ -83,6 +82,7 @@ export const userRouter = router({
           // with a usable break-glass password is the bootstrap super_admin (seeded, not created here).
           email: z.string().email(),
           displayName: z.string().min(1),
+          phone: z.string().optional(),
           roles: z.array(role).min(1),
           primaryRole: role,
           facilityIds: z.array(z.number().int().positive()),
@@ -121,18 +121,29 @@ export const userRouter = router({
           });
         }
       }
+      // Facility min(1) applies to ALL actors (including super_admin) — a 0-facility
+      // account has no RLS scope and is a dead login (decision 0026 P2).
+      if (input.facilityIds.length === 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Phải chọn ít nhất một cơ sở',
+        });
+      }
+
 
       // 3. Write under elevated context so the super-admin-only INSERT policy passes.
       //    All scope constraints have been enforced above; SYSTEM_CTX is only safe here.
       const actorId = ctx.session.userId;
-      const user = await withRls(SYSTEM_CTX, async (tx) => {
+      try {
+        const user = await withRls(SYSTEM_CTX, async (tx) => {
         const created = await tx.appUser.create({
           data: {
             // Normalize to lowercase: SSO returns the Microsoft email lowercased, and the callback
-            // matches AppUser by exact email. A mixed-case address here would never match → login
+            // matches AppUser by exact email. A mixed-case address here would never match — login
             // would fail with "not_provisioned" even though the M365 account is correct.
             email: input.email.trim().toLowerCase(),
             displayName: input.displayName,
+            phone: input.phone?.trim() || null,
             // SSO-only account: store a hash of a high-entropy random secret that is never returned
             // or transmitted, so password login is impossible for staff (NOT NULL column satisfied).
             passwordHash: await hashPassword(randomBytes(32).toString('base64url')),
@@ -150,10 +161,16 @@ export const userRouter = router({
         });
         return created;
       });
-      // Welcome email (best-effort, post-commit). SSO onboarding: no password is sent — staff sign in
+      // Welcome email (best-effort, post-commit). SSO onboarding: no password is sent — staff sign in
       // with their Microsoft (CMC EDU) account. A mail-queue failure must never undo the create.
       await emailWelcome(user.email, user.displayName, user.primaryRole);
-      return user;
+        return user;
+      } catch (e) {
+        if (e && typeof e === 'object' && 'code' in e && (e as { code: string }).code === 'P2002') {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Email đã tồn tại' });
+        }
+        throw e;
+      }
     }),
 
   // setRoles / setActive / setFacilities remain super_admin-only for F0. Directors build
@@ -314,17 +331,14 @@ export const userRouter = router({
 // Human-readable Vietnamese role names for staff-facing email. Unknown roles fall back to the raw key.
 const ROLE_LABELS: Partial<Record<Role, string>> = {
   [Role.super_admin]: 'Quản trị hệ thống',
-  [Role.quan_ly]: 'Quản lý cơ sở',
   [Role.giam_doc_kinh_doanh]: 'Giám đốc Kinh doanh',
   [Role.giam_doc_dao_tao]: 'Giám đốc Đào tạo',
-  [Role.head_teacher]: 'Trưởng bộ môn',
   [Role.giao_vien]: 'Giáo viên',
   [Role.ke_toan]: 'Kế toán',
   [Role.hr]: 'Nhân sự',
   [Role.sale]: 'Tư vấn tuyển sinh',
   [Role.cskh]: 'Chăm sóc khách hàng',
   [Role.ctv_mkt]: 'Cộng tác viên Marketing',
-  [Role.bgd]: 'Ban giám đốc',
 };
 
 // ERP login URL for the welcome email's CTA. Mirrors the SSO route's erpOrigin() default.
@@ -332,7 +346,7 @@ function loginUrl(): string {
   return process.env.ADMIN_APP_ORIGIN ?? 'http://localhost:5173';
 }
 
-// Post-commit, best-effort welcome email on user creation. SSO onboarding: NO password is sent —
+// Post-commit, best-effort welcome email on user creation. SSO onboarding: NO password is sent —
 // staff log in with their Microsoft (CMC EDU) account. Own super-scoped tx + try/catch so a
 // mail-queue failure never rolls back the create. dedupKey is stable per user so a re-run won't
 // double-send.

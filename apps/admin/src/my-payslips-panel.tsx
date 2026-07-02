@@ -46,6 +46,7 @@ export function MyPayslipsPanel() {
                 <Table.Th style={TH_STYLE}>Kỳ</Table.Th>
                 <Table.Th style={TH_STYLE}>Lương gộp</Table.Th>
                 <Table.Th style={TH_STYLE}>Thuế TNCN</Table.Th>
+                <Table.Th style={TH_STYLE}>Phạt công</Table.Th>
                 <Table.Th style={TH_STYLE}>Thực lĩnh</Table.Th>
                 <Table.Th style={TH_STYLE}>Trạng thái</Table.Th>
               </Table.Tr>
@@ -58,6 +59,7 @@ export function MyPayslipsPanel() {
                     <Table.Td>{s.periodKey}</Table.Td>
                     <Table.Td>{vnd(s.grossIncome)}</Table.Td>
                     <Table.Td>{vnd(s.pitAmount)}</Table.Td>
+                    <Table.Td>{vnd(s.attendanceDeductionOverride ?? s.attendanceDeduction ?? 0)}</Table.Td>
                     <Table.Td>{vnd(s.netIncome)}</Table.Td>
                     <Table.Td>
                       <Badge color={st.color}>{st.label}</Badge>

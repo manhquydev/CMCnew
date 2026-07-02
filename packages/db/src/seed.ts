@@ -63,6 +63,9 @@ async function seedBootstrap(email: string, password: string): Promise<void> {
     console.log(`✓ Seeded ${d.role} <${d.email}> (SSO-only)`);
   }
 
+  // ── Work shift defaults ──────────────────────────────────────────────
+  await seedWorkShift(hq.id, hq.code);
+
   console.log('');
   console.log('Bootstrap complete. Log in as the IT head to create other accounts.');
   console.log(`  Email:    ${email}`);
@@ -109,9 +112,9 @@ async function seedFull(email: string, password: string): Promise<void> {
   // to run the business end-to-end. Idempotent. All share SEED_SUPERADMIN_PASSWORD
   // for a simple first login; change per-user in the admin app after launch. ──────
   const STAFF: Array<{ email: string; name: string; role: Role }> = [
-    { email: 'quanly@cmc.local', name: 'Quản Lý Cơ Sở', role: Role.quan_ly },
-    { email: 'bgd@cmc.local', name: 'Ban Giám Đốc', role: Role.bgd },
-    { email: 'headteacher@cmc.local', name: 'Trưởng Bộ Môn', role: Role.head_teacher },
+    { email: 'quanly@cmc.local', name: 'Quản Lý Cơ Sở', role: Role.giam_doc_kinh_doanh },
+    { email: 'bgd@cmc.local', name: 'Ban Giám Đốc', role: Role.giam_doc_kinh_doanh },
+    { email: 'headteacher@cmc.local', name: 'Trưởng Bộ Môn', role: Role.giam_doc_dao_tao },
     { email: 'giaovien@cmc.local', name: 'Giáo Viên', role: Role.giao_vien },
     { email: 'ketoan@cmc.local', name: 'Kế Toán', role: Role.ke_toan },
     { email: 'hr@cmc.local', name: 'Nhân Sự (HR)', role: Role.hr },
@@ -203,10 +206,91 @@ async function seedFull(email: string, password: string): Promise<void> {
     update: {},
   });
   console.log('✓ Seed guardian link: parent@cmc.local ↔ TEST-001');
+
+  // ── Priced course fixture — the CRM receipt-provision and commission-chain E2E specs
+  // (apps/e2e/tests/admin-receipt-provision.spec.ts, admin-commission-chain.spec.ts) both
+  // create a receipt via the admin UI's course Select, which only lists courses with an
+  // active CoursePrice. Without this, both specs fail with no priced course to select.
+  const seedCourse = await prisma.course.upsert({
+    where: { code: 'CRS_10512_5483' },
+    create: { code: 'CRS_10512_5483', name: 'Khóa học Test (giá cố định)', program: 'UCREA' },
+    update: {},
+  });
+  const existingSeedPrice = await prisma.coursePrice.findFirst({
+    where: { facilityId: hq.id, courseId: seedCourse.id },
+  });
+  if (!existingSeedPrice) {
+    await prisma.coursePrice.create({
+      data: {
+        facilityId: hq.id,
+        courseId: seedCourse.id,
+        amount: 10_000_000,
+        effectiveFrom: new Date('2020-01-01'),
+      },
+    });
+    console.log(`✓ Seed coursePrice: ${seedCourse.code} @ HQ`);
+  } else {
+    console.log(`• coursePrice ${seedCourse.code} @ HQ already exists — skipped`);
+  }
+
+  // ── Work shift defaults ──────────────────────────────────────────────
+  await seedWorkShift(hq.id, hq.code);
+  await seedWorkShift(branch.id, branch.code);
+
   console.log('');
   console.log('LMS Login credentials:');
   console.log(`  Student  — loginCode: TEST-001     password: (= SEED_SUPERADMIN_PASSWORD)`);
   console.log(`  Parent   — email: parent@cmc.local password: (= SEED_SUPERADMIN_PASSWORD)`);
+}
+
+/// Seed work shift defaults for a facility. Idempotent.
+async function seedWorkShift(facilityId: number, facilityCode: string): Promise<void> {
+  // ── Shift Groups ────────────────────────────────────────────────────
+  const GROUPS = [
+    { code: 'KINH_DOANH', name: 'Kinh doanh', selectionMode: 'SINGLE', sortOrder: 0 },
+    { code: 'GIAO_VIEN', name: 'Giáo viên', selectionMode: 'MULTIPLE', sortOrder: 1 },
+  ];
+  const groupIds: Record<string, string> = {};
+  for (const g of GROUPS) {
+    const group = await prisma.shiftGroup.upsert({
+      where: { facilityId_code: { facilityId, code: g.code } },
+      update: { name: g.name, selectionMode: g.selectionMode },
+      create: { facilityId, code: g.code, name: g.name, selectionMode: g.selectionMode, sortOrder: g.sortOrder },
+    });
+    groupIds[g.code] = group.id;
+  }
+
+  // ── Shift Templates ─────────────────────────────────────────────────
+  const TEMPLATES: Array<{ groupCode: string; code: string; name: string; startTime: string; endTime: string; hours: number; sortOrder: number }> = [
+    // Kinh doanh — 3 ca, 8h mỗi ca, SINGLE selection
+    { groupCode: 'KINH_DOANH', code: 'CA1_KD', name: 'Ca 1', startTime: '08:30', endTime: '18:00', hours: 8.0, sortOrder: 0 },
+    { groupCode: 'KINH_DOANH', code: 'CA2_KD', name: 'Ca 2', startTime: '10:00', endTime: '20:00', hours: 8.0, sortOrder: 1 },
+    { groupCode: 'KINH_DOANH', code: 'CA3_KD', name: 'Ca 3', startTime: '13:00', endTime: '21:00', hours: 8.0, sortOrder: 2 },
+    // Giáo viên — 3 ca, 4h mỗi ca, MULTIPLE selection
+    { groupCode: 'GIAO_VIEN', code: 'CA1_GV', name: 'Ca 1', startTime: '08:00', endTime: '12:00', hours: 4.0, sortOrder: 0 },
+    { groupCode: 'GIAO_VIEN', code: 'CA2_GV', name: 'Ca 2', startTime: '13:00', endTime: '17:00', hours: 4.0, sortOrder: 1 },
+    { groupCode: 'GIAO_VIEN', code: 'CA3_GV', name: 'Ca 3', startTime: '17:00', endTime: '21:00', hours: 4.0, sortOrder: 2 },
+  ];
+  for (const t of TEMPLATES) {
+    const gid = groupIds[t.groupCode];
+    if (!gid) continue;
+    await prisma.shiftTemplate.upsert({
+      where: { shiftGroupId_code: { shiftGroupId: gid, code: t.code } },
+      update: { name: t.name, startTime: t.startTime, endTime: t.endTime, hours: t.hours },
+      create: {
+        facilityId, shiftGroupId: gid, code: t.code, name: t.name,
+        startTime: t.startTime, endTime: t.endTime, hours: t.hours, sortOrder: t.sortOrder,
+      },
+    });
+  }
+    // ── Facility Network (IP whitelist for check-in) ─────────────────────
+  await prisma.facilityNetwork.upsert({
+    where: { facilityId_ipAddress: { facilityId, ipAddress: '127.0.0.1' } },
+    update: {},
+    create: { facilityId, ipAddress: '127.0.0.1', label: `WiFi VP ${facilityCode} (dev)` },
+  });
+
+  console.log(`✓ Work shift defaults: ${facilityCode} (${Object.keys(groupIds).length} groups, ${TEMPLATES.length} templates, 1 IP)`);
 }
 
 async function main(): Promise<void> {

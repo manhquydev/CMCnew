@@ -46,6 +46,8 @@ export interface PayslipInput {
   /** Commission / overtime / other variable earnings entered for the period. */
   variablePay?: number;
   insuranceDeduction?: number;
+  /** Attendance penalty deducted after tax. */
+  attendanceDeduction?: number;
   dependents?: number;
 }
 
@@ -58,6 +60,7 @@ export interface PayslipResult {
   variablePay: number;
   grossIncome: number;
   insuranceDeduction: number;
+  attendanceDeduction: number;
   taxableIncome: number;
   pitAmount: number;
   netIncome: number;
@@ -76,6 +79,10 @@ export function assemblePayslip(input: PayslipInput, params: CompensationParams 
   if (!Number.isInteger(variablePay) || variablePay < 0) throw new Error('variablePay must be a non-negative integer');
   const grossIncome = baseEarned + allowanceEarned + kpiBonus + variablePay;
   const insuranceDeduction = input.insuranceDeduction ?? 0;
+  const attendanceDeduction = input.attendanceDeduction ?? 0;
+  if (!Number.isInteger(attendanceDeduction) || attendanceDeduction < 0) {
+    throw new Error('attendanceDeduction must be a non-negative integer');
+  }
   const dependents = input.dependents ?? 0;
   const taxable = taxableIncome(grossIncome, insuranceDeduction, dependents, params.pit.selfRelief, params.pit.dependentRelief);
   const pitAmount = computePit(taxable, params.pit.brackets);
@@ -88,8 +95,10 @@ export function assemblePayslip(input: PayslipInput, params: CompensationParams 
     variablePay,
     grossIncome,
     insuranceDeduction,
+    attendanceDeduction,
     taxableIncome: taxable,
     pitAmount,
-    netIncome: grossIncome - insuranceDeduction - pitAmount,
+    // Floor at 0: a pathological attendance penalty exceeding post-tax net must never yield negative pay.
+    netIncome: Math.max(0, grossIncome - insuranceDeduction - pitAmount - attendanceDeduction),
   };
 }

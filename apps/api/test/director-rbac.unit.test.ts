@@ -11,18 +11,18 @@ const superAdmin = { isSuperAdmin: true, roles: ['super_admin'] };
 const plainSale = { isSuperAdmin: false, roles: ['sale'] };
 
 describe('DIRECTOR_ROLE_GRANTS', () => {
-  it('Business Director grant set contains sale, cskh, ctv_mkt', () => {
+  it('Business Director grant set contains sale, cskh, ctv_mkt, ke_toan, hr', () => {
     expect(DIRECTOR_ROLE_GRANTS['giam_doc_kinh_doanh']).toEqual(
-      expect.arrayContaining(['sale', 'cskh', 'ctv_mkt']),
+      expect.arrayContaining(['sale', 'cskh', 'ctv_mkt', 'ke_toan', 'hr']),
     );
-    expect(DIRECTOR_ROLE_GRANTS['giam_doc_kinh_doanh']!.length).toBe(3);
+    expect(DIRECTOR_ROLE_GRANTS['giam_doc_kinh_doanh']!.length).toBe(5);
   });
 
-  it('Education Director grant set contains giao_vien, head_teacher', () => {
+  it('Education Director grant set contains giao_vien only (head_teacher retired, no replacement grant)', () => {
     expect(DIRECTOR_ROLE_GRANTS['giam_doc_dao_tao']).toEqual(
-      expect.arrayContaining(['giao_vien', 'head_teacher']),
+      expect.arrayContaining(['giao_vien']),
     );
-    expect(DIRECTOR_ROLE_GRANTS['giam_doc_dao_tao']!.length).toBe(2);
+    expect(DIRECTOR_ROLE_GRANTS['giam_doc_dao_tao']!.length).toBe(1);
   });
 
   it('neither director can grant super_admin or another director role', () => {
@@ -35,24 +35,23 @@ describe('DIRECTOR_ROLE_GRANTS', () => {
 });
 
 describe('assignableRoles — Business Director', () => {
-  it('may assign sale, cskh, ctv_mkt', () => {
+  it('may assign sale, cskh, ctv_mkt, ke_toan, hr', () => {
     const set = assignableRoles(bizDir);
     expect(set.has('sale')).toBe(true);
     expect(set.has('cskh')).toBe(true);
     expect(set.has('ctv_mkt')).toBe(true);
+    expect(set.has('ke_toan')).toBe(true);
+    expect(set.has('hr')).toBe(true);
   });
 
-  it('may NOT assign giao_vien or head_teacher (education roles)', () => {
+  it('may NOT assign giao_vien (education role)', () => {
     const set = assignableRoles(bizDir);
     expect(set.has('giao_vien')).toBe(false);
-    expect(set.has('head_teacher')).toBe(false);
   });
 
-  it('may NOT assign quan_ly, ke_toan, hr, bgd, or super_admin', () => {
+  it('may NOT assign super_admin (elevation)', () => {
     const set = assignableRoles(bizDir);
-    for (const r of ['quan_ly', 'ke_toan', 'hr', 'bgd', 'super_admin']) {
-      expect(set.has(r), `bizDir must not assign ${r}`).toBe(false);
-    }
+    expect(set.has('super_admin')).toBe(false);
   });
 
   it('may NOT elevate another director', () => {
@@ -63,10 +62,9 @@ describe('assignableRoles — Business Director', () => {
 });
 
 describe('assignableRoles — Education Director', () => {
-  it('may assign giao_vien, head_teacher', () => {
+  it('may assign giao_vien', () => {
     const set = assignableRoles(eduDir);
     expect(set.has('giao_vien')).toBe(true);
-    expect(set.has('head_teacher')).toBe(true);
   });
 
   it('may NOT assign sale, cskh, or ctv_mkt (business roles)', () => {
@@ -88,7 +86,7 @@ describe('assignableRoles — super_admin', () => {
   it('returns a non-empty set (all roles available)', () => {
     const set = assignableRoles(superAdmin);
     // super_admin can assign anything — spot-check common roles
-    for (const r of ['sale', 'cskh', 'giao_vien', 'head_teacher', 'ke_toan', 'hr',
+    for (const r of ['sale', 'cskh', 'giao_vien', 'ke_toan', 'hr',
       'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'super_admin']) {
       expect(set.has(r), `super_admin must be able to assign ${r}`).toBe(true);
     }

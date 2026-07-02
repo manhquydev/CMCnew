@@ -7,6 +7,10 @@
     "test:ui": "playwright test --ui",
     "report": "playwright show-report"
   },
+  "dependencies": {
+    "@cmc/auth": "workspace:*",
+    "@cmc/db": "workspace:*"
+  },
   "devDependencies": {
     "@playwright/test": "^1.49.0"
   }

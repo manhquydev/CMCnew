@@ -1,11 +1,14 @@
 /**
- * Integration tests: four security/correctness invariants in the LMS academic path.
+ * Integration tests: security/correctness invariants in the LMS academic path.
  *
  * 1. Unpublished grade score/feedback is hidden from student (mine) and parent (forStudent)
  *    but fully visible to staff.
  * 2. attendance.mark rejects a (session, enrollment) pair that crosses class-batch boundaries.
  * 3. grade.grade rejects a score that exceeds the exercise maxScore.
- * 4. submission.save and submission.submit reject submissions targeting an unpublished exercise.
+ * 4. submission.save and submission.submit enforce exercise-open guard:
+ *    - reject submissions targeting an unpublished exercise
+ *    - reject submissions when the exercise unit's session has not yet ended
+ *    - reject submissions when the student is not enrolled in any class teaching the exercise unit.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { type LmsSession } from '@cmc/auth';
@@ -27,6 +30,7 @@ let unpublishedExerciseId: string;
 // Track every submission/exercise created across tests so afterAll can clean up
 const cleanupSubmissions: string[] = [];
 const cleanupExercises: string[] = [];
+const cleanupBatches: string[] = [];
 
 let dbReachable = false;
 
@@ -42,17 +46,27 @@ function makeStudentSession(): LmsSession {
   };
 }
 
-/** Create a published exercise in classBatchId and register it for cleanup. */
+/** Create a published exercise and register it for cleanup. Requires courseId to be set. */
 async function mkPublishedExercise(maxScore = 10) {
   return withRls(SUPER, async (tx) => {
+    // Exercise is now a global curriculum asset, linked via CurriculumUnit
+    const unit = await tx.curriculumUnit.create({
+      data: {
+        courseId,
+        unitCode: uniq('CU_EX'),
+        seqInLevel: 1,
+        orderGlobal: 1,
+        unitType: 'LESSON',
+        theme: 'Security invariants',
+        sessions: 1,
+      },
+    });
     const ex = await tx.exercise.create({
       data: {
-        facilityId: FACILITY,
-        classBatchId,
+        curriculumUnitId: unit.id,
         title: uniq('EX_PUB'),
         type: 'homework',
         maxScore,
-        starReward: 0,
         status: 'published',
       },
     });
@@ -124,15 +138,24 @@ beforeAll(async () => {
       });
       classSessionId = session.id;
 
-      // Unpublished exercise in batch A (for submission-to-unpublished tests)
+      // Unpublished exercise (for submission-to-unpublished tests)
+      const unpubUnit = await tx.curriculumUnit.create({
+        data: {
+          courseId,
+          unitCode: uniq('CU_UNPUB'),
+          seqInLevel: 1,
+          orderGlobal: 1,
+          unitType: 'LESSON',
+          theme: 'Security invariants',
+          sessions: 1,
+        },
+      });
       const unpubEx = await tx.exercise.create({
         data: {
-          facilityId: FACILITY,
-          classBatchId,
+          curriculumUnitId: unpubUnit.id,
           title: uniq('EX_UNPUB'),
           type: 'homework',
           maxScore: 10,
-          starReward: 0,
           status: 'draft',
         },
       });
@@ -153,11 +176,16 @@ afterAll(async () => {
       await tx.submission.deleteMany({ where: { id: { in: cleanupSubmissions } } });
     }
     if (cleanupExercises.length) {
+      // Delete exercises first, then their parent curriculumUnits
       await tx.exercise.deleteMany({ where: { id: { in: cleanupExercises } } });
+      const units = await tx.curriculumUnit.findMany({
+        where: { courseId },
+      });
+      await tx.curriculumUnit.deleteMany({ where: { id: { in: units.map((u) => u.id) } } });
     }
     await tx.classSession.deleteMany({ where: { classBatchId } });
     await tx.enrollment.deleteMany({ where: { studentId } });
-    await tx.classBatch.deleteMany({ where: { id: { in: [classBatchId, otherBatchId] } } });
+    await tx.classBatch.deleteMany({ where: { id: { in: [classBatchId, otherBatchId, ...cleanupBatches] } } });
     await tx.coursePrice.deleteMany({ where: { courseId } });
     await tx.course.deleteMany({ where: { id: courseId } });
     await tx.student.deleteMany({ where: { id: studentId } });
@@ -303,6 +331,23 @@ describe('Invariant 4: submission.save/submit rejected for unpublished exercises
     if (!dbReachable) return;
 
     const ex = await mkPublishedExercise();
+
+    // Create an ENDED session mapped to this exercise's curriculum unit so it auto-opens
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    await withRls(SUPER, async (tx) => {
+      await tx.classSession.create({
+        data: {
+          facilityId: FACILITY,
+          classBatchId,
+          sessionDate: twoDaysAgo,
+          startTime: '18:00',
+          endTime: '19:00',
+          status: 'confirmed',
+          curriculumUnitId: ex.curriculumUnitId,
+        },
+      });
+    });
+
     const lms = lmsCaller(makeStudentSession());
     const saved = await lms.submission.save({ exerciseId: ex.id, answerText: 'valid draft' });
     expect(saved.status).toBe('draft');
@@ -314,6 +359,23 @@ describe('Invariant 4: submission.save/submit rejected for unpublished exercises
 
     // Create an exercise published, have student save a draft, then retract it
     const ex = await mkPublishedExercise();
+
+    // Create an ENDED session mapped to this exercise's curriculum unit so it auto-opens
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    await withRls(SUPER, async (tx) => {
+      await tx.classSession.create({
+        data: {
+          facilityId: FACILITY,
+          classBatchId,
+          sessionDate: twoDaysAgo,
+          startTime: '20:00',
+          endTime: '21:00',
+          status: 'confirmed',
+          curriculumUnitId: ex.curriculumUnitId,
+        },
+      });
+    });
+
     const lms = lmsCaller(makeStudentSession());
     const saved = await lms.submission.save({ exerciseId: ex.id, answerText: 'saved while published' });
     cleanupSubmissions.push(saved.id);
@@ -325,5 +387,98 @@ describe('Invariant 4: submission.save/submit rejected for unpublished exercises
 
     // Submit should now be rejected
     await expect(lms.submission.submit({ exerciseId: ex.id })).rejects.toThrow();
+  });
+
+  it('rejects submission.save when exercise session has not yet ended (before-open)', async () => {
+    if (!dbReachable) return;
+
+    const ex = await mkPublishedExercise();
+
+    // Session dated tomorrow (UTC calendar day) — guaranteed future regardless of the
+    // wall-clock time this test runs at, since sessionEndUtc() derives the end instant from
+    // sessionDate's Y/M/D plus the endTime string, not from sessionDate's own time-of-day.
+    const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    await withRls(SUPER, async (tx) => {
+      await tx.classSession.create({
+        data: {
+          facilityId: FACILITY,
+          classBatchId, // student is enrolled in classBatchId
+          sessionDate: futureDate,
+          startTime: '08:00',
+          endTime: '10:00', // not yet ended (relative to now)
+          status: 'planned',
+          curriculumUnitId: ex.curriculumUnitId,
+        },
+      });
+    });
+
+    // Student tries to save submission for this exercise
+    // Should fail because the session hasn't ended yet
+    const lms = lmsCaller(makeStudentSession());
+    await expect(
+      lms.submission.save({ exerciseId: ex.id, answerText: 'too early' }),
+    ).rejects.toThrow();
+  });
+
+  it('rejects submission.submit when student is not enrolled in any class teaching the exercise unit (cross-class)', async () => {
+    if (!dbReachable) return;
+
+    // Create a third batch (C) where the student is NOT enrolled
+    const thirdBatchId = await withRls(SUPER, async (tx) => {
+      const batch = await tx.classBatch.create({
+        data: { facilityId: FACILITY, code: uniq('B_SEC3'), courseId, name: 'Security Batch C', status: 'open' },
+      });
+      cleanupBatches.push(batch.id);
+      return batch.id;
+    });
+
+    // Create an exercise for a curriculum unit taught only in batch C
+    const exerciseForBatchC = await withRls(SUPER, async (tx) => {
+      const unit = await tx.curriculumUnit.create({
+        data: {
+          courseId,
+          unitCode: uniq('CU_C'),
+          seqInLevel: 1,
+          orderGlobal: 1,
+          unitType: 'LESSON',
+          theme: 'Batch C unit',
+          sessions: 1,
+        },
+      });
+      const ex = await tx.exercise.create({
+        data: {
+          curriculumUnitId: unit.id,
+          title: uniq('EX_C'),
+          type: 'homework',
+          maxScore: 10,
+          status: 'published',
+        },
+      });
+      cleanupExercises.push(ex.id);
+      return ex;
+    });
+
+    // Create an ENDED session for batch C (so the exercise would theoretically be open)
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    await withRls(SUPER, async (tx) => {
+      await tx.classSession.create({
+        data: {
+          facilityId: FACILITY,
+          classBatchId: thirdBatchId, // only batch C has this session
+          sessionDate: twoDaysAgo,
+          startTime: '18:00',
+          endTime: '19:00',
+          status: 'confirmed',
+          curriculumUnitId: exerciseForBatchC.curriculumUnitId,
+        },
+      });
+    });
+
+    // Student tries to save submission for the exercise in batch C
+    // Should fail because student is not enrolled in batch C
+    const lms = lmsCaller(makeStudentSession());
+    await expect(
+      lms.submission.save({ exerciseId: exerciseForBatchC.id, answerText: 'wrong batch' }),
+    ).rejects.toThrow();
   });
 });

@@ -3,7 +3,7 @@
  *
  * Verifies that the app-layer scope guards in user.ts correctly enforce:
  *   - Business Director can only assign KD roles (sale/cskh/ctv_mkt)
- *   - Education Director can only assign education roles (giao_vien/head_teacher)
+ *   - Education Director can only assign education roles (giao_vien)
  *   - Directors cannot place users outside their own facilities
  *   - super_admin is unrestricted
  *   - Password login for a non-super-admin works when SSO_ENABLED is unset
@@ -184,7 +184,7 @@ describe('Education Director user.create', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
-  it('cannot assign a head_teacher to a foreign facility → FORBIDDEN', async () => {
+  it('cannot assign a giao_vien to a foreign facility → FORBIDDEN', async () => {
     const caller = await staffCaller({
       userId: eduDirId,
       roles: [Role.giam_doc_dao_tao],
@@ -194,10 +194,10 @@ describe('Education Director user.create', () => {
     });
     await expect(
       caller.user.create({
-        email: `${uniq('htfac')}@cmc.test`,
-        displayName: 'HT Foreign',
-        roles: [Role.head_teacher],
-        primaryRole: Role.head_teacher,
+        email: `${uniq('gvfac')}@cmc.test`,
+        displayName: 'GV Foreign',
+        roles: [Role.giao_vien],
+        primaryRole: Role.giao_vien,
         facilityIds: [facilityB],
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
@@ -220,17 +220,17 @@ describe('super_admin user.create', () => {
     expect(user.roles).toContain(Role.giam_doc_kinh_doanh);
   });
 
-  it('can create a user with no facilities (system-wide account)', async () => {
+  it('rejects a 0-facility account, including for super_admin (Plan 3 P2: a login with no facility has no RLS scope — dead account)', async () => {
     const caller = await staffCaller();
-    const user = await caller.user.create({
-      email: `${uniq('nofacsa')}@cmc.test`,
-      displayName: 'No Fac SA',
-      password: 'TestPass!123',
-      roles: [Role.ke_toan],
-      primaryRole: Role.ke_toan,
-      facilityIds: [],
-    });
-    expect(user.id).toBeTruthy();
+    await expect(
+      caller.user.create({
+        email: `${uniq('nofacsa')}@cmc.test`,
+        displayName: 'No Fac SA',
+        roles: [Role.ke_toan],
+        primaryRole: Role.ke_toan,
+        facilityIds: [],
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 });
 

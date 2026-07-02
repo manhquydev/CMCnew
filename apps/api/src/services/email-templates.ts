@@ -8,7 +8,9 @@ export type EmailTemplateKind =
   | 'parent_meeting'
   | 'otp_login'
   | 'lms_account_ready'
-  | 'account_welcome';
+  | 'account_welcome'
+  | 'ops_error_alert'
+  | 'receipt';
 
 /**
  * Brand identity for outbound email — the REAL CMC EDU public info (mirrors the LMS login footer).
@@ -114,6 +116,20 @@ export interface TemplatePayloads {
     loginUrl: string;
     roleLabel?: string;
   };
+  /** Sent to ops when the error-rate window crosses ERROR_ALERT_THRESHOLD. No PII — counts only. */
+  ops_error_alert: {
+    windowStart: string;
+    count: number;
+    threshold: number;
+  };
+  /** Sent to the payer on finance.sendReceiptEmail. Non-secret — retryable and re-sendable. */
+  receipt: {
+    receiptCode: string;
+    netAmount: number;
+    studentName: string;
+    facilityName: string;
+    approvedAt: string;
+  };
 }
 
 type Renderer<K extends EmailTemplateKind> = (data: TemplatePayloads[K]) => RenderedEmail;
@@ -208,6 +224,37 @@ const renderers: { [K in EmailTemplateKind]: Renderer<K> } = {
         ) +
         button('Mở hệ thống', d.loginUrl) +
         p('Nếu bạn chưa nhận được tài khoản Microsoft, vui lòng liên hệ bộ phận IT.'),
+    }),
+  }),
+
+  ops_error_alert: (d) => ({
+    subject: `[CMC EDU] Cảnh báo tỉ lệ lỗi tăng cao (${d.count} lỗi)`,
+    html: layout({
+      title: 'Cảnh báo vận hành: tỉ lệ lỗi tăng cao',
+      preheader: `${d.count}/${d.threshold} lỗi trong cửa sổ ${d.windowStart}`,
+      bodyHtml:
+        p(`Hệ thống ghi nhận <strong>${d.count}</strong> lỗi kể từ ${esc(d.windowStart)}, vượt ngưỡng cảnh báo (${d.threshold}).`) +
+        p('Vui lòng kiểm tra log máy chủ để xác định nguyên nhân.'),
+    }),
+  }),
+
+  receipt: (d) => ({
+    subject: `Phiếu thu ${esc(d.receiptCode)} — ${BRAND.name}`,
+    html: layout({
+      title: 'Phiếu thu học phí',
+      preheader: `Phiếu thu ${d.receiptCode}`,
+      bodyHtml:
+        p('Kính gửi Quý phụ huynh,') +
+        p(`Đính kèm là phiếu thu học phí cho học sinh <strong>${esc(d.studentName)}</strong> tại ${esc(d.facilityName)}.`) +
+        `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border:1px solid #e6e8eb;border-radius:8px;overflow:hidden">
+<tr><td style="padding:12px 16px;background:#f8f9fb;font-size:13px;color:#555;font-weight:600;width:140px">Mã phiếu thu</td>
+<td style="padding:12px 16px;font-size:15px;font-weight:700;color:#0b5cad">${esc(d.receiptCode)}</td></tr>
+<tr style="border-top:1px solid #e6e8eb"><td style="padding:12px 16px;background:#f8f9fb;font-size:13px;color:#555;font-weight:600">Số tiền</td>
+<td style="padding:12px 16px;font-size:15px;font-weight:700;color:#333">${d.netAmount.toLocaleString('vi-VN')}đ</td></tr>
+<tr style="border-top:1px solid #e6e8eb"><td style="padding:12px 16px;background:#f8f9fb;font-size:13px;color:#555;font-weight:600">Ngày duyệt</td>
+<td style="padding:12px 16px;font-size:15px;color:#333">${esc(d.approvedAt)}</td></tr>
+</table>` +
+        p('Cảm ơn Quý phụ huynh đã tin tưởng đồng hành cùng chúng tôi.'),
     }),
   }),
 };

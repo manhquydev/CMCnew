@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
+import { IconStar, IconMountain, IconCheck, IconClock } from '@tabler/icons-react';
 import './cloud-climb.css';
 
 /** Visual state of a single exercise node on the climb. */
@@ -11,9 +12,9 @@ export type ProgramKey = 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE';
 
 /** Per-program branding: label + public asset + official marketing accent color. */
 export const PROGRAM_META: Record<ProgramKey, { label: string; sub: string; img: string; accent: string }> = {
-  BLACK_HOLE: { label: 'BlackHole', sub: 'Tư duy', img: '/brand/program-black-hole.png', accent: '#7950F2' },
-  BRIGHT_IG: { label: 'BRIGHT I.G', sub: 'Trí tuệ', img: '/brand/program-bright-ig.png', accent: '#1B98E0' },
-  UCREA: { label: 'UCREA', sub: 'Sáng tạo', img: '/brand/program-ucrea.png', accent: '#FF7B2E' },
+  BLACK_HOLE: { label: 'BlackHole', sub: 'Tư duy', img: 'brand/program-black-hole.png', accent: '#7950F2' },
+  BRIGHT_IG: { label: 'BRIGHT I.G', sub: 'Trí tuệ', img: 'brand/program-bright-ig.png', accent: '#1B98E0' },
+  UCREA: { label: 'UCREA', sub: 'Sáng tạo', img: 'brand/program-ucrea.png', accent: '#FF7B2E' },
 };
 
 /** Vertical rhythm of the beanstalk (matches the cungcontuhoc journey: nodes climb upward). */
@@ -21,13 +22,43 @@ export const NODE_GAP = 300;
 export const NODE_BASE = 360;
 export const SCENE_PAD = 560;
 
+/** Vector Claymorphic Cloud background to replace static PNG image */
+export function ClayCloudSVG({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 240 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ overflow: 'visible' }}>
+      <defs>
+        <linearGradient id="cloudGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="85%" stopColor="#f8fafc" />
+          <stop offset="100%" stopColor="#e2e8f0" />
+        </linearGradient>
+        <filter id="clayShadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="12" stdDeviation="16" floodColor="#0f2042" floodOpacity="0.08" />
+          <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#0f2042" floodOpacity="0.04" />
+        </filter>
+      </defs>
+      <path 
+        d="M45 65 C25 65, 10 48, 25 32 C20 18, 40 8, 60 18 C72 5, 98 5, 112 18 C130 5, 160 12, 165 30 C185 30, 195 48, 178 62 C192 75, 165 88, 148 80 C135 88, 92 88, 78 80 C60 88, 45 76, 45 65 Z" 
+        fill="url(#cloudGrad)" 
+        filter="url(#clayShadow)"
+        stroke="#ffffff"
+        strokeWidth="3"
+      />
+    </svg>
+  );
+}
+
 export function ClimbHud({ stars, climbed, total }: { stars: number; climbed: number; total: number }) {
   return (
     <div className="climb-hud">
-      <img className="climb-hud__logo" src="/brand/cmc-logo.jpg" alt="CMC" />
+      <img className="climb-hud__logo" src="brand/cmc-logo.jpg" alt="CMC" />
       <span className="climb-hud__spacer" />
-      <span className="climb-chip climb-chip--gold">⭐ {stars}</span>
-      <span className="climb-chip">🏔 {climbed}/{total} bậc</span>
+      <span className="climb-chip climb-chip--gold">
+        <IconStar size={16} fill="currentColor" stroke={1.5} /> {stars}
+      </span>
+      <span className="climb-chip">
+        <IconMountain size={16} stroke={1.5} /> {climbed}/{total} bậc
+      </span>
     </div>
   );
 }
@@ -61,25 +92,35 @@ interface BeanNodeProps {
 /** One lesson node: a floating cloud platform with a round status button + label. */
 export function BeanNode({ state, side, yPos, step, title, earnedStars, reward, onClick }: BeanNodeProps) {
   const leftPct = side === 'left' ? '34%' : side === 'right' ? '66%' : '50%';
-  // Done = check, submitted = waiting; otherwise show the step number (no padlock — every
-  // published exercise is openable, so a lock glyph would mis-signal).
-  const glyph = state === 'done' ? '✓' : state === 'submitted' ? '⏳' : String(step);
+  
+  const glyph = state === 'done' ? (
+    <IconCheck size={26} stroke={3} />
+  ) : state === 'submitted' ? (
+    <IconClock size={24} stroke={3} />
+  ) : (
+    <span>{step}</span>
+  );
+
   return (
     <div className="climb-bnode" style={{ bottom: yPos, left: leftPct }}>
       {state === 'current' && <span className="climb-bnode__here">Bạn ở đây</span>}
-      <img className="climb-bnode__cloud" src="/garden/platform/cloud-platform.png" alt="" />
+      <ClayCloudSVG className="climb-bnode__cloud" />
       <button
         type="button"
         className={`climb-bnode__btn climb-bnode__btn--${state}`}
         onClick={onClick}
         aria-label={`Bài ${step}: ${title} — ${stateLabel(state)}`}
       >
-        <span>{glyph}</span>
+        {glyph}
       </button>
       <div className="climb-bnode__meta">
         <strong>{title}</strong>
         {state === 'done' && earnedStars != null && (
-          <span className="climb-bnode__stars">{'⭐'.repeat(Math.max(1, Math.min(3, earnedStars)))}</span>
+          <div className="climb-bnode__stars">
+            {Array.from({ length: Math.max(1, Math.min(3, earnedStars)) }).map((_, i) => (
+              <IconStar key={i} size={14} fill="currentColor" stroke={1.5} />
+            ))}
+          </div>
         )}
         {(state === 'current' || state === 'upcoming') && reward != null && reward > 0 && (
           <span className="climb-bnode__stars">+{reward} sao</span>
@@ -130,7 +171,11 @@ export function CloudCelebration({ title, reward, onClose }: { title: string; re
       </div>
       <img className="climb-celebrate__vfx" src="/garden/vfx/cloud-burst.png" alt="" />
       <img className="climb-celebrate__pop" src="/garden/vfx/star-pop.png" alt="" />
-      <div className="climb-celebrate__rate">★ ★ ★</div>
+      <div className="climb-celebrate__rate">
+        <IconStar size={24} fill="currentColor" stroke={1.5} />
+        <IconStar size={32} fill="currentColor" stroke={1.5} style={{ margin: '0 8px', transform: 'translateY(-4px)' }} />
+        <IconStar size={24} fill="currentColor" stroke={1.5} />
+      </div>
       <h2>Lên một tầng mây!</h2>
       <p>Bạn đã nộp “{title}”</p>
       {reward > 0 && <div className="climb-celebrate__earn">+{reward} ⭐ khi được chấm đạt</div>}

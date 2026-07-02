@@ -75,7 +75,7 @@ GĐ Kinh Doanh có **toàn quyền** với CRM, có thể tự làm hoặc giám
 - **Liên hệ (Contact)**: xem danh sách, tạo mới.
 - **Bài test đầu vào**: xem danh sách, tạo lịch test cho khách.
 
-**KHÔNG làm được:** **chấm điểm test** — việc chấm test thuộc giáo viên/trưởng bộ môn (giám đốc không đứng lớp).
+**KHÔNG làm được:** **chấm điểm test** — việc chấm test thuộc giáo viên (giám đốc không đứng lớp).
 
 ### 3.4. Chăm sóc khách hàng (After-sale)
 
@@ -85,7 +85,7 @@ Toàn quyền với ca chăm sóc sau bán để có thể vào cuộc hoặc ph
 - Chuyển trạng thái ca (transition).
 - **Gán/phân ca** cho nhân viên CSKH.
 
-**KHÔNG làm được:** **đặt vòng đời học sinh** (`setStudentLifecycle`) — thao tác này có ảnh hưởng tài chính nên chỉ Quản Lý cơ sở mới làm.
+**KHÔNG làm được:** **đặt vòng đời học sinh** (`setStudentLifecycle`) — thao tác này có ảnh hưởng tài chính nên chỉ GĐ Kinh Doanh mới làm.
 
 ### 3.5. Đổi quà (Rewards)
 
@@ -100,7 +100,7 @@ GĐ Kinh Doanh có quyền **xem** tài chính để nắm doanh thu, **không**
 - Xem **bảng giá** (price list).
 - Xem **voucher**.
 
-**KHÔNG làm được:** tạo/duyệt/đối soát/hủy phiếu thu, tạo bảng giá, tạo voucher — các thao tác ghi này thuộc Kế Toán / Quản Lý.
+**KHÔNG làm được:** tạo/duyệt/đối soát/hủy phiếu thu, tạo bảng giá, tạo voucher — các thao tác ghi này thuộc Kế Toán / GĐ Kinh Doanh.
 
 ### 3.7. Đánh giá KPI
 
@@ -117,10 +117,10 @@ Xem chi tiết quy trình và quy tắc tách trách nhiệm ở **mục 6**.
 ### 3.9. GĐ Kinh Doanh KHÔNG làm được gì
 
 - Không có bất kỳ quyền **học vụ/giảng dạy** nào: không điểm danh, không chấm bài, không học bạ, không tạo/quản lý lớp, không lịch dạy, không chứng chỉ, không duyệt cấp độ, không họp phụ huynh, không tạo khóa học.
-- Không **ghi** tài chính (chỉ xem).
-- Không quản lý phụ huynh (Phụ huynh là mục của Quản Lý).
 - Không **chuẩn bị dữ liệu KPI** (khởi tạo/tự điền/đặt điểm tự động) — đó là việc HR/Kế Toán.
-- Không tạo vai trò ngoài sale/cskh/ctv_mkt.
+- Không tạo vai trò ngoài sale/cskh/ctv_mkt/ke_toan/hr.
+
+> Sau khi bỏ vai trò Quản Lý, GĐ Kinh Doanh **nay được** ghi tài chính (bảng giá/voucher/phiếu thu) và quản lý phụ huynh — trước đây thuộc Quản Lý.
 
 ---
 
@@ -139,9 +139,8 @@ GĐ Đào Tạo nhìn thấy các mục: **Tổng quan**, **Cơ sở & Người 
 GĐ Đào Tạo được tạo tài khoản ERP cho team đào tạo. Các vai trò bạn được tạo:
 
 - **Giáo Viên** (`giao_vien`)
-- **Trưởng Bộ Môn** (`head_teacher`)
 
-Danh sách vai trò tự lọc — bạn không tạo được vai trò ngoài hai vai trò trên. (Quy trình ở mục 5.)
+Danh sách vai trò tự lọc — bạn không tạo được vai trò ngoài vai trò trên. (Quy trình ở mục 5.)
 
 ### 4.3. Khóa học
 
@@ -208,7 +207,7 @@ Chi tiết quy trình ở **mục 6**.
 - Không có quyền **Chăm sóc khách hàng** (after-sale).
 - Không **tài chính** (kể cả xem) và không **đổi quà** — các mục này không hiện trong menu của bạn.
 - Không **chuẩn bị dữ liệu KPI** (khởi tạo/tự điền/đặt điểm tự động) — đó là việc HR/Kế Toán.
-- Không tạo vai trò ngoài giáo viên / trưởng bộ môn.
+- Không tạo vai trò ngoài giáo viên.
 
 ---
 
@@ -228,7 +227,7 @@ Việc đưa một nhân viên mới vào hệ thống cần **hai bước**, do
 3. Nhập:
    - **Email**: đúng địa chỉ `@cmcvn.edu.vn` mà IT vừa tạo.
    - **Tên hiển thị**.
-   - **Vai trò**: chọn từ danh sách (đã tự lọc theo quyền của bạn — GĐ KD chỉ thấy sale/cskh/ctv_mkt; GĐ ĐT chỉ thấy giáo viên/trưởng bộ môn).
+   - **Vai trò**: chọn từ danh sách (đã tự lọc theo quyền của bạn — GĐ KD thấy sale/cskh/ctv_mkt/ke_toan/hr; GĐ ĐT chỉ thấy giáo viên).
    - **Vai trò chính**: chọn vai trò chính của nhân viên (nếu để trống, hệ thống mặc định lấy vai trò đầu tiên trong danh sách vai trò đã chọn).
    - **Cơ sở**: chọn cơ sở của nhân viên.
 
@@ -252,8 +251,8 @@ draft (nháp) → submitted (đã nộp) → confirmed (đã xác nhận) → ap
 | Bước | Trạng thái | Người thực hiện |
 |------|-----------|-----------------|
 | Chuẩn bị dữ liệu (khởi tạo phiếu, tự điền, đặt điểm tự động) | tạo `draft` | **HR / Kế Toán** |
-| Nộp phiếu (sau khi hệ thống tính điểm) | `submitted` | **HR / Quản Lý** (nhân viên không có menu tự nộp riêng; được xem kết quả qua HR/quản lý) |
-| Xác nhận | `confirmed` | **Quản Lý hoặc Giám Đốc** |
+| Nộp phiếu (sau khi hệ thống tính điểm) | `submitted` | **HR / Kế Toán** (nhân viên không có menu tự nộp riêng; được xem kết quả qua HR/kế toán) |
+| Xác nhận | `confirmed` | **Giám Đốc** |
 | Duyệt (bước cuối) | `approved` | **Giám Đốc** |
 
 ### Quy tắc tách trách nhiệm (quan trọng)
@@ -268,7 +267,7 @@ draft (nháp) → submitted (đã nộp) → confirmed (đã xác nhận) → ap
 2. Chọn phiếu đang ở trạng thái phù hợp.
 3. Bấm **Xác nhận** (nếu là người xác nhận), hoặc **Duyệt** (nếu phiếu đã được người khác xác nhận).
 
-> Mẹo phối hợp: nếu một giám đốc đã **xác nhận** phiếu, hãy để **giám đốc còn lại** (hoặc Quản Lý đã xác nhận → giám đốc duyệt) thực hiện bước **duyệt**, đảm bảo hai người khác nhau.
+> Mẹo phối hợp: nếu một giám đốc đã **xác nhận** phiếu, hãy để **giám đốc còn lại** thực hiện bước **duyệt**, đảm bảo hai người khác nhau.
 
 ---
 
@@ -276,7 +275,7 @@ draft (nháp) → submitted (đã nộp) → confirmed (đã xác nhận) → ap
 
 - Các trang xem chung (Tổng quan, Lịch dạy, Lớp học, Khóa học) hiện cho mọi nhân sự ở chế độ chỉ xem; chỉ **nút hành động** bên trong mới theo quyền — thiếu nút = thiếu quyền (không phải lỗi).
 - Giám đốc đăng nhập **bằng Microsoft (SSO)**, không bằng mật khẩu.
-- GĐ Kinh Doanh: kinh doanh + CRM + CSKH + thưởng + **xem** tài chính + KPI; **không** học vụ.
+- GĐ Kinh Doanh: kinh doanh + CRM + CSKH + thưởng + **tài chính (ghi)** + phụ huynh + KPI; **không** học vụ.
 - GĐ Đào Tạo: học vụ + lớp + KPI; **không** CRM/tài chính/thưởng. (Chứng chỉ tạm ẩn — chưa sử dụng.)
 - KPI: người duyệt ≠ người xác nhận trên cùng phiếu.
-- **Đặt lại mật khẩu LMS cho học sinh** hiện do **Quản Lý cơ sở** thực hiện (trong mục **Học sinh**). Tuy hai giám đốc có quyền này về mặt hệ thống, mục **Học sinh** hiện chưa hiển thị trên menu của giám đốc, nên trên thực tế thao tác này do quản lý cơ sở làm.
+- **Đặt lại mật khẩu LMS cho học sinh**: tuy hai giám đốc có quyền này về mặt hệ thống, mục **Học sinh** hiện chưa hiển thị trên menu của giám đốc, nên trên thực tế thao tác này do **super_admin (quản trị hệ thống)** thực hiện trong mục **Học sinh**.

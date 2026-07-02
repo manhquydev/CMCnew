@@ -1,6 +1,15 @@
 # CI/CD Observability (recommendations + remaining work)
 
-Status: in-progress · Lane: high-risk · Intake #36
+Status: completed (2026-07-02) · Lane: high-risk · Intake #36
+
+**Closure note (2026-07-02):** P3's deferred items are done — GitHub token
+credential + `github-branch-source` PR discovery wired in `docker/jenkins-casc.yaml`
+(commits `72b1d3f`, `e2a1657`), `ci.cmcvn.edu.vn` is live. Verified live via
+`gh pr list --json statusCheckRollup` on PR #11-#15: Jenkins posts real
+`continuous-integration/jenkins/branch` status to GitHub PRs. `.github/workflows/ci.yml`
+(GitHub Actions) remains billing-blocked and always FAILURE — now slated for
+deletion in `plans/260702-*-google-jules-async-agent-integration/` since it
+provides zero signal and only adds noise.
 Goal: make Jenkins deploys externally verifiable + visually observable, and close
 the session's harness backlog.
 

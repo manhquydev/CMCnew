@@ -48,7 +48,7 @@ export const levelProgressRouter = router({
       }),
     ),
 
-  // Approver queue: pending proposals in the head_teacher's facilities.
+  // Approver queue: pending proposals in the giam_doc_dao_tao's facilities.
   listPending: requirePermission('levelProgress', 'listPending')
     .query(({ ctx }) =>
       withRls(rlsContextOf(ctx.session), (tx) =>
@@ -67,7 +67,7 @@ export const levelProgressRouter = router({
       ),
     ),
 
-  // Only head_teacher (or super) decides (charter). Approve writes Student.level in the same tx
+  // Only giam_doc_dao_tao (or super) decides (charter). Approve writes Student.level in the same tx
   // and notifies the student/parent over SSE; reject just records the decision.
   decide: requirePermission('levelProgress', 'decide')
     .input(

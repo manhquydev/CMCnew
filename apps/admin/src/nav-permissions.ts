@@ -28,7 +28,7 @@ export const NAV_GATES: Record<SectionKey, NavGate> = {
   schedule:       { kind: 'open' },
   // classes: class list/detail are protectedProcedure; any staff can browse classes
   classes:        { kind: 'open' },
-  // overview: the panel's ONLY load query is dashboard.summary (restricted to BGĐ/quản lý/
+  // overview: the panel's ONLY load query is dashboard.summary (restricted to the two
   //   directors), so it must be gated to that action — otherwise teachers etc. see "Tổng quan"
   //   and every open returns FORBIDDEN ("Không tải được tổng quan").
   overview:       { kind: 'permission', module: 'dashboard', action: 'summary' },
@@ -46,56 +46,88 @@ export const NAV_GATES: Record<SectionKey, NavGate> = {
   compensation:   { kind: 'superAdmin' },
 
   // ── Gated by PERMISSIONS registry entry ─────────────────────────────────
-  // attendance: primary action is attendance.mark = [giao_vien, quan_ly].
-  //   head_teacher can read session lists (protectedProcedure) but the panel's purpose is
-  //   marking attendance — gate to mark so only roles that can act see the panel.
+  // attendance: primary action is attendance.mark = [giao_vien, giam_doc_dao_tao].
+  //   Gate to mark so only roles that can act see the panel.
   attendance:   { kind: 'permission', module: 'attendance', action: 'mark' },
 
-  // grading: grade.grade = [giao_vien, quan_ly]
+  // grading: grade.grade = [giao_vien, giam_doc_dao_tao]
   grading:      { kind: 'permission', module: 'grade', action: 'grade' },
 
-  // assessment: assessment.termList = [giao_vien, head_teacher, quan_ly]
+  // assessment: assessment.termList = [giao_vien, giam_doc_dao_tao]
   //   termList is the panel's primary load query and is permission-gated.
   assessment:   { kind: 'permission', module: 'assessment', action: 'termList' },
 
-  // meetings: parentMeeting.setStatus = [giao_vien, head_teacher, quan_ly]
+  // meetings: parentMeeting.setStatus = [giao_vien, giam_doc_dao_tao]
   meetings:     { kind: 'permission', module: 'parentMeeting', action: 'setStatus' },
 
-  // levelup: levelProgress.listPending = [head_teacher, quan_ly]
+  // levelup: levelProgress.listPending = [giam_doc_dao_tao]
   //   Panel's purpose is reviewing pending proposals — gated to the list query.
   levelup:      { kind: 'permission', module: 'levelProgress', action: 'listPending' },
 
-  // certificate: certificate.list = [head_teacher, quan_ly, giao_vien]
+  // certificate: certificate.list = [giao_vien, giam_doc_dao_tao]
   certificate:  { kind: 'permission', module: 'certificate', action: 'list' },
 
-  // students: student.update = [quan_ly, sale] — panel's primary work action.
+  // students: student.update = [sale, giam_doc_kinh_doanh] — panel's primary work action.
   //   student.list is protectedProcedure (any staff can read), but management operations
   //   require update permission; gate to the work action per spec.
   students:     { kind: 'permission', module: 'student', action: 'update' },
 
-  // guardians: guardian.parentList = [bgd, quan_ly] — panel's first load query.
-  //   D1 fix: cskh previously appeared in the nav but cannot call guardian.* procedures.
+  // guardians: guardian.parentList = [giam_doc_kinh_doanh, giam_doc_dao_tao] — panel's first load query.
   guardians:    { kind: 'permission', module: 'guardian', action: 'parentList' },
 
-  // finance: finance.receiptList = [ke_toan, quan_ly]
+  // finance: finance.receiptList = [ke_toan, giam_doc_kinh_doanh]
   finance:      { kind: 'permission', module: 'finance', action: 'receiptList' },
 
-  // crm: crm.opportunityList = [sale, cskh, quan_ly, ctv_mkt]
+  // email-outbox: email.outboxList = [giam_doc_kinh_doanh] only (v1, YAGNI)
+  'email-outbox': { kind: 'permission', module: 'email', action: 'outboxList' },
+
+  // revenue-report: finance.revenueReport = [ke_toan, giam_doc_kinh_doanh]
+  'revenue-report': { kind: 'permission', module: 'finance', action: 'revenueReport' },
+
+  // reconcile-worklist: finance.reconcileWorklist = [ke_toan, giam_doc_kinh_doanh]
+  'reconcile-worklist': { kind: 'permission', module: 'finance', action: 'reconcileWorklist' },
+
+  // crm: crm.opportunityList = [sale, cskh, ctv_mkt, giam_doc_kinh_doanh]
   //   All CRM-role staff can at minimum read opportunities.
   crm:          { kind: 'permission', module: 'crm', action: 'opportunityList' },
 
-  // cskh: afterSale.list = [cskh, quan_ly]
+  // cskh: afterSale.list = [cskh, giam_doc_kinh_doanh]
   cskh:         { kind: 'permission', module: 'afterSale', action: 'list' },
 
-  // rewards: rewards.giftCreate = [quan_ly] only.
-  //   D2 fix: head_teacher and bgd previously appeared in nav but cannot create/review gifts.
+  // rewards: rewards.giftCreate = [giam_doc_kinh_doanh] only.
   rewards:      { kind: 'permission', module: 'rewards', action: 'giftCreate' },
 
-  // hr: payroll.payslipList = [hr, ke_toan]
-  hr:           { kind: 'permission', module: 'payroll', action: 'payslipList' },
+  // badges: badge.list = [giao_vien, giam_doc_dao_tao] — panel's primary load query.
+  badges:       { kind: 'permission', module: 'badge', action: 'list' },
 
-  // kpi: payroll.kpiList = [hr, ke_toan] — panel's primary load query.
-  //   D3 fix: head_teacher/bgd/quan_ly previously appeared in nav but kpiList is hr/ke_toan-only;
-  //   those roles can confirm/approve (kpiEvalConfirm/kpiEvalApprove) but cannot load the list rows.
+  // hr: payroll.roster = [giam_doc_kinh_doanh, giam_doc_dao_tao]
+  hr:           { kind: 'permission', module: 'payroll', action: 'roster' },
+
+  // kpi: payroll.kpiList = [giam_doc_kinh_doanh, giam_doc_dao_tao] — panel's primary load query.
   kpi:          { kind: 'permission', module: 'payroll', action: 'kpiList' },
+
+  // ── Work Shift & Attendance ────────────────────────────────────────────
+  checkin:              { kind: 'permission', module: 'checkInOut', action: 'punch' },
+  'shift-registration': { kind: 'permission', module: 'shiftRegistration', action: 'list' },
+  'facility-network':  { kind: 'permission', module: 'facilityNetwork', action: 'list' },
+  'shift-config':      { kind: 'superAdmin' },
+
+  // ── Teacher nav consolidation (Lịch 360) ────────────────────────────────
+  // These two are aggregate screens visible ONLY to giao_vien-only accounts. The real
+  // visibility decision lives in buildNavGroups() (shell.tsx), not here — the gate below is a
+  // placeholder so NAV_GATES stays a complete Record<SectionKey, NavGate> for the type checker.
+  'student-mgmt':     { kind: 'open' },
+  'payroll-checkin':  { kind: 'open' },
+
+  // ── Executive Cockpit (Phase 3) ─────────────────────────────────────────
+  // Aggregate screen visible ONLY to giam_doc_kinh_doanh-only accounts (replaces 'overview').
+  // Same placeholder pattern as student-mgmt/payroll-checkin above — real visibility lives in
+  // buildNavGroups() (shell.tsx, isBizDirectorOnly), not here.
+  'biz-director-cockpit': { kind: 'open' },
+
+  // ── Executive Cockpit (Phase 4) ─────────────────────────────────────────
+  // Aggregate screen visible ONLY to giam_doc_dao_tao-only accounts (replaces 'overview').
+  // Same placeholder pattern as biz-director-cockpit above — real visibility lives in
+  // buildNavGroups() (shell.tsx, isEduDirectorOnly), not here.
+  'edu-director-cockpit': { kind: 'open' },
 };
