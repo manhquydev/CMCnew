@@ -51,6 +51,7 @@ import { CrmPanel } from './crm-panel';
 import { CskhPanel } from './cskh-panel';
 import { StudentsPanel } from './students-panel';
 import { RewardsPanel } from './rewards-panel';
+import { BadgePanel } from './badge-panel';
 import { TermsPanel } from './terms-panel';
 // Panels — ported from teaching
 import { GradingPanel } from './grading';
@@ -491,7 +492,7 @@ function HrPayrollSection() {
 
 const ALL_SECTION_KEYS = new Set<string>([
   'overview', 'courses', 'students', 'org', 'guardians',
-  'hr', 'kpi', 'compensation', 'finance', 'email-outbox', 'revenue-report', 'reconcile-worklist', 'crm', 'cskh', 'rewards',
+  'hr', 'kpi', 'compensation', 'finance', 'email-outbox', 'revenue-report', 'reconcile-worklist', 'crm', 'cskh', 'rewards', 'badges',
   'schedule', 'attendance', 'grading', 'assessment',
   // 'certificate' intentionally omitted: the feature is hidden from nav (shell.tsx visible:false),
   // so #certificate is not a reachable hash route either. Re-add when the feature is re-enabled.
@@ -735,6 +736,14 @@ function Dashboard() {
           <Stack>
             <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Đổi quà</Text>
             <RewardsPanel />
+          </Stack>
+        );
+
+      case 'badges':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Huy hiệu</Text>
+            <BadgePanel />
           </Stack>
         );
 

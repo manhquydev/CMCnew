@@ -99,16 +99,18 @@ describe('nav-permissions consistency', () => {
     }
   });
 
-  it('D3: sale, cskh, giao_vien do not see kpi; both directors + hr/ke_toan do (payroll.kpiList)', () => {
+  it('D3: sale, cskh, giao_vien, hr, ke_toan do not see kpi; only both directors do (payroll.kpiList)', () => {
     const gate = NAV_GATES.kpi;
     expect(gate.kind).toBe('permission');
     if (gate.kind === 'permission') {
       expect(can(['sale'], false, gate.module, gate.action)).toBe(false);
       expect(can(['cskh'], false, gate.module, gate.action)).toBe(false);
       expect(can(['giao_vien'], false, gate.module, gate.action)).toBe(false);
-      // Positive: hr, ke_toan, and both directors can (payroll.kpiList grants all four)
-      expect(can(['hr'], false, gate.module, gate.action)).toBe(true);
-      expect(can(['ke_toan'], false, gate.module, gate.action)).toBe(true);
+      // hr/ke_toan were dropped from payroll.kpiList by the RBAC role-consolidation decision
+      // (payroll read/list surfaces are director-only) — see rbac-role-consolidation-decision.
+      expect(can(['hr'], false, gate.module, gate.action)).toBe(false);
+      expect(can(['ke_toan'], false, gate.module, gate.action)).toBe(false);
+      // Positive: both directors can
       expect(can(['giam_doc_kinh_doanh'], false, gate.module, gate.action)).toBe(true);
       expect(can(['giam_doc_dao_tao'], false, gate.module, gate.action)).toBe(true);
     }

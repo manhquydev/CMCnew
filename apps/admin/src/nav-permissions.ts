@@ -97,6 +97,9 @@ export const NAV_GATES: Record<SectionKey, NavGate> = {
   // rewards: rewards.giftCreate = [giam_doc_kinh_doanh] only.
   rewards:      { kind: 'permission', module: 'rewards', action: 'giftCreate' },
 
+  // badges: badge.list = [giao_vien, giam_doc_dao_tao] — panel's primary load query.
+  badges:       { kind: 'permission', module: 'badge', action: 'list' },
+
   // hr: payroll.roster = [giam_doc_kinh_doanh, giam_doc_dao_tao]
   hr:           { kind: 'permission', module: 'payroll', action: 'roster' },
 

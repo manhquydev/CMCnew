@@ -121,3 +121,30 @@ export const attendanceApi = trpc.checkInOut as unknown as {
   monthlyReport: { query: (i: { facilityId: number; periodKey: string }) => Promise<{ periodKey: string; rows: AttendanceReportRow[] }> };
   history: { query: (i: { userId?: string; fromDate: string; toDate: string }) => Promise<AttendanceHistoryPunch[]> };
 };
+
+export type BadgeRow = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  iconUrl: string | null;
+  unlockCriteria: unknown;
+  isActive: boolean;
+  archivedAt: string | Date | null;
+};
+
+export const badgeApi = trpc.badge as unknown as {
+  list: { query: (i: { facilityId: number }) => Promise<BadgeRow[]> };
+  create: {
+    mutate: (i: {
+      facilityId: number;
+      code: string;
+      name: string;
+      description?: string;
+      iconUrl?: string;
+      unlockCriteria: { kind: 'stars_total' | 'homework_count'; gte: number };
+    }) => Promise<{ id: string }>;
+  };
+  archive: { mutate: (i: { id: string }) => Promise<{ ok: boolean }> };
+  grant: { mutate: (i: { studentId: string; badgeId: string }) => Promise<{ awarded: boolean }> };
+};

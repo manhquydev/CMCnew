@@ -20,6 +20,7 @@ import {
   IconCurrencyDong,
   IconDoor,
   IconGift,
+  IconAward,
   IconHeadset,
   IconId,
   IconLayoutDashboard,
@@ -62,6 +63,7 @@ export type SectionKey =
   | 'crm'
   | 'cskh'
   | 'rewards'
+  | 'badges'
   // HR / Payroll
   | 'hr'
   | 'kpi'
@@ -441,6 +443,7 @@ export function buildNavGroups({
         { key: 'crm' as const, label: 'CRM', icon: <IconTrendingUp {...I()} />, visible: visible('crm') },
         { key: 'cskh' as const, label: 'Chăm sóc KH', icon: <IconHeadset {...I()} />, visible: visible('cskh') },
         { key: 'rewards' as const, label: 'Đổi quà', icon: <IconGift {...I()} />, visible: visible('rewards') },
+        { key: 'badges' as const, label: 'Huy hiệu', icon: <IconAward {...I()} />, visible: visible('badges') },
       ],
     },
     {
@@ -507,6 +510,7 @@ export const SECTION_TITLES: Record<SectionKey, string> = {
   kpi: 'Đánh giá KPI',
   compensation: 'Cơ cấu lương',
   rewards: 'Đổi quà',
+  badges: 'Huy hiệu',
   // Teaching / Academic
   schedule: 'Lịch dạy',
   attendance: 'Điểm danh',
