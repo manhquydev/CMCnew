@@ -1,10 +1,10 @@
 ---
 title: "P2 — Primitive: generic record-detail component"
 description: "Extract packages/ui/src/record-detail.tsx from staff-profile.tsx's Tabs+Chatter pattern, parameterized for any entity."
-status: pending
+status: implemented
 priority: P2
-effort: TBD (detail when P1 lands)
-branch: TBD (create from P1's merge point)
+effort: normal
+branch: feat/phase-d-facility-picker-and-stitch-wireframes
 tags: [ux, ui-rebuild, primitive]
 created: 2026-07-03
 ---
@@ -34,3 +34,10 @@ Build `packages/ui/src/record-detail.tsx`: 2-col label|value form grid + Tabs (w
 
 1. Field-render extensibility — custom `render()` beyond a type-enum, or is type-enum sufficient for all known entities?
 2. ActivityLog refresh strategy — auto-poll, WebSocket, or manual `refreshKey` (current staff-profile pattern)?
+
+## Implementation Summary (2026-07-03)
+
+`packages/ui/src/record-detail.tsx` committed `731f03b` (Q1: type-enum + `render()` override,
+`onFieldChange` added later; Q2: manual `refreshKey`, matches staff-profile). Interface later extended
+in P5 (`11ae211`, decision 0032) with `data`/`onStateChange`/`onFieldChange`. Proven by its first real
+consumer in P5 — see `plans/260703-1549-p5-reskin-staff-profile/plan.md`.

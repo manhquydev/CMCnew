@@ -1,10 +1,10 @@
 ---
 title: "P7 — Re-skin: List/Kanban templates + profile page + checkin discoverability"
 description: "data-table.tsx, view-switcher.tsx onto P1 tokens; verify kanban drag-drop status first; also builds Bucket-B #19 profile/settings page and #12 checkin discoverability."
-status: pending
+status: implemented
 priority: P3
-effort: TBD
-branch: TBD (create from P1's merge point)
+effort: normal
+branch: feat/phase-d-facility-picker-and-stitch-wireframes
 tags: [ux, ui-rebuild, list, kanban]
 created: 2026-07-03
 updated: 2026-07-03
@@ -30,3 +30,14 @@ Plan 7 of 7 (last in sequence, but independent of P4/P5/P6 — could run in para
 - Depends on: P1
 - Independent of: P2, P3, P4, P5, P6
 - P4 soft-depends on this plan's finalized DataTable/ViewSwitcher interface (see sequencing note)
+
+## Implementation Summary (2026-07-03)
+
+Committed `2cdb892`. (A) Token re-skin of `data-table.tsx`/`view-switcher.tsx` — no-op, already
+compliant, verified not just assumed. (B) Finding #19: real profile/settings page + avatar `Menu`
+built (red-team found no dropdown existed at all — a bare `<Avatar>`; `RecordDetailPanel` didn't fit
+the shape, built as a plain Mantine form instead per red-team recommendation). (C) Finding #12: checkin
+relabeled for discoverability (user-confirmed: relabel only, keep the existing nav grouping, zero test
+changes) — adding a routable section actually required 5 coordinated file edits (SectionKey union,
+SECTION_TITLES, NAV_GATES, ALL_SECTION_KEYS+renderContent switch, nav-consistency.test.ts), not a
+single-line change as the phase file originally assumed.

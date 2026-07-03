@@ -1,23 +1,22 @@
 ---
 title: "P4 — Re-skin: CRM cockpit + pipeline"
 description: "biz-director-cockpit-panel.tsx + crm-panel.tsx + opportunity-detail.tsx onto P1 tokens, preserving the just-shipped stage-stepper fix and Modal-ized form."
-status: partially-implemented
+status: implemented
 priority: P3
-effort: TBD
+effort: normal
 branch: feat/phase-d-facility-picker-and-stitch-wireframes
 tags: [ux, ui-rebuild, crm]
 created: 2026-07-03
 updated: 2026-07-03
 ---
 
-**Status (2026-07-03)**: Token re-skin portion VERIFIED COMPLETE — red-team confirmed zero code
-changes needed (all 3 files already inherit P1's flat Card default, no explicit overrides;
-`2bb1ad5`'s stage-stepper fix and Modal-ized forms both intact). **Finding #26's actual substance
-(new CRM director team-metrics dashboard: KPI cards, pipeline funnel with conversion %, consultant
-leaderboard table) is NOT built** — the plan as originally scoped only covered cosmetic re-skinning
-and lost track of #26's real requirement (a genuinely new dashboard, not existing-panel re-skin).
-The earlier approved `/stitch` wireframe (`crm-director-dashboard`) depicts this content but it was
-never implemented. Flagging as a separate follow-up scope, not silently closing #26 as done.
+**Status (2026-07-03, DONE — commit `32f3e0b`)**: Token re-skin portion VERIFIED COMPLETE — red-team
+confirmed zero code changes needed (all 3 files already inherit P1's flat Card default, no explicit
+overrides; `2bb1ad5`'s stage-stepper fix and Modal-ized forms both intact). Finding #26's actual
+substance (new CRM director team-metrics dashboard) was caught as a scope gap after the
+"verification only" red-team came back clean for the wrong scope, then built: `CrmDirectorDashboardCard`
+— 4 KPI stat cards (open pipeline, new leads, conversion rate, avg cycle, all with week-over-week
+trend), a 5-stage O1-O5 funnel with cumulative conversion %, and a consultant leaderboard table.
 
 ## Overview
 

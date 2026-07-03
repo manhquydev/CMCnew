@@ -1,10 +1,10 @@
 ---
 title: "P3 — Primitive: calendar-view (week default, month secondary)"
 description: "Hand-built packages/ui/src/calendar-view.tsx — @mantine/dates 7.15.2 has no week/month view."
-status: pending
+status: implemented
 priority: P2
-effort: TBD (detail when P1 lands)
-branch: TBD (create from P1's merge point)
+effort: normal
+branch: feat/phase-d-facility-picker-and-stitch-wireframes
 tags: [ux, ui-rebuild, primitive]
 created: 2026-07-03
 ---
@@ -36,3 +36,10 @@ Week view default (won over month in prior `/stitch` review — all 4 first-cons
 ## Unresolved questions (from research)
 
 1. Locale/week-start (Monday vs Sunday) — configurable prop or hardcoded VN convention (Monday)?
+
+## Implementation Summary (2026-07-03)
+
+`packages/ui/src/calendar-view.tsx` committed `09aee0a` (Q1: hardcoded Monday-first, VN convention,
+via a `weekStartDay` param defaulting to 1). `attendance` dropped from first-consumer scope (red-team:
+no 1:1 event mapping — `Attendance` has no scheduling field, one `ClassSession` has many rows).
+Consumed by P6's `meetings-panel.tsx` (`c8c7872`) for `parentMeeting`.
