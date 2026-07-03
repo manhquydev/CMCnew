@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, API_URL, Chatter, notifyError, notifySuccess, FacilityPicker } from '@cmc/ui';
+import {
+  trpc,
+  API_URL,
+  Chatter,
+  notifyError,
+  notifySuccess,
+  FacilityPicker,
+  StatusBadge,
+  InitialsAvatar,
+  type StatusDef,
+} from '@cmc/ui';
 import {
   Alert,
-  Badge,
   Button,
   Card,
   Group,
@@ -36,12 +45,12 @@ const YEARS = [
   { value: '2', label: '2 năm (−20%)' },
   { value: '3', label: '3 năm (−30%)' },
 ];
-const STATUS: Record<string, { label: string; color: string }> = {
-  draft: { label: 'Nháp', color: 'gray' },
-  approved: { label: 'Đã duyệt', color: 'teal' },
-  sent: { label: 'Đã gửi', color: 'blue' },
-  reconciled: { label: 'Đã đối soát', color: 'green' },
-  cancelled: { label: 'Đã hủy', color: 'red' },
+const STATUS: Record<string, StatusDef> = {
+  draft: { label: 'Nháp', tone: 'draft' },
+  approved: { label: 'Đã duyệt', tone: 'active' },
+  sent: { label: 'Đã gửi', tone: 'info' },
+  reconciled: { label: 'Đã đối soát', tone: 'active' },
+  cancelled: { label: 'Đã hủy', tone: 'rejected' },
 };
 
 const RECEIPT_PAGE_SIZE = 20;
@@ -944,18 +953,28 @@ function ReceiptsCard({
             </Table.Thead>
             <Table.Tbody>
               {paged.map((r) => {
-                const st = STATUS[r.status] ?? { label: r.status, color: 'gray' };
+                const st: StatusDef = STATUS[r.status] ?? { label: r.status, tone: 'inactive' };
+                const sName = studentName(r.studentId);
                 return (
                   <Table.Tr key={r.id}>
                     <Table.Td>{r.code ?? '—'}</Table.Td>
-                    <Table.Td>{studentName(r.studentId)}</Table.Td>
+                    <Table.Td>
+                      {sName === '—' ? (
+                        sName
+                      ) : (
+                        <Group gap={6} wrap="nowrap">
+                          <InitialsAvatar name={sName} size={22} />
+                          <Text size="sm" lineClamp={1}>{sName}</Text>
+                        </Group>
+                      )}
+                    </Table.Td>
                     <Table.Td>{courseName(r.courseId)}</Table.Td>
                     <Table.Td>{r.effectiveDiscountPercent}%</Table.Td>
                     <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>
                       {vnd(r.netAmount)}
                     </Table.Td>
                     <Table.Td>
-                      <Badge color={st.color}>{st.label}</Badge>
+                      <StatusBadge status={r.status} label={st.label} tone={st.tone} pill />
                     </Table.Td>
                     <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>
                       {r.status === 'cancelled' ? vnd(refundTotals[r.id] ?? 0) : '—'}

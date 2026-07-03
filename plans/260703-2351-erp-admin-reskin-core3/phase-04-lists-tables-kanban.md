@@ -1,5 +1,17 @@
 # Phase 4 — Lists, tables & kanban
 
+> **Status (batch 1, 2026-07-04): implemented for the 6 explicitly-named files.**
+> `crm-panel.tsx`, `students-panel.tsx`, `guardians-panel.tsx`, `finance-panel.tsx`,
+> `contact-directory-panel.tsx` restyled (StatusBadge pill, InitialsAvatar, kanban card
+> radius/owner polish). `student-management-panel.tsx` confirmed NOT a list/table screen
+> (plain `Tabs` wrapper delegating to `Workspace`/`CoursesPanel`/`AssessmentPanel`) — no
+> change needed, correctly skipped. `data-table.tsx` untouched — `--cmc-dt-*` density
+> tokens and `density="compact"` default already covered the requirement, no shared-file
+> gap found. Remaining ~33 other `*-panel.tsx` files using `DataTable`/`<Table` are an
+> **intentionally deferred batch 2** (see report
+> `reports/fullstack-developer-260704-0150-phase-04-lists-tables-kanban-batch1-report.md`
+> for the full list and candidates).
+
 ## Context
 - Wireframe refs: `template_danh_s_ch_erp_vietnamese_core` (#11 — canonical: 36px dense rows,
   8px 12px cell padding, sticky header, tinted status pills, control bar with facet chips + view

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { trpc, notifyError, EmptyState } from '@cmc/ui';
+import { trpc, notifyError, EmptyState, InitialsAvatar } from '@cmc/ui';
 import { Button, Card, Group, Skeleton, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { IconAddressBook } from '@tabler/icons-react';
 
@@ -100,7 +100,12 @@ export function ContactDirectoryPanel({
             <Table.Tbody>
               {filtered.map((contact) => (
                 <Table.Tr key={contact.id}>
-                  <Table.Td>{contact.fullName}</Table.Td>
+                  <Table.Td>
+                    <Group gap={6} wrap="nowrap">
+                      <InitialsAvatar name={contact.fullName} size={22} />
+                      <Text size="sm" lineClamp={1}>{contact.fullName}</Text>
+                    </Group>
+                  </Table.Td>
                   <Table.Td>{contact.phone}</Table.Td>
                   <Table.Td>{contact.email ?? '—'}</Table.Td>
                   <Table.Td>{contact.medium || contact.source || '—'}</Table.Td>

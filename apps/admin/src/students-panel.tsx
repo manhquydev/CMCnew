@@ -6,6 +6,7 @@ import {
   PageHeader,
   DataTable,
   StatusBadge,
+  InitialsAvatar,
   EmptyState,
   FacilityPicker,
   type DataTableColumn,
@@ -128,7 +129,12 @@ export function StudentsPanel() {
       key: 'name',
       header: 'Họ tên',
       sortValue: (s) => s.fullName,
-      render: (s) => s.fullName,
+      render: (s) => (
+        <Group gap={6} wrap="nowrap">
+          <InitialsAvatar name={s.fullName} size={22} />
+          <Text size="sm" lineClamp={1}>{s.fullName}</Text>
+        </Group>
+      ),
     },
     {
       key: 'program',
@@ -143,7 +149,7 @@ export function StudentsPanel() {
       key: 'lifecycle',
       header: 'Vòng đời',
       sortValue: (s) => s.lifecycle ?? '',
-      render: (s) => <StatusBadge status={s.lifecycle ?? ''} map={LIFECYCLE} />,
+      render: (s) => <StatusBadge status={s.lifecycle ?? ''} map={LIFECYCLE} pill />,
     },
     {
       key: 'facility',

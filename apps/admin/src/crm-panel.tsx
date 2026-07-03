@@ -7,6 +7,7 @@ import {
   PageHeader,
   DataTable,
   StatusBadge,
+  InitialsAvatar,
   EmptyState,
   FilterBar,
   ViewSwitcher,
@@ -80,7 +81,7 @@ function OppKanban({
           // Badge counts OPEN opps in the stage (a lost/closed lead shouldn't inflate the pipeline).
           const openCount = col.filter((o) => !isClosed(o)).length;
           return (
-            <Card key={s.value} withBorder p="sm" radius="md">
+            <Card key={s.value} withBorder p="sm" radius="sm">
               <Group justify="space-between" mb="xs">
                 <Text size="sm" fw={600}>{s.label}</Text>
                 <Badge variant="light" radius="xl" size="sm">{openCount}</Badge>
@@ -92,10 +93,11 @@ function OppKanban({
                   col.map((o) => {
                     const st = statusOf(o);
                     const closed = isClosed(o);
+                    const owner = ownerName(o.ownerId);
                     return (
                       <Card
                         key={o.id}
-                        withBorder p="xs" radius="md"
+                        withBorder p="xs" radius="sm"
                         style={{ cursor: 'pointer' }}
                         role="button"
                         tabIndex={0}
@@ -108,9 +110,12 @@ function OppKanban({
                         </Group>
                         <Text size="xs" c="dimmed">{o.contact.phone}</Text>
                         <Group justify="space-between" gap="xs" wrap="nowrap" mt={2}>
-                          <Text size="xs" c="dimmed" lineClamp={1}>Phụ trách: {ownerName(o.ownerId)}</Text>
+                          <Group gap={4} wrap="nowrap" style={{ minWidth: 0 }}>
+                            <InitialsAvatar name={owner} size={18} />
+                            <Text size="xs" c="dimmed" lineClamp={1}>{owner}</Text>
+                          </Group>
                           {closed ? (
-                            <StatusBadge status={st.label} label={st.label} tone={st.tone} />
+                            <StatusBadge status={st.label} label={st.label} tone={st.tone} pill />
                           ) : (
                             <Text size="xs" style={{ color: 'var(--cmc-text-faint)' }}>{daysAgo(o.createdAt)} ngày</Text>
                           )}
@@ -234,7 +239,15 @@ export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
       key: 'name',
       header: 'Học sinh / Liên hệ',
       sortValue: (o) => o.studentName || o.contact.fullName,
-      render: (o) => o.studentName || o.contact.fullName,
+      render: (o) => {
+        const label = o.studentName || o.contact.fullName;
+        return (
+          <Group gap={6} wrap="nowrap">
+            <InitialsAvatar name={label} size={22} />
+            <Text size="sm" lineClamp={1}>{label}</Text>
+          </Group>
+        );
+      },
     },
     { key: 'phone', header: 'SĐT', width: 130, render: (o) => o.contact.phone },
     {
@@ -244,14 +257,27 @@ export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
       sortValue: (o) => o.stage,
       render: (o) => <Badge variant="light" radius="sm">{STAGE_LABEL[o.stage] ?? o.stage}</Badge>,
     },
-    { key: 'owner', header: 'Phụ trách', width: 150, render: (o) => ownerName(o.ownerId) },
+    {
+      key: 'owner',
+      header: 'Phụ trách',
+      width: 150,
+      render: (o) => {
+        const owner = ownerName(o.ownerId);
+        return (
+          <Group gap={6} wrap="nowrap">
+            <InitialsAvatar name={owner} size={22} />
+            <Text size="sm" lineClamp={1}>{owner}</Text>
+          </Group>
+        );
+      },
+    },
     {
       key: 'status',
       header: 'Trạng thái',
       width: 140,
       render: (o) => {
         const st = statusOf(o);
-        return <StatusBadge status={st.label} label={st.label} tone={st.tone} />;
+        return <StatusBadge status={st.label} label={st.label} tone={st.tone} pill />;
       },
     },
   ];
