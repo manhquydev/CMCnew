@@ -31,7 +31,7 @@ function TrendBarChart({ data }: { data: { month: string; total: number; present
               style={{
                 width: '100%', maxWidth: 36, height: 96,
                 display: 'flex', alignItems: 'flex-end',
-                backgroundColor: 'var(--cmc-surface-muted)', borderRadius: 4,
+                backgroundColor: 'var(--cmc-surface-2)', borderRadius: 4,
               }}
             >
               <Box
