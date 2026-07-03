@@ -1,6 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { trpc, useSession, notifyError, StatCard, DataTable, EmptyState, type DataTableColumn } from '@cmc/ui';
-import { Card, Group, SimpleGrid, Text } from '@mantine/core';
+import {
+  trpc,
+  useSession,
+  notifyError,
+  StatCard,
+  DataTable,
+  EmptyState,
+  InitialsAvatar,
+  PipelineFunnel,
+  type DataTableColumn,
+} from '@cmc/ui';
+import { Box, Card, Group, SimpleGrid, Text } from '@mantine/core';
 import {
   IconChartFunnel,
   IconTargetArrow,
@@ -174,7 +184,16 @@ export function CrmDirectorDashboardCard() {
   }, [opps, owners]);
 
   const columns: DataTableColumn<ConsultantRow>[] = [
-    { key: 'name', header: 'Tư vấn viên', render: (r) => r.name },
+    {
+      key: 'name',
+      header: 'Tư vấn viên',
+      render: (r) => (
+        <Group gap={8} wrap="nowrap">
+          <InitialsAvatar name={r.name} size="sm" />
+          <Text size="sm">{r.name}</Text>
+        </Group>
+      ),
+    },
     { key: 'leads', header: 'Số lead', width: 100, sortValue: (r) => r.leads, render: (r) => r.leads },
     {
       key: 'conversion',
@@ -269,17 +288,15 @@ export function CrmDirectorDashboardCard() {
           <Text size="sm" fw={600} mb={8} style={{ color: 'var(--cmc-text-2)' }}>
             Phễu chuyển đổi (O1 → O5)
           </Text>
-          <SimpleGrid cols={{ base: 1, sm: 5 }} spacing="sm" mb="lg">
-            {funnel.map((f) => (
-              <Card key={f.stage.value} withBorder p="sm" radius="md">
-                <Text size="xs" c="dimmed">{f.stage.label}</Text>
-                <Text fw={700} style={{ fontSize: 'var(--cmc-text-2xl)', fontVariantNumeric: 'tabular-nums' }}>
-                  {loading ? '—' : f.count}
-                </Text>
-                <Text size="xs" c="dimmed">{loading ? '' : `${f.pct}% tổng pipeline`}</Text>
-              </Card>
-            ))}
-          </SimpleGrid>
+          <Box mb="lg">
+            <PipelineFunnel
+              stages={funnel.map((f) => ({
+                label: f.stage.label,
+                count: f.count,
+                value: `${f.pct}% tổng pipeline`,
+              }))}
+            />
+          </Box>
 
           <Text size="sm" fw={600} mb={8} style={{ color: 'var(--cmc-text-2)' }}>
             Xếp hạng tư vấn viên

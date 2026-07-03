@@ -1,5 +1,28 @@
 # Phase 3 — Dashboards & cockpits
 
+**Status**: implemented (2026-07-04). Touched only 3 of the 6 listed files —
+`crm-director-dashboard.tsx`, `revenue-report.tsx`, `attendance-report-panel.tsx` — after reading
+`biz-director-cockpit-panel.tsx`, `edu-director-cockpit-panel.tsx`, `overview-panel.tsx` in full
+and confirming each already met the Phase 2 component bar with zero diff needed (judgment calls
+below). `crm-director-dashboard.tsx`: leaderboard name cell now renders `InitialsAvatar` +
+`Text` (was plain `r.name`); the flat `SimpleGrid` of 5 stage cards replaced with `PipelineFunnel`,
+mapping `funnel` (`{stage, count, pct}[]`, `useMemo` computation itself untouched) to
+`{label, count, value}[]` at the JSX call site only. `revenue-report.tsx`: added a 3-card
+`StatCard` row (gross/refunds/net) above the existing table, driven by the already-computed
+`totals` reduce (no new state/query) — table body and its "Tổng" row kept exactly as-is; outer
+`Card` gained `p="lg"`. `attendance-report-panel.tsx`: the audit-flagged `--cmc-surface-muted`
+bug was **already fixed** in a prior session (grepped both `apps/admin/src` and
+`packages/ui/src/tokens.css` — zero occurrences outside plan docs) — no code change needed; added
+semantic `icon`/`accent`/`muted` props to the 5 existing `StatCard`s (was bare `label`/`value`
+only) and `p="lg"` to the outer `Card`. `pnpm -w typecheck` 12/12 clean, ESLint clean on all 6
+files (3 edited + 3 confirmed no-op), `pnpm --filter @cmc/admin test` 27/27 (no regression).
+GitNexus MCP tools were not exposed in this session's toolset — `git diff` used instead to confirm
+the diff is scoped to exactly 3 files with zero conditional-branch changes (verified line-by-line:
+every `{error && ...}`, `{load === 'ok' && ...}`, ternary, ordering untouched — only what renders
+inside existing branches changed). Full report:
+`plans/260703-2351-erp-admin-reskin-core3/reports/
+fullstack-developer-260704-0136-phase-03-dashboards-cockpits-report.md`.
+
 ## Context
 - Most visually broken group → done first. Wireframe refs: `cockpit_i_u_h_nh_crm` (#3, 4 KPI cards +
   gradient chevron funnel + 36px leaderboard table with initials avatars + tinted status pills) and

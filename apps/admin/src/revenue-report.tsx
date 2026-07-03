@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
-import { trpc, notifyError } from '@cmc/ui';
-import { Alert, Button, Card, Group, Select, Table, Text, TextInput, Title } from '@mantine/core';
-import { IconDownload, IconRefresh } from '@tabler/icons-react';
+import { trpc, notifyError, StatCard } from '@cmc/ui';
+import { Alert, Button, Card, Group, Select, SimpleGrid, Table, Text, TextInput, Title } from '@mantine/core';
+import { IconCash, IconDownload, IconReceiptRefund, IconRefresh, IconTrendingUp } from '@tabler/icons-react';
 
 type RevenueBucket = Awaited<ReturnType<typeof trpc.finance.revenueReport.query>>[number];
 type GroupBy = 'month' | 'facility' | 'course';
@@ -77,7 +77,7 @@ export function RevenueReportPanel() {
   );
 
   return (
-    <Card withBorder>
+    <Card withBorder p="lg">
       <Title order={5} mb="sm">
         Báo cáo doanh thu
       </Title>
@@ -128,35 +128,58 @@ export function RevenueReportPanel() {
         </Text>
       )}
       {load === 'ok' && rows.length > 0 && (
-        <Table fz="sm" striped>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Kỳ</Table.Th>
-              <Table.Th>Doanh thu gộp</Table.Th>
-              <Table.Th>Hoàn tiền</Table.Th>
-              <Table.Th>Doanh thu ròng</Table.Th>
-              <Table.Th>Số phiếu</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {rows.map((r) => (
-              <Table.Tr key={r.key}>
-                <Table.Td>{r.label}</Table.Td>
-                <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(r.gross)}</Table.Td>
-                <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(r.refunds)}</Table.Td>
-                <Table.Td style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{vnd(r.net)}</Table.Td>
-                <Table.Td>{r.count}</Table.Td>
+        <>
+          <SimpleGrid cols={{ base: 1, xs: 3 }} spacing="md" mb="md">
+            <StatCard
+              label="Doanh thu gộp"
+              value={vnd(totals.gross)}
+              icon={<IconCash size={18} stroke={1.5} />}
+              accent="brand"
+            />
+            <StatCard
+              label="Hoàn tiền"
+              value={vnd(totals.refunds)}
+              icon={<IconReceiptRefund size={18} stroke={1.5} />}
+              accent="danger"
+              muted={totals.refunds === 0}
+            />
+            <StatCard
+              label="Doanh thu ròng"
+              value={vnd(totals.net)}
+              icon={<IconTrendingUp size={18} stroke={1.5} />}
+              accent="ok"
+            />
+          </SimpleGrid>
+          <Table fz="sm" striped>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Kỳ</Table.Th>
+                <Table.Th>Doanh thu gộp</Table.Th>
+                <Table.Th>Hoàn tiền</Table.Th>
+                <Table.Th>Doanh thu ròng</Table.Th>
+                <Table.Th>Số phiếu</Table.Th>
               </Table.Tr>
-            ))}
-            <Table.Tr>
-              <Table.Td fw={700}>Tổng</Table.Td>
-              <Table.Td fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(totals.gross)}</Table.Td>
-              <Table.Td fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(totals.refunds)}</Table.Td>
-              <Table.Td fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(totals.net)}</Table.Td>
-              <Table.Td fw={700}>{rows.reduce((s, r) => s + r.count, 0)}</Table.Td>
-            </Table.Tr>
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {rows.map((r) => (
+                <Table.Tr key={r.key}>
+                  <Table.Td>{r.label}</Table.Td>
+                  <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(r.gross)}</Table.Td>
+                  <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(r.refunds)}</Table.Td>
+                  <Table.Td style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{vnd(r.net)}</Table.Td>
+                  <Table.Td>{r.count}</Table.Td>
+                </Table.Tr>
+              ))}
+              <Table.Tr>
+                <Table.Td fw={700}>Tổng</Table.Td>
+                <Table.Td fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(totals.gross)}</Table.Td>
+                <Table.Td fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(totals.refunds)}</Table.Td>
+                <Table.Td fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(totals.net)}</Table.Td>
+                <Table.Td fw={700}>{rows.reduce((s, r) => s + r.count, 0)}</Table.Td>
+              </Table.Tr>
+            </Table.Tbody>
+          </Table>
+        </>
       )}
     </Card>
   );

@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { trpc, notifyError, StatCard } from '@cmc/ui';
 import { Alert, Box, Button, Card, Group, Select, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
-import { IconRefresh } from '@tabler/icons-react';
+import {
+  IconCalendarStats,
+  IconChartBar,
+  IconCircleCheck,
+  IconClockHour4,
+  IconRefresh,
+  IconUserX,
+} from '@tabler/icons-react';
 
 type Scope = 'student' | 'class' | 'term' | 'facility';
 type ReportResult = Awaited<ReturnType<typeof trpc.attendance.report.query>>;
@@ -134,7 +141,7 @@ export function AttendanceReportPanel({ facilityId }: { facilityId: number }) {
   }, [byMonth]);
 
   return (
-    <Card withBorder>
+    <Card withBorder p="lg">
       <Title order={5} mb="sm">Báo cáo điểm danh</Title>
 
       <Group align="flex-end" mb="sm" wrap="wrap">
@@ -172,13 +179,40 @@ export function AttendanceReportPanel({ facilityId }: { facilityId: number }) {
       {result && (
         <Stack gap="md">
           <SimpleGrid cols={{ base: 2, sm: 5 }}>
-            <StatCard label="Tổng buổi" value={result.counts.total} />
-            <StatCard label="Có mặt" value={result.counts.present} />
-            <StatCard label="Trễ" value={result.counts.late} />
-            <StatCard label="Vắng" value={result.counts.absent} />
+            <StatCard
+              label="Tổng buổi"
+              value={result.counts.total}
+              icon={<IconCalendarStats size={18} stroke={1.5} />}
+              accent="brand"
+              muted={result.counts.total === 0}
+            />
+            <StatCard
+              label="Có mặt"
+              value={result.counts.present}
+              icon={<IconCircleCheck size={18} stroke={1.5} />}
+              accent="ok"
+              muted={result.counts.present === 0}
+            />
+            <StatCard
+              label="Trễ"
+              value={result.counts.late}
+              icon={<IconClockHour4 size={18} stroke={1.5} />}
+              accent="warn"
+              muted={result.counts.late === 0}
+            />
+            <StatCard
+              label="Vắng"
+              value={result.counts.absent}
+              icon={<IconUserX size={18} stroke={1.5} />}
+              accent="danger"
+              muted={result.counts.absent === 0}
+            />
             <StatCard
               label="Tỉ lệ chuyên cần"
               value={result.rate != null ? `${(result.rate * 100).toFixed(1)}%` : '—'}
+              icon={<IconChartBar size={18} stroke={1.5} />}
+              accent="brand"
+              muted={result.rate == null}
               delta={monthDelta != null ? `${monthDelta >= 0 ? '+' : ''}${monthDelta.toFixed(1)}%` : undefined}
               deltaDir={monthDelta == null ? 'flat' : monthDelta > 0.5 ? 'up' : monthDelta < -0.5 ? 'down' : 'flat'}
               deltaHint={monthDelta != null ? 'so với tháng trước' : undefined}
