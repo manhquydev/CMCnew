@@ -245,3 +245,45 @@ describe('staff password-login gate (fail-closed)', () => {
     expect(process.env.STAFF_PASSWORD_LOGIN).not.toBe('true');
   });
 });
+
+// ── user.setPassword (decision 0031) ──────────────────────────────────────────
+
+describe('user.setPassword', () => {
+  it('super_admin-only: a director cannot call it', async () => {
+    const caller = await staffCaller({
+      userId: bizDirId,
+      roles: [Role.giam_doc_kinh_doanh],
+      primaryRole: Role.giam_doc_kinh_doanh,
+      isSuperAdmin: false,
+      facilityIds: [facilityA],
+    });
+    await expect(caller.user.setPassword({ id: eduDirId })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  // Verifies the credential mechanics (hash + tokenVersion) via the low-level login() primitive —
+  // matches auth-login.int.test.ts's convention. The separate STAFF_PASSWORD_LOGIN fail-closed
+  // gate (authRouter.login's tRPC layer, not login() itself) is covered by the
+  // 'staff password-login gate' describe block above; this test does not re-prove that gate.
+  it('returns a working temp password once, invalidates via tokenVersion bump', async () => {
+    const admin = await staffCaller();
+    const target = await admin.user.create({
+      email: `${uniq('setpw')}@cmc.test`,
+      displayName: 'Set PW Target',
+      roles: [Role.sale],
+      primaryRole: Role.sale,
+      facilityIds: [facilityA],
+    });
+    const before = await withRls(SUPER, (tx) => tx.appUser.findUniqueOrThrow({ where: { id: target.id }, select: { tokenVersion: true } }));
+
+    const result = await admin.user.setPassword({ id: target.id });
+    expect(result.email).toBe(target.email);
+    expect(result.tempPassword).toHaveLength(12); // randomBytes(6).toString('hex')
+
+    const after = await withRls(SUPER, (tx) => tx.appUser.findUniqueOrThrow({ where: { id: target.id }, select: { tokenVersion: true, passwordHash: true } }));
+    expect(after.tokenVersion).toBe(before.tokenVersion + 1);
+
+    const { login } = await import('@cmc/auth');
+    const session = await login(target.email, result.tempPassword);
+    expect(session).not.toBeNull();
+  });
+});

@@ -36,7 +36,10 @@ ENTRA_CLIENT_ID=<...>
 ENTRA_CLIENT_SECRET=<...>
 ERP_SSO_REDIRECT_URI=https://erp.cmcvn.edu.vn/api/auth/sso/callback
 STAFF_EMAIL_DOMAIN=cmcvn.edu.vn
-# Fail-closed: KHÔNG set STAFF_PASSWORD_LOGIN ở prod (chỉ super_admin break-glass)
+# STAFF_PASSWORD_LOGIN=true — chạy song song với SSO (decision 0031). SSO vẫn là đường onboarding
+# mặc định; đăng nhập mật khẩu chỉ dùng được cho tài khoản đã được super_admin gọi
+# user.setPassword đặt mật khẩu — tài khoản chỉ qua SSO thì không có mật khẩu nào để đăng nhập.
+STAFF_PASSWORD_LOGIN=true
 # Graph email (M365 staff notifications)
 GRAPH_SENDER_NOTIFY=<mailbox>
 GRAPH_SENDER_PAYROLL=<mailbox>

@@ -27,10 +27,10 @@ export const authRouter = router({
         recordLoginFailure(ctx.ip, input.email);
         throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sai email hoặc mật khẩu' });
       }
-      // Fail-closed: only super_admin may ever use password login (break-glass). Every other staff
-      // member is SSO-only, regardless of whether the Entra env is wired — so a pre-config window or
-      // an env drift can never silently expose password login for staff. STAFF_PASSWORD_LOGIN=true is
-      // a deliberate local/dev escape hatch (seed accounts) and must stay unset in production.
+      // super_admin may always password-login (break-glass). Other staff need
+      // STAFF_PASSWORD_LOGIN=true (decision 0031: password login runs permanently alongside SSO
+      // in prod — a staff account only has a usable password after an explicit
+      // user.setPassword call, SSO remains the default onboarding path).
       if (!result.session.isSuperAdmin && process.env.STAFF_PASSWORD_LOGIN !== 'true') {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Nhân viên đăng nhập bằng tài khoản CMC EDU (SSO)' });
       }
