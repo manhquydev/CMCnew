@@ -42,6 +42,7 @@ import {
   STAGES,
   LOST_REASON_OPTIONS,
   LOST_REASON_LABEL,
+  STAGE_LABEL,
   makeOwnerName,
   type LostReasonValue,
   statusOf,
@@ -605,7 +606,17 @@ export function OpportunityDetailPanel({
       />
 
       <Divider label="Nhật ký hoạt động" labelPosition="left" />
-      <Chatter entityType="opportunity" entityId={opp.id} />
+      <Chatter
+        entityType="opportunity"
+        entityId={opp.id}
+        fieldLabels={{ stage: 'Giai đoạn', ownerId: 'Người phụ trách' }}
+        formatValue={(field, value) => {
+          if (field === 'stage') return STAGE_LABEL[value as string] ?? String(value);
+          if (field === 'ownerId') return value ? ownerName(value as string) : '(chưa có)';
+          if (value === null || value === undefined || value === '') return '(trống)';
+          return String(value);
+        }}
+      />
 
       {/* ── Action modals ──────────────────────────────────────────────────── */}
       <Modal

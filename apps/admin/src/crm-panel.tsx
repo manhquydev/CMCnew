@@ -30,7 +30,7 @@ import {
 } from '@mantine/core';
 import { IconAlertTriangle, IconTargetArrow } from '@tabler/icons-react';
 import { getDefaultView, getAllowedViews } from './view-defaults';
-import { STAGES, PROGRAMS, statusOf, isClosed, makeOwnerName } from './crm-shared';
+import { STAGES, STAGE_LABEL, PROGRAMS, statusOf, isClosed, makeOwnerName } from './crm-shared';
 import { OpportunityDetailPanel } from './opportunity-detail';
 import { ContactDirectoryPanel } from './contact-directory-panel';
 
@@ -38,7 +38,6 @@ type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Opp = Awaited<ReturnType<typeof trpc.crm.opportunityList.query>>[number];
 type Owner = Awaited<ReturnType<typeof trpc.crm.assignableOwners.query>>[number];
 
-const STAGE_LABEL: Record<string, string> = Object.fromEntries(STAGES.map((s) => [s.value, s.label]));
 
 /** Whole days since a date (used for the kanban "age in pipeline" hint). */
 function daysAgo(date: string | Date): number {

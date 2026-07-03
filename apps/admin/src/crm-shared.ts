@@ -12,6 +12,8 @@ export const STAGES = [
   { value: 'O5_ENROLLED', label: 'O5 · Nhập học' },
 ];
 
+export const STAGE_LABEL: Record<string, string> = Object.fromEntries(STAGES.map((s) => [s.value, s.label]));
+
 export const PROGRAMS = [
   { value: 'UCREA', label: 'UCREA' },
   { value: 'BRIGHT_IG', label: 'Bright I.G' },

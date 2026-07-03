@@ -49,6 +49,19 @@ const STATUS_COLOR: Record<string, string> = {
   closed: 'dark',
   cancelled: 'red',
 };
+const STATUS_LABEL: Record<string, string> = {
+  planned: 'Đã lên kế hoạch',
+  open: 'Đang mở',
+  running: 'Đang học',
+  closed: 'Đã đóng',
+  cancelled: 'Đã hủy',
+};
+// SessionStatus (per session, not per class batch) is a distinct, smaller enum.
+const SESSION_STATUS_LABEL: Record<string, string> = {
+  planned: 'Đã lên lịch',
+  confirmed: 'Đã xác nhận',
+  cancelled: 'Đã hủy',
+};
 const DOW = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 const fmtDate = (d: string | Date) => dayjs(d).format('DD/MM/YYYY');
 const toApiDate = (d: Date | null) => (d ? dayjs(d).format('YYYY-MM-DD') : undefined);
@@ -590,7 +603,7 @@ function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Roo
             <Table.Td>{roomLabel(s.roomId)}</Table.Td>
             <Table.Td>{teacherLabel(s.teacherId)}</Table.Td>
             <Table.Td>
-              <Badge size="sm" color={STATUS_COLOR[s.status]}>{s.status}</Badge>
+              <Badge size="sm" color={STATUS_COLOR[s.status]}>{SESSION_STATUS_LABEL[s.status] ?? s.status}</Badge>
             </Table.Td>
           </Table.Tr>
         ))}
@@ -1218,7 +1231,7 @@ function ClassDetail({
         <div>
           <Group gap="xs">
             <Title order={5}>{batch.code}</Title>
-            <Badge color={STATUS_COLOR[batch.status]}>{batch.status}</Badge>
+            <Badge color={STATUS_COLOR[batch.status]}>{STATUS_LABEL[batch.status] ?? batch.status}</Badge>
           </Group>
           <Text c="dimmed" size="sm">{batch.name} · {batch.course.code}</Text>
         </div>
@@ -1569,11 +1582,11 @@ export function Workspace({ navAction }: { navAction: NavAction | null }) {
                 onChange={(v) => { setClassStatusFilter(v); setClassPage(1); }}
                 data={[
                   { value: 'all', label: 'Tất cả' },
-                  { value: 'planned', label: 'Planned' },
-                  { value: 'open', label: 'Open' },
-                  { value: 'running', label: 'Running' },
-                  { value: 'closed', label: 'Closed' },
-                  { value: 'cancelled', label: 'Cancelled' },
+                  { value: 'planned', label: STATUS_LABEL.planned },
+                  { value: 'open', label: STATUS_LABEL.open },
+                  { value: 'running', label: STATUS_LABEL.running },
+                  { value: 'closed', label: STATUS_LABEL.closed },
+                  { value: 'cancelled', label: STATUS_LABEL.cancelled },
                 ]}
               />
             </Stack>
@@ -1591,7 +1604,7 @@ export function Workspace({ navAction }: { navAction: NavAction | null }) {
                       <Text size="xs" c="dimmed">{b.name}</Text>
                     </Table.Td>
                     <Table.Td>
-                      <Badge size="sm" color={STATUS_COLOR[b.status]}>{b.status}</Badge>
+                      <Badge size="sm" color={STATUS_COLOR[b.status]}>{STATUS_LABEL[b.status] ?? b.status}</Badge>
                     </Table.Td>
                   </Table.Tr>
                 ))}

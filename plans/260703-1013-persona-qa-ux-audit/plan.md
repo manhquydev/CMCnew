@@ -1,14 +1,14 @@
 ---
-title: "Persona QA Fleet + UX Audit (6 roles, live prod)"
-description: ""
+title: 'Persona QA Fleet + UX Audit (6 roles, live prod)'
+description: ''
 status: pending
 priority: P2
-branch: "main"
+branch: main
 tags: []
 blockedBy: []
 blocks: []
-created: "2026-07-03T03:46:25.028Z"
-createdBy: "ck:plan"
+created: '2026-07-03T03:46:25.028Z'
+createdBy: 'ck:plan'
 source: skill
 ---
 
@@ -33,9 +33,9 @@ Source: `plans/reports/brainstorm-260703-0919-persona-qa-ux-audit-action-plan-re
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Setup Test Accounts](./phase-01-setup-test-accounts.md) | Pending |
-| 2 | [Run Persona Agents](./phase-02-run-persona-agents.md) | Pending |
-| 3 | [UX Audit Synthesis](./phase-03-ux-audit-synthesis.md) | Pending |
+| 1 | [Setup Test Accounts](./phase-01-setup-test-accounts.md) | Completed |
+| 2 | [Run Persona Agents](./phase-02-run-persona-agents.md) | Completed |
+| 3 | [UX Audit Synthesis](./phase-03-ux-audit-synthesis.md) | Completed |
 | 4 | [Cleanup](./phase-04-cleanup.md) | Pending |
 
 ## Dependencies

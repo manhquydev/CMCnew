@@ -8,7 +8,7 @@
 
 import { useEffect, useState } from 'react';
 import { trpc, useSession, notifyError, notifySuccess, ActivityLog } from '@cmc/ui';
-import { can, canReadSensitiveHr, maskSensitive } from '@cmc/auth/permissions';
+import { can, canReadSensitiveHr, maskSensitive, ROLE_LABEL } from '@cmc/auth/permissions';
 import {
   ActionIcon,
   Badge,
@@ -306,7 +306,7 @@ export function StaffProfilePanel({
 }: {
   user: StaffProfileUser;
   facilities: FacilityOption[];
-  roleOptions: string[];
+  roleOptions: { value: string; label: string }[];
   onBack: () => void;
   reload: () => void;
 }) {
@@ -454,7 +454,7 @@ export function StaffProfilePanel({
               <Text size="sm" c="dimmed" mb={4}>Vai trò</Text>
               <Group gap="xs">
                 {view.roles.map((r) => (
-                  <Badge key={r} variant="light" radius="xl">{r}{r === view.primaryRole ? ' ★' : ''}</Badge>
+                  <Badge key={r} variant="light" radius="xl">{ROLE_LABEL[r] ?? r}{r === view.primaryRole ? ' ★' : ''}</Badge>
                 ))}
               </Group>
             </div>
