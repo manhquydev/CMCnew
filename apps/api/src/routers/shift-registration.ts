@@ -190,11 +190,18 @@ export const shiftRegistrationRouter = router({
         if (existing) {
           throw new TRPCError({ code: 'CONFLICT', message: 'Bạn có phiếu đang chờ duyệt — không thể tạo phiếu mới' });
         }
-        // Determine shift group
-        const profile = await tx.employmentProfile.findUniqueOrThrow({
+        // Determine shift group. EmploymentProfile is set up manually by HR, not auto-created —
+        // a staff account never onboarded through HR would otherwise crash with a raw Prisma error.
+        const profile = await tx.employmentProfile.findUnique({
           where: { userId: ctx.session.userId },
           select: { position: true },
         });
+        if (!profile) {
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message: 'Tài khoản chưa được thiết lập hồ sơ nhân sự — liên hệ HR để được thiết lập trước khi đăng ký ca',
+          });
+        }
         const groupCode = resolveShiftGroup(profile.position);
         const group = await tx.shiftGroup.findFirstOrThrow({
           where: { facilityId: input.facilityId, code: groupCode, archivedAt: null },

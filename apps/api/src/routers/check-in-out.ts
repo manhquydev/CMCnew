@@ -84,10 +84,19 @@ export const checkInOutRouter = router({
           throw new TRPCError({ code: 'CONFLICT', message: 'Vừa chấm công, vui lòng đợi giây lát trước khi chấm lại' });
         }
         const clientIP = ctx.ip ?? 'unknown';
-        const profile = await tx.employmentProfile.findUniqueOrThrow({
+        // EmploymentProfile is set up manually by HR (payroll.upsertEmploymentProfile), not
+        // auto-created at account creation — a staff account that has checkInOut.punch permission
+        // but was never onboarded through HR would otherwise crash here with a raw Prisma error.
+        const profile = await tx.employmentProfile.findUnique({
           where: { userId: ctx.session.userId },
           select: { facilityId: true, managerId: true },
         });
+        if (!profile) {
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message: 'Tài khoản chưa được thiết lập hồ sơ nhân sự — liên hệ HR để được thiết lập trước khi chấm công',
+          });
+        }
         const networks = await tx.facilityNetwork.findMany({
           where: { facilityId: profile.facilityId, isActive: true, archivedAt: null },
         });
