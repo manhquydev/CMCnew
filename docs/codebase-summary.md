@@ -6,7 +6,7 @@
 > For roadmap/status, read [roadmap.md](roadmap.md). This file describes *what
 > exists today* and *where to find it*.
 
-Last reviewed: 2026-07-02 (branch `develop`).
+Last reviewed: 2026-07-03 (branch `develop`).
 
 ## What this is
 
@@ -26,10 +26,10 @@ sync layer. The LMS is a **homework/practice platform**, not online classes.
 | DB | PostgreSQL + Prisma 6, **Row-Level Security (RLS)** for facility tenancy |
 | Frontend | React 19 + Vite 6 + Mantine 7 (`@tabler/icons-react`) |
 | Auth | `jose` JWT sessions (staff + LMS parent/student), cookie-based |
-| Email | Microsoft Graph (M365) via outbox pattern |
+| Email | Dual-transport: Microsoft Graph (M365, staff notifications), Brevo REST API (external/parent mail) via outbox pattern |
 | Jobs | `node-cron` embedded in the API process |
 | Tests | Vitest (unit + integration), Playwright (e2e) |
-| CI/CD | Jenkins (`Jenkinsfile`); GitHub Actions blocked on billing |
+| CI/CD | Jenkins (`Jenkinsfile`, publishes `CMCnew CI` check via github-checks plugin); GitHub Actions blocked on billing |
 
 ## Workspace layout
 
@@ -86,7 +86,8 @@ routes. This is the anti-"chắp vá" (anti-patchwork) rule from the charter.
 - `services/` — cross-router workflows: `email-outbox`, `email-templates`,
   `login-otp`, `student-provisioning`, `parent-meeting-cadence/-reminder`,
   `receipt-html`/`certificate-html`, `pdf-store`, code generators.
-- `lib/` — integrations & helpers: `graph-client` (email), `sso`, `callio-client`,
+- `lib/` — integrations & helpers: `graph-client` (M365 email), `brevo-client`
+  (external email), `email-routing` (transport selector), `sso`, `callio-client`,
   `kpi-authz`, `parent-email`, `emit-staff-notif`.
 
 ## Security model (load-bearing)
@@ -99,6 +100,12 @@ routes. This is the anti-"chắp vá" (anti-patchwork) rule from the charter.
    the middleware layer. A parity test guards against drift.
 3. **Parse-first boundaries** — Zod validates HTTP/session/env input before it
    reaches domain code.
+
+4. **Email transport routing** — `lib/email-routing.ts` `decideTransport` determines
+   whether each outbound message uses Graph (staff, internal domain) or Brevo
+   (external/parent mail). Transport is stored in EmailOutbox at enqueue time;
+   `drainOutbox` sends each transport in separate batches (isolation from
+   provider-specific failures). See decision 0030.
 
 Related: [auth-sso-otp-redirection.md](auth-sso-otp-redirection.md),
 [prod-deploy-security-runbook.md](prod-deploy-security-runbook.md).

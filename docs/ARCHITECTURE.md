@@ -39,6 +39,38 @@ Staff submits ShiftRegistration (Draft)
 - SINGLE / MULTIPLE selection mode enforced per shift group (KD staff picks one shift per day, GV can pick multiple).
 - IP validation is a soft gate: punches outside whitelist are recorded but flagged.
 
+## Email Transport Routing
+
+A two-transport outbound email system for production resilience against provider-specific failures.
+
+### Modules
+
+| Module | Purpose |
+|--------|---------|
+| `lib/graph-client.ts` | M365 Graph API integration (SMTP-equivalent over HTTP). Sends staff notifications. Fails closed if tenant reputation blocked or credential missing. |
+| `lib/brevo-client.ts` | Brevo REST transactional-email API. Sends external/parent mail. Mirrors Graph config shape; inert if `BREVO_API_KEY` unset. |
+| `lib/email-routing.ts` | `decideTransport(to)` selects Graph (staff, `@STAFF_EMAIL_DOMAIN`) vs Brevo (external). Cheap format validation. Used at enqueue time. |
+| `services/email-outbox.ts` | Prisma model `EmailOutbox` + workflow. Enqueue stores transport decision; drain splits by transport (separate batches, no cascading failure). |
+
+### Data flow
+
+```text
+Request email send (e.g. parent OTP, staff notification)
+  -> validate address + decideTransport
+  -> insert EmailOutbox with transport=graph|brevo
+  -> drain-cron claims rows per transport
+  -> Graph batch / Brevo batch sent independently
+  -> if 429/timeout on Brevo, Graph queue not blocked
+```
+
+### Key invariants
+
+- Transport chosen at enqueue time, never re-decided. Operator can backfill in-flight rows via one-off migration if policy changes.
+- Failure isolation: a 429 on Brevo does not reschedule Graph batch.
+- Brevo rows queue inert (no external calls) if env unset.
+
+Related: decision 0030.
+
 ## Discovery Before Shape
 
 Before proposing implementation shape, identify:
