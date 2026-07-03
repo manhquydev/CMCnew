@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "CI Check Investigation"
-status: pending
+status: blocked
 effort: ""
 ---
 
@@ -44,6 +44,6 @@ should simply be adopted as the required check instead of continuing to debug th
 
 ## Success Criteria
 
-- [ ] A real check-run context reliably posts SUCCESS on a green build and FAILURE on a red build — verified with an actual forced-red test build, not just observed on passing builds.
-- [ ] `scripts/setup-github-required-check.sh` run for real against `main`, confirmed via the script's own GET-first safety check that it didn't clobber any existing branch protection.
-- [ ] A PR with a failing build is confirmed blocked from merging in the GitHub UI.
+- [x] A real check-run context reliably posts SUCCESS on a green build and FAILURE on a red build — verified with an actual forced-red test build, not just observed on passing builds. Confirmed 2026-07-03: `continuous-integration/jenkins/pr-head` flips `pending`→`success` on green (PR #16-22) and `pending`→`error` on a deliberately broken build (scratch PR #23, closed without merge). `CMCnew CI` (custom publishChecks) confirmed to NEVER post — not even `pending` — across every PR built this session; root cause not found (Jenkins system log shows no swallowed exception). `scripts/setup-github-required-check.sh` updated to target `continuous-integration/jenkins/pr-head` instead.
+- [ ] `scripts/setup-github-required-check.sh` run for real against `main` — **BLOCKED**: `gh api repos/manhquydev/CMCnew/branches/main/protection` returns 403 "Upgrade to GitHub Pro or make this repository public to enable this feature." GitHub branch protection is not available on a private repo under the current (free) plan tier. This is a billing/plan decision, not a technical fix — options: (a) upgrade to GitHub Pro/Team, (b) make the repo public, (c) accept no automated merge-blocking and rely on the Jenkins gate being visually checked before merge (current de facto state). Needs operator decision.
+- [ ] A PR with a failing build is confirmed blocked from merging in the GitHub UI — depends on the above being resolved first.

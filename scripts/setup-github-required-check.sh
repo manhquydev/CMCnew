@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
-# One-time, interactive, operator-run: add "CMCnew CI" as a required status check on `main`
-# WITHOUT clobbering any existing branch protection. The GitHub branch-protection PUT endpoint
-# replaces the whole protection object, so this reads current state first and merges in only
-# the new required check.
+# One-time, interactive, operator-run: add "continuous-integration/jenkins/pr-head" as a required
+# status check on `main` WITHOUT clobbering any existing branch protection. The GitHub
+# branch-protection PUT endpoint replaces the whole protection object, so this reads current
+# state first and merges in only the new required check.
 #
-# Do NOT run this until the "CMCnew CI" check has been proven to post on a real PR — enabling
-# a required check that has never posted will block ALL PRs.
+# NOTE (2026-07-03): the custom Jenkinsfile "CMCnew CI" publishChecks step never reliably posts
+# (root cause not found — investigated via Jenkins system log + strategyId fix, still silent).
+# "continuous-integration/jenkins/pr-head" is Jenkins' own github-branch-source plugin status,
+# confirmed on real PRs this session to flip pending→success on green and pending→error on a
+# deliberately broken red build (plans/260703-0933-action-plan-known-issues/phase-03). Use this
+# context instead.
+#
+# Do NOT run this until the check context has been proven to post reliably on a real PR — enabling
+# a required check that never posts will block ALL PRs.
 #
 #   gh auth login   (needs admin on the repo)
 #   bash scripts/setup-github-required-check.sh
 set -euo pipefail
 
 REPO="manhquydev/CMCnew"
-CONTEXT="CMCnew CI"
+CONTEXT="continuous-integration/jenkins/pr-head"
 
 current=$(gh api "repos/${REPO}/branches/main/protection" 2>/dev/null || echo '{}')
 

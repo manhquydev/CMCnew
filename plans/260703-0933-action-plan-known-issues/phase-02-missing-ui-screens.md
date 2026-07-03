@@ -1,8 +1,8 @@
 ---
 phase: 2
-title: "Missing UI Screens"
-status: pending
-effort: ""
+title: Missing UI Screens
+status: completed
+effort: ''
 ---
 
 # Phase 2: Missing UI Screens
