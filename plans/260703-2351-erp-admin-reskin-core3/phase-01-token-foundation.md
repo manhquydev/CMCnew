@@ -1,5 +1,17 @@
 # Phase 1 — Token foundation (Inter, border, green, radius)
 
+**Status**: implemented (2026-07-04). All 5 token values corrected in `tokens.css`+`theme.ts`
+together, `theme.test.ts` locks added (14/14 pass), `pnpm -w typecheck`/ESLint clean on
+`@cmc/ui`/`@cmc/admin`/`@cmc/lms`. `design-showcase.tsx` Button demos de-hardcoded from
+`radius="xl"` so they reflect the real new default; border/green swatch hex labels corrected.
+`docs/design-system.md` synced (font stack, border/green hex, Card/Button radius examples).
+Visual capture (`pnpm --filter e2e reskin:capture`) re-run against the live admin+LMS dev
+servers: Inter renders, buttons render square (~4px), borders lighter, green shifted — confirmed
+in `apps/e2e/reskin-baseline/crm-kanban.png`/`students-list.png`. See phase completion report
+for the one concern that needs owner sign-off: the capture run overwrote the P0 "before"
+screenshots (same output path, gitignored/local-only) — no pixel-diff exists for this phase,
+only fresh visual inspection.
+
 ## Context
 - Single source of truth: `packages/ui/src/tokens.css` (CSS vars) + `packages/ui/src/theme.ts`
   (Mantine override). Both must change together — the audit report found a prior bug where

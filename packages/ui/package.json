@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@cmc/api": "workspace:*",
+    "@fontsource/inter": "^5.1.0",
     "@mantine/core": "^7.15.2",
     "@mantine/form": "^7.15.2",
     "@mantine/hooks": "^7.15.2",

@@ -15,7 +15,7 @@ Apple-inspired minimalism adapted for ERP density. Single interactive blue, flat
 | Single blue for all interaction | Same: `#0071E3` for every clickable element |
 | Flat surfaces, no card shadow | Subtle border + `xs` shadow, no decorative depth |
 | Typography carries hierarchy | Column headers in uppercase 11px, data in 13px |
-| Pill CTAs | Pill for primary buttons only; secondary = text link |
+| Square, precise CTAs | Buttons use `radius="xs"` (4px, DESIGN.md literal spec — not pill); secondary = text link |
 
 ---
 
@@ -52,7 +52,7 @@ Apple-inspired minimalism adapted for ERP density. Single interactive blue, flat
 
 | Token | Value | Use |
 |-------|-------|-----|
-| `--cmc-border` | `#D2D2D7` | Default input borders, card borders |
+| `--cmc-border` | `#E5E7EB` | Default input borders, card borders |
 | `--cmc-border-focus` | `#0071E3` | Focused input ring |
 | `--cmc-border-faint` | `#E8E8ED` | Subtle row dividers inside cards |
 
@@ -60,7 +60,7 @@ Apple-inspired minimalism adapted for ERP density. Single interactive blue, flat
 
 | Token | Bg token | Text token | Use |
 |-------|----------|------------|-----|
-| `#34C759` ok | `--cmc-ok-bg` `#F0FBF3` | `--cmc-ok-text` `#1A6B34` | Success, active |
+| `#06C167` ok | `--cmc-ok-bg` `#E6F9F0` | `--cmc-ok-text` `#1A6B34` | Success, active |
 | `#FF9F0A` warn | `--cmc-warn-bg` `#FFF8EC` | `--cmc-warn-text` `#7A4A00` | Pending, warning |
 | `#FF3B30` danger | `--cmc-danger-bg` `#FFF0EF` | `--cmc-danger-text` `#C0160D` | Error, rejected |
 | `#0071E3` info | `--cmc-info-bg` `#E8F1FC` | `--cmc-info-text` `#003D99` | Info, draft |
@@ -70,7 +70,7 @@ Apple-inspired minimalism adapted for ERP density. Single interactive blue, flat
 ### Status Dot Colors (kanban, table chips)
 
 ```
---cmc-status-active:   #34C759   active / approved
+--cmc-status-active:   #06C167   active / approved
 --cmc-status-pending:  #FF9F0A   pending / in-review
 --cmc-status-inactive: #AEAEB2   inactive / archived
 --cmc-status-rejected: #FF3B30   rejected / error
@@ -81,8 +81,12 @@ Apple-inspired minimalism adapted for ERP density. Single interactive blue, flat
 
 ## Typography
 
-**Font stack:** `-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif`  
-Renders as SF Pro on Apple devices, Segoe UI on Windows — no Google Fonts dependency.
+**Font stack:** `'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, 'Helvetica Neue', Arial, sans-serif`  
+Inter is self-hosted via `@fontsource/inter` (weights 400/500/600/700), imported once in
+`apps/admin/src/main.tsx` — no Google Fonts network call. `packages/ui/src/tokens.css`
+stays font-agnostic (no `@import`/`url()`), so LMS (which overrides with its own
+Fredoka/Quicksand stack via `.lms-app-root`) never loads Inter. The system-font fallback
+stack still applies before Inter finishes loading or in any consumer that doesn't import it.
 
 ### Scale
 
@@ -160,7 +164,10 @@ h6 → 11px / 600   column headers (combine with uppercase + tracking)
 | — | 24px | `--cmc-radius-xl` (inline use only) |
 | 9999 | 9999px | `--cmc-radius-pill` |
 
-**Rule:** Inputs/compact fields use `radius="md"` (10px). Cards/panels use `radius="lg"` (14px). Modals use `radius="xl"` (18px). Primary CTA buttons use explicit `radius={9999}` for true pill.
+**Rule:** Inputs/compact fields use `radius="md"` (10px). Cards/panels default to `radius="sm"`
+(8px, DESIGN.md "no rounded corners should exceed 8px" — set via `Card`/`Paper` `defaultProps`,
+no need to pass it explicitly). Modals use `radius="xl"` (18px). Buttons default to `radius="xs"`
+(4px, square — set via `Button` `defaultProps`); do not override to a pill radius for CTAs.
 
 ---
 
@@ -202,8 +209,8 @@ distinguishable from the page.
 ### Button
 
 ```tsx
-// Primary — pill, filled blue
-<Button variant="filled" radius="xl">Tạo mới</Button>
+// Primary — square 4px radius (theme default), filled blue
+<Button variant="filled">Tạo mới</Button>
 
 // Secondary — ghost, no border (Apple text-link style)
 <Button variant="subtle" color="cmc">Xem chi tiết</Button>
@@ -282,10 +289,10 @@ Always pair badge with icon in table cells for color-independent meaning:
 
 ### Form Section
 
-Group related fields with a `Card` container using `radius="lg"`:
+Group related fields with a `Card` container (theme default `radius="sm"`, 8px):
 
 ```tsx
-<Card radius="lg" p="xl" withBorder>
+<Card p="xl" withBorder>
   <Text size="lg" fw={600} mb="lg">Thông tin cá nhân</Text>
   <Stack gap="md">
     <TextInput label="Họ tên" required />
@@ -334,8 +341,8 @@ Group related fields with a `Card` container using `radius="lg"`:
 ### Card
 
 ```tsx
-// Standard data card
-<Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+// Standard data card (theme default radius="sm", 8px — no need to pass it)
+<Card p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
   <Text size="sm" c="dimmed" mb={4}>Tổng thu nhập</Text>
   <Text size="xl" fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>
     24,500,000 ₫
@@ -345,7 +352,6 @@ Group related fields with a `Card` container using `radius="lg"`:
 // Hover-interactive card (kanban, list item) — Zero Elevation: hover
 // communicates via border color, not shadow (Card is decorative-flat).
 <Card
-  radius="lg"
   p="lg"
   style={{
     border: '1px solid var(--cmc-border)',

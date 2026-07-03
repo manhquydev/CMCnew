@@ -60,3 +60,36 @@ describe('theme.shadows scale — unchanged reference scale', () => {
     });
   });
 });
+
+/**
+ * Locks the token-value corrections from the Vietnamese Enterprise Core 3
+ * re-skin (P1 of `plans/260703-2351-erp-admin-reskin-core3`). Radius SCALE
+ * and Zero Elevation doctrine stay untouched — only these component defaults
+ * and the green swatch move to match DESIGN.md's measured values.
+ */
+describe('theme tokens — Core 3 re-skin corrections', () => {
+  it('Card defaults to radius sm (8px, DESIGN.md "no rounded corners should exceed 8px")', () => {
+    expect(components.Card?.defaultProps?.radius).toBe('sm');
+  });
+
+  it('Paper defaults to radius sm (8px), same as Card', () => {
+    expect(components.Paper?.defaultProps?.radius).toBe('sm');
+  });
+
+  it('Button defaults to radius xs (4px square, not pill)', () => {
+    expect(components.Button?.defaultProps?.radius).toBe('xs');
+  });
+
+  it('cmcGreen[5] matches DESIGN.md success color #06C167 (was Apple iOS #34C759)', () => {
+    expect(theme.colors?.cmcGreen?.[5]).toBe('#06C167');
+  });
+
+  it('fontFamily starts with Inter (self-hosted via @fontsource/inter in admin/main.tsx)', () => {
+    expect(theme.fontFamily?.startsWith("'Inter'")).toBe(true);
+  });
+
+  it('headings.fontFamily starts with Inter', () => {
+    const headings = theme.headings as { fontFamily?: string } | undefined;
+    expect(headings?.fontFamily?.startsWith("'Inter'")).toBe(true);
+  });
+});

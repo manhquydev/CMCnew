@@ -11,12 +11,31 @@ created: 2026-07-03
 
 ## Overview
 
-An earlier P1-P7 rebuild (shipped, committed) chose "Vietnamese Enterprise Core 3" as
-the target style but the implemented tokens/components measurably diverge from the
-authoritative spec `D:\Downloads\stitch_cmcnew\stitch_cmcnew\vietnamese_enterprise_core_3\DESIGN.md`.
+An earlier P1-P7 rebuild (shipped, committed same day, `plans/260703-1549-p1-token-remap-zero-elevation/`
+through `p7-reskin-list-kanban-templates/`, all `status: implemented`) chose "Vietnamese
+Enterprise Core 3" as the target style but the implemented tokens/components measurably
+diverge from the authoritative spec
+`D:\Downloads\stitch_cmcnew\stitch_cmcnew\vietnamese_enterprise_core_3\DESIGN.md`.
 This plan is **corrective/additive** on top of that work — it re-aligns token *values*
 and adds the missing component polish, then applies both across the admin app. It does
 NOT redo the Zero Elevation doctrine (kept as-is) and does NOT touch business logic.
+
+**Reconciliation with the prior P1-P7 plans (verified by reading their code, not just
+their status field)**: P1's "token remap" was scoped to shadow/elevation ONLY — it never
+touched font-family, border color, green hue, or radius, so Phase 1 here is genuinely
+unaddressed ground, not a redo. P4 already built a real `CrmDirectorDashboardCard`
+(`apps/admin/src/crm-director-dashboard.tsx`) consuming `StatCard` with working icon +
+trend-delta infrastructure — `packages/ui/src/stat-card.tsx` already has an icon chip and
+`DELTA_COLOR` semantic coloring on the delta text. Phase 2a is an **incremental upgrade**
+of that existing component (square brand-only chip → circular semantic-accent chip, delta
+arrow built into the component instead of caller-supplied), not a rebuild. P4's pipeline
+funnel is currently a flat `SimpleGrid` of cards (not the wireframe's gradient chevron) —
+Phase 2d's `PipelineFunnel` must match that exact data shape (`{stage, count, pct}`) so
+`CrmDirectorDashboardCard` can swap to it as a drop-in, not a parallel implementation.
+Phase 3 must re-verify each dashboard/cockpit screen fresh (logged in as the correct role —
+`biz-director-cockpit-panel.tsx` only renders for single-role `giam_doc_kinh_doanh`
+accounts, not `super_admin`, which routes to a plain `overview-panel.tsx` instead per
+`App.tsx`'s `isSuperAdmin` bypass) before assuming a screen needs the full treatment.
 
 Source of truth for token VALUES = `DESIGN.md` (its screenshot comparison is what the
 user validated). Source of truth for component COMPOSITION/layout = the wireframe
@@ -50,7 +69,7 @@ scoped via `.lms-app-root` — must stay untouched).
 | # | Phase | Owns (files) | Status | File |
 |---|---|---|---|---|
 | 0 | Visual-verification harness | `apps/e2e/*` (new spec + wireframe refs) | pending | [phase-00-visual-verification-harness.md](phase-00-visual-verification-harness.md) |
-| 1 | Token foundation (Inter, border, green, radius) | `tokens.css`, `theme.ts`, `theme.test.ts`, `design-showcase.tsx`, `admin/main.tsx`, `ui/package.json` | pending | [phase-01-token-foundation.md](phase-01-token-foundation.md) |
+| 1 | Token foundation (Inter, border, green, radius) | `tokens.css`, `theme.ts`, `theme.test.ts`, `design-showcase.tsx`, `admin/main.tsx`, `ui/package.json` | implemented | [phase-01-token-foundation.md](phase-01-token-foundation.md) |
 | 2 | Shared component layer | `stat-card.tsx`, `status-badge.tsx`, new `avatar-initials.tsx`, new `pipeline-funnel.tsx`, `shell.tsx`, `index.tsx` | pending | [phase-02-shared-components.md](phase-02-shared-components.md) |
 | 3 | Dashboards & cockpits | `biz-director-cockpit-panel`, `edu-director-cockpit-panel`, `crm-director-dashboard`, `overview-panel`, `revenue-report`, `attendance-report-panel` | pending | [phase-03-dashboards-cockpits.md](phase-03-dashboards-cockpits.md) |
 | 4 | Lists, tables & kanban | `crm-panel`, `students-panel`, `student-management-panel`, `guardians-panel`, `finance-panel`, `contact-directory-panel`, other `*-panel` list screens | pending | [phase-04-lists-tables-kanban.md](phase-04-lists-tables-kanban.md) |
