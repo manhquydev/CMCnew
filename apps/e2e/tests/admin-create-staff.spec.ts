@@ -22,7 +22,7 @@ test.describe('create staff (SSO-only form)', () => {
     await loginAsSuperAdmin(page);
 
     // Open the org section + the create modal.
-    await page.locator('nav').getByText('Cơ sở & Users').click();
+    await page.locator('nav').getByText('Cơ sở & Người dùng').click();
     await page.getByRole('button', { name: 'Tạo người dùng' }).click();
 
     const dialog = page.getByRole('dialog');

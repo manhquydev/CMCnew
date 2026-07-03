@@ -19,12 +19,14 @@ export function AttendancePanel() {
 
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facilityId, setFacilityId] = useState<number | null>(null);
+  const [facilitiesLoading, setFacilitiesLoading] = useState(true);
   const [sessions, setSessions] = useState<MySession[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Load facility list once
+  // Load facility list once. `facilitiesLoading` holds the Select in a disabled/loading state so it
+  // never flashes an empty/required-looking control before the facility auto-populates (#28).
   useEffect(() => {
     trpc.facility.list
       .query()
@@ -32,7 +34,8 @@ export function AttendancePanel() {
         setFacilities(fs);
         setFacilityId((cur) => cur ?? fs[0]?.id ?? null);
       })
-      .catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
+      .catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'))
+      .finally(() => setFacilitiesLoading(false));
   }, []);
 
   // Reload today's sessions when facility changes
@@ -58,6 +61,8 @@ export function AttendancePanel() {
       <Select
         label="Cơ sở"
         w={220}
+        placeholder={facilitiesLoading ? 'Đang tải...' : undefined}
+        disabled={facilitiesLoading}
         data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
         value={facilityId ? String(facilityId) : null}
         onChange={(v) => setFacilityId(v ? Number(v) : null)}

@@ -11,6 +11,7 @@ import {
   FilterBar,
   ViewSwitcher,
   useViewSwitcher,
+  required,
   type DataTableColumn,
 } from '@cmc/ui';
 import {
@@ -19,6 +20,7 @@ import {
   Button,
   Card,
   Group,
+  Modal,
   ScrollArea,
   Select,
   SimpleGrid,
@@ -28,7 +30,9 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconAlertTriangle, IconTargetArrow } from '@tabler/icons-react';
+import { useForm } from '@mantine/form';
+import { useDisclosure } from '@mantine/hooks';
+import { IconAlertTriangle, IconPlus, IconTargetArrow } from '@tabler/icons-react';
 import { getDefaultView, getAllowedViews } from './view-defaults';
 import { STAGES, STAGE_LABEL, PROGRAMS, statusOf, isClosed, makeOwnerName } from './crm-shared';
 import { OpportunityDetailPanel } from './opportunity-detail';
@@ -104,7 +108,7 @@ function OppKanban({
                         </Group>
                         <Text size="xs" c="dimmed">{o.contact.phone}</Text>
                         <Group justify="space-between" gap="xs" wrap="nowrap" mt={2}>
-                          <Text size="xs" c="dimmed" lineClamp={1}>PT: {ownerName(o.ownerId)}</Text>
+                          <Text size="xs" c="dimmed" lineClamp={1}>Phụ trách: {ownerName(o.ownerId)}</Text>
                           {closed ? (
                             <StatusBadge status={st.label} label={st.label} tone={st.tone} />
                           ) : (
@@ -130,20 +134,23 @@ export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
   const [facilityId, setFacilityId] = useState<number | null>(null);
   const [opps, setOpps] = useState<Opp[]>([]);
   const [owners, setOwners] = useState<Owner[]>([]);
-  const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [studentName, setStudentName] = useState('');
-  const [program, setProgram] = useState<string | null>(null);
-  const [medium, setMedium] = useState('');
-  const [campaign, setCampaign] = useState('');
   const [busy, setBusy] = useState(false);
   const [oppsLoading, setOppsLoading] = useState(true);
   const [oppsError, setOppsError] = useState<string | null>(null);
+  const [contactsRefresh, setContactsRefresh] = useState(0);
+  const [opened, { open, close }] = useDisclosure(false);
   const { view: oppView, setView: setOppView } = useViewSwitcher(
     'crm.opportunity',
     getDefaultView('opportunity'),
     getAllowedViews('opportunity'),
   );
+  const form = useForm({
+    initialValues: { fullName: '', phone: '', studentName: '', program: null as string | null, medium: '', campaign: '' },
+    validate: {
+      fullName: required('Nhập tên liên hệ'),
+      phone: required('Nhập số điện thoại'),
+    },
+  });
 
   useEffect(() => {
     trpc.facility.list.query().then((fs) => {
@@ -174,37 +181,34 @@ export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
   const openOpp = useCallback((o: Opp) => navigate(`/crm/opportunities/${o.id}`), [navigate]);
 
   const duplicateOpenOpps = useMemo(() => {
-    const normalizedPhone = normalizePhoneForCompare(phone);
+    const normalizedPhone = normalizePhoneForCompare(form.values.phone);
     if (!normalizedPhone) return [];
     return opps.filter((o) => !isClosed(o) && normalizePhoneForCompare(o.contact.phone) === normalizedPhone);
-  }, [opps, phone]);
+  }, [opps, form.values.phone]);
 
-  async function createLead() {
-    if (!facilityId || !fullName.trim() || !phone.trim()) {
-      notifyError(new Error('Nhập tên liên hệ và số điện thoại'), 'Tạo cơ hội thất bại');
+  async function createLead(values: typeof form.values) {
+    if (!facilityId) {
+      notifyError(new Error('Chưa chọn cơ sở'), 'Tạo cơ hội thất bại');
       return;
     }
     setBusy(true);
     try {
       const contact = await trpc.crm.contactCreate.mutate({
         facilityId,
-        fullName: fullName.trim(),
-        phone: phone.trim(),
-        medium: medium.trim() || undefined,
-        campaign: campaign.trim() || undefined,
+        fullName: values.fullName.trim(),
+        phone: values.phone.trim(),
+        medium: values.medium.trim() || undefined,
+        campaign: values.campaign.trim() || undefined,
       });
       await trpc.crm.opportunityCreate.mutate({
         contactId: contact.id,
-        studentName: studentName.trim() || undefined,
-        program: (program as 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE') || undefined,
+        studentName: values.studentName.trim() || undefined,
+        program: (values.program as 'UCREA' | 'BRIGHT_IG' | 'BLACK_HOLE') || undefined,
       });
       notifySuccess(`Đã tạo cơ hội cho ${contact.fullName}`);
-      setFullName('');
-      setPhone('');
-      setStudentName('');
-      setProgram(null);
-      setMedium('');
-      setCampaign('');
+      close();
+      form.reset();
+      setContactsRefresh((n) => n + 1);
       load();
     } catch (e) {
       notifyError(e, 'Tạo cơ hội thất bại');
@@ -258,81 +262,23 @@ export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
         title="CRM"
         subtitle="Quản lý cơ hội tuyển sinh & lịch test"
         actions={
-          <Select
-            aria-label="Cơ sở"
-            w={240}
-            data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-            value={facilityId ? String(facilityId) : null}
-            onChange={(v) => setFacilityId(v ? Number(v) : null)}
-            allowDeselect={false}
-          />
+          <Group>
+            <Select
+              aria-label="Cơ sở"
+              w={240}
+              data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
+              value={facilityId ? String(facilityId) : null}
+              onChange={(v) => setFacilityId(v ? Number(v) : null)}
+              allowDeselect={false}
+            />
+            <Button leftSection={<IconPlus size={16} />} onClick={open}>
+              Tạo cơ hội
+            </Button>
+          </Group>
         }
       />
 
-      <Card withBorder>
-        <Title order={5} mb="sm">
-          Tạo cơ hội mới
-        </Title>
-        <Group grow align="flex-end">
-          <TextInput label="Tên liên hệ" value={fullName} onChange={(e) => setFullName(e.currentTarget.value)} />
-          <TextInput label="Số điện thoại" value={phone} onChange={(e) => setPhone(e.currentTarget.value)} />
-        </Group>
-        {duplicateOpenOpps.length > 0 && (
-          <Alert
-            mt="sm"
-            color="yellow"
-            icon={<IconAlertTriangle size={18} />}
-            title="SĐT này đang có cơ hội mở"
-          >
-            <Stack gap={4}>
-              {duplicateOpenOpps.slice(0, 3).map((o) => (
-                <Group key={o.id} justify="space-between" gap="xs">
-                  <Text size="sm">
-                    {o.studentName || o.contact.fullName} · {STAGE_LABEL[o.stage] ?? o.stage} · PT: {ownerName(o.ownerId)}
-                  </Text>
-                  <Button size="compact-xs" variant="subtle" onClick={() => openOpp(o)}>
-                    Mở
-                  </Button>
-                </Group>
-              ))}
-              {duplicateOpenOpps.length > 3 && (
-                <Text size="xs" c="dimmed">
-                  Còn {duplicateOpenOpps.length - 3} cơ hội mở khác trong pipeline.
-                </Text>
-              )}
-            </Stack>
-          </Alert>
-        )}
-        <Group grow align="flex-end" mt="sm">
-          <TextInput
-            label="Tên học sinh (tùy chọn)"
-            value={studentName}
-            onChange={(e) => setStudentName(e.currentTarget.value)}
-          />
-          <Select label="Chương trình (tùy chọn)" data={PROGRAMS} value={program} onChange={setProgram} clearable />
-        </Group>
-        <Group grow align="flex-end" mt="sm">
-          <TextInput
-            label="Kênh nguồn / Medium (tùy chọn)"
-            placeholder="cpc, organic, referral, event…"
-            value={medium}
-            onChange={(e) => setMedium(e.currentTarget.value)}
-          />
-          <TextInput
-            label="Chiến dịch / Campaign (tùy chọn)"
-            placeholder="he-2026, tet-ads…"
-            value={campaign}
-            onChange={(e) => setCampaign(e.currentTarget.value)}
-          />
-        </Group>
-        <Group mt="md">
-          <Button onClick={createLead} loading={busy}>
-            Tạo cơ hội (O1)
-          </Button>
-        </Group>
-      </Card>
-
-      <ContactDirectoryPanel facilityId={facilityId} />
+      <ContactDirectoryPanel facilityId={facilityId} refreshKey={contactsRefresh} />
 
       <Stack gap="xs">
         <FilterBar right={<ViewSwitcher value={oppView} allowed={getAllowedViews('opportunity')} onChange={setOppView} />}>
@@ -362,6 +308,58 @@ export function CrmPanel({ selectedOppId }: { selectedOppId?: string | null }) {
           />
         )}
       </Stack>
+
+      <Modal opened={opened} onClose={close} title="Tạo cơ hội" radius="xl" centered>
+        <form onSubmit={form.onSubmit(createLead)}>
+          <Stack>
+            <Group grow align="flex-start">
+              <TextInput label="Tên liên hệ" withAsterisk {...form.getInputProps('fullName')} />
+              <TextInput label="Số điện thoại" withAsterisk {...form.getInputProps('phone')} />
+            </Group>
+            {duplicateOpenOpps.length > 0 && (
+              <Alert color="yellow" icon={<IconAlertTriangle size={18} />} title="SĐT này đang có cơ hội mở">
+                <Stack gap={4}>
+                  {duplicateOpenOpps.slice(0, 3).map((o) => (
+                    <Group key={o.id} justify="space-between" gap="xs">
+                      <Text size="sm">
+                        {o.studentName || o.contact.fullName} · {STAGE_LABEL[o.stage] ?? o.stage} · Phụ trách: {ownerName(o.ownerId)}
+                      </Text>
+                      <Button size="compact-xs" variant="subtle" onClick={() => openOpp(o)}>
+                        Mở
+                      </Button>
+                    </Group>
+                  ))}
+                  {duplicateOpenOpps.length > 3 && (
+                    <Text size="xs" c="dimmed">
+                      Còn {duplicateOpenOpps.length - 3} cơ hội mở khác trong pipeline.
+                    </Text>
+                  )}
+                </Stack>
+              </Alert>
+            )}
+            <Group grow align="flex-start">
+              <TextInput label="Tên học sinh (tùy chọn)" {...form.getInputProps('studentName')} />
+              <Select label="Chương trình (tùy chọn)" data={PROGRAMS} clearable {...form.getInputProps('program')} />
+            </Group>
+            <Group grow align="flex-start">
+              <TextInput
+                label="Kênh nguồn / Medium (tùy chọn)"
+                placeholder="cpc, organic, referral, event…"
+                {...form.getInputProps('medium')}
+              />
+              <TextInput
+                label="Chiến dịch / Campaign (tùy chọn)"
+                placeholder="he-2026, tet-ads…"
+                {...form.getInputProps('campaign')}
+              />
+            </Group>
+            <Group justify="flex-end" mt="xs">
+              <Button variant="subtle" onClick={close}>Hủy</Button>
+              <Button type="submit" variant="filled" radius={9999} loading={busy}>Tạo cơ hội</Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
     </Stack>
   );
 }

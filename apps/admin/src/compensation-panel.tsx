@@ -1,16 +1,23 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { notifyError, notifySuccess } from '@cmc/ui';
-import { Badge, Button, Card, Group, JsonInput, Stack, Table, Text, TextInput } from '@mantine/core';
+import { useForm } from '@mantine/form';
+import { useDisclosure } from '@mantine/hooks';
+import { Badge, Button, Card, Group, JsonInput, Modal, Stack, Table, Text, TextInput } from '@mantine/core';
+import { IconPlus } from '@tabler/icons-react';
 import { compensationApi, type CompensationPolicyRow } from './shallow-trpc';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
 export function CompensationConfigPanel() {
   const [policies, setPolicies] = useState<CompensationPolicyRow[]>([]);
-  const [paramsText, setParamsText] = useState('');
-  const [effectiveFrom, setEffectiveFrom] = useState(todayISO());
-  const [note, setNote] = useState('');
+  const [opened, { open, close }] = useDisclosure(false);
   const [busy, setBusy] = useState(false);
+  const form = useForm({
+    initialValues: { paramsText: '', effectiveFrom: todayISO(), note: '' },
+    validate: {
+      effectiveFrom: (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? null : 'Ngày hiệu lực phải dạng YYYY-MM-DD'),
+    },
+  });
 
   const loadList = useCallback(() => {
     compensationApi.list
@@ -26,41 +33,40 @@ export function CompensationConfigPanel() {
       try {
         const list = await compensationApi.list.query();
         const base = list[0]?.params ?? (await compensationApi.defaults.query());
-        setParamsText(JSON.stringify(base, null, 2));
+        form.setFieldValue('paramsText', JSON.stringify(base, null, 2));
       } catch {
         /* leave empty */
       }
     })();
+    // Prefill only on mount — form is stable across renders (Mantine useForm).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadDefaults() {
     try {
       const d = await compensationApi.defaults.query();
-      setParamsText(JSON.stringify(d, null, 2));
+      form.setFieldValue('paramsText', JSON.stringify(d, null, 2));
       notifySuccess('Đã nạp tham số mặc định (PA2 + Đào tạo). Sửa rồi tạo phiên bản mới.');
     } catch (e) {
       notifyError(e, 'Không tải được tham số mặc định');
     }
   }
 
-  async function createVersion() {
+  async function createVersion(values: typeof form.values) {
     let params: unknown;
     try {
-      params = JSON.parse(paramsText);
+      params = JSON.parse(values.paramsText);
     } catch {
       notifyError('JSON không hợp lệ — kiểm tra lại.', 'Lỗi định dạng');
-      return;
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
-      notifyError('Ngày hiệu lực phải dạng YYYY-MM-DD.', 'Lỗi ngày');
       return;
     }
     setBusy(true);
     try {
       // Server re-validates params against the Zod schema; an invalid shape throws here.
-      await compensationApi.create.mutate({ effectiveFrom, params, note: note || undefined });
-      notifySuccess(`Đã tạo chính sách hiệu lực từ ${effectiveFrom} (áp dụng kỳ sau, không đổi lương đã chốt).`);
-      setNote('');
+      await compensationApi.create.mutate({ effectiveFrom: values.effectiveFrom, params, note: values.note || undefined });
+      notifySuccess(`Đã tạo chính sách hiệu lực từ ${values.effectiveFrom} (áp dụng kỳ sau, không đổi lương đã chốt).`);
+      close();
+      form.setFieldValue('note', '');
       loadList();
     } catch (e) {
       notifyError(e, 'Tạo chính sách thất bại (tham số không hợp lệ?)');
@@ -87,28 +93,11 @@ export function CompensationConfigPanel() {
         </Text>
       </Card>
 
-      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-        <Text fw={600} style={{ color: 'var(--cmc-text)' }} mb="md">Tạo phiên bản chính sách mới</Text>
-        <Group grow mb="sm" align="flex-end">
-          <TextInput label="Hiệu lực từ" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.currentTarget.value)} placeholder="YYYY-MM-DD" />
-          <TextInput label="Ghi chú" value={note} onChange={(e) => setNote(e.currentTarget.value)} placeholder="vd: điều chỉnh hoa hồng Q3" />
-          <Button variant="subtle" onClick={loadDefaults}>Nạp mặc định</Button>
-        </Group>
-        <JsonInput
-          label="Tham số (JSON)"
-          value={paramsText}
-          onChange={setParamsText}
-          formatOnBlur
-          autosize
-          minRows={12}
-          maxRows={28}
-          validationError="JSON không hợp lệ"
-          styles={{ input: { fontFamily: 'monospace', fontSize: 12 } }}
-        />
-        <Group justify="flex-end" mt="md">
-          <Button variant="filled" radius={9999} onClick={createVersion} loading={busy}>Tạo phiên bản</Button>
-        </Group>
-      </Card>
+      <Group justify="flex-end">
+        <Button variant="filled" radius={9999} leftSection={<IconPlus size={16} />} onClick={open}>
+          Tạo phiên bản chính sách lương
+        </Button>
+      </Group>
 
       <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
         <Text fw={600} style={{ color: 'var(--cmc-text)' }} mb="md">Các phiên bản đã ban hành</Text>
@@ -140,6 +129,32 @@ export function CompensationConfigPanel() {
           </Table>
         )}
       </Card>
+
+      <Modal opened={opened} onClose={close} title="Tạo phiên bản chính sách lương" radius="xl" centered>
+        <form onSubmit={form.onSubmit(createVersion)}>
+          <Stack>
+            <Group grow align="flex-end">
+              <TextInput label="Hiệu lực từ" placeholder="YYYY-MM-DD" {...form.getInputProps('effectiveFrom')} />
+              <TextInput label="Ghi chú" placeholder="vd: điều chỉnh hoa hồng Q3" {...form.getInputProps('note')} />
+              <Button variant="subtle" onClick={loadDefaults}>Nạp mặc định</Button>
+            </Group>
+            <JsonInput
+              label="Tham số (JSON)"
+              formatOnBlur
+              autosize
+              minRows={12}
+              maxRows={28}
+              validationError="JSON không hợp lệ"
+              styles={{ input: { fontFamily: 'monospace', fontSize: 12 } }}
+              {...form.getInputProps('paramsText')}
+            />
+            <Group justify="flex-end" mt="xs">
+              <Button variant="subtle" onClick={close}>Hủy</Button>
+              <Button type="submit" variant="filled" radius={9999} loading={busy}>Tạo phiên bản</Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
     </Stack>
   );
 }

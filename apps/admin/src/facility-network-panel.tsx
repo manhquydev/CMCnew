@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { trpc, useSession, notifyError, notifySuccess } from '@cmc/ui';
-import { ActionIcon, Badge, Button, Card, Group, Loader, Stack, Table, Text, TextInput } from '@mantine/core';
+import { trpc, useSession, notifyError, notifySuccess, required } from '@cmc/ui';
+import { useForm } from '@mantine/form';
+import { useDisclosure } from '@mantine/hooks';
+import { ActionIcon, Badge, Button, Card, Group, Loader, Modal, Stack, Table, Text, TextInput } from '@mantine/core';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
@@ -17,9 +19,14 @@ export function FacilityNetworkPanel() {
   const [activeFacilityId, setActiveFacilityId] = useState<number | null>(null);
   const [networks, setNetworks] = useState<Network[]>([]);
   const [loading, setLoading] = useState(true);
-  const [ipAddress, setIpAddress] = useState('');
-  const [label, setLabel] = useState('');
+  const [opened, { open, close }] = useDisclosure(false);
   const [saving, setSaving] = useState(false);
+  const form = useForm({
+    initialValues: { ipAddress: '', label: '' },
+    validate: {
+      ipAddress: required('Nhập địa chỉ IP / CIDR'),
+    },
+  });
 
   useEffect(() => {
     trpc.facility.list.query()
@@ -39,13 +46,14 @@ export function FacilityNetworkPanel() {
 
   const fid = activeFacilityId ?? me.facilityIds[0];
 
-  async function addIP() {
-    if (!fid || !ipAddress.trim()) return;
+  async function addIP(values: typeof form.values) {
+    if (!fid) return;
     setSaving(true);
     try {
-      await trpc.facilityNetwork.create.mutate({ facilityId: fid, ipAddress: ipAddress.trim(), label: label.trim() || undefined });
+      await trpc.facilityNetwork.create.mutate({ facilityId: fid, ipAddress: values.ipAddress.trim(), label: values.label.trim() || undefined });
       notifySuccess('Đã thêm IP');
-      setIpAddress(''); setLabel('');
+      close();
+      form.reset();
       trpc.facilityNetwork.list.query({ facilityId: fid }).then(setNetworks);
     } catch (e) { notifyError(e, 'Thêm IP thất bại'); }
     finally { setSaving(false); }
@@ -66,39 +74,21 @@ export function FacilityNetworkPanel() {
 
   return (
     <Stack maw={640}>
-      <Group gap="xs">
-        {facilities.map((f) => (
-          <Button
-            key={f.id}
-            size="xs"
-            variant={(activeFacilityId ?? me.facilityIds[0]) === f.id ? 'filled' : 'light'}
-            onClick={() => setActiveFacilityId(f.id)}
-          >{f.name}</Button>
-        ))}
-      </Group>
-
-      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-        <Text fw={700} size="sm" mb="md" style={{ color: 'var(--cmc-text)' }}>Thêm IP WiFi công ty</Text>
-        <Group gap="sm" align="flex-end">
-          <TextInput
-            label="Địa chỉ IP / CIDR"
-            placeholder="192.168.1.0/24"
-            value={ipAddress}
-            onChange={(e) => setIpAddress(e.target.value)}
-            style={{ flex: 1 }}
-          />
-          <TextInput
-            label="Ghi chú"
-            placeholder="WiFi VP chính"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            style={{ flex: 1 }}
-          />
-          <Button leftSection={<IconPlus size={16} />} loading={saving} onClick={addIP}>
-            Thêm
-          </Button>
+      <Group justify="space-between" align="center">
+        <Group gap="xs">
+          {facilities.map((f) => (
+            <Button
+              key={f.id}
+              size="xs"
+              variant={(activeFacilityId ?? me.facilityIds[0]) === f.id ? 'filled' : 'light'}
+              onClick={() => setActiveFacilityId(f.id)}
+            >{f.name}</Button>
+          ))}
         </Group>
-      </Card>
+        <Button leftSection={<IconPlus size={16} />} onClick={open}>
+          Thêm IP WiFi công ty
+        </Button>
+      </Group>
 
       {loading ? (
         <Group justify="center"><Loader /></Group>
@@ -136,6 +126,19 @@ export function FacilityNetworkPanel() {
           </Table>
         </Card>
       )}
+
+      <Modal opened={opened} onClose={close} title="Thêm IP WiFi công ty" radius="xl" centered>
+        <form onSubmit={form.onSubmit(addIP)}>
+          <Stack>
+            <TextInput label="Địa chỉ IP / CIDR" placeholder="192.168.1.0/24" withAsterisk {...form.getInputProps('ipAddress')} />
+            <TextInput label="Ghi chú" placeholder="WiFi VP chính" {...form.getInputProps('label')} />
+            <Group justify="flex-end" mt="xs">
+              <Button variant="subtle" onClick={close}>Hủy</Button>
+              <Button type="submit" variant="filled" radius={9999} loading={saving}>Thêm</Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
     </Stack>
   );
 }

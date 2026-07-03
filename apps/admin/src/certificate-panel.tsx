@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { trpc, API_URL, notifyError, notifySuccess } from '@cmc/ui';
-import { Button, Card, Group, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { trpc, API_URL, notifyError, notifySuccess, required } from '@cmc/ui';
+import { useForm } from '@mantine/form';
+import { useDisclosure } from '@mantine/hooks';
+import { Button, Card, Group, Modal, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { IconPlus } from '@tabler/icons-react';
 
 const TH_STYLE: React.CSSProperties = {
   fontSize: 11,
@@ -19,10 +22,15 @@ export function CertificatePanel() {
   const [facilityId, setFacilityId] = useState<number | null>(null);
   const [students, setStudents] = useState<StudentT[]>([]);
   const [certs, setCerts] = useState<Cert[]>([]);
-  const [studentId, setStudentId] = useState<string | null>(null);
-  const [level, setLevel] = useState('');
-  const [title, setTitle] = useState('Hoàn thành cấp độ');
+  const [opened, { open, close }] = useDisclosure(false);
   const [busy, setBusy] = useState(false);
+  const form = useForm({
+    initialValues: { studentId: '' as string | null, level: '', title: 'Hoàn thành cấp độ' },
+    validate: {
+      studentId: required('Chọn học sinh'),
+      title: required('Nhập tiêu đề'),
+    },
+  });
 
   useEffect(() => {
     trpc.facility.list
@@ -52,10 +60,10 @@ export function CertificatePanel() {
   }, [facilityId]);
   useEffect(load, [load]);
 
-  async function issue() {
-    const student = students.find((s) => s.id === studentId);
-    if (!student || !title.trim()) {
-      notifyError(new Error('Chọn học sinh và nhập tiêu đề'), 'Cấp chứng chỉ thất bại');
+  async function issue(values: typeof form.values) {
+    const student = students.find((s) => s.id === values.studentId);
+    if (!student) {
+      notifyError(new Error('Chọn học sinh'), 'Cấp chứng chỉ thất bại');
       return;
     }
     setBusy(true);
@@ -63,11 +71,12 @@ export function CertificatePanel() {
       await trpc.certificate.issue.mutate({
         studentId: student.id,
         program: student.program,
-        level: level.trim() || undefined,
-        title: title.trim(),
+        level: values.level.trim() || undefined,
+        title: values.title.trim(),
       });
       notifySuccess(`Đã cấp chứng chỉ cho ${student.fullName}`);
-      setLevel('');
+      close();
+      form.reset();
       load();
     } catch (e) {
       notifyError(e, 'Cấp chứng chỉ thất bại');
@@ -78,37 +87,19 @@ export function CertificatePanel() {
 
   return (
     <Stack>
-      <Select
-        label="Cơ sở"
-        w={280}
-        data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-        value={facilityId ? String(facilityId) : null}
-        onChange={(v) => setFacilityId(v ? Number(v) : null)}
-        allowDeselect={false}
-      />
-
-      <Card withBorder>
-        <Title order={5} mb="sm">
+      <Group justify="space-between" align="flex-end">
+        <Select
+          label="Cơ sở"
+          w={280}
+          data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
+          value={facilityId ? String(facilityId) : null}
+          onChange={(v) => setFacilityId(v ? Number(v) : null)}
+          allowDeselect={false}
+        />
+        <Button leftSection={<IconPlus size={16} />} onClick={open}>
           Cấp chứng chỉ
-        </Title>
-        <Group grow align="flex-end">
-          <Select
-            label="Học sinh"
-            searchable
-            placeholder={students.length ? 'Chọn học sinh' : 'Chưa có học sinh'}
-            data={students.map((s) => ({ value: s.id, label: `${s.studentCode} — ${s.fullName}` }))}
-            value={studentId}
-            onChange={setStudentId}
-          />
-          <TextInput label="Cấp độ (tùy chọn)" placeholder="vd L2" value={level} onChange={(e) => setLevel(e.currentTarget.value)} />
-        </Group>
-        <TextInput label="Tiêu đề" mt="sm" value={title} onChange={(e) => setTitle(e.currentTarget.value)} />
-        <Group mt="md">
-          <Button onClick={issue} loading={busy}>
-            Cấp chứng chỉ
-          </Button>
-        </Group>
-      </Card>
+        </Button>
+      </Group>
 
       <Card withBorder>
         <Title order={6} mb="sm">
@@ -151,6 +142,27 @@ export function CertificatePanel() {
           </Table>
         )}
       </Card>
+
+      <Modal opened={opened} onClose={close} title="Cấp chứng chỉ" radius="xl" centered>
+        <form onSubmit={form.onSubmit(issue)}>
+          <Stack>
+            <Select
+              label="Học sinh"
+              withAsterisk
+              searchable
+              placeholder={students.length ? 'Chọn học sinh' : 'Chưa có học sinh'}
+              data={students.map((s) => ({ value: s.id, label: `${s.studentCode} — ${s.fullName}` }))}
+              {...form.getInputProps('studentId')}
+            />
+            <TextInput label="Cấp độ (tùy chọn)" placeholder="vd L2" {...form.getInputProps('level')} />
+            <TextInput label="Tiêu đề" withAsterisk {...form.getInputProps('title')} />
+            <Group justify="flex-end" mt="xs">
+              <Button variant="subtle" onClick={close}>Hủy</Button>
+              <Button type="submit" variant="filled" radius={9999} loading={busy}>Cấp chứng chỉ</Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
     </Stack>
   );
 }

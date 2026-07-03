@@ -120,7 +120,7 @@ function StageBar({
             key={s.value}
             size="xs"
             variant={active ? 'filled' : done ? 'light' : 'default'}
-            color={active ? 'cmcRed' : done ? 'teal' : 'gray'}
+            color={active ? 'cmc' : done ? 'teal' : 'gray'}
             disabled={disabled || active || done}
             onClick={() => onPick(s.value)}
             radius={0}
@@ -691,12 +691,16 @@ export function OpportunityDetailPanel({
             label="Thời gian test"
             value={testAt}
             onChange={(v: Date | null) => setTestAt(v)}
+            error={testAt && testAt.getHours() === 0 && testAt.getMinutes() === 0 ? 'Chọn giờ cụ thể, chưa chỉ chọn ngày' : undefined}
           />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setTestOpen(false)}>
               Đóng
             </Button>
-            <Button disabled={!testAt} onClick={scheduleTest}>
+            <Button
+              disabled={!testAt || (testAt.getHours() === 0 && testAt.getMinutes() === 0)}
+              onClick={scheduleTest}
+            >
               Đặt lịch
             </Button>
           </Group>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { notifyError, notifySuccess, useSession } from '@cmc/ui';
+import { can } from '@cmc/auth/permissions';
 import {
   Alert,
   Badge,
@@ -911,8 +912,11 @@ export function PayrollPanel({ facilityId }: { facilityId?: number }) {
   const { me } = useSession();
   const [selectedStaff, setSelectedStaff] = useState<{ id: string; name: string } | null>(null);
 
-  if (!me.isSuperAdmin && !me.roles.includes('hr') && !me.roles.includes('ke_toan')) {
-    return <Text c="dimmed">Chỉ HR và Kế toán mới được truy cập mục này.</Text>;
+  // Gate must match the nav's NAV_GATES.hr entry (shell.tsx) — payroll.roster — so the "Nhân sự &
+  // Lương" nav item is never visible-but-denied. Was a hardcoded ['hr', 'ke_toan'] check that
+  // predated giam_doc_kinh_doanh/giam_doc_dao_tao being granted payroll.roster in the registry.
+  if (!can(me.roles, me.isSuperAdmin, 'payroll', 'roster')) {
+    return <Text c="dimmed">Bạn không có quyền truy cập mục này.</Text>;
   }
 
   const activeFacilityId = facilityId ?? me.facilityIds[0];

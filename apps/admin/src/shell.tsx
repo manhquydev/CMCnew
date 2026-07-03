@@ -485,7 +485,7 @@ export function buildNavGroups({
         // GĐ Đào tạo (chỉ role này): "Tổng quan" thay bằng Executive Cockpit (summary +
         // hộp duyệt nhanh). Đặt gate 'open' (nav-permissions.ts) vì visibility thật nằm ở đây.
         { key: 'edu-director-cockpit' as const, label: 'Cockpit điều hành', icon: <IconLayoutDashboard {...I()} />, visible: isEduDirectorOnly },
-        { key: 'org' as const, label: 'Cơ sở & Users', icon: <IconBuilding {...I()} />, visible: visible('org') },
+        { key: 'org' as const, label: 'Cơ sở & Người dùng', icon: <IconBuilding {...I()} />, visible: visible('org') },
         { key: 'facility-network' as const, label: 'IP WiFi chấm công', icon: <IconWifi {...I()} />, visible: visible('facility-network') },
         { key: 'shift-config' as const, label: 'Danh mục ca', icon: <IconAdjustments {...I()} />, visible: visible('shift-config') },
       ],

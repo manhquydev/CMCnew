@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useSession, notifyError, notifySuccess } from '@cmc/ui';
+import { useSession, notifyError, notifySuccess, required } from '@cmc/ui';
+import { useForm } from '@mantine/form';
+import { useDisclosure } from '@mantine/hooks';
 import {
   Badge,
   Button,
   Card,
   Group,
+  Modal,
   NumberInput,
   Select,
   SimpleGrid,
@@ -13,6 +16,7 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
+import { IconPlus } from '@tabler/icons-react';
 import { payrollApi } from './shallow-trpc';
 
 const TH_STYLE: React.CSSProperties = {
@@ -352,9 +356,14 @@ export function KpiEvaluationPanel() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Create-eval form state
-  const [createUserId, setCreateUserId] = useState<string | null>(null);
-  const [createBlock, setCreateBlock] = useState<string>('training');
+  const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
   const [createBusy, setCreateBusy] = useState(false);
+  const createForm = useForm({
+    initialValues: { userId: '' as string | null, block: 'training' },
+    validate: {
+      userId: required('Chọn nhân sự'),
+    },
+  });
 
   const fid = facilityId ? Number(facilityId) : null;
 
@@ -386,18 +395,19 @@ export function KpiEvaluationPanel() {
     return <Text c="dimmed">Tài khoản chưa được gán cơ sở.</Text>;
   }
 
-  async function createEval() {
-    if (!fid || !createUserId) return;
+  async function createEval(values: typeof createForm.values) {
+    if (!fid || !values.userId) return;
     setCreateBusy(true);
     try {
       await payrollApi.kpiEvalStart.mutate({
-        userId: createUserId,
+        userId: values.userId,
         facilityId: fid,
         periodKey,
-        block: createBlock as 'training' | 'sales',
+        block: values.block as 'training' | 'sales',
       });
-      notifySuccess(`Đã tạo phiếu KPI cho ${rosterMap.get(createUserId) ?? createUserId}.`);
-      setCreateUserId(null);
+      notifySuccess(`Đã tạo phiếu KPI cho ${rosterMap.get(values.userId) ?? values.userId}.`);
+      closeCreate();
+      createForm.reset();
       loadKpiList();
     } catch (e) {
       notifyError(e, 'Tạo phiếu KPI thất bại');
@@ -432,35 +442,12 @@ export function KpiEvaluationPanel() {
         </Group>
       </Card>
 
-      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-        <Text fw={600} style={{ color: 'var(--cmc-text)' }} mb="sm">Tạo phiếu kỳ này cho nhân sự</Text>
-        <Group align="flex-end">
-          <Select
-            label="Nhân sự"
-            placeholder="Chọn người"
-            data={rosterData}
-            value={createUserId}
-            onChange={setCreateUserId}
-            searchable
-            w={280}
-          />
-          <Select
-            label="Bộ phận"
-            data={[
-              { value: 'training', label: 'Đào tạo (training)' },
-              { value: 'sales', label: 'Kinh doanh (sales)' },
-            ]}
-            value={createBlock}
-            onChange={(v) => setCreateBlock(v ?? 'training')}
-            w={200}
-          />
-          <Button variant="filled" radius={9999} onClick={createEval} loading={createBusy} disabled={!createUserId || !fid}>
-            Tạo phiếu
-          </Button>
-        </Group>
-      </Card>
-
-      <Text fw={600} size="lg" style={{ color: 'var(--cmc-text)' }}>Phiếu KPI kỳ {periodKey}</Text>
+      <Group justify="space-between" align="center">
+        <Text fw={600} size="lg" style={{ color: 'var(--cmc-text)' }}>Phiếu KPI kỳ {periodKey}</Text>
+        <Button variant="filled" radius={9999} leftSection={<IconPlus size={16} />} onClick={openCreate} disabled={!fid}>
+          Tạo phiếu KPI kỳ này
+        </Button>
+      </Group>
 
       {fid && (
         <SimpleGrid cols={4} spacing="sm">
@@ -478,6 +465,33 @@ export function KpiEvaluationPanel() {
           ))}
         </SimpleGrid>
       )}
+
+      <Modal opened={createOpened} onClose={closeCreate} title="Tạo phiếu KPI kỳ này" radius="xl" centered>
+        <form onSubmit={createForm.onSubmit(createEval)}>
+          <Stack>
+            <Select
+              label="Nhân sự"
+              withAsterisk
+              placeholder="Chọn người"
+              data={rosterData}
+              searchable
+              {...createForm.getInputProps('userId')}
+            />
+            <Select
+              label="Bộ phận"
+              data={[
+                { value: 'training', label: 'Đào tạo' },
+                { value: 'sales', label: 'Kinh doanh' },
+              ]}
+              {...createForm.getInputProps('block')}
+            />
+            <Group justify="flex-end" mt="xs">
+              <Button variant="subtle" onClick={closeCreate}>Hủy</Button>
+              <Button type="submit" variant="filled" radius={9999} loading={createBusy}>Tạo phiếu</Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
     </Stack>
   );
 }

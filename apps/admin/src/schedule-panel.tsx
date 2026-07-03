@@ -37,21 +37,26 @@ interface SchedulePanelProps {
 
 /**
  * Cross-class schedule panel — shows the teacher's (or facility's) agenda for a
- * selected date range, grouped by class. Default = current week. A row click opens
- * the connected Session Detail (onOpenSession); the class-card title opens the
+ * selected date range, grouped by class. Default = this week + next week (rolling 2-week
+ * window, so upcoming sessions are visible without manually widening the range). A row click
+ * opens the connected Session Detail (onOpenSession); the class-card title opens the
  * Class Workspace via goToClass.
  */
 export function SchedulePanel({ goToClass, onOpenSession }: SchedulePanelProps) {
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facilityId, setFacilityId] = useState<number | null>(null);
-  // Default to the current week (Monday..Sunday using dayjs)
+  const [facilitiesLoading, setFacilitiesLoading] = useState(true);
+  // Default to a rolling 2-week window (this week + next week) so upcoming sessions are visible
+  // without requiring the user to manually widen the range (#9: "this week" alone hid next week's
+  // sessions for teachers who plan ahead).
   const [from, setFrom] = useState<Date | null>(() => dayjs().startOf('week').toDate());
-  const [to, setTo] = useState<Date | null>(() => dayjs().endOf('week').toDate());
+  const [to, setTo] = useState<Date | null>(() => dayjs().add(1, 'week').endOf('week').toDate());
   const [sessions, setSessions] = useState<MySession[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Load facility list once
+  // Load facility list once. `facilitiesLoading` holds the Select in a disabled/loading state so it
+  // never flashes an empty/required-looking control before the facility auto-populates (#28).
   useEffect(() => {
     trpc.facility.list
       .query()
@@ -59,7 +64,8 @@ export function SchedulePanel({ goToClass, onOpenSession }: SchedulePanelProps) 
         setFacilities(fs);
         setFacilityId((cur) => cur ?? fs[0]?.id ?? null);
       })
-      .catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
+      .catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'))
+      .finally(() => setFacilitiesLoading(false));
   }, []);
 
   // Reload sessions when facility or date range changes
@@ -96,6 +102,8 @@ export function SchedulePanel({ goToClass, onOpenSession }: SchedulePanelProps) 
         <Select
           label="Cơ sở"
           w={220}
+          placeholder={facilitiesLoading ? 'Đang tải...' : undefined}
+          disabled={facilitiesLoading}
           data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
           value={facilityId ? String(facilityId) : null}
           onChange={(v) => setFacilityId(v ? Number(v) : null)}
@@ -118,10 +126,10 @@ export function SchedulePanel({ goToClass, onOpenSession }: SchedulePanelProps) 
           variant="default"
           onClick={() => {
             setFrom(dayjs().startOf('week').toDate());
-            setTo(dayjs().endOf('week').toDate());
+            setTo(dayjs().add(1, 'week').endOf('week').toDate());
           }}
         >
-          Tuần này
+          2 tuần này
         </Button>
       </Group>
 
