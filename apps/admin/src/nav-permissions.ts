@@ -50,6 +50,10 @@ export const NAV_GATES: Record<SectionKey, NavGate> = {
   //   Gate to mark so only roles that can act see the panel.
   attendance:   { kind: 'permission', module: 'attendance', action: 'mark' },
 
+  // attendance-report: attendance.report = [giao_vien, giam_doc_dao_tao] — read-only summary,
+  // gate to the same 'report' action the router itself checks.
+  'attendance-report': { kind: 'permission', module: 'attendance', action: 'report' },
+
   // grading: grade.grade = [giao_vien, giam_doc_dao_tao]
   grading:      { kind: 'permission', module: 'grade', action: 'grade' },
 

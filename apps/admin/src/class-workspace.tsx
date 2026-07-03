@@ -544,10 +544,12 @@ function ScheduleTab({
 // ─── SessionsTab ──────────────────────────────────────────────────────────────
 
 function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Room[]; teachers: Teacher[] }) {
+  const { me } = useSession();
+  const canCreateMakeup = can(me.roles, me.isSuperAdmin, 'schedule', 'createMakeupSession');
   const [sessions, setSessions] = useState<ClassSession[]>([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     setLoading(true);
     trpc.schedule.listSessions
       .query({ classBatchId: batchId })
@@ -555,6 +557,7 @@ function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Roo
       .catch((e) => notifyError(e, 'Không tải được buổi học'))
       .finally(() => setLoading(false));
   }, [batchId]);
+  useEffect(load, [load]);
 
   const roomLabel = (id: string | null) => (id ? (rooms.find((r) => r.id === id)?.code ?? '—') : '—');
   const teacherLabel = (id: string | null) =>
@@ -563,7 +566,13 @@ function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Roo
   if (loading) return <Loader size="sm" />;
 
   return (
-    <Table striped>
+    <Stack>
+      {canCreateMakeup && (
+        <Group justify="flex-end">
+          <CreateMakeupSessionModal batchId={batchId} rooms={rooms} teachers={teachers} onCreated={load} />
+        </Group>
+      )}
+      <Table striped>
       <Table.Thead>
         <Table.Tr>
           <Table.Th>Ngày</Table.Th>
@@ -593,7 +602,102 @@ function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Roo
           </Table.Tr>
         )}
       </Table.Tbody>
-    </Table>
+      </Table>
+    </Stack>
+  );
+}
+
+// ─── CreateMakeupSessionModal (used in SessionsTab) ────────────────────────────
+
+function CreateMakeupSessionModal({
+  batchId,
+  rooms,
+  teachers,
+  onCreated,
+}: {
+  batchId: string;
+  rooms: Room[];
+  teachers: Teacher[];
+  onCreated: () => void;
+}) {
+  const [opened, { open, close }] = useDisclosure(false);
+  const [sessionDate, setSessionDate] = useState<Date | null>(null);
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [roomId, setRoomId] = useState<string | null>(null);
+  const [teacherId, setTeacherId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function create() {
+    const date = toApiDate(sessionDate);
+    if (!date || !startTime || !endTime) {
+      setErr('Nhập đủ ngày, giờ bắt đầu và kết thúc');
+      return;
+    }
+    setBusy(true);
+    setErr('');
+    try {
+      await trpc.schedule.createMakeupSession.mutate({
+        classBatchId: batchId,
+        sessionDate: date,
+        startTime,
+        endTime,
+        roomId: roomId ?? undefined,
+        teacherId: teacherId ?? undefined,
+      });
+      notifySuccess('Đã tạo buổi học bù');
+      close();
+      setSessionDate(null);
+      setStartTime('');
+      setEndTime('');
+      setRoomId(null);
+      setTeacherId(null);
+      onCreated();
+    } catch (e) {
+      notifyError(e, 'Tạo buổi học bù thất bại');
+      setErr(e instanceof Error ? e.message : 'Lỗi không xác định');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <Button variant="default" size="xs" onClick={open}>+ Tạo buổi học bù</Button>
+      <Modal opened={opened} onClose={close} title="Tạo buổi học bù" size="md">
+        <Stack>
+          <DateInput label="Ngày" value={sessionDate} onChange={setSessionDate} valueFormat="DD/MM/YYYY" />
+          <Group grow>
+            <TextInput label="Giờ bắt đầu (HH:mm)" placeholder="08:00" value={startTime} onChange={(e) => setStartTime(e.currentTarget.value)} />
+            <TextInput label="Giờ kết thúc (HH:mm)" placeholder="10:00" value={endTime} onChange={(e) => setEndTime(e.currentTarget.value)} />
+          </Group>
+          <Select
+            label="Phòng (tùy chọn)"
+            clearable
+            data={rooms.map((r) => ({ value: r.id, label: r.code }))}
+            value={roomId}
+            onChange={setRoomId}
+          />
+          <Select
+            label="Giáo viên (tùy chọn)"
+            clearable
+            searchable
+            data={teachers.map((t) => ({ value: t.id, label: t.displayName }))}
+            value={teacherId}
+            onChange={setTeacherId}
+          />
+          <Text size="xs" c="dimmed">
+            Buổi bù không mở bài tập cho cả lớp — chỉ học sinh điểm danh present/late trên buổi này mới được mở bài tập riêng.
+          </Text>
+          {err && <Text c="red" size="sm">{err}</Text>}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={close}>Hủy</Button>
+            <Button onClick={create} loading={busy}>Tạo buổi bù</Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
   );
 }
 
@@ -653,6 +757,7 @@ function CreateStudentModal({ facilityId, onCreated }: { facilityId: number; onC
 function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) {
   const { me } = useSession();
   const canEnroll = can(me.roles, me.isSuperAdmin, 'enrollment', 'enroll');
+  const canTransfer = can(me.roles, me.isSuperAdmin, 'enrollment', 'transfer');
   // student.create is superAdminProcedure — not in PERMISSIONS registry, super_admin only.
   const canCreateStudent = me.isSuperAdmin;
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
@@ -662,6 +767,7 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
   const [loading, setLoading] = useState(false);
   // Deep-link: clicking an enrolled student opens the existing StudentDetailPanel in place.
   const [detailStudentId, setDetailStudentId] = useState<string | null>(null);
+  const [transferEnrollment, setTransferEnrollment] = useState<Enrollment | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -755,15 +861,29 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
               <Table.Td>
                 <Badge size="sm" color={e.status === 'completed' ? 'teal' : undefined}>{e.status}</Badge>
               </Table.Td>
-              <Table.Td w={110}>
+              <Table.Td w={190}>
                 {e.status === 'active' && (
-                  <Button size="compact-xs" variant="subtle" onClick={() => complete(e.id)}>Hoàn tất</Button>
+                  <Group gap={4} wrap="nowrap">
+                    <Button size="compact-xs" variant="subtle" onClick={() => complete(e.id)}>Hoàn tất</Button>
+                    {canTransfer && (
+                      <Button size="compact-xs" variant="subtle" color="gray" onClick={() => setTransferEnrollment(e)}>Chuyển lớp</Button>
+                    )}
+                  </Group>
                 )}
               </Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>
       </Table>
+      {transferEnrollment && (
+        <TransferEnrollmentModal
+          enrollment={transferEnrollment}
+          facilityId={facilityId}
+          opened
+          onClose={() => setTransferEnrollment(null)}
+          onTransferred={() => { setTransferEnrollment(null); load(); }}
+        />
+      )}
     </Stack>
   );
 }
@@ -954,6 +1074,87 @@ function EditClassModal({
         <Group justify="flex-end">
           <Button variant="default" onClick={onClose}>Hủy</Button>
           <Button onClick={save} loading={busy}>Lưu</Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
+// ─── TransferEnrollmentModal (Chuyển lớp — history-preserving, see enrollment.transfer) ────────
+
+function TransferEnrollmentModal({
+  enrollment,
+  facilityId,
+  opened,
+  onClose,
+  onTransferred,
+}: {
+  enrollment: Enrollment;
+  facilityId: number;
+  opened: boolean;
+  onClose: () => void;
+  onTransferred: () => void;
+}) {
+  const [targetBatches, setTargetBatches] = useState<Batch[]>([]);
+  const [targetClassBatchId, setTargetClassBatchId] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    if (!opened) return;
+    setTargetClassBatchId(null);
+    setReason('');
+    setErr('');
+    trpc.classBatch.list
+      .query()
+      .then((bs) => setTargetBatches(bs.filter((b) => b.facilityId === facilityId && b.id !== enrollment.classBatchId)))
+      .catch((e) => notifyError(e, 'Không tải được danh sách lớp'));
+  }, [opened, facilityId, enrollment.classBatchId]);
+
+  async function transfer() {
+    if (!targetClassBatchId) {
+      setErr('Chọn lớp đích');
+      return;
+    }
+    setBusy(true);
+    setErr('');
+    try {
+      await trpc.enrollment.transfer.mutate({
+        enrollmentId: enrollment.id,
+        targetClassBatchId,
+        reason: reason.trim() || undefined,
+      });
+      notifySuccess('Đã chuyển lớp');
+      onClose();
+      onTransferred();
+    } catch (e) {
+      notifyError(e, 'Chuyển lớp thất bại');
+      setErr(e instanceof Error ? e.message : 'Lỗi không xác định');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal opened={opened} onClose={onClose} title={`Chuyển lớp — ${enrollment.student.fullName}`} size="md">
+      <Stack>
+        <Select
+          label="Lớp đích"
+          searchable
+          placeholder={targetBatches.length ? 'Chọn lớp' : 'Không có lớp khác trong cơ sở'}
+          data={targetBatches.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }))}
+          value={targetClassBatchId}
+          onChange={setTargetClassBatchId}
+        />
+        <TextInput label="Lý do (tùy chọn)" value={reason} onChange={(e) => setReason(e.currentTarget.value)} maxLength={500} />
+        <Text size="xs" c="dimmed">
+          Ghi danh cũ chuyển sang trạng thái &quot;transferred&quot;, tạo ghi danh mới ở lớp đích. Điểm danh/điểm số cũ được giữ nguyên.
+        </Text>
+        {err && <Text c="red" size="sm">{err}</Text>}
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>Hủy</Button>
+          <Button onClick={transfer} loading={busy}>Chuyển lớp</Button>
         </Group>
       </Stack>
     </Modal>
