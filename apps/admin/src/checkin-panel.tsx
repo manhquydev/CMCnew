@@ -119,7 +119,7 @@ export function CheckInPanel() {
             <IconWifiOff size={16} color="var(--cmc-warn)" />
           )}
           <Text size="sm" style={{ color: ipCheck.allowed ? 'var(--cmc-ok)' : 'var(--cmc-warn)' }}>
-            {ipCheck.allowed ? `WiFi công ty (${ipCheck.ip})` : `Ngoài mạng công ty (${ipCheck.ip}) — cần manager duyệt`}
+            {ipCheck.allowed ? 'Đang ở mạng công ty' : 'Ngoài mạng công ty — cần quản lý duyệt chấm công'}
           </Text>
         </Group>
 
