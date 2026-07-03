@@ -17,6 +17,7 @@ import {
   Fieldset,
   Grid,
   Group,
+  Modal,
   MultiSelect,
   Select,
   SimpleGrid,
@@ -314,6 +315,22 @@ export function StaffProfilePanel({
   const canPayroll = me.isSuperAdmin || can(me.roles as string[], me.isSuperAdmin, 'payroll', 'listByStaff');
   const canActivity = me.isSuperAdmin || can(me.roles as string[], me.isSuperAdmin, 'user', 'viewActivity');
 
+  // Decision 0031: STAFF_PASSWORD_LOGIN runs permanently alongside SSO — super_admin can set a
+  // staff account's password (mirrors student.resetLmsPassword's one-time-reveal pattern).
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwResult, setPwResult] = useState<{ email: string; tempPassword: string } | null>(null);
+  async function resetPassword() {
+    setPwBusy(true);
+    try {
+      const r = await trpc.user.setPassword.mutate({ id: user.id });
+      setPwResult(r);
+    } catch (e) {
+      notifyError(e, 'Đặt lại mật khẩu thất bại');
+    } finally {
+      setPwBusy(false);
+    }
+  }
+
   const facilityLabels = Object.fromEntries(facilities.map((f) => [f.id, `${f.code} — ${f.name}`])) as Record<number, string>;
   const facilityData = facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }));
 
@@ -482,10 +499,21 @@ export function StaffProfilePanel({
               <Button variant="filled" radius={9999} size="xs" loading={busy} onClick={save} disabled={displayName.trim().length === 0 || roleEditInvalid}>Lưu</Button>
             </Group>
           ) : (
-            <Button variant="light" size="xs" leftSection={<IconPencil size={14} />} onClick={beginEdit}>Chỉnh sửa</Button>
+            <Group gap="xs">
+              <Button variant="default" size="xs" loading={pwBusy} onClick={resetPassword}>Đặt lại mật khẩu</Button>
+              <Button variant="light" size="xs" leftSection={<IconPencil size={14} />} onClick={beginEdit}>Chỉnh sửa</Button>
+            </Group>
           )
         )}
       </Group>
+
+      <Modal opened={!!pwResult} onClose={() => setPwResult(null)} title="Mật khẩu mới" size="sm">
+        <Stack>
+          <Text size="sm">Chỉ hiện <strong>một lần</strong> — gửi cho {pwResult?.email} qua kênh an toàn (không lưu lại ở đâu khác).</Text>
+          <Text ff="monospace" fw={700} size="lg" ta="center" style={{ userSelect: 'all' }}>{pwResult?.tempPassword}</Text>
+          <Button onClick={() => setPwResult(null)}>Đã lưu, đóng</Button>
+        </Stack>
+      </Modal>
 
       {canActivity ? (
         <Grid gutter="lg">

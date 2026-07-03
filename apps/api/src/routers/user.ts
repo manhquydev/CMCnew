@@ -284,6 +284,37 @@ export const userRouter = router({
       return user;
     }),
 
+  // Set/reset a staff account's password (decision: STAFF_PASSWORD_LOGIN runs permanently
+  // alongside SSO — see docs/decisions/0031-staff-password-login-parallel-to-sso.md). Mirrors
+  // student.resetLmsPassword's temp-password pattern: super_admin sets it, returns once, caller
+  // relays it out-of-band. Bumps tokenVersion so any existing sessions are invalidated.
+  setPassword: superAdminProcedure
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const tempPassword = randomBytes(6).toString('hex');
+      const passwordHash = await hashPassword(tempPassword);
+      const user = await withRls(rlsContextOf(ctx.session), async (tx) => {
+        // Atomic increment (matches setRoles/setFacilities/setActive below) — a read-then-write
+        // here could lose a concurrent tokenVersion bump from another admin action.
+        const updated = await tx.appUser.update({
+          where: { id: input.id },
+          data: { passwordHash, tokenVersion: { increment: 1 } },
+          select: userSelect,
+        });
+        await logEvent(tx, {
+          entityType: 'user',
+          entityId: updated.id,
+          type: 'updated',
+          body: 'Đặt lại mật khẩu đăng nhập',
+          actorId: ctx.session.userId,
+        });
+        return updated;
+      });
+      await emailSecurityAlert(user.id, user.email, 'Đặt lại mật khẩu đăng nhập');
+      // tempPassword is returned once and never stored — caller must relay it out-of-band.
+      return { email: user.email, tempPassword };
+    }),
+
   // Edit basic contact fields only (displayName, phone). email is SSO-derived and intentionally
   // NOT editable here. This is a profile-data change, not a security-session change, so it does
   // NOT bump tokenVersion (unlike setRoles/setActive/setFacilities). super_admin-only for F0;
