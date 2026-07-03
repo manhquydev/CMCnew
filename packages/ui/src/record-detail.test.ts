@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveOptions, displayValue, getValidationError } from './record-detail.js';
+import { resolveOptions, displayValue, getValidationError, applyFieldChange } from './record-detail.js';
 
 describe('resolveOptions', () => {
   const staticOptions = [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }];
@@ -71,5 +71,35 @@ describe('getValidationError — cross-field Save gating', () => {
     expect(getValidationError(config, { roles: [], primaryRole: null })).toBe('Phải có ít nhất một vai trò');
     expect(getValidationError(config, { roles: ['teacher'], primaryRole: null })).toBe('Chọn vai trò chính');
     expect(getValidationError(config, { roles: ['teacher'], primaryRole: 'teacher' })).toBeNull();
+  });
+});
+
+describe('applyFieldChange — onFieldChange cross-field side effects', () => {
+  it('returns the post-edit data unchanged when no onFieldChange is given', () => {
+    const next = { roles: ['teacher'], primaryRole: 'teacher' };
+    expect(applyFieldChange(next)).toEqual(next);
+  });
+
+  it('returns the post-edit data unchanged when onFieldChange returns void', () => {
+    const next = { roles: ['teacher', 'hr'], primaryRole: 'teacher' };
+    expect(applyFieldChange(next, () => undefined)).toEqual(next);
+  });
+
+  it('merges a returned partial patch on top of the post-edit data (e.g. clearing primaryRole)', () => {
+    const next = { roles: ['hr'], primaryRole: 'teacher' };
+    const clearPrimaryRoleIfDropped = (data: Record<string, unknown>) => {
+      const roles = data.roles as string[];
+      if (data.primaryRole && !roles.includes(data.primaryRole as string)) return { primaryRole: null };
+    };
+    expect(applyFieldChange(next, clearPrimaryRoleIfDropped)).toEqual({ roles: ['hr'], primaryRole: null });
+  });
+
+  it('leaves primaryRole intact when it is still among the selected roles', () => {
+    const next = { roles: ['hr', 'teacher'], primaryRole: 'teacher' };
+    const clearPrimaryRoleIfDropped = (data: Record<string, unknown>) => {
+      const roles = data.roles as string[];
+      if (data.primaryRole && !roles.includes(data.primaryRole as string)) return { primaryRole: null };
+    };
+    expect(applyFieldChange(next, clearPrimaryRoleIfDropped)).toEqual(next);
   });
 });

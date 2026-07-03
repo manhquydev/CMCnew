@@ -54,6 +54,12 @@ export interface RecordDetailField {
    * driven by `type` — `render` only overrides the read-only presentation. */
   render?: (value: unknown, data: Record<string, unknown>) => ReactNode;
   validate?: (value: unknown) => string | null;
+  /** Side-effect hook fired after this field's value changes, given the new full
+   * form data — lets a caller express cross-field auto-corrections (e.g.
+   * clearing primaryRole when it's no longer in the selected roles) without the
+   * primitive needing field-specific business logic. Return a partial patch to
+   * merge into form data, or void/undefined for no further change. */
+  onFieldChange?: (data: Record<string, unknown>) => Record<string, unknown> | void;
 }
 
 export interface RecordDetailSection {
@@ -103,6 +109,11 @@ export interface RecordDetailPanelProps {
   /** Entity-wide edit-mode toggle is caller-owned (FIX #5) — this only reflects it. */
   editing?: boolean;
   onEditingChange?: (editing: boolean) => void;
+  /** Fires whenever the primitive's internal reactive state (busy/isDirty/
+   * validationError/data) changes, so a caller-owned header can re-render its
+   * own Save button (ref reads alone don't trigger re-renders — this callback
+   * does). Optional; omitting it means the caller accepts non-live header state. */
+  onStateChange?: (state: Pick<RecordDetailHandle, 'busy' | 'isDirty' | 'validationError' | 'data'>) => void;
 }
 
 /** Imperative handle for a caller-owned header Save/Hủy button. */
@@ -111,6 +122,9 @@ export interface RecordDetailHandle {
   isDirty: boolean;
   validationError: string | null;
   busy: boolean;
+  /** Current live form data — lets a caller-owned header read values (e.g. for its
+   * own additional guard checks) without duplicating form state. */
+  data: Record<string, unknown>;
 }
 
 // ─── Pure helpers (exported for unit testing — no component-render tests in
@@ -146,6 +160,17 @@ export function getValidationError(
   data: Record<string, unknown>,
 ): string | null {
   return config.validate ? config.validate(data) : null;
+}
+
+/** Applies a field's `onFieldChange` side effect to the post-edit form data,
+ * merging any returned partial patch on top (e.g. auto-clearing primaryRole
+ * when it falls out of the newly-selected roles). */
+export function applyFieldChange(
+  next: Record<string, unknown>,
+  onFieldChange?: RecordDetailField['onFieldChange'],
+): Record<string, unknown> {
+  const patch = onFieldChange?.(next);
+  return patch ? { ...next, ...patch } : next;
 }
 
 // ─── Field input (edit mode: type-driven control; read mode: render() or a
@@ -253,7 +278,7 @@ function RecordDetailFieldInput({
 // ─── Main panel: sheet(Fieldsets)+Tabs, sticky ActivityLog rail when configured ─
 
 export const RecordDetailPanel = forwardRef<RecordDetailHandle, RecordDetailPanelProps>(function RecordDetailPanel(
-  { config, refreshKey, editing, onEditingChange },
+  { config, refreshKey, editing, onEditingChange, onStateChange },
   ref,
 ) {
   const { me } = useSession();
@@ -286,8 +311,8 @@ export const RecordDetailPanel = forwardRef<RecordDetailHandle, RecordDetailPane
   const validationError = getValidationError(config, formData);
   const isDirty = JSON.stringify(formData) !== JSON.stringify(config.data);
 
-  function setField(key: string, value: unknown) {
-    setFormData((prev) => ({ ...prev, [key]: value }));
+  function setField(key: string, value: unknown, onFieldChange?: RecordDetailField['onFieldChange']) {
+    setFormData((prev) => applyFieldChange({ ...prev, [key]: value }, onFieldChange));
   }
 
   async function handleSave() {
@@ -304,10 +329,19 @@ export const RecordDetailPanel = forwardRef<RecordDetailHandle, RecordDetailPane
   }
 
   // Hook order must stay unconditional (Rules of Hooks) — this runs before the
-  // `!canRead` early return below, not after.
-  useImperativeHandle(ref, () => ({ save: handleSave, isDirty, validationError, busy }), [
+  // `!canRead` early return below, not after. handleSave/isDirty are recomputed
+  // from formData/config/validationError every render, already covered below.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useImperativeHandle(ref, () => ({ save: handleSave, isDirty, validationError, busy, data: formData }), [
     formData, config.data, validationError, busy,
   ]);
+
+  // Ref mutation alone doesn't trigger the caller's re-render — this callback lets
+  // a caller-owned header react to busy/isDirty/validationError/data changes (e.g.
+  // to enable/disable its own Save button).
+  useEffect(() => {
+    onStateChange?.({ busy, isDirty, validationError, data: formData });
+  }, [busy, isDirty, validationError, formData, onStateChange]);
 
   if (!canRead) {
     return <Text size="sm" c="dimmed">Bạn không có quyền xem bản ghi này.</Text>;
@@ -329,7 +363,7 @@ export const RecordDetailPanel = forwardRef<RecordDetailHandle, RecordDetailPane
                 data={formData}
                 editing={isEditing}
                 error={field.validate ? field.validate(formData[field.key]) : null}
-                onChange={(v) => setField(field.key, v)}
+                onChange={(v) => setField(field.key, v, field.onFieldChange)}
               />
             ))}
           </SimpleGrid>
