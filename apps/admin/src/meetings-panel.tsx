@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
-import { trpc, notifyError, notifySuccess } from '@cmc/ui';
+import { trpc, notifyError, notifySuccess, FacilityPicker } from '@cmc/ui';
 import {
   Badge,
   Button,
@@ -8,7 +8,6 @@ import {
   Group,
   Loader,
   Modal,
-  Select,
   SegmentedControl,
   Stack,
   Table,
@@ -193,12 +192,12 @@ export function MeetingsPanel({
   return (
     <Stack>
       <Group align="flex-end" wrap="wrap">
-        <Select
-          label="Cơ sở"
+        <FacilityPicker
+          facilities={facilities}
           w={220}
-          data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-          value={facilityId ? String(facilityId) : null}
-          onChange={(v) => setFacilityId(v ? Number(v) : null)}
+          clearable={false}
+          value={facilityId}
+          onChange={setFacilityId}
         />
         <SegmentedControl
           size="xs"

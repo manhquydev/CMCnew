@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dayjs from 'dayjs';
-import { trpc, Chatter, notifyError, notifySuccess, useSession } from '@cmc/ui';
+import { trpc, Chatter, notifyError, notifySuccess, useSession, FacilityPicker } from '@cmc/ui';
 import { can } from '@cmc/auth/permissions';
 import {
   Badge,
@@ -1544,11 +1544,11 @@ export function Workspace({ navAction }: { navAction: NavAction | null }) {
   return (
     <Stack>
       <Group justify="space-between">
-        <Select
-          label="Cơ sở"
-          data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-          value={facilityId ? String(facilityId) : null}
-          onChange={(v) => { setFacilityId(v ? Number(v) : null); setClassPage(1); }}
+        <FacilityPicker
+          facilities={facilities}
+          clearable={false}
+          value={facilityId}
+          onChange={(v) => { setFacilityId(v); setClassPage(1); }}
           w={240}
         />
         {facilityId && canManageClass && (

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, useSession, notifyError, notifySuccess } from '@cmc/ui';
+import { trpc, useSession, notifyError, notifySuccess, FacilityPicker } from '@cmc/ui';
 import { can } from '@cmc/auth/permissions';
 import { badgeApi, type BadgeRow } from './shallow-trpc';
 import {
@@ -306,12 +306,12 @@ export function BadgePanel() {
 
   return (
     <Stack>
-      <Select
-        label="Cơ sở"
+      <FacilityPicker
+        facilities={facilities}
         withAsterisk
-        data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-        value={facilityId}
-        onChange={setFacilityId}
+        clearable={false}
+        value={facilityId ? Number(facilityId) : null}
+        onChange={(v) => setFacilityId(v ? String(v) : null)}
         w={280}
       />
 

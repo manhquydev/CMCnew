@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
-import { trpc, notifyError } from '@cmc/ui';
+import { trpc, notifyError, FacilityPicker } from '@cmc/ui';
 import {
   Badge,
   Button,
   Card,
   Group,
   Loader,
-  Select,
   Stack,
   Table,
   Text,
@@ -99,14 +98,14 @@ export function SchedulePanel({ goToClass, onOpenSession }: SchedulePanelProps) 
   return (
     <Stack>
       <Group align="flex-end" wrap="wrap">
-        <Select
-          label="Cơ sở"
+        <FacilityPicker
+          facilities={facilities}
           w={220}
           placeholder={facilitiesLoading ? 'Đang tải...' : undefined}
           disabled={facilitiesLoading}
-          data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-          value={facilityId ? String(facilityId) : null}
-          onChange={(v) => setFacilityId(v ? Number(v) : null)}
+          clearable={false}
+          value={facilityId}
+          onChange={setFacilityId}
         />
         <DateInput
           label="Từ ngày"

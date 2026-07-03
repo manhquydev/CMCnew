@@ -7,6 +7,7 @@ import {
   DataTable,
   StatusBadge,
   EmptyState,
+  FacilityPicker,
   type DataTableColumn,
   type StatusDef,
 } from '@cmc/ui';
@@ -15,7 +16,6 @@ import {
   Button,
   Group,
   Modal,
-  Select,
   Stack,
   Text,
   TextInput,
@@ -209,13 +209,11 @@ export function StudentsPanel() {
         searchPlaceholder="Mã hoặc tên học sinh"
         onRowClick={(s) => setDetailStudentId(s.id)}
         toolbar={
-          <Select
-            label="Cơ sở"
+          <FacilityPicker
+            facilities={facilities}
             placeholder="Tất cả"
-            data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-            value={facilityId}
-            onChange={setFacilityId}
-            clearable
+            value={facilityId ? Number(facilityId) : null}
+            onChange={(v) => setFacilityId(v ? String(v) : null)}
             w={220}
           />
         }

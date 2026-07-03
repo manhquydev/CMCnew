@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, PdfAnnotator, type AnnotationData, notifyError, notifySuccess } from '@cmc/ui';
+import { trpc, PdfAnnotator, type AnnotationData, notifyError, notifySuccess, FacilityPicker } from '@cmc/ui';
 import {
   Badge,
   Button,
@@ -543,13 +543,13 @@ export function GradingPanel({
   return (
     <Stack>
       <Group align="flex-end">
-        <Select
-          label="Cơ sở"
+        <FacilityPicker
+          facilities={facilities}
           w={240}
           placeholder={facilities.length ? 'Chọn cơ sở' : 'Chưa có cơ sở'}
-          data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-          value={facilityId ? String(facilityId) : null}
-          onChange={(v) => setFacilityId(v ? Number(v) : null)}
+          clearable={false}
+          value={facilityId}
+          onChange={setFacilityId}
         />
         <Select
           label="Lớp học"

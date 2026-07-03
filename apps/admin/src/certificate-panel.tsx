@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { trpc, API_URL, notifyError, notifySuccess, required } from '@cmc/ui';
+import { trpc, API_URL, notifyError, notifySuccess, required, FacilityPicker } from '@cmc/ui';
 import { useForm } from '@mantine/form';
 import { useDisclosure } from '@mantine/hooks';
 import { Button, Card, Group, Modal, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
@@ -88,13 +88,12 @@ export function CertificatePanel() {
   return (
     <Stack>
       <Group justify="space-between" align="flex-end">
-        <Select
-          label="Cơ sở"
+        <FacilityPicker
+          facilities={facilities}
           w={280}
-          data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-          value={facilityId ? String(facilityId) : null}
-          onChange={(v) => setFacilityId(v ? Number(v) : null)}
-          allowDeselect={false}
+          value={facilityId}
+          onChange={setFacilityId}
+          clearable={false}
         />
         <Button leftSection={<IconPlus size={16} />} onClick={open}>
           Cấp chứng chỉ

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, notifyError, notifySuccess } from '@cmc/ui';
-import { Alert, Badge, Button, Card, Group, Select, Table, Text, TextInput, Title } from '@mantine/core';
+import { trpc, notifyError, notifySuccess, FacilityPicker } from '@cmc/ui';
+import { Alert, Badge, Button, Card, Group, Table, Text, TextInput, Title } from '@mantine/core';
 import { IconRefresh } from '@tabler/icons-react';
 
 type WorklistRow = Awaited<ReturnType<typeof trpc.finance.reconcileWorklist.query>>[number];
@@ -85,13 +85,11 @@ export function ReconcileWorklistPanel() {
       <Group align="flex-end" mb="sm">
         <TextInput label="Từ ngày" placeholder="YYYY-MM-DD" value={from} onChange={(e) => setFrom(e.currentTarget.value)} w={160} />
         <TextInput label="Đến ngày (không bao gồm)" placeholder="YYYY-MM-DD" value={to} onChange={(e) => setTo(e.currentTarget.value)} w={200} />
-        <Select
-          label="Cơ sở"
+        <FacilityPicker
+          facilities={facilities}
           placeholder="Tất cả"
-          data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-          value={facilityId}
-          onChange={setFacilityId}
-          clearable
+          value={facilityId ? Number(facilityId) : null}
+          onChange={(v) => setFacilityId(v ? String(v) : null)}
           w={220}
         />
         <Button leftSection={<IconRefresh size={14} />} onClick={runQuery} loading={load === 'loading'}>

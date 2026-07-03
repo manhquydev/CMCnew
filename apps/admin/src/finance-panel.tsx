@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, API_URL, Chatter, notifyError, notifySuccess } from '@cmc/ui';
+import { trpc, API_URL, Chatter, notifyError, notifySuccess, FacilityPicker } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -520,13 +520,11 @@ function DiscountTierCard({ facilities }: { facilities: Facility[] }) {
         Bậc giảm giá theo năm đóng trước
       </Title>
 
-      <Select
-        label="Cơ sở"
+      <FacilityPicker
+        facilities={facilities}
         placeholder="Chọn cơ sở để cấu hình"
-        data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-        value={facilityId}
-        onChange={handleFacilitySelect}
-        clearable
+        value={facilityId ? Number(facilityId) : null}
+        onChange={(v) => handleFacilitySelect(v ? String(v) : null)}
         w={280}
         mb="sm"
       />
@@ -1269,17 +1267,14 @@ function ReceiptCreateCard({
       ) : (
         <Stack gap="sm">
           <Group grow align="flex-end">
-            <Select
-              label="Cơ sở"
+            <FacilityPicker
+              facilities={facilities}
               withAsterisk
+              clearable={false}
               placeholder="Chọn cơ sở"
-              data={facilities.map((f) => ({
-                value: String(f.id),
-                label: `${f.code} — ${f.name}`,
-              }))}
-              value={newFacilityId}
+              value={newFacilityId ? Number(newFacilityId) : null}
               onChange={(v) => {
-                setNewFacilityId(v);
+                setNewFacilityId(v ? String(v) : null);
                 setClassBatchId(null);
               }}
             />
