@@ -55,3 +55,14 @@ export {
   pageCount,
   type SortDir,
 } from './data-table-utils.js';
+export {
+  CalendarView,
+  getWeekRange,
+  getMonthGridCells,
+  placeEventsInDay,
+  type CalendarEvent,
+  type CalendarViewMode,
+  type CalendarViewProps,
+  type PlacedEvent,
+  type HourWindow,
+} from './calendar-view.js';

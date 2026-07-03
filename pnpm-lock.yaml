@@ -352,6 +352,9 @@ importers:
       '@trpc/client':
         specifier: ^11.0.0
         version: 11.18.0(@trpc/server@11.18.0(typescript@5.9.3))(typescript@5.9.3)
+      dayjs:
+        specifier: ^1.11.13
+        version: 1.11.21
       pdfjs-dist:
         specifier: ^6.0.227
         version: 6.0.227

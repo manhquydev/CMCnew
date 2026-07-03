@@ -1,7 +1,7 @@
 ---
 title: "P1 — Token remap: Zero Elevation (Vietnamese Enterprise Core 3)"
 description: "Remove decorative shadows from docs/design-system.md + tokens.css + theme.ts, keep functional depth-cues, TDD-locked (object-assertion test, not component-render test)."
-status: pending
+status: implemented
 priority: P1
 effort: 4h (was 3h — red-team found blast radius larger than initial research)
 branch: feat/phase-d-facility-picker-and-stitch-wireframes
@@ -9,6 +9,8 @@ tags: [ux, design-tokens, ui-rebuild]
 created: 2026-07-03
 updated: 2026-07-03
 ---
+
+**Status**: implemented, reviewed, tested, audited, committed (`41fef4a`). 14/14 tests pass, typecheck clean across ui/admin/lms, gitnexus scope confirmed matches plan. Review found 1 blocking issue (login-screen shadow accidentally touched, violates explicit login-exclusion) + 2 minor — all fixed post-review, re-verified.
 
 ## Overview
 
