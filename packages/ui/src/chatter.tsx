@@ -26,6 +26,12 @@ function fmt(d: string | Date): string {
   return new Date(d).toLocaleString('vi-VN');
 }
 
+function genericFormatValue(_field: string, v: unknown): string {
+  if (v === null || v === undefined || v === '') return '(trống)';
+  if (typeof v === 'boolean') return v ? 'Có' : 'Không';
+  return String(v);
+}
+
 /** Best-effort human message from a tRPC/network error, with a friendly fallback. */
 function msgOf(e: unknown, fallback: string): string {
   const m = e instanceof Error ? e.message : '';
@@ -36,9 +42,15 @@ function msgOf(e: unknown, fallback: string): string {
 export function Chatter({
   entityType,
   entityId,
+  fieldLabels = {},
+  formatValue = genericFormatValue,
 }: {
   entityType: string;
   entityId: string;
+  /** field key → human label, e.g. { stage: 'Giai đoạn' }. Falls back to the raw field key. */
+  fieldLabels?: Record<string, string>;
+  /** optional per-field value formatter; falls back to a generic one (raw string). */
+  formatValue?: (field: string, value: unknown) => string;
 }) {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [body, setBody] = useState('');
@@ -119,11 +131,19 @@ export function Chatter({
             >
               {e.body && <Text size="sm">{e.body}</Text>}
               {Array.isArray(e.changes) &&
-                (e.changes as Change[]).map((c, i) => (
-                  <Text key={i} size="sm" c="dimmed">
-                    {c.field}: {String(c.old)} → {String(c.new)}
-                  </Text>
-                ))}
+                (e.changes as Change[])
+                  .map((c) => ({
+                    label: fieldLabels[c.field] ?? c.field,
+                    from: formatValue(c.field, c.old),
+                    to: formatValue(c.field, c.new),
+                  }))
+                  // Drop no-op lines (X → X) so the log shows only what actually changed.
+                  .filter((r) => r.from !== r.to)
+                  .map((r, i) => (
+                    <Text key={i} size="sm" c="dimmed">
+                      {r.label}: {r.from} → {r.to}
+                    </Text>
+                  ))}
             </Timeline.Item>
           ))}
         </Timeline>

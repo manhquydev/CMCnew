@@ -1,8 +1,8 @@
 ---
 phase: 2
-title: "Run Persona Agents"
-status: pending
-effort: ""
+title: Run Persona Agents
+status: completed
+effort: ''
 ---
 
 # Phase 2: Run Persona Agents
@@ -30,8 +30,8 @@ MCP) against the live prod URL for its app, attempts its tasks end-to-end, and r
 | Giáo viên | erp.cmcvn.edu.vn | Log in, find today's schedule, check in for a session, try attendance marking, look for exercises |
 | Giám đốc kinh doanh | erp.cmcvn.edu.vn | Log in, find revenue report, find CRM overview, try executive cockpit if visible |
 | Giám đốc đào tạo | erp.cmcvn.edu.vn | Log in, find attendance report (new Phase-2 feature), try creating a makeup session, review a class |
-| Học sinh | hoc.cmcvn.edu.vn | Log in via OTP, find homework/exercises, try submitting one, check grades |
-| Phụ huynh | hoc.cmcvn.edu.vn | Log in via OTP, find child's progress, check attendance, look for meeting schedule |
+| Học sinh | hoc.cmcvn.edu.vn | Log in with loginCode+password (NOT OTP — student login mechanism, corrected 2026-07-03), find homework/exercises, try submitting one, check grades |
+| Phụ huynh | hoc.cmcvn.edu.vn | Log in via OTP to `manhquydev@gmail.com` — **agent pauses at the OTP step and asks the user for the code** (semi-automated, resolved 2026-07-03), then find child's progress, check attendance, look for meeting schedule |
 
 ## Implementation Steps
 

@@ -10,6 +10,20 @@
  * The parity test (apps/api/test/permission-parity.test.ts) catches any value-level drift.
  */
 
+// Vietnamese display label per role slug — for UI surfaces that list roles to non-technical
+// staff (e.g. the Cơ sở & Users table, staff-profile badges). Never display a raw role slug.
+export const ROLE_LABEL: Record<string, string> = {
+  super_admin: 'Quản trị hệ thống',
+  giao_vien: 'Giáo viên',
+  ke_toan: 'Kế toán',
+  hr: 'Nhân sự',
+  sale: 'Tư vấn tuyển sinh',
+  cskh: 'Chăm sóc khách hàng',
+  ctv_mkt: 'Cộng tác viên Marketing',
+  giam_doc_kinh_doanh: 'Giám đốc kinh doanh',
+  giam_doc_dao_tao: 'Giám đốc đào tạo',
+};
+
 export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   assessment: {
     template: ['giao_vien', 'giam_doc_dao_tao'],

@@ -11,7 +11,7 @@ import {
   minLength,
   combine,
 } from '@cmc/ui';
-import { assignableRoles, can } from '@cmc/auth/permissions';
+import { assignableRoles, can, ROLE_LABEL } from '@cmc/auth/permissions';
 import { useForm } from '@mantine/form';
 import {
   Badge,
@@ -280,7 +280,7 @@ function UserCreateModal({
   close: () => void;
   facilities: Facility[];
   reload: () => void;
-  roleOptions: string[];
+  roleOptions: { value: string; label: string }[];
 }) {
   const [roles, setRoles] = useState<string[]>([]);
   const [primaryRole, setPrimaryRole] = useState<string | null>(null);
@@ -379,7 +379,10 @@ function Users({
   // (incl. the two director roles); a director sees only their grant set. Keeps the dropdown in sync
   // with what user.create will actually accept — no hardcoded role list to drift.
   const roleOptions = useMemo(
-    () => [...assignableRoles({ isSuperAdmin: me.isSuperAdmin, roles: me.roles as string[] })].sort(),
+    () =>
+      [...assignableRoles({ isSuperAdmin: me.isSuperAdmin, roles: me.roles as string[] })]
+        .sort()
+        .map((r) => ({ value: r, label: ROLE_LABEL[r] ?? r })),
     [me.isSuperAdmin, me.roles],
   );
 
@@ -411,7 +414,7 @@ function Users({
                 </Group>
               </Table.Td>
               <Table.Td><Text size="sm" style={{ color: 'var(--cmc-text-muted)' }}>{u.email}</Text></Table.Td>
-              <Table.Td><Text size="sm">{u.roles.join(', ')}</Text></Table.Td>
+              <Table.Td><Text size="sm">{u.roles.map((r) => ROLE_LABEL[r] ?? r).join(', ')}</Text></Table.Td>
               <Table.Td><Text size="sm">{u.facilities.length}</Text></Table.Td>
             </Table.Tr>
           ))}
@@ -440,7 +443,10 @@ function OrgPanel() {
   useEffect(() => { loadFacilities(); loadUsers(); }, []);
 
   const roleOptions = useMemo(
-    () => [...assignableRoles({ isSuperAdmin: me.isSuperAdmin, roles: me.roles as string[] })].sort(),
+    () =>
+      [...assignableRoles({ isSuperAdmin: me.isSuperAdmin, roles: me.roles as string[] })]
+        .sort()
+        .map((r) => ({ value: r, label: ROLE_LABEL[r] ?? r })),
     [me.isSuperAdmin, me.roles],
   );
 

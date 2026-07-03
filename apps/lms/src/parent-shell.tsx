@@ -25,7 +25,7 @@ const PARENT_NAV: { tab: ParentTab; label: string; icon: React.ReactNode }[] = [
   { tab: 'schedule', label: 'Lịch học & Nội dung', icon: <IconCalendarEvent size={18} stroke={1.5} /> },
   { tab: 'sessions', label: 'Buổi học (ảnh & nhận xét)', icon: <IconPhoto size={18} stroke={1.5} /> },
   { tab: 'gradebook', label: 'Học bạ', icon: <IconReport size={18} stroke={1.5} /> },
-  { tab: 'notifications', label: 'Tiến trình', icon: <IconBell size={18} stroke={1.5} /> },
+  { tab: 'notifications', label: 'Thông báo', icon: <IconBell size={18} stroke={1.5} /> },
   { tab: 'rewards', label: 'Phần thưởng', icon: <IconStar size={18} stroke={1.5} /> },
   { tab: 'profile', label: 'Hồ sơ & liên kết', icon: <IconUserCircle size={18} stroke={1.5} /> },
 ];
