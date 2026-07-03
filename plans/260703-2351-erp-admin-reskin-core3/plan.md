@@ -1,9 +1,9 @@
 ---
 title: "ERP admin re-skin to Vietnamese Enterprise Core 3 wireframe fidelity"
 description: "Corrective, phased re-skin of the admin app (tokens + shared components + ~40 screens) to match the approved Core 3 wireframe spec — presentation only, no business-logic change."
-status: pending
+status: implemented
 priority: P2
-effort: 5-7d
+effort: 5-7d (actual: 1 session, all 8 phases)
 branch: feat/phase-d-facility-picker-and-stitch-wireframes
 tags: [ux, design-system, ui-reskin, admin, wireframe-fidelity]
 created: 2026-07-03
@@ -68,14 +68,14 @@ scoped via `.lms-app-root` — must stay untouched).
 
 | # | Phase | Owns (files) | Status | File |
 |---|---|---|---|---|
-| 0 | Visual-verification harness | `apps/e2e/*` (new spec + wireframe refs) | pending | [phase-00-visual-verification-harness.md](phase-00-visual-verification-harness.md) |
+| 0 | Visual-verification harness | `apps/e2e/*` (new spec + wireframe refs) | implemented | [phase-00-visual-verification-harness.md](phase-00-visual-verification-harness.md) |
 | 1 | Token foundation (Inter, border, green, radius) | `tokens.css`, `theme.ts`, `theme.test.ts`, `design-showcase.tsx`, `admin/main.tsx`, `ui/package.json` | implemented | [phase-01-token-foundation.md](phase-01-token-foundation.md) |
-| 2 | Shared component layer | `stat-card.tsx`, `status-badge.tsx`, new `avatar-initials.tsx`, new `pipeline-funnel.tsx`, `shell.tsx`, `index.tsx` | pending | [phase-02-shared-components.md](phase-02-shared-components.md) |
-| 3 | Dashboards & cockpits | `biz-director-cockpit-panel`, `edu-director-cockpit-panel`, `crm-director-dashboard`, `overview-panel`, `revenue-report`, `attendance-report-panel` | pending | [phase-03-dashboards-cockpits.md](phase-03-dashboards-cockpits.md) |
-| 4 | Lists, tables & kanban | `crm-panel`, `students-panel`, `student-management-panel`, `guardians-panel`, `finance-panel`, `contact-directory-panel`, other `*-panel` list screens | pending | [phase-04-lists-tables-kanban.md](phase-04-lists-tables-kanban.md) |
-| 5 | Detail / record pages | `record-detail.tsx` (primitive), `staff-profile`, `student-detail`, `opportunity-detail`, `schedule-detail`, `profile-settings-panel` | pending | [phase-05-detail-record-pages.md](phase-05-detail-record-pages.md) |
-| 6 | Calendar / schedule | `calendar-view.tsx` (primitive), `schedule-panel`, `meetings-panel`, `attendance-panel` | pending | [phase-06-calendar-schedule.md](phase-06-calendar-schedule.md) |
-| 7 | Login | `login-gate.tsx` | pending | [phase-07-login.md](phase-07-login.md) |
+| 2 | Shared component layer (+ 2f search backend) | `stat-card.tsx`, `status-badge.tsx`, `avatar-initials.tsx`, `pipeline-funnel.tsx`, `shell.tsx`, `index.tsx`, `search.ts` | implemented | [phase-02-shared-components.md](phase-02-shared-components.md) |
+| 3 | Dashboards & cockpits | `crm-director-dashboard`, `revenue-report`, `attendance-report-panel` (3 others verified already-compliant, zero diff needed) | implemented | [phase-03-dashboards-cockpits.md](phase-03-dashboards-cockpits.md) |
+| 4 | Lists, tables & kanban — batch 1 | `crm-panel`, `students-panel`, `guardians-panel`, `finance-panel`, `contact-directory-panel` (`student-management-panel` not applicable) | implemented (batch 1 of N — ~33 more `*-panel.tsx` files deferred, see phase file) | [phase-04-lists-tables-kanban.md](phase-04-lists-tables-kanban.md) |
+| 5 | Detail / record pages | `record-detail.tsx` (primitive), `staff-profile`, `student-detail`, `opportunity-detail`, `schedule-detail`, `profile-settings-panel` | implemented | [phase-05-detail-record-pages.md](phase-05-detail-record-pages.md) |
+| 6 | Calendar / schedule | `calendar-view.tsx` (primitive), `meetings-panel`, `attendance-panel` (`schedule-panel` has no CalendarView usage — plan assumption was wrong, applied in-scope StatusBadge swap only) | implemented | [phase-06-calendar-schedule.md](phase-06-calendar-schedule.md) |
+| 7 | Login | `login-gate.tsx` | verified, zero diff needed (already inherits all Phase-1 tokens correctly) | [phase-07-login.md](phase-07-login.md) |
 
 ## Dependencies
 

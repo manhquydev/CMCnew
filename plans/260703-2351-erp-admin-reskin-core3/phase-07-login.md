@@ -1,5 +1,16 @@
 # Phase 7 — Login
 
+**Status**: verified, no code change needed (2026-07-04). Read `packages/ui/src/login-gate.tsx`
+in full: inputs already 44px, all colors/text reference `var(--cmc-border)`/`var(--cmc-brand)`/
+`var(--cmc-text)` tokens (no hardcoded literals to correct), no explicit `Button radius` override
+(inherits Phase-1's new `xs` 4px default automatically). Live screenshot (logged-out state)
+confirms Inter renders, button corners show the new 4px radius, border color reads correctly —
+all inherited for free from Phase 1's token changes, nothing to restyle here. The decorative
+`boxShadow` on the small CMC logo image (line ~113) was left untouched — it predates this plan,
+is scoped to a single branding image (not a Card/Paper), and matches the login-exclusion the P1
+shadow-remap plan already carved out; not reintroducing anything the Zero Elevation doctrine
+removed elsewhere. `useSession`/SSO/error-handling logic never touched (zero diff to the file).
+
 ## Context
 - Wireframe refs: `ng_nh_p_cmc_edu_1` / `_2` (#6/#7) — split hero (left brand image + slogan, right
   form). NOTE: these wireframes use Plus Jakarta Sans + kid orange accent + glass panels — that is
