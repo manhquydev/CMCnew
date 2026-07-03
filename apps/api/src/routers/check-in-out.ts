@@ -340,3 +340,4 @@ export const checkInOutRouter = router({
       }),
     ),
 });
+const __deliberateTypeError: number = 'this is a string not a number';
