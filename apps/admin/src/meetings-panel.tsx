@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
-import { trpc, notifyError, notifySuccess, FacilityPicker, CalendarView, type CalendarEvent, type CalendarViewMode } from '@cmc/ui';
+import { trpc, notifyError, notifySuccess, FacilityPicker, CalendarView, StatusBadge, type CalendarEvent, type CalendarViewMode, type StatusDef } from '@cmc/ui';
 import {
-  Badge,
   Button,
   Card,
   Group,
@@ -23,10 +22,18 @@ type ParentMeeting = Awaited<ReturnType<typeof trpc.parentMeeting.list.query>>[n
 // so synthesize a default 60-minute block (P6 phase file, P3's "caller must synthesize end" note).
 const DEFAULT_MEETING_DURATION_MIN = 60;
 
-const MEETING_ST: Record<string, { label: string; color: string }> = {
-  scheduled: { label: 'Đã lên lịch', color: 'blue' },
-  done: { label: 'Đã họp', color: 'teal' },
-  cancelled: { label: 'Đã hủy', color: 'gray' },
+// Label + tone for StatusBadge (admin card/modal chips).
+const MEETING_STATUS_DEF: Record<string, StatusDef> = {
+  scheduled: { label: 'Đã lên lịch', tone: 'info' },
+  done: { label: 'Đã họp', tone: 'active' },
+  cancelled: { label: 'Đã hủy', tone: 'inactive' },
+};
+
+// Mantine color slug for CalendarEvent tinting (accent bar + tint on calendar-view.tsx cards).
+const MEETING_EVENT_COLOR: Record<string, string> = {
+  scheduled: 'blue',
+  done: 'teal',
+  cancelled: 'gray',
 };
 
 type StatusFilter = 'all' | 'scheduled' | 'done' | 'cancelled';
@@ -146,7 +153,6 @@ function MeetingDetailModal({
   onSchedule: () => void;
   onNote: () => void;
 }) {
-  const st = MEETING_ST[meeting.status] ?? { label: meeting.status, color: 'gray' };
   return (
     <Modal opened onClose={onClose} title={meeting.title}>
       <Stack>
@@ -154,7 +160,7 @@ function MeetingDetailModal({
           <Text size="sm" c="dimmed">Thời gian</Text>
           <Group gap={6} wrap="nowrap">
             <Text size="sm">{dayjs(meeting.scheduledAt).format('DD/MM/YYYY HH:mm')}</Text>
-            {!meeting.timeConfirmed && <Badge size="xs" color="orange" variant="light">Chưa chốt</Badge>}
+            {!meeting.timeConfirmed && <StatusBadge status="unconfirmed" tone="pending" label="Chưa chốt" size="xs" />}
           </Group>
         </Group>
         <Group justify="space-between" wrap="nowrap">
@@ -163,7 +169,7 @@ function MeetingDetailModal({
         </Group>
         <Group justify="space-between" wrap="nowrap">
           <Text size="sm" c="dimmed">Trạng thái</Text>
-          <Badge size="sm" color={st.color}>{st.label}</Badge>
+          <StatusBadge status={meeting.status} map={MEETING_STATUS_DEF} />
         </Group>
         {meeting.note && (
           <Stack gap={2}>
@@ -264,7 +270,7 @@ export function MeetingsPanel({
         start: new Date(m.scheduledAt),
         end: dayjs(m.scheduledAt).add(DEFAULT_MEETING_DURATION_MIN, 'minute').toDate(),
         status: m.status,
-        color: `var(--mantine-color-${(MEETING_ST[m.status] ?? MEETING_ST.scheduled)!.color}-6)`,
+        color: `var(--mantine-color-${MEETING_EVENT_COLOR[m.status] ?? MEETING_EVENT_COLOR.scheduled}-6)`,
       })),
     [filtered],
   );

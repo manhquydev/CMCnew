@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
-import { trpc, notifyError, FacilityPicker } from '@cmc/ui';
+import { trpc, notifyError, FacilityPicker, StatusBadge, type StatusDef } from '@cmc/ui';
 import {
-  Badge,
   Button,
   Card,
   Group,
@@ -17,12 +16,12 @@ import { DateInput } from '@mantine/dates';
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
 
-const STATUS_COLOR: Record<string, string> = {
-  planned: 'gray',
-  open: 'blue',
-  running: 'green',
-  closed: 'dark',
-  cancelled: 'red',
+const SESSION_STATUS_DEF: Record<string, StatusDef> = {
+  planned: { label: 'planned', tone: 'draft' },
+  open: { label: 'open', tone: 'info' },
+  running: { label: 'running', tone: 'active' },
+  closed: { label: 'closed', tone: 'inactive' },
+  cancelled: { label: 'cancelled', tone: 'rejected' },
 };
 
 const fmtDate = (d: string | Date) => dayjs(d).format('DD/MM/YYYY');
@@ -184,9 +183,7 @@ export function SchedulePanel({ goToClass, onOpenSession }: SchedulePanelProps) 
                     </Table.Td>
                     <Table.Td>{s.roomName ?? '—'}</Table.Td>
                     <Table.Td>
-                      <Badge size="sm" color={STATUS_COLOR[s.status] ?? 'gray'}>
-                        {s.status}
-                      </Badge>
+                      <StatusBadge status={s.status} map={SESSION_STATUS_DEF} size="sm" />
                     </Table.Td>
                   </Table.Tr>
                 ))}

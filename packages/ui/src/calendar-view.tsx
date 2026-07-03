@@ -270,26 +270,34 @@ function WeekGrid({
     () => Array.from({ length: hourWindow.endHour - hourWindow.startHour }, (_, i) => hourWindow.startHour + i),
     [hourWindow],
   );
-  const rowHeight = 48; // px per hour row
+  const rowHeight = 60; // px per hour row (Core 3 time-grid: 60px hour rows)
+  const headerRowHeight = 40; // px — Core 3 time-grid header row
 
   return (
     <Box style={{ border: '1px solid var(--cmc-border)', borderRadius: 10, overflow: 'hidden' }}>
       <Box style={{ display: 'grid', gridTemplateColumns: `56px repeat(7, 1fr)` }}>
-        <Box />
-        {days.map((d, i) => (
-          <Box
-            key={i}
-            style={{
-              padding: '8px 4px',
-              textAlign: 'center',
-              borderLeft: '1px solid var(--cmc-border-faint)',
-              backgroundColor: dayjs(d).isSame(new Date(), 'day') ? 'var(--cmc-brand-muted)' : undefined,
-            }}
-          >
-            <Text size="xs" c="dimmed">{WEEKDAY_LABELS_MON_FIRST[i]}</Text>
-            <Text size="sm" fw={600}>{dayjs(d).format('DD')}</Text>
-          </Box>
-        ))}
+        <Box style={{ height: headerRowHeight }} />
+        {days.map((d, i) => {
+          const isToday = dayjs(d).isSame(new Date(), 'day');
+          return (
+            <Box
+              key={i}
+              style={{
+                height: headerRowHeight,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderLeft: '1px solid var(--cmc-border-faint)',
+                backgroundColor: isToday ? 'var(--cmc-brand-muted)' : undefined,
+                boxShadow: isToday ? 'inset 0 0 0 2px var(--cmc-brand)' : undefined,
+              }}
+            >
+              <Text size="xs" c="dimmed" lh={1.2}>{WEEKDAY_LABELS_MON_FIRST[i]}</Text>
+              <Text size="sm" fw={600} lh={1.2} c={isToday ? 'var(--cmc-brand)' : undefined}>{dayjs(d).format('DD')}</Text>
+            </Box>
+          );
+        })}
       </Box>
       <Box style={{ display: 'grid', gridTemplateColumns: `56px repeat(7, 1fr)`, position: 'relative' }}>
         <Box>
@@ -304,6 +312,7 @@ function WeekGrid({
           const dayEnd = dayjs(d).endOf('day').toDate();
           const placed = placeEventsInDay(events, dayStart, dayEnd, hourWindow);
           const totalHeight = rowHeight * hours.length;
+          const isToday = dayjs(d).isSame(new Date(), 'day');
           return (
             <Box
               key={i}
@@ -311,36 +320,43 @@ function WeekGrid({
                 position: 'relative',
                 borderLeft: '1px solid var(--cmc-border-faint)',
                 height: totalHeight,
+                backgroundColor: isToday ? 'var(--cmc-brand-muted)' : undefined,
+                boxShadow: isToday ? 'inset 2px 0 0 0 var(--cmc-brand)' : undefined,
               }}
             >
               {hours.map((h) => (
                 <Box key={h} style={{ height: rowHeight, borderBottom: '1px solid var(--cmc-border-faint)' }} />
               ))}
-              {placed.map((p) => (
-                <Box
-                  key={p.event.id}
-                  onClick={() => onEventClick?.(p.event)}
-                  style={{
-                    position: 'absolute',
-                    top: `${p.top * 100}%`,
-                    height: `${p.height * 100}%`,
-                    left: `${(p.columnIndex / p.columnCount) * 100}%`,
-                    width: `${(1 / p.columnCount) * 100}%`,
-                    backgroundColor: p.event.color ?? 'var(--cmc-brand)',
-                    color: '#fff',
-                    borderRadius: 6,
-                    padding: '2px 6px',
-                    fontSize: 11,
-                    overflow: 'hidden',
-                    cursor: onEventClick ? 'pointer' : undefined,
-                    boxSizing: 'border-box',
-                    border: '1px solid var(--cmc-surface)',
-                  }}
-                  title={p.event.title}
-                >
-                  {p.event.title}
-                </Box>
-              ))}
+              {placed.map((p) => {
+                const accent = p.event.color ?? 'var(--cmc-brand)';
+                return (
+                  <Box
+                    key={p.event.id}
+                    onClick={() => onEventClick?.(p.event)}
+                    style={{
+                      position: 'absolute',
+                      top: `${p.top * 100}%`,
+                      height: `${p.height * 100}%`,
+                      left: `${(p.columnIndex / p.columnCount) * 100}%`,
+                      width: `${(1 / p.columnCount) * 100}%`,
+                      backgroundColor: `color-mix(in srgb, ${accent} 14%, var(--cmc-surface))`,
+                      color: accent,
+                      border: '1px solid var(--cmc-border-faint)',
+                      borderLeft: `4px solid ${accent}`,
+                      borderRadius: 6,
+                      padding: '2px 6px',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      overflow: 'hidden',
+                      cursor: onEventClick ? 'pointer' : undefined,
+                      boxSizing: 'border-box',
+                    }}
+                    title={p.event.title}
+                  >
+                    {p.event.title}
+                  </Box>
+                );
+              })}
             </Box>
           );
         })}
@@ -367,7 +383,16 @@ function MonthGrid({
     <Box style={{ border: '1px solid var(--cmc-border)', borderRadius: 10, overflow: 'hidden' }}>
       <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
         {WEEKDAY_LABELS_MON_FIRST.map((label) => (
-          <Box key={label} style={{ padding: '6px 4px', textAlign: 'center', borderLeft: '1px solid var(--cmc-border-faint)' }}>
+          <Box
+            key={label}
+            style={{
+              height: 40,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderLeft: '1px solid var(--cmc-border-faint)',
+            }}
+          >
             <Text size="xs" c="dimmed">{label}</Text>
           </Box>
         ))}
@@ -390,31 +415,38 @@ function MonthGrid({
                   borderLeft: '1px solid var(--cmc-border-faint)',
                   borderTop: '1px solid var(--cmc-border-faint)',
                   backgroundColor: isToday ? 'var(--cmc-brand-muted)' : undefined,
+                  boxShadow: isToday ? 'inset 0 0 0 2px var(--cmc-brand)' : undefined,
                   opacity: isCurrentMonth ? 1 : 0.45,
+                  position: 'relative',
                 }}
               >
-                <Text size="xs" fw={isToday ? 700 : 500}>{cellDay.format('DD')}</Text>
-                {visible.map((e) => (
-                  <Box
-                    key={e.id}
-                    onClick={() => onEventClick?.(e)}
-                    style={{
-                      marginTop: 2,
-                      fontSize: 10,
-                      padding: '1px 4px',
-                      borderRadius: 4,
-                      backgroundColor: e.color ?? 'var(--cmc-brand)',
-                      color: '#fff',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      cursor: onEventClick ? 'pointer' : undefined,
-                    }}
-                    title={e.title}
-                  >
-                    {e.title}
-                  </Box>
-                ))}
+                <Text size="xs" fw={isToday ? 700 : 500} c={isToday ? 'var(--cmc-brand)' : undefined}>{cellDay.format('DD')}</Text>
+                {visible.map((e) => {
+                  const accent = e.color ?? 'var(--cmc-brand)';
+                  return (
+                    <Box
+                      key={e.id}
+                      onClick={() => onEventClick?.(e)}
+                      style={{
+                        marginTop: 2,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        padding: '1px 4px',
+                        borderRadius: 4,
+                        backgroundColor: `color-mix(in srgb, ${accent} 14%, var(--cmc-surface))`,
+                        color: accent,
+                        borderLeft: `3px solid ${accent}`,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        cursor: onEventClick ? 'pointer' : undefined,
+                      }}
+                      title={e.title}
+                    >
+                      {e.title}
+                    </Box>
+                  );
+                })}
                 {overflow > 0 && (
                   <Text size="xs" c="dimmed" mt={2}>+{overflow} khác</Text>
                 )}

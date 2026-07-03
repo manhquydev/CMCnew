@@ -1,11 +1,20 @@
 import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
-import { trpc, notifyError, FacilityPicker } from '@cmc/ui';
-import { Card, Loader, Select, Stack, Text } from '@mantine/core';
+import { trpc, notifyError, FacilityPicker, StatusBadge, type StatusDef } from '@cmc/ui';
+import { Card, Group, Loader, Select, Stack, Text } from '@mantine/core';
 import { AttendanceRoster } from './attendance-roster.js';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
+
+// Display-only status chip for the selected session header (same tone mapping as schedule-panel.tsx).
+const SESSION_STATUS_DEF: Record<string, StatusDef> = {
+  planned: { label: 'planned', tone: 'draft' },
+  open: { label: 'open', tone: 'info' },
+  running: { label: 'running', tone: 'active' },
+  closed: { label: 'closed', tone: 'inactive' },
+  cancelled: { label: 'cancelled', tone: 'rejected' },
+};
 
 /**
  * Cross-class attendance panel — fetches today's sessions for the active facility,
@@ -96,11 +105,14 @@ export function AttendancePanel() {
 
       {sessionId && selectedSession && facilityId && (
         <Card withBorder>
-          <Text fw={600} mb="xs">
-            Điểm danh: {selectedSession.batch.code} — {selectedSession.batch.name}
-            {'  '}
-            {dayjs(selectedSession.sessionDate).format('DD/MM/YYYY')} {selectedSession.startTime}
-          </Text>
+          <Group justify="space-between" wrap="wrap" mb="xs">
+            <Text fw={600}>
+              Điểm danh: {selectedSession.batch.code} — {selectedSession.batch.name}
+              {'  '}
+              {dayjs(selectedSession.sessionDate).format('DD/MM/YYYY')} {selectedSession.startTime}
+            </Text>
+            <StatusBadge status={selectedSession.status} map={SESSION_STATUS_DEF} size="sm" />
+          </Group>
           {/* key forces re-mount when session changes so marks reload cleanly */}
           <AttendanceRoster
             key={sessionId}

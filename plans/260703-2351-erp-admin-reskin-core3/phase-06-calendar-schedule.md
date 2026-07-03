@@ -36,3 +36,21 @@
 - Risk: event absolute-positioning math altered by padding change. Mitigation: change colors/borders/
   radius only, not the grid geometry constants the test locks.
 - Rollback: primitive + per-panel reverts.
+
+## Status (implemented 2026-07-04)
+- `calendar-view.tsx`: rowHeight 48→60px, header row 40px (both week+month), event cards get
+  4px left accent + `color-mix` tint (was solid fill), today ring `inset 0 0 0 2px var(--cmc-brand)`
+  on header/day-column/month-cell. `calendar-view.test.ts` only asserts pure-function proportional
+  math (fractions of window minutes) — no pixel/DOM geometry assertions exist, so rowHeight/header
+  height were safe to change; 11/11 tests green before and after.
+- `meetings-panel.tsx`: status Badge → `StatusBadge` (modal detail + "Chưa chốt" flag); calendar
+  event tint color kept as a separate mantine-color-slug map since `StatusDef` has no color field.
+- `schedule-panel.tsx`: status Badge → `StatusBadge`. No CalendarView/view-toggle exists in this
+  file (it's table-based, not the calendar primitive) — skipped inventing a toggle per styling-only
+  scope.
+- `attendance-panel.tsx`: added a display-only `StatusBadge` for the selected session's status next
+  to the card title (data already fetched by existing `mySessions` query, no new fetch/logic).
+  `trpc.schedule.mySessions.query` / session-selection / attendance-marking logic untouched.
+- Validation: `pnpm --filter @cmc/ui test` 55/55 pass, `pnpm -w typecheck` clean (12/12 packages),
+  `pnpm --filter @cmc/admin test` 27/27 pass, ESLint clean on all 4 files, `git status` confirms
+  diff scoped to exactly the 4 owned files.
