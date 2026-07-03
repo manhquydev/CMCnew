@@ -1,14 +1,16 @@
 ---
-title: "Action Plan: Fix Known UX/Debt Issues (checkin IP leak, DEBT.md UI gaps, CI check)"
-description: ""
-status: pending
+title: >-
+  Action Plan: Fix Known UX/Debt Issues (checkin IP leak, DEBT.md UI gaps, CI
+  check)
+description: ''
+status: blocked
 priority: P2
-branch: "main"
+branch: main
 tags: []
 blockedBy: []
 blocks: []
-created: "2026-07-03T02:34:07.059Z"
-createdBy: "ck:plan"
+created: '2026-07-03T02:34:07.059Z'
+createdBy: 'ck:plan'
 source: skill
 ---
 
@@ -33,9 +35,9 @@ Source: `plans/reports/brainstorm-260703-0919-persona-qa-ux-audit-action-plan-re
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [IP Display Fix](./phase-01-ip-display-fix.md) | Pending |
-| 2 | [Missing UI Screens](./phase-02-missing-ui-screens.md) | Pending |
-| 3 | [CI Check Investigation](./phase-03-ci-check-investigation.md) | Pending |
+| 1 | [IP Display Fix](./phase-01-ip-display-fix.md) | Completed |
+| 2 | [Missing UI Screens](./phase-02-missing-ui-screens.md) | Completed |
+| 3 | [CI Check Investigation](./phase-03-ci-check-investigation.md) | Blocked — GitHub branch protection unavailable on current plan (403, needs GitHub Pro or public repo) |
 
 ## Operator action items (not code — no phase covers these)
 

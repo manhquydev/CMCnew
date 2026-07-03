@@ -1,8 +1,8 @@
 ---
 phase: 1
-title: "IP Display Fix"
-status: pending
-effort: ""
+title: IP Display Fix
+status: completed
+effort: ''
 ---
 
 # Phase 1: IP Display Fix
