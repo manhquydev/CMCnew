@@ -52,10 +52,13 @@ per `admin-commission-chain.spec.ts`'s own comment) instead.
    (creates Enrollment `if (receipt.classBatchId)`), but nothing in the UI ever sets it. Manual
    "Ghi danh" after the fact is the only path — meaning **every student provisioned via the sales
    flow today lands with zero class enrollment** unless a separate manual step is remembered.
-2. **Curriculum-catalog courses and priced-sales courses are disconnected.** No course in the
-   current seed/schema has both a `CurriculumUnit` framework AND a `CoursePrice` — meaning a
-   receipt can never actually be created against the "khóa học đã chốt" course a class was built
-   from. Sale sells against a DIFFERENT, generic-priced course than what the class was created for.
+2. ~~Curriculum-catalog courses and priced-sales courses are disconnected~~ **CORRECTED 2026-07-03,
+   user clarified**: this is correct-by-design, not a bug. Curriculum courses (`UCREA-L1`, etc.)
+   are the **LMS homework/content framework** — what's taught session-by-session in the physical
+   offline class, driving `CurriculumUnit`→`ClassSession` mapping for post-class homework. They are
+   NOT a sellable online SKU. Priced courses (`CRS_*`) are the actual sales package Sales quotes —
+   legitimately a separate entity, since one purchased package can span multiple curriculum levels
+   over time as a student progresses (e.g. UCREA-L1 this term, L2 next term). No action needed here.
 3. **Parent accounts provisioned via the sales flow have no email**, making LMS parent access
    (email-OTP) unreachable. If parent LMS access matters for phone-sourced leads, email needs to
    be collected somewhere in the chain (at opportunity creation, or as a required field before
@@ -94,18 +97,22 @@ per `admin-commission-chain.spec.ts`'s own comment) instead.
 - Commission-chain money flow (O1→draft receipt→director approve→auto-O5-win) — confirmed still
   works end-to-end via the real UI, independent of the enrollment gap noted above.
 
-## Unresolved questions for the next planning round
+## Decisions confirmed by user (2026-07-03) — scope for next plan
 
-1. Should the sales flow (opportunity → receipt) gain a class-binding field, or should manual
-   "Ghi danh" remain the intended post-provisioning step? If the latter, should there be a
-   reminder/checklist so staff don't forget it?
-2. Should curriculum-linked courses (e.g. `UCREA-L1`) get real `CoursePrice` rows, or is the
-   generic-fixture-course-for-billing / curriculum-course-for-scheduling split intentional?
-3. Is parent email required at some other point in the real operational flow (not exercised in
-   this test), or is phone-only genuinely how CMC sells today — in which case parent LMS access
-   for these leads needs a different login mechanism, or email needs collecting later?
-4. Real passwords for the seeded non-super_admin staff accounts (`giaovien@cmc.local`, etc.) are
-   unknown — worth a documented reset process for future test sessions so RBAC-boundary testing
-   isn't permanently blocked.
-5. Makeup-session attendance-UI visibility gap: worth a dedicated fix, or is "Lịch dạy" considered
-   the sole correct entry point (making the other two surfaces' gap moot in practice)?
+1. **Class-binding**: add a class-selection field to the "Tạo phiếu thu" (receipt-create) dialog.
+   `receiptApprove` already supports `classBatchId`-driven enrollment — only the UI is missing.
+   Manual "Ghi danh" step goes away for the normal path.
+2. ~~Course/pricing split~~ — not a gap, see correction above. No action.
+3. **Parent email**: collect it later than opportunity creation — at receipt-approve time (Step 3,
+   Giám đốc Kinh doanh duyệt), before the system provisions the `ParentAccount`. Not required at
+   Sale's initial opportunity form.
+4. **Makeup-session attendance visibility**: fix now — real operational impact (GV may not know to
+   use "Lịch dạy" specifically to find/mark a makeup session). Both the class-detail "Điểm danh"
+   tab picker and the standalone `/attendance` "today" page should surface makeup sessions
+   consistently with "Lịch dạy".
+
+## Still open (not yet decided)
+
+- Real passwords for the seeded non-super_admin staff accounts (`giaovien@cmc.local`, etc.) are
+  unknown — worth a documented reset process for future test sessions so RBAC-boundary testing
+  isn't permanently blocked. Deferred, not blocking the 3 fixes above.
