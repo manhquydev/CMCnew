@@ -11,6 +11,20 @@ export { LoginGate, useSession } from './login-gate.js';
 export { LmsLoginGate, useLmsSession, type LmsPrincipal } from './lms-login-gate.js';
 export { Chatter } from './chatter.js';
 export { ActivityLog, type ActivityEntry, type ActivityLogProps } from './activity-log.js';
+export {
+  RecordDetailPanel,
+  resolveOptions as recordDetailResolveOptions,
+  displayValue as recordDetailDisplayValue,
+  getValidationError as recordDetailGetValidationError,
+  type RecordDetailConfig,
+  type RecordDetailField,
+  type RecordDetailFieldOption,
+  type RecordDetailSection,
+  type RecordDetailTab,
+  type RecordDetailActivityLogConfig,
+  type RecordDetailPanelProps,
+  type RecordDetailHandle,
+} from './record-detail.js';
 export { FacilityPicker, type FacilityOption, type FacilityPickerProps } from './facility-picker.js';
 export { ViewSwitcher, useViewSwitcher, type ViewMode, type ViewSwitcherProps } from './view-switcher.js';
 export { FilterBar, type FilterBarProps } from './filter-bar.js';
