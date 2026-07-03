@@ -33,6 +33,20 @@
 - Playwright: staff-profile + one opportunity/student detail vs #9/#4.
 - `gitnexus_detect_changes`; reviewer confirms no data/handler change.
 
+## Status (2026-07-04)
+DONE. `record-detail.tsx` restyled (160px right-aligned labels via `--cmc-form-label-*`,
+accent-bar section headings, flex-based 340px sticky `--cmc-chatter-w` right rail, `Grid`
+import dropped) — `record-detail.test.ts` (pure-function tests only, no render assertions)
+stayed green untouched. `staff-profile.tsx` (the primitive's only real consumer) gained a
+128px `InitialsAvatar` + green `--cmc-status-active` dot header card and `StatusBadge pill`
+role chips. `student-detail.tsx`, `schedule-detail.tsx`, `opportunity-detail.tsx` (hand-rolled,
+not RecordDetailPanel consumers) got the same label/heading/radius conventions applied
+directly; `profile-settings-panel.tsx` got heading accent bars, the label convention, a header
+avatar, and `StatusBadge pill` role chips. `opportunity-detail.tsx`'s receipt-create Modal
+(`receiptClassBatchId`/`classBatches`) was left untouched per this session's other in-flight
+work — confirmed via `git diff` grep. `pnpm -w typecheck`, `@cmc/ui`/`@cmc/admin` test, and
+ESLint all clean. See `reports/fullstack-developer-260704-0217-phase5-detail-record-pages-report.md`.
+
 ## Risks / rollback
 - Risk: primitive restyle shifts every consuming detail page unexpectedly. Mitigation: change is
   visual; test locks structure; screenshot 2 consumers before batch-applying panel tweaks.

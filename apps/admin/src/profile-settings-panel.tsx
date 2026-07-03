@@ -22,7 +22,7 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, Group, Skeleton, Stack, Switch, Text, Title } from '@mantine/core';
 import { IconLogout } from '@tabler/icons-react';
-import { trpc, useSession, notifyError } from '@cmc/ui';
+import { trpc, useSession, notifyError, InitialsAvatar, StatusBadge } from '@cmc/ui';
 import { ROLE_LABEL } from '@cmc/auth/permissions';
 
 const NOTIF_PREF_KEY = 'notif-pref:desktop';
@@ -36,20 +36,40 @@ function readNotifPref(): boolean {
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
+    <Card radius="sm" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
       <Stack gap="sm">
-        <Text fw={600} size="sm">{title}</Text>
+        <Group gap="xs" wrap="nowrap" align="center">
+          <span
+            aria-hidden="true"
+            style={{ display: 'inline-block', width: 4, height: 20, borderRadius: 2, background: 'var(--cmc-brand)' }}
+          />
+          <Text fw={600} style={{ fontSize: 'var(--cmc-form-group-title)', color: 'var(--cmc-text)' }}>{title}</Text>
+        </Group>
         {children}
       </Stack>
     </Card>
   );
 }
 
+/** Two-column read-only field row — matches @cmc/ui's record-detail.tsx label conventions
+ *  (160px right-aligned label) used across the other detail panels. */
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <Group justify="space-between" wrap="nowrap" gap="xl">
-      <Text size="sm" c="dimmed">{label}</Text>
-      <Text size="sm" style={{ textAlign: 'right' }}>{value}</Text>
+    <Group wrap="nowrap" gap="md" align="center">
+      <Text
+        size="sm"
+        style={{
+          width: 'var(--cmc-form-label-w)',
+          minWidth: 'var(--cmc-form-label-w)',
+          flexShrink: 0,
+          textAlign: 'right',
+          fontSize: 'var(--cmc-form-label-font)',
+          color: 'var(--cmc-form-label-color)',
+        }}
+      >
+        {label}
+      </Text>
+      <Text size="sm" style={{ flex: 1, minWidth: 0 }}>{value}</Text>
     </Group>
   );
 }
@@ -110,7 +130,13 @@ export function ProfileSettingsPanel() {
 
   return (
     <Stack>
-      <Title order={4} style={{ color: 'var(--cmc-text)' }}>Hồ sơ cá nhân</Title>
+      <Group gap="md" wrap="nowrap" align="center">
+        <InitialsAvatar name={me.displayName} size={64} />
+        <div>
+          <Title order={4} style={{ color: 'var(--cmc-text)' }}>Hồ sơ cá nhân</Title>
+          <Text size="sm" c="dimmed">{me.displayName}</Text>
+        </div>
+      </Group>
 
       <SectionCard title="Thông tin cá nhân">
         <Field label="Tên hiển thị" value={me.displayName} />
@@ -118,9 +144,13 @@ export function ProfileSettingsPanel() {
           <Text size="sm" c="dimmed" mb={4}>Vai trò</Text>
           <Group gap="xs">
             {me.roles.map((r) => (
-              <Badge key={r} variant="light" radius="xl">
-                {ROLE_LABEL[r] ?? r}{r === me.primaryRole ? ' ★' : ''}
-              </Badge>
+              <StatusBadge
+                key={r}
+                status={r}
+                tone="info"
+                pill
+                label={`${ROLE_LABEL[r] ?? r}${r === me.primaryRole ? ' ★' : ''}`}
+              />
             ))}
           </Group>
         </div>

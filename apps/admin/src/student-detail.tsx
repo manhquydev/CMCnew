@@ -74,6 +74,44 @@ function fmtCurrency(n: number): string {
   return n.toLocaleString('vi-VN') + ' ₫';
 }
 
+// ─── Record-shell field row — matches @cmc/ui's record-detail.tsx label
+// conventions (160px right-aligned label) for this hand-rolled panel. ────────
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <Group wrap="nowrap" gap="md" align="center">
+      <Text
+        size="sm"
+        style={{
+          width: 'var(--cmc-form-label-w)',
+          minWidth: 'var(--cmc-form-label-w)',
+          flexShrink: 0,
+          textAlign: 'right',
+          fontSize: 'var(--cmc-form-label-font)',
+          color: 'var(--cmc-form-label-color)',
+        }}
+      >
+        {label}
+      </Text>
+      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+    </Group>
+  );
+}
+
+// Section heading with the shared accent-bar convention (matches record-detail.tsx).
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <Group gap="xs" wrap="nowrap" align="center" mb="xs">
+      <span
+        aria-hidden="true"
+        style={{ display: 'inline-block', width: 4, height: 20, borderRadius: 2, background: 'var(--cmc-brand)' }}
+      />
+      <Text fw={600} style={{ fontSize: 'var(--cmc-form-group-title)', color: 'var(--cmc-text)' }}>
+        {children}
+      </Text>
+    </Group>
+  );
+}
+
 // ─── LMS account section (inside InfoTab) ────────────────────────────────────
 
 function LmsAccountSection({ studentId }: { studentId: string }) {
@@ -143,57 +181,29 @@ function InfoTab({ s }: { s: DetailT }) {
   const lcColor = LIFECYCLE_COLOR[s.lifecycle ?? ''] ?? 'gray';
 
   return (
-    <Card withBorder radius="md" p="md">
-      <Stack gap="xs">
-        <Group>
-          <Text size="sm" fw={600} w={130}>Mã học sinh</Text>
-          <Text size="sm">{s.studentCode}</Text>
-        </Group>
-        <Group>
-          <Text size="sm" fw={600} w={130}>Họ tên</Text>
-          <Text size="sm">{s.fullName}</Text>
-        </Group>
-        <Group>
-          <Text size="sm" fw={600} w={130}>Ngày sinh</Text>
-          <Text size="sm">{dob}</Text>
-        </Group>
-        <Group>
-          <Text size="sm" fw={600} w={130}>Chương trình</Text>
-          <Badge size="sm" variant="light">{s.program}</Badge>
-        </Group>
-        <Group>
-          <Text size="sm" fw={600} w={130}>Cấp độ</Text>
-          <Text size="sm">{s.level ?? '—'}</Text>
-        </Group>
-        <Group>
-          <Text size="sm" fw={600} w={130}>Vòng đời</Text>
-          <Badge size="sm" variant="dot" color={lcColor}>{lcLabel}</Badge>
-        </Group>
-        <Group>
-          <Text size="sm" fw={600} w={130}>Ngày tạo</Text>
-          <Text size="sm">{fmtDate(s.createdAt)}</Text>
-        </Group>
+    <Card withBorder radius="sm" p="lg">
+      <Stack gap="sm">
+        <Field label="Mã học sinh"><Text size="sm">{s.studentCode}</Text></Field>
+        <Field label="Họ tên"><Text size="sm">{s.fullName}</Text></Field>
+        <Field label="Ngày sinh"><Text size="sm">{dob}</Text></Field>
+        <Field label="Chương trình"><Badge size="sm" variant="light">{s.program}</Badge></Field>
+        <Field label="Cấp độ"><Text size="sm">{s.level ?? '—'}</Text></Field>
+        <Field label="Vòng đời"><Badge size="sm" variant="dot" color={lcColor}>{lcLabel}</Badge></Field>
+        <Field label="Ngày tạo"><Text size="sm">{fmtDate(s.createdAt)}</Text></Field>
       </Stack>
 
       {/* LMS account block — only shown when a StudentAccount exists */}
       {s.account && (
-        <Card withBorder radius="md" p="md" mt="sm">
-          <Title order={6} mb="xs">Tài khoản LMS</Title>
-          <Stack gap="xs">
-            <Group>
-              <Text size="sm" fw={600} w={130}>Mã đăng nhập</Text>
-              <Text size="sm" ff="monospace">{s.account.loginCode}</Text>
-            </Group>
-            <Group>
-              <Text size="sm" fw={600} w={130}>Trạng thái</Text>
+        <Card withBorder radius="sm" p="lg" mt="md">
+          <SectionHeading>Tài khoản LMS</SectionHeading>
+          <Stack gap="sm">
+            <Field label="Mã đăng nhập"><Text size="sm" ff="monospace">{s.account.loginCode}</Text></Field>
+            <Field label="Trạng thái">
               <Badge size="sm" variant="dot" color={s.account.isActive ? 'teal' : 'red'}>
                 {s.account.isActive ? 'Hoạt động' : 'Bị khoá'}
               </Badge>
-            </Group>
-            <Group>
-              <Text size="sm" fw={600} w={130}>Tạo lúc</Text>
-              <Text size="sm">{fmtDate(s.account.createdAt)}</Text>
-            </Group>
+            </Field>
+            <Field label="Tạo lúc"><Text size="sm">{fmtDate(s.account.createdAt)}</Text></Field>
             <LmsAccountSection studentId={s.id} />
           </Stack>
         </Card>
@@ -210,7 +220,7 @@ function GuardiansTab({ s }: { s: DetailT }) {
   }
 
   return (
-    <Card withBorder radius="md" p={0}>
+    <Card withBorder radius="sm" p={0}>
       <Table striped highlightOnHover>
         <Table.Thead>
           <Table.Tr>
@@ -247,7 +257,7 @@ function EnrollmentsTab({ s }: { s: DetailT }) {
   }
 
   return (
-    <Card withBorder radius="md" p={0}>
+    <Card withBorder radius="sm" p={0}>
       <Table striped highlightOnHover>
         <Table.Thead>
           <Table.Tr>
@@ -304,7 +314,7 @@ function OpportunitiesTab({ s }: { s: DetailT }) {
   }
 
   return (
-    <Card withBorder radius="md" p={0}>
+    <Card withBorder radius="sm" p={0}>
       <Table striped highlightOnHover>
         <Table.Thead>
           <Table.Tr>
@@ -337,7 +347,7 @@ function ReceiptsTab({ s }: { s: DetailT }) {
   }
 
   return (
-    <Card withBorder radius="md" p={0}>
+    <Card withBorder radius="sm" p={0}>
       <Table striped highlightOnHover>
         <Table.Thead>
           <Table.Tr>
@@ -396,7 +406,7 @@ function GradesTab({ s }: { s: DetailT }) {
   }
 
   return (
-    <Card withBorder radius="md" p={0}>
+    <Card withBorder radius="sm" p={0}>
       <Table striped highlightOnHover>
         <Table.Thead>
           <Table.Tr>

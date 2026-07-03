@@ -18,7 +18,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useState, type ComponentType, type ReactNode } from 'react';
 import {
   Fieldset,
-  Grid,
   Group,
   MultiSelect,
   Select,
@@ -197,9 +196,21 @@ function RecordDetailFieldInput({
   if (effectiveReadOnly) {
     const content = field.render ? field.render(value, data) : displayValue(field, value, options);
     return (
-      <Group justify="space-between" wrap="nowrap" gap="xl">
-        <Text size="sm" c="dimmed">{field.label}</Text>
-        <Text size="sm" style={{ textAlign: 'right' }}>{content}</Text>
+      <Group wrap="nowrap" gap="md" align="center">
+        <Text
+          size="sm"
+          style={{
+            width: 'var(--cmc-form-label-w)',
+            minWidth: 'var(--cmc-form-label-w)',
+            flexShrink: 0,
+            textAlign: 'right',
+            fontSize: 'var(--cmc-form-label-font)',
+            color: 'var(--cmc-form-label-color)',
+          }}
+        >
+          {field.label}
+        </Text>
+        <Text size="sm" style={{ flex: 1, minWidth: 0 }}>{content}</Text>
       </Group>
     );
   }
@@ -353,7 +364,29 @@ export const RecordDetailPanel = forwardRef<RecordDetailHandle, RecordDetailPane
   const sheet = (
     <Stack>
       {visibleSections.map((section) => (
-        <Fieldset key={section.name} legend={section.name}>
+        <Fieldset
+          key={section.name}
+          legend={
+            <Group gap="xs" wrap="nowrap" align="center">
+              <span
+                aria-hidden="true"
+                style={{
+                  display: 'inline-block',
+                  width: 4,
+                  height: 20,
+                  borderRadius: 2,
+                  background: 'var(--cmc-brand)',
+                }}
+              />
+              <Text
+                fw={600}
+                style={{ fontSize: 'var(--cmc-form-group-title)', color: 'var(--cmc-text)' }}
+              >
+                {section.name}
+              </Text>
+            </Group>
+          }
+        >
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
             {section.fields.map((field) => (
               <RecordDetailFieldInput
@@ -390,19 +423,25 @@ export const RecordDetailPanel = forwardRef<RecordDetailHandle, RecordDetailPane
   if (!config.activityLog) return sheet;
 
   return (
-    <Grid gutter="lg">
-      <Grid.Col span={{ base: 12, md: 8 }}>{sheet}</Grid.Col>
-      <Grid.Col span={{ base: 12, md: 4 }}>
-        <div style={{ position: 'sticky', top: 12 }}>
-          <ActivityLog
-            entries={logEntries}
-            loading={logLoading}
-            fieldLabels={config.activityLog.fieldLabels}
-            formatValue={config.activityLog.formatValue}
-            title={config.activityLog.title}
-          />
-        </div>
-      </Grid.Col>
-    </Grid>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'flex-start' }}>
+      <div style={{ flex: '1 1 480px', minWidth: 0 }}>{sheet}</div>
+      <div
+        style={{
+          flex: `0 1 var(--cmc-chatter-w)`,
+          width: 'var(--cmc-chatter-w)',
+          maxWidth: '100%',
+          position: 'sticky',
+          top: 12,
+        }}
+      >
+        <ActivityLog
+          entries={logEntries}
+          loading={logLoading}
+          fieldLabels={config.activityLog.fieldLabels}
+          formatValue={config.activityLog.formatValue}
+          title={config.activityLog.title}
+        />
+      </div>
+    </div>
   );
 });

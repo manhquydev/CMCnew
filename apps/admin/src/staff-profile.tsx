@@ -18,6 +18,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   trpc, useSession, notifyError, notifySuccess,
   RecordDetailPanel, type RecordDetailConfig, type RecordDetailHandle,
+  InitialsAvatar, StatusBadge,
 } from '@cmc/ui';
 import { can, canReadSensitiveHr, maskSensitive, ROLE_LABEL } from '@cmc/auth/permissions';
 import {
@@ -557,6 +558,45 @@ export function StaffProfilePanel({
           <Button onClick={() => setPwResult(null)}>Đã lưu, đóng</Button>
         </Stack>
       </Modal>
+
+      <Card radius="sm" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Group align="center" gap="lg" wrap="nowrap">
+          <div style={{ position: 'relative', width: 128, height: 128, flexShrink: 0 }}>
+            <InitialsAvatar name={view.displayName} size={128} />
+            {view.isActive && (
+              <span
+                aria-hidden="true"
+                title="Đang hoạt động"
+                style={{
+                  position: 'absolute',
+                  bottom: 6,
+                  right: 6,
+                  width: 18,
+                  height: 18,
+                  borderRadius: '50%',
+                  background: 'var(--cmc-status-active)',
+                  border: '3px solid var(--cmc-surface)',
+                }}
+              />
+            )}
+          </div>
+          <Stack gap="xs" style={{ minWidth: 0 }}>
+            <Text fw={600} size="lg">{view.displayName}</Text>
+            <Text size="sm" c="dimmed">{view.email}</Text>
+            <Group gap="xs" wrap="wrap">
+              {view.roles.map((r) => (
+                <StatusBadge
+                  key={r}
+                  status={r}
+                  tone="info"
+                  pill
+                  label={`${ROLE_LABEL[r] ?? r}${r === view.primaryRole ? ' ★' : ''}`}
+                />
+              ))}
+            </Group>
+          </Stack>
+        </Group>
+      </Card>
 
       <RecordDetailPanel
         key={`${view.id}-${formResetToken}`}

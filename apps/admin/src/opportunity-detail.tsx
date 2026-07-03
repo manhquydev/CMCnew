@@ -82,16 +82,42 @@ const RECEIPT_STATUS: Record<string, { label: string; color: string }> = {
   cancelled: { label: 'Đã hủy', color: 'red' },
 };
 
-/** Two-column read-only field row (matches student/staff/schedule detail visual language). */
+/** Two-column read-only field row — matches @cmc/ui's record-detail.tsx label conventions
+ *  (160px right-aligned label) used across student/staff/schedule detail panels. */
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <Group justify="space-between" wrap="nowrap" gap="xl">
-      <Text size="sm" c="dimmed">
+    <Group wrap="nowrap" gap="md" align="center">
+      <Text
+        size="sm"
+        style={{
+          width: 'var(--cmc-form-label-w)',
+          minWidth: 'var(--cmc-form-label-w)',
+          flexShrink: 0,
+          textAlign: 'right',
+          fontSize: 'var(--cmc-form-label-font)',
+          color: 'var(--cmc-form-label-color)',
+        }}
+      >
         {label}
       </Text>
       {/* component="div" so non-text values (e.g. a <Badge>) don't nest a block inside a <p>. */}
-      <Text component="div" size="sm" style={{ textAlign: 'right' }}>
+      <Text component="div" size="sm" style={{ flex: 1, minWidth: 0 }}>
         {value ?? '—'}
+      </Text>
+    </Group>
+  );
+}
+
+/** Section heading with the shared accent-bar convention (matches record-detail.tsx). */
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <Group gap="xs" wrap="nowrap" align="center" mb="sm">
+      <span
+        aria-hidden="true"
+        style={{ display: 'inline-block', width: 4, height: 20, borderRadius: 2, background: 'var(--cmc-brand)' }}
+      />
+      <Text fw={600} style={{ fontSize: 'var(--cmc-form-group-title)', color: 'var(--cmc-text)' }}>
+        {children}
       </Text>
     </Group>
   );
@@ -525,7 +551,7 @@ export function OpportunityDetailPanel({
       </Group>
 
       {/* Clickable stage statusbar */}
-      <Card withBorder p="sm" radius="md">
+      <Card withBorder p="sm" radius="sm">
         <StageBar current={opp.stage} disabled={closed} onPick={pickStage} />
         {closed && (
           <Text size="xs" c="dimmed" mt="xs">
@@ -536,10 +562,8 @@ export function OpportunityDetailPanel({
 
       {/* Lead + attribution info */}
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xl">
-        <Card withBorder p="md" radius="md">
-          <Title order={6} mb="sm">
-            Thông tin liên hệ
-          </Title>
+        <Card withBorder p="lg" radius="sm">
+          <SectionHeading>Thông tin liên hệ</SectionHeading>
           <Stack gap="xs">
             <Field label="Liên hệ" value={opp.contact.fullName} />
             <Field label="Số điện thoại" value={opp.contact.phone} />
@@ -551,10 +575,8 @@ export function OpportunityDetailPanel({
             />
           </Stack>
         </Card>
-        <Card withBorder p="md" radius="md">
-          <Title order={6} mb="sm">
-            Phân bổ &amp; nguồn
-          </Title>
+        <Card withBorder p="lg" radius="sm">
+          <SectionHeading>Phân bổ &amp; nguồn</SectionHeading>
           <Stack gap="xs">
             <Field
               label="Người phụ trách"
@@ -569,10 +591,8 @@ export function OpportunityDetailPanel({
       </SimpleGrid>
 
       {canCreateReceipt && ownReceipts.length > 0 && (
-        <Card withBorder p="md" radius="md">
-          <Title order={6} mb="sm">
-            Phiếu thu của tôi
-          </Title>
+        <Card withBorder p="lg" radius="sm">
+          <SectionHeading>Phiếu thu của tôi</SectionHeading>
           <Stack gap="xs">
             {ownReceipts.map((receipt) => {
               const status = RECEIPT_STATUS[receipt.status] ?? {
