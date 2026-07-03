@@ -555,7 +555,7 @@ export function DesignShowcase() {
                       <Table.Td>{row.facility}</Table.Td>
                       <Table.Td>{statusBadge(row.status)}</Table.Td>
                       <Table.Td>
-                        <Menu shadow="lg" radius="md">
+                        <Menu shadow="sm" radius="md">
                           <Menu.Target>
                             <ActionIcon variant="subtle" radius="md" aria-label="Options">
                               <IconDots size={14} />
@@ -728,14 +728,19 @@ export function DesignShowcase() {
 
           {/* ── SHADOW SCALE ── */}
           <Section title="Shadow Scale">
+            <Text size="xs" c="dimmed" mb={12}>
+              Zero Elevation doctrine: Card/Paper/Notification use <b>none</b> (decorative, border-only).
+              Modal/Menu/Select/Drawer use <b>sm</b> (functional minimum depth-cue). md/lg/xl remain
+              reserved for opportunistic use (e.g. hover-elevated cards) — no component defaults to them.
+            </Text>
             <Group gap={24} wrap="wrap" align="flex-start">
               {[
-                { label: 'none',  shadow: 'none',                   border: '1px solid var(--cmc-border)' },
-                { label: 'xs',    shadow: 'var(--cmc-shadow-xs)',   border: 'none' },
-                { label: 'sm',    shadow: 'var(--cmc-shadow-sm)',   border: 'none' },
-                { label: 'md',    shadow: 'var(--cmc-shadow-md)',   border: 'none' },
-                { label: 'lg',    shadow: 'var(--cmc-shadow-lg)',   border: 'none' },
-                { label: 'xl',    shadow: 'var(--cmc-shadow-xl)',   border: 'none' },
+                { label: 'none',  usage: 'Card, Paper, Notification', shadow: 'none',                   border: '1px solid var(--cmc-border)' },
+                { label: 'xs',    usage: 'reserved',                  shadow: 'var(--cmc-shadow-xs)',   border: 'none' },
+                { label: 'sm',    usage: 'Modal, Menu, Select, Drawer', shadow: 'var(--cmc-shadow-sm)', border: 'none' },
+                { label: 'md',    usage: 'reserved (hover opt-in)',   shadow: 'var(--cmc-shadow-md)',   border: 'none' },
+                { label: 'lg',    usage: 'reserved',                  shadow: 'var(--cmc-shadow-lg)',   border: 'none' },
+                { label: 'xl',    usage: 'reserved',                  shadow: 'var(--cmc-shadow-xl)',   border: 'none' },
               ].map((item) => (
                 <Stack key={item.label} gap={8} align="center">
                   <Box
@@ -750,6 +755,9 @@ export function DesignShowcase() {
                   />
                   <Text size="xs" c="dimmed" style={{ fontFamily: 'var(--cmc-font-mono)' }}>
                     {item.label}
+                  </Text>
+                  <Text size="xs" c="dimmed" ta="center" style={{ maxWidth: 90 }}>
+                    {item.usage}
                   </Text>
                 </Stack>
               ))}

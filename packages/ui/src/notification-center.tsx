@@ -78,7 +78,7 @@ export function NotificationCenter({ pulse = 0 }: { pulse?: number }) {
     <Popover
       width={340}
       position="bottom-end"
-      shadow="md"
+      shadow="sm"
       opened={opened}
       onChange={setOpened}
       onClose={markRead}
