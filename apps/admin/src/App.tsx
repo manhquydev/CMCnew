@@ -46,6 +46,7 @@ import { KpiEvaluationPanel } from './kpi-evaluation-panel';
 import { FinancePanel } from './finance-panel';
 import { EmailOutboxPanel } from './email-outbox-panel';
 import { RevenueReportPanel } from './revenue-report';
+import { AttendanceReportPanel } from './attendance-report-panel';
 import { ReconcileWorklistPanel } from './reconcile-worklist';
 import { CrmPanel } from './crm-panel';
 import { CskhPanel } from './cskh-panel';
@@ -493,7 +494,7 @@ function HrPayrollSection() {
 const ALL_SECTION_KEYS = new Set<string>([
   'overview', 'courses', 'students', 'org', 'guardians',
   'hr', 'kpi', 'compensation', 'finance', 'email-outbox', 'revenue-report', 'reconcile-worklist', 'crm', 'cskh', 'rewards', 'badges',
-  'schedule', 'attendance', 'grading', 'assessment',
+  'schedule', 'attendance', 'attendance-report', 'grading', 'assessment',
   // 'certificate' intentionally omitted: the feature is hidden from nav (shell.tsx visible:false),
   // so #certificate is not a reachable hash route either. Re-add when the feature is re-enabled.
   'classes', 'meetings', 'levelup', 'my-payslips',
@@ -711,6 +712,20 @@ function Dashboard() {
             <RevenueReportPanel />
           </Stack>
         );
+
+      case 'attendance-report': {
+        const reportFacilityId = me.facilityIds[0] ?? (me.isSuperAdmin ? 1 : null);
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Báo cáo điểm danh</Text>
+            {reportFacilityId != null ? (
+              <AttendanceReportPanel facilityId={reportFacilityId} />
+            ) : (
+              <Text c="dimmed" size="sm">Chưa có cơ sở được gán.</Text>
+            )}
+          </Stack>
+        );
+      }
 
       case 'reconcile-worklist':
         return (

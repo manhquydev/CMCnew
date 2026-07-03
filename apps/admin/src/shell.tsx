@@ -48,6 +48,7 @@ export type SectionKey =
   // Academic / Teaching
   | 'schedule'
   | 'attendance'
+  | 'attendance-report'
   | 'grading'
   | 'assessment'
   // Class management
@@ -410,6 +411,7 @@ export function buildNavGroups({
         // Điểm danh/Chấm bài đã gộp vào "Lịch dạy" (Lịch 360 mở rộng — điểm danh nhúng sẵn trong
         // schedule-detail, chấm bài + họp PH là WorkflowCard) cho giáo_viên-only.
         { key: 'attendance' as const, label: 'Điểm danh', icon: <IconClipboardCheck {...I()} />, visible: !isTeacherOnly && visible('attendance') },
+        { key: 'attendance-report' as const, label: 'Báo cáo điểm danh', icon: <IconReport {...I()} />, visible: visible('attendance-report') },
         { key: 'grading' as const, label: 'Chấm bài', icon: <IconPencil {...I()} />, visible: !isTeacherOnly && visible('grading') },
         { key: 'assessment' as const, label: 'Học bạ', icon: <IconReport {...I()} />, visible: !isTeacherOnly && visible('assessment') },
       ],
@@ -514,6 +516,7 @@ export const SECTION_TITLES: Record<SectionKey, string> = {
   // Teaching / Academic
   schedule: 'Lịch dạy',
   attendance: 'Điểm danh',
+  'attendance-report': 'Báo cáo điểm danh',
   grading: 'Chấm bài',
   assessment: 'Học bạ',
   classes: 'Lớp học',

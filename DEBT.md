@@ -46,9 +46,9 @@ still owed.
 - Shift registration withdraw/cancel: shift registration flow supports submit/approve paths; employee withdraw UX remains deferred.
 - [x] PAID 2026-07-02 (academic-ops Plan 5 P6): Room update/archive UI shipped in `apps/admin/src/class-workspace.tsx` (`RoomEditModal` + archive action).
 - Facility network update/archive: network list/create exists; full management UX remains deferred.
-- [ ] DEBT: `attendance.report` (per-class/per-period attendance summary) has no admin UI caller -- backend complete, permission-gated, integration-tested (`attendance-report-markall.int.test.ts`) -- close when a facility/director-facing attendance report screen is built -- opened 2026-07-02 (found in full-project cross-plan integrity review)
-- [ ] DEBT: `enrollment.transfer` (move a student between class batches) has no admin UI caller -- backend complete, permission-gated, integration-tested (`enrollment-transfer.int.test.ts`) -- close when a class-workspace transfer action is built -- opened 2026-07-02 (found in full-project cross-plan integrity review)
-- [ ] DEBT: `schedule.createMakeupSession` has no admin UI caller -- backend complete, permission-gated, integration-tested (`schedule-makeup-session.int.test.ts`) -- close when a schedule/class-workspace makeup-session action is built -- opened 2026-07-02 (found in full-project cross-plan integrity review)
+- [x] PAID 2026-07-03 (action-plan-known-issues Phase 2): `attendance.report` UI shipped in `apps/admin/src/attendance-report-panel.tsx` (new nav item "Báo cáo điểm danh", scope=student/class/term picker + summary cards + byMonth breakdown for term scope).
+- [x] PAID 2026-07-03 (action-plan-known-issues Phase 2): `enrollment.transfer` UI shipped in `apps/admin/src/class-workspace.tsx` (`TransferEnrollmentModal`, "Chuyển lớp" action on active enrollment rows in EnrollTab).
+- [x] PAID 2026-07-03 (action-plan-known-issues Phase 2): `schedule.createMakeupSession` UI shipped in `apps/admin/src/class-workspace.tsx` (`CreateMakeupSessionModal`, "+ Tạo buổi học bù" action in SessionsTab).
 
 ## Security / Identity
 
