@@ -32,7 +32,7 @@ const STUDENT_NAV: {
     items: [
       { tab: 'courses', label: 'Khóa học', icon: <IconBook2 size={18} stroke={1.5} /> },
       { tab: 'schedule', label: 'Lịch học & Nội dung', icon: <IconCalendarEvent size={18} stroke={1.5} /> },
-      { tab: 'sessions', label: 'Buổi học (ảnh & nhận xét)', icon: <IconPhoto size={18} stroke={1.5} /> },
+      { tab: 'sessions', label: 'Điểm danh & buổi học', icon: <IconPhoto size={18} stroke={1.5} /> },
       { tab: 'exercises', label: 'Bài tập', icon: <IconClipboard size={18} stroke={1.5} /> },
       { tab: 'results', label: 'Kết quả học', icon: <IconChartBar size={18} stroke={1.5} /> },
     ],

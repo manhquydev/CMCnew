@@ -209,9 +209,12 @@ export const attendanceRouter = router({
   report: requirePermission('attendance', 'report')
     .input(
       z.object({
-        scope: z.enum(['student', 'class', 'term']),
-        id: z.string().uuid(),
+        scope: z.enum(['student', 'class', 'term', 'facility']),
+        // Required for student/class/term (entity uuid); ignored for facility.
+        id: z.string().uuid().optional(),
         termId: z.string().uuid().optional(),
+        // Required for facility scope only — RLS still bounds this to the caller's tenant.
+        facilityId: z.number().int().positive().optional(),
       }),
     )
     .query(({ ctx, input }) =>
@@ -224,7 +227,7 @@ export const attendanceRouter = router({
         const teacherFilter = isDirector ? undefined : ctx.session.userId;
 
         const termWindow =
-          input.scope === 'term'
+          input.scope === 'term' && input.id
             ? await tx.academicTerm.findUniqueOrThrow({
                 where: { id: input.id },
                 select: { startDate: true, endDate: true },
@@ -237,19 +240,36 @@ export const attendanceRouter = router({
               : null;
 
         const sessionWhere: Record<string, unknown> = {};
-        if (input.scope === 'class') sessionWhere.classBatchId = input.id;
+        if (input.scope === 'class' && input.id) sessionWhere.classBatchId = input.id;
         if (termWindow) sessionWhere.sessionDate = { gte: termWindow.startDate, lte: termWindow.endDate };
         if (teacherFilter) sessionWhere.teacherId = teacherFilter;
+        if (input.scope === 'facility') {
+          if (!input.facilityId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'facilityId required for scope=facility' });
+          sessionWhere.facilityId = input.facilityId;
+          // Trailing 6 calendar months (ICT), matching the report's month-trend granularity.
+          const sixMonthsAgo = new Date();
+          sixMonthsAgo.setUTCMonth(sixMonthsAgo.getUTCMonth() - 5, 1);
+          sixMonthsAgo.setUTCHours(0, 0, 0, 0);
+          sessionWhere.sessionDate = { gte: sixMonthsAgo };
+        }
+
+        const isTrend = input.scope === 'term' || input.scope === 'facility';
 
         const attendances = await tx.attendance.findMany({
           where: {
-            ...(input.scope === 'student' ? { enrollment: { studentId: input.id } } : {}),
+            ...(input.scope === 'student' && input.id ? { enrollment: { studentId: input.id } } : {}),
             session: sessionWhere,
           },
           select: {
             status: true,
             excused: true,
-            session: { select: { sessionDate: true, endTime: true } },
+            session: {
+              select: {
+                sessionDate: true,
+                endTime: true,
+                ...(input.scope === 'facility' ? { classBatchId: true, batch: { select: { code: true, name: true } } } : {}),
+              },
+            },
           },
         });
 
@@ -259,10 +279,11 @@ export const attendanceRouter = router({
         // opposite convention from exercise-open.ts's class-wide unit-open gate, which excludes
         // isMakeup — the two rules serve different purposes and must not be unified.
         const byMonth = new Map<string, { present: number; absent: number; late: number; excused: number; total: number }>();
+        const byClass = new Map<string, { code: string; name: string; present: number; absent: number; late: number; excused: number; total: number }>();
         for (const a of attendances) {
           counts[a.status] += 1;
           if (a.excused) counts.excused += 1;
-          if (input.scope === 'term') {
+          if (isTrend) {
             const key = ictMonthKey(a.session.sessionDate, a.session.endTime);
             const m = byMonth.get(key) ?? { present: 0, absent: 0, late: 0, excused: 0, total: 0 };
             m[a.status] += 1;
@@ -270,17 +291,36 @@ export const attendanceRouter = router({
             m.total += 1;
             byMonth.set(key, m);
           }
+          if (input.scope === 'facility' && 'classBatchId' in a.session && a.session.classBatchId) {
+            const classKey = a.session.classBatchId;
+            const batch = 'batch' in a.session ? a.session.batch : null;
+            const c = byClass.get(classKey) ?? {
+              code: batch?.code ?? classKey, name: batch?.name ?? classKey,
+              present: 0, absent: 0, late: 0, excused: 0, total: 0,
+            };
+            c[a.status] += 1;
+            if (a.excused) c.excused += 1;
+            c.total += 1;
+            byClass.set(classKey, c);
+          }
         }
         const attended = counts.present + counts.late;
         const rate = counts.total > 0 ? attended / counts.total : null;
 
         return {
           scope: input.scope,
-          id: input.id,
+          id: input.scope === 'facility' ? String(input.facilityId) : (input.id ?? ''),
           counts,
           rate,
-          ...(input.scope === 'term'
+          ...(isTrend
             ? { byMonth: [...byMonth.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([month, c]) => ({ month, ...c })) }
+            : {}),
+          ...(input.scope === 'facility'
+            ? {
+                byClass: [...byClass.values()]
+                  .map((c) => ({ ...c, rate: c.total > 0 ? (c.present + c.late) / c.total : null }))
+                  .sort((a, b) => a.code.localeCompare(b.code)),
+              }
             : {}),
         };
       }),
