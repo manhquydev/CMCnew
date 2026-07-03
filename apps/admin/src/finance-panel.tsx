@@ -660,6 +660,10 @@ function ReceiptsCard({
   const [refundReason, setRefundReason] = useState('');
   // Refund total per receipt id — fetched lazily for cancelled rows on the current page.
   const [refundTotals, setRefundTotals] = useState<Record<string, number>>({});
+  // Approve-time parent-email prompt — only shown for new-student receipts with no email captured
+  // yet (intake didn't collect it), so LMS parent access (OTP) stays reachable. Optional/skippable.
+  const [approveEmailTarget, setApproveEmailTarget] = useState<Receipt | null>(null);
+  const [approveEmailValue, setApproveEmailValue] = useState('');
 
   const studentName = (id: string | null) =>
     id ? (students.find((s) => s.id === id)?.fullName ?? id.slice(0, 8)) : '—';
@@ -693,9 +697,9 @@ function ReceiptsCard({
   const totalPages = Math.max(1, Math.ceil(filtered.length / RECEIPT_PAGE_SIZE));
   const paged = filtered.slice((page - 1) * RECEIPT_PAGE_SIZE, page * RECEIPT_PAGE_SIZE);
 
-  async function approve(id: string) {
+  async function approve(id: string, parentEmail?: string) {
     try {
-      const r = await trpc.finance.receiptApprove.mutate({ id });
+      const r = await trpc.finance.receiptApprove.mutate({ id, parentEmail: parentEmail || undefined });
       notifySuccess(`Đã duyệt phiếu ${r.code}`);
       if (r.lmsAccount) setCred(r.lmsAccount);
       loadReceipts();
@@ -705,6 +709,30 @@ function ReceiptsCard({
     } catch (e) {
       notifyError(e, 'Duyệt phiếu thu thất bại');
     }
+  }
+
+  // New-student receipts with no email captured at intake get one more chance to collect it here —
+  // enables LMS parent OTP login once provisioned. Existing-student/renewal receipts (studentId
+  // already set) and receipts that already have an email skip straight to approve, unchanged.
+  function onApproveClick(r: Receipt) {
+    if (!r.studentId && !r.parentEmail) {
+      setApproveEmailTarget(r);
+      setApproveEmailValue('');
+    } else {
+      approve(r.id);
+    }
+  }
+
+  function confirmApproveWithEmail() {
+    if (!approveEmailTarget) return;
+    approve(approveEmailTarget.id, approveEmailValue.trim());
+    setApproveEmailTarget(null);
+  }
+
+  function skipApproveEmail() {
+    if (!approveEmailTarget) return;
+    approve(approveEmailTarget.id);
+    setApproveEmailTarget(null);
   }
 
   async function markSent(id: string) {
@@ -824,6 +852,37 @@ function ReceiptsCard({
         )}
       </Modal>
 
+      <Modal
+        opened={!!approveEmailTarget}
+        onClose={() => setApproveEmailTarget(null)}
+        title="Duyệt phiếu thu — email phụ huynh"
+        centered
+      >
+        {approveEmailTarget && (
+          <Stack gap="sm">
+            <Text size="sm">
+              Học sinh mới, chưa có email phụ huynh. Nhập email để phụ huynh đăng nhập LMS bằng OTP
+              (có thể bỏ qua, thêm sau).
+            </Text>
+            <TextInput
+              label="Email phụ huynh (tùy chọn)"
+              type="email"
+              placeholder="parent@example.com"
+              value={approveEmailValue}
+              onChange={(e) => setApproveEmailValue(e.currentTarget.value)}
+            />
+            <Group justify="flex-end">
+              <Button variant="default" onClick={skipApproveEmail}>
+                Bỏ qua, duyệt luôn
+              </Button>
+              <Button onClick={confirmApproveWithEmail} disabled={!approveEmailValue.trim()}>
+                Duyệt
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
+
       <Group align="flex-end" mb="sm">
         <Select
           label="Lọc theo cơ sở"
@@ -912,7 +971,7 @@ function ReceiptsCard({
                           Nhật ký
                         </Button>
                         {r.status === 'draft' && (
-                          <Button size="compact-xs" onClick={() => approve(r.id)}>
+                          <Button size="compact-xs" onClick={() => onApproveClick(r)}>
                             Duyệt
                           </Button>
                         )}

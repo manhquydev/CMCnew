@@ -618,7 +618,14 @@ export const financeRouter = router({
   //   4. Set student.lifecycle = 'active'.
   //   5. Stamp receipt.studentId with the resolved id (for commission attribution below).
   receiptApprove: requirePermission('finance', 'receiptApprove')
-    .input(z.object({ id: z.string().uuid() }))
+    .input(
+      z.object({
+        id: z.string().uuid(),
+        // Optional: director may supply parent email at approve time (new-student path only) when
+        // it wasn't captured at intake — enables OTP login once the ParentAccount is provisioned.
+        parentEmail: z.string().email().optional(),
+      }),
+    )
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const receipt = await tx.receipt.findUniqueOrThrow({
@@ -721,7 +728,8 @@ export const financeRouter = router({
                 phone: receipt.parentPhone,
                 displayName: receipt.parentName ?? receipt.parentPhone,
                 // Capture email if provided — enables OTP passwordless login for the parent.
-                email: receipt.parentEmail ?? null,
+                // Approve-time input takes priority (director-supplied) over intake-time (sale-supplied).
+                email: input.parentEmail ?? receipt.parentEmail ?? null,
                 isActive: true,
               },
             });
@@ -850,18 +858,23 @@ export const financeRouter = router({
 
         // Create enrollment if a class batch was specified (idempotent: skip on duplicate).
         if (receipt.classBatchId) {
-          // Guard: the batch's course must match the receipt's course.
-          // Enrolling a student into an unrelated batch corrupts attendance records and
-          // mis-attributes commission to the wrong course.
-          const batchForCourseCheck = await tx.classBatch.findUniqueOrThrow({
+          // No courseId-match guard: ClassBatch.courseId references the curriculum-content course
+          // (drives LMS homework mapping), while Receipt.courseId references the priced sales
+          // course (what was billed) — two structurally separate catalogs, not the same entity.
+          // Staff picks the class explicitly in the UI; that choice is trusted here.
+          //
+          // Facility-match guard kept: a multi-facility staff member (director/admin with grants
+          // across facilities) could otherwise enroll a student billed at facility A into a batch
+          // that physically belongs to facility B via the class picker — that's a real defect
+          // (wrong roster, wrong attendance scoping), distinct from the courseId conflation above.
+          const batchForFacilityCheck = await tx.classBatch.findUniqueOrThrow({
             where: { id: receipt.classBatchId },
-            select: { courseId: true },
+            select: { facilityId: true },
           });
-          if (batchForCourseCheck.courseId !== receipt.courseId) {
+          if (batchForFacilityCheck.facilityId !== receipt.facilityId) {
             throw new TRPCError({
               code: 'BAD_REQUEST',
-              message:
-                'Lớp học không thuộc khóa học trong phiếu thu (batch.courseId ≠ receipt.courseId)',
+              message: 'Lớp học không thuộc cơ sở của phiếu thu',
             });
           }
 

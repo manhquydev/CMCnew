@@ -63,11 +63,16 @@ per `admin-commission-chain.spec.ts`'s own comment) instead.
    (email-OTP) unreachable. If parent LMS access matters for phone-sourced leads, email needs to
    be collected somewhere in the chain (at opportunity creation, or as a required field before
    receipt-approve).
-4. **Makeup sessions (`is_makeup=true`) are invisible to both attendance-taking UI surfaces**
-   (class-detail "Điểm danh" tab picker, and the standalone `/attendance` "today" page) despite
-   being correctly persisted in the DB. They ARE reachable via "Lịch dạy" → click session, which
-   is likely the real teacher's actual daily entry point, so impact may be lower than it first
-   appeared — but the gap is real and confirmed, not assumed.
+4. ~~Makeup sessions invisible to both attendance-taking UI surfaces~~ **RETRACTED 2026-07-03,
+   re-verified before implementation**: this was a false positive from my own test methodology, not
+   a real bug. Re-checked both surfaces with a fresh page load + proper accessibility snapshot
+   (not `.innerText()`, which does not capture Mantine `Select`'s `placeholder` attribute text —
+   an empty-looking text scrape was misread as "no data"). Confirmed via direct API call
+   (`schedule.mySessions`) that the backend correctly returns `isMakeup: true` sessions, and via
+   browser snapshot that both the class-detail picker and the standalone `/attendance` page
+   correctly list the makeup session once actually opened. No code change needed — original finding
+   was an artifact of stale in-page state (class-detail case) and an inadequate verification method
+   (`/attendance` case), not a product defect.
 
 ### Should-fix (real but non-blocking)
 

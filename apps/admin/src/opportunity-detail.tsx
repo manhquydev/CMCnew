@@ -56,6 +56,7 @@ type AssignmentLog = Awaited<ReturnType<typeof trpc.crm.assignmentHistory.query>
 type TestAppt = Awaited<ReturnType<typeof trpc.crm.testList.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
 type OwnReceipt = Awaited<ReturnType<typeof trpc.finance.receiptListOwn.query>>[number];
+type ClassBatchOption = Awaited<ReturnType<typeof trpc.classBatch.list.query>>[number];
 
 function testStatus(t: TestAppt): { label: string; tone: ReturnType<typeof statusOf>['tone'] } {
   if (t.status === 'done') return { label: 'Đã test', tone: 'active' };
@@ -211,6 +212,7 @@ export function OpportunityDetailPanel({
   const [tests, setTests] = useState<TestAppt[]>([]);
   const [testsLoading, setTestsLoading] = useState(true);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [classBatches, setClassBatches] = useState<ClassBatchOption[]>([]);
   const [ownReceipts, setOwnReceipts] = useState<OwnReceipt[]>([]);
 
   const [reassignOpen, setReassignOpen] = useState(false);
@@ -228,6 +230,7 @@ export function OpportunityDetailPanel({
   const [receiptCourseId, setReceiptCourseId] = useState<string | null>(null);
   const [receiptYears, setReceiptYears] = useState('1');
   const [receiptVoucher, setReceiptVoucher] = useState('');
+  const [receiptClassBatchId, setReceiptClassBatchId] = useState<string | null>(null);
   const [receiptBusy, setReceiptBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -246,6 +249,10 @@ export function OpportunityDetailPanel({
             .query()
             .then(setCourses)
             .catch(() => setCourses([])),
+          trpc.classBatch.list
+            .query()
+            .then(setClassBatches)
+            .catch(() => setClassBatches([])),
           canCreateReceipt
             ? trpc.finance.receiptListOwn
                 .query({ opportunityId: oppId })
@@ -384,12 +391,14 @@ export function OpportunityDetailPanel({
         parentPhone: opp.contact.phone,
         parentName: opp.contact.fullName,
         studentName: (opp.studentName || opp.contact.fullName).trim(),
+        classBatchId: receiptClassBatchId ?? undefined,
       });
       notifySuccess(`Đã tạo phiếu nháp ${receipt.code ?? ''}`.trim());
       setReceiptOpen(false);
       setReceiptCourseId(null);
       setReceiptYears('1');
       setReceiptVoucher('');
+      setReceiptClassBatchId(null);
       refresh();
     } catch (e) {
       notifyError(e, 'Tạo phiếu thu thất bại');
@@ -724,6 +733,28 @@ export function OpportunityDetailPanel({
             data={courses.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` }))}
             value={receiptCourseId}
             onChange={setReceiptCourseId}
+          />
+          <Select
+            label="Lớp học (tùy chọn)"
+            description="Ghi danh học sinh vào lớp này ngay khi phiếu thu được duyệt — không cần thao tác Ghi danh riêng"
+            searchable
+            clearable
+            placeholder={
+              classBatches.filter((b) => b.facilityId === opp.facilityId).length
+                ? 'Chọn lớp'
+                : 'Chưa có lớp tại cơ sở này'
+            }
+            // Scoped to this opportunity's facility — receiptApprove rejects a cross-facility
+            // batch server-side too, but filtering here keeps the picker from listing options
+            // that are guaranteed to fail on submit for a multi-facility staff member.
+            data={classBatches
+              .filter((b) => b.facilityId === opp.facilityId)
+              .map((b) => ({
+                value: b.id,
+                label: `${b.code} — ${b.name} · ${b.course.code}`,
+              }))}
+            value={receiptClassBatchId}
+            onChange={setReceiptClassBatchId}
           />
           <Group grow align="flex-end">
             <Select
