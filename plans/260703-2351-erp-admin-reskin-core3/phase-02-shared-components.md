@@ -1,5 +1,31 @@
 # Phase 2 — Shared component layer
 
+**Status**: sub-phases 2a-2e implemented (2026-07-04). 2f (global search backend) explicitly
+OUT of scope for this pass — separate agent/review unit. `StatCard` icon chip is now circular
+with a semantic `accent` prop and a built-in trend arrow (`IconArrowUpRight`/`IconArrowDownRight`,
+none for `flat`); `crm-director-dashboard.tsx`'s `TrendDelta` helper was trimmed to text-only
+(11-line diff) so the arrow doesn't double-render — this was the only business file touched, and
+only for that one fix. `StatusBadge` gained a backward-compatible `pill?: boolean` (default
+false). New `InitialsAvatar` (`avatar-initials.tsx`, deterministic char-code-hash → semantic
+palette, `initialsOf`/`colorOf` unit-tested) and `PipelineFunnel` (`pipeline-funnel.tsx`, CSS
+`clip-path` chevrons, `color-mix` gradient from pale to full `--cmc-brand`) both export from
+`index.tsx` and drop into `design-showcase.tsx` demo sections. `shell.tsx` top-bar gained a
+presentation-only search `TextInput` (`visibleFrom="sm"`, no backend call — 2f wires it later),
+help + app-grid `ActionIcon`s, and swapped the ad-hoc `me.displayName.slice(0,2)` avatar for
+`InitialsAvatar` — additive only, AppShell.Header height and notification/logout logic untouched.
+`pnpm --filter @cmc/ui test` (55/55, incl. 9 new avatar-initials tests), `pnpm -w typecheck`
+(12/12 packages), ESLint clean on `@cmc/ui`+`@cmc/admin` touched files, `pnpm --filter @cmc/admin
+test` (27/27, incl. nav-consistency suites — no shell regression). Visual capture re-run
+(`pnpm --filter e2e reskin:capture`, 3/4 — cockpit-crm pre-existingly needs
+`STAFF_PASSWORD_LOGIN=true` on the dev api, unrelated to this change) confirms: top-bar
+search/help/app-grid render without squeezing the section title at 1280px, `InitialsAvatar`
+renders correctly (color+initials) in the account menu, StatCard's chip-shape change is visible
+on every screen using it (attendance-report) as flagged — no layout regression. Captures saved to
+`apps/e2e/reskin-baseline-phase2/` (copied aside) instead of overwriting the Phase 1 baseline at
+the harness's fixed `reskin-baseline/` output path — Phase 1's known process gap, worked around
+this time by backing up/restoring the dir around the run. Full report:
+`plans/260703-2351-erp-admin-reskin-core3/reports/fullstack-developer-260704-0056-phase-02a-2e-shared-components-report.md`.
+
 ## Context
 - Existing primitives (verified): `stat-card.tsx` (StatCard), `status-badge.tsx` (StatusBadge),
   `page-header.tsx`, `data-table.tsx`, `record-detail.tsx`, `calendar-view.tsx`. Do NOT duplicate.

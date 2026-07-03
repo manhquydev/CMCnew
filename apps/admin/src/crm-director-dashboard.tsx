@@ -5,7 +5,6 @@ import {
   IconChartFunnel,
   IconTargetArrow,
   IconTrendingUp,
-  IconTrendingDown,
   IconClockHour4,
   IconMedal2,
 } from '@tabler/icons-react';
@@ -38,15 +37,11 @@ function trendOf(current: number, previous: number): { deltaPct: number | null }
   return { deltaPct: Math.round(((current - previous) / previous) * 1000) / 10 };
 }
 
+// StatCard renders its own up/down arrow from deltaDir now (2a re-skin) — this returns text only,
+// otherwise the trend icon would render twice.
 function TrendDelta({ deltaPct }: { deltaPct: number | null }) {
   if (deltaPct === null) return null;
-  const Icon = deltaPct >= 0 ? IconTrendingUp : IconTrendingDown;
-  return (
-    <Group gap={4} wrap="nowrap" style={{ display: 'inline-flex' }}>
-      <Icon size={14} stroke={2} />
-      <span>{deltaPct > 0 ? '+' : ''}{deltaPct}%</span>
-    </Group>
-  );
+  return <>{deltaPct > 0 ? '+' : ''}{deltaPct}%</>;
 }
 // deltaDir is derived alongside the rendered delta node — small helper keeps StatCard call-sites terse.
 function deltaDirOf(deltaPct: number | null): 'up' | 'down' | 'flat' {

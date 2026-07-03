@@ -39,6 +39,7 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import {
   IconBell,
+  IconCash,
   IconCheck,
   IconChevronLeft,
   IconChevronRight,
@@ -50,11 +51,13 @@ import {
   IconPlus,
   IconSearch,
   IconSettings,
+  IconTargetArrow,
   IconTrash,
   IconUser,
   IconUsers,
   IconX,
 } from '@tabler/icons-react';
+import { StatCard, StatusBadge, InitialsAvatar, PipelineFunnel } from '@cmc/ui';
 
 /* ─── Section wrapper ────────────────────────────────────────────────────── */
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -624,6 +627,102 @@ export function DesignShowcase() {
                 </Card>
               ))}
             </Group>
+          </Section>
+
+          {/* ── STAT CARD (2a re-skin) ── */}
+          <Section title="StatCard — Circular Accent Chip + Trend Arrow">
+            <Group gap={16} wrap="wrap" align="stretch">
+              <Box style={{ width: 220 }}>
+                <StatCard
+                  label="Doanh thu"
+                  value="24.8 tỷ"
+                  icon={<IconCash size={18} stroke={1.5} />}
+                  accent="brand"
+                  delta="+12.5%"
+                  deltaDir="up"
+                  deltaHint="so với tuần trước"
+                />
+              </Box>
+              <Box style={{ width: 220 }}>
+                <StatCard
+                  label="Cơ hội chốt"
+                  value="42"
+                  icon={<IconTargetArrow size={18} stroke={1.5} />}
+                  accent="ok"
+                  delta="+8"
+                  deltaDir="up"
+                  deltaHint="tháng này"
+                />
+              </Box>
+              <Box style={{ width: 220 }}>
+                <StatCard
+                  label="Cảnh báo KPI"
+                  value="7"
+                  icon={<IconTargetArrow size={18} stroke={1.5} />}
+                  accent="warn"
+                  delta="+2"
+                  deltaDir="down"
+                  deltaHint="so với tháng trước"
+                />
+              </Box>
+              <Box style={{ width: 220 }}>
+                <StatCard
+                  label="Khiếu nại"
+                  value="3"
+                  icon={<IconTargetArrow size={18} stroke={1.5} />}
+                  accent="danger"
+                  delta="0%"
+                  deltaDir="flat"
+                  deltaHint="không đổi"
+                />
+              </Box>
+            </Group>
+          </Section>
+
+          {/* ── STATUS BADGE PILL (2b re-skin) ── */}
+          <Section title="StatusBadge — Pill Variant">
+            <Stack gap={16}>
+              <Box>
+                <Text size="xs" c="dimmed" mb={10}>Mặc định (dot + light badge)</Text>
+                <Group gap={10} wrap="wrap">
+                  <StatusBadge status="active" label="Hoạt động" tone="active" />
+                  <StatusBadge status="pending" label="Chờ duyệt" tone="pending" />
+                  <StatusBadge status="rejected" label="Từ chối" tone="rejected" />
+                </Group>
+              </Box>
+              <Box>
+                <Text size="xs" c="dimmed" mb={10}>Pill (uppercase, dotless — cockpit wireframe)</Text>
+                <Group gap={10} wrap="wrap">
+                  <StatusBadge status="active" label="Vượt KPI" tone="active" pill />
+                  <StatusBadge status="pending" label="Cảnh báo" tone="pending" pill />
+                  <StatusBadge status="rejected" label="Chưa đạt" tone="rejected" pill />
+                </Group>
+              </Box>
+            </Stack>
+          </Section>
+
+          {/* ── INITIALS AVATAR (2c) ── */}
+          <Section title="InitialsAvatar — Deterministic Color">
+            <Group gap={16} wrap="wrap" align="center">
+              <InitialsAvatar name="Nguyễn Thành Trung" />
+              <InitialsAvatar name="Trần Thị Bình" />
+              <InitialsAvatar name="Lê Minh Châu" />
+              <InitialsAvatar name="Phạm Thu Dung" />
+              <InitialsAvatar name="Hoàng Văn Em" size={44} />
+            </Group>
+          </Section>
+
+          {/* ── PIPELINE FUNNEL (2d) ── */}
+          <Section title="PipelineFunnel — Gradient Chevron Funnel">
+            <PipelineFunnel
+              stages={[
+                { label: 'O1: Lead mới', count: 840, value: '100% Volume' },
+                { label: 'O2: Liên hệ', count: 512, value: '61% Chuyển đổi' },
+                { label: 'O3: Giải pháp', count: 204, value: '40% Chuyển đổi' },
+                { label: 'O4: Đàm phán', count: 88, value: '43% Chuyển đổi' },
+                { label: 'O5: Thành công', count: 42, value: '48% Chuyển đổi' },
+              ]}
+            />
           </Section>
 
           {/* ── TABS ── */}

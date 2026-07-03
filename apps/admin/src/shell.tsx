@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import {
-  AppShell, ActionIcon, Avatar, Badge, Box, Button, Group, Menu, NavLink,
-  Popover, ScrollArea, Stack, Text, UnstyledButton,
+  AppShell, ActionIcon, Badge, Box, Button, Group, Menu, NavLink,
+  Popover, ScrollArea, Stack, Text, TextInput, UnstyledButton,
 } from '@mantine/core';
-import { useSession, useStaffNotif } from '@cmc/ui';
+import { useSession, useStaffNotif, InitialsAvatar } from '@cmc/ui';
 import type { StaffNotifItem } from '@cmc/ui';
 import { can } from '@cmc/auth/permissions';
 import { NAV_GATES } from './nav-permissions.js';
@@ -22,14 +22,17 @@ import {
   IconGift,
   IconAward,
   IconHeadset,
+  IconHelpCircle,
   IconId,
   IconLayoutDashboard,
+  IconLayoutGrid,
   IconInbox,
   IconLogout,
   IconPencil,
   IconReceipt,
   IconReport,
   IconSchool,
+  IconSearch,
   IconTargetArrow,
   IconTrendingUp,
   IconUser,
@@ -226,6 +229,8 @@ export function Shell({
 }) {
   const { me, logout } = useSession();
   const [mobileOpened, setMobileOpened] = useState(false);
+  // Presentation-only for now — Phase 2f wires this to a real global-search backend endpoint.
+  const [searchQuery, setSearchQuery] = useState('');
   const facilityId = me.facilityIds[0] ?? null;
   const { unreadCount, notifications, fetchList, markAllRead, isMarkingAll } = useStaffNotif(facilityId);
 
@@ -268,6 +273,30 @@ export function Shell({
             </Text>
           </Group>
           <Group gap="sm">
+            <TextInput
+              placeholder="Tìm kiếm…"
+              leftSection={<IconSearch size={16} stroke={1.5} />}
+              size="sm"
+              visibleFrom="sm"
+              style={{ width: 220 }}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.currentTarget.value)}
+              aria-label="Tìm kiếm"
+            />
+            <ActionIcon
+              variant="subtle"
+              aria-label="Trợ giúp"
+              style={{ color: 'var(--cmc-text-muted)' }}
+            >
+              <IconHelpCircle size={20} stroke={1.5} />
+            </ActionIcon>
+            <ActionIcon
+              variant="subtle"
+              aria-label="Ứng dụng"
+              style={{ color: 'var(--cmc-text-muted)' }}
+            >
+              <IconLayoutGrid size={20} stroke={1.5} />
+            </ActionIcon>
             <Popover width={320} position="bottom-end" withArrow>
               <Popover.Target>
                 <UnstyledButton
@@ -317,9 +346,7 @@ export function Shell({
             <Menu position="bottom-end" withArrow shadow="md" width={200}>
               <Menu.Target>
                 <UnstyledButton aria-label="Tài khoản" style={{ borderRadius: '50%' }}>
-                  <Avatar size={32} radius="xl" color="blue" title={me.displayName}>
-                    {me.displayName.slice(0, 2).toUpperCase()}
-                  </Avatar>
+                  <InitialsAvatar name={me.displayName} size={32} />
                 </UnstyledButton>
               </Menu.Target>
               <Menu.Dropdown>
