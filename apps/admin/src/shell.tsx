@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  AppShell, ActionIcon, Avatar, Badge, Box, Button, Group, NavLink,
+  AppShell, ActionIcon, Avatar, Badge, Box, Button, Group, Menu, NavLink,
   Popover, ScrollArea, Stack, Text, UnstyledButton,
 } from '@mantine/core';
 import { useSession, useStaffNotif } from '@cmc/ui';
@@ -25,12 +25,14 @@ import {
   IconId,
   IconLayoutDashboard,
   IconInbox,
+  IconLogout,
   IconPencil,
   IconReceipt,
   IconReport,
   IconSchool,
   IconTargetArrow,
   IconTrendingUp,
+  IconUser,
   IconUsers,
   IconWallet,
 } from '@tabler/icons-react';
@@ -80,7 +82,9 @@ export type SectionKey =
   // Executive Cockpit (Phase 3) — giam_doc_kinh_doanh-only aggregate screen
   | 'biz-director-cockpit'
   // Executive Cockpit (Phase 4) — giam_doc_dao_tao-only aggregate screen
-  | 'edu-director-cockpit';
+  | 'edu-director-cockpit'
+  // Profile/settings — reachable by any logged-in staff via the avatar menu, not the sidebar.
+  | 'profile';
 
 // ─── Nav types ────────────────────────────────────────────────────────────────
 
@@ -310,10 +314,28 @@ export function Shell({
                 />
               </Popover.Dropdown>
             </Popover>
-            <Avatar size={32} radius="xl" color="blue" title={me.displayName}>
-              {me.displayName.slice(0, 2).toUpperCase()}
-            </Avatar>
-            <Button variant="subtle" size="xs" color="gray" onClick={logout}>Đăng xuất</Button>
+            <Menu position="bottom-end" withArrow shadow="md" width={200}>
+              <Menu.Target>
+                <UnstyledButton aria-label="Tài khoản" style={{ borderRadius: '50%' }}>
+                  <Avatar size={32} radius="xl" color="blue" title={me.displayName}>
+                    {me.displayName.slice(0, 2).toUpperCase()}
+                  </Avatar>
+                </UnstyledButton>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Label>{me.displayName}</Menu.Label>
+                <Menu.Item
+                  leftSection={<IconUser size={14} />}
+                  onClick={() => onSectionChange('profile')}
+                >
+                  Hồ sơ
+                </Menu.Item>
+                <Menu.Divider />
+                <Menu.Item color="red" leftSection={<IconLogout size={14} />} onClick={logout}>
+                  Đăng xuất
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
           </Group>
         </Group>
       </AppShell.Header>
@@ -464,8 +486,10 @@ export function buildNavGroups({
         { key: 'kpi' as const, label: 'Đánh giá KPI', icon: <IconTargetArrow {...I()} />, visible: visible('kpi') },
         { key: 'compensation' as const, label: 'Cơ cấu lương', icon: <IconCurrencyDong {...I()} />, visible: visible('compensation') },
         { key: 'my-payslips' as const, label: 'Phiếu lương của tôi', icon: <IconWallet {...I()} />, visible: !isTeacherOnly && visible('my-payslips') },
-        // Giáo viên (chỉ role này): Phiếu lương + Chấm công gộp thành 1 màn có tab.
-        { key: 'payroll-checkin' as const, label: 'Lương & chấm công', icon: <IconWallet {...I()} />, visible: isTeacherOnly },
+        // Giáo viên (chỉ role này): Phiếu lương + Chấm công gộp thành 1 màn có tab. Label dẫn đầu
+        // bằng "Chấm công" (thay vì "Lương & chấm công") vì đây là phần khó tìm hơn với giáo viên
+        // mới — chấm công đứng trước giúp scan trái-sang-phải bắt được ngay (finding #12, relabel-only).
+        { key: 'payroll-checkin' as const, label: 'Chấm công & lương', icon: <IconWallet {...I()} />, visible: isTeacherOnly },
       ],
     },
     {
@@ -530,9 +554,11 @@ export const SECTION_TITLES: Record<SectionKey, string> = {
   'shift-config': 'Danh mục ca',
   // Teacher nav consolidation (Lịch 360)
   'student-mgmt': 'Quản lý học sinh',
-  'payroll-checkin': 'Lương & chấm công',
+  'payroll-checkin': 'Chấm công & lương',
   // Executive Cockpit (Phase 3)
   'biz-director-cockpit': 'Cockpit điều hành',
   // Executive Cockpit (Phase 4)
   'edu-director-cockpit': 'Cockpit điều hành',
+  // Profile/settings
+  profile: 'Hồ sơ cá nhân',
 };

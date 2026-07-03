@@ -151,7 +151,9 @@ describe('nav-permissions consistency', () => {
     // placeholders only to satisfy the Record<SectionKey, NavGate> completeness check — real
     // visibility for these is decided in buildNavGroups() (shell.tsx), gated on
     // isTeacherOnly/isBizDirectorOnly/isEduDirectorOnly, not on this NAV_GATES entry.
-    const expectedOpen: SectionKey[] = ['schedule', 'classes', 'courses', 'my-payslips', 'student-mgmt', 'payroll-checkin', 'biz-director-cockpit', 'edu-director-cockpit'];
+    // 'profile' is genuinely open — any authenticated staff member reaches their own account via
+    // the avatar menu, not the sidebar, so it carries no isXOnly gate in buildNavGroups().
+    const expectedOpen: SectionKey[] = ['schedule', 'classes', 'courses', 'my-payslips', 'student-mgmt', 'payroll-checkin', 'biz-director-cockpit', 'edu-director-cockpit', 'profile'];
     expect(openSections.sort()).toEqual(expectedOpen.sort());
   });
 });

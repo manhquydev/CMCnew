@@ -73,6 +73,7 @@ import { Workspace, type NavAction } from './class-workspace';
 import { Shell, buildNavGroups, SECTION_TITLES, type SectionKey } from './shell';
 import { applyAdminMetadata, getAdminMetadata } from './link-preview-metadata';
 import { StaffProfilePanel } from './staff-profile';
+import { ProfileSettingsPanel } from './profile-settings-panel';
 import { ScheduleDetailPanel } from './schedule-detail';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
@@ -507,6 +508,7 @@ const ALL_SECTION_KEYS = new Set<string>([
   'checkin', 'shift-registration', 'facility-network', 'shift-config',
   'student-mgmt', 'payroll-checkin',
   'biz-director-cockpit', 'edu-director-cockpit',
+  'profile',
 ]);
 
 // ─── Work Shift Section ──────────────────────────────────────────────────────
@@ -827,6 +829,10 @@ function Dashboard() {
             <ShiftConfigPanel />
           </Stack>
         );
+
+      // ── Profile/settings (reachable via the avatar menu, not the sidebar) ────
+      case 'profile':
+        return <ProfileSettingsPanel />;
 
       default:
         return null;
