@@ -1,7 +1,39 @@
 # Phase 2 — Shared component layer
 
-**Status**: sub-phases 2a-2e implemented (2026-07-04). 2f (global search backend) explicitly
-OUT of scope for this pass — separate agent/review unit. `StatCard` icon chip is now circular
+**Status**: sub-phases 2a-2e implemented (2026-07-04); 2f (global search backend) implemented
+2026-07-04 as its own review unit (real backend, not presentation). New `apps/api/src/routers/
+search.ts` exports `search.global` (`protectedProcedure`, RLS-scoped via `withRls`/`rlsContextOf`
+— no manual `facilityId` WHERE substituting for RLS): case-insensitive `contains` match across
+students (name/studentCode/guardian phone via `guardians.some.parent.phone`), CRM opportunities
+(contact name/phone), staff (`AppUser` name/email — already RLS-scoped to co-facility rosters by
+the existing `app_user_facility_roster` policy, confirmed by reading the migration; no extra
+`requirePermission` gate needed), and class batches (code/name). `q.length < 2` returns empty
+groups instead of a 400 (autosuggest-safe). Per-entity limit 5, no pagination (YAGNI). Registered
+in `routers/index.ts` as `search`. 7-test integration suite (`apps/api/test/
+search-global.int.test.ts`, new file beyond the phase's stated file list — added because the
+phase asked for tests where an int-test pattern exists, which it does) passed against the live
+dev Postgres, plus a manual tRPC-over-curl verification (logged in as `admin@cmc.local`, queried
+`sale`/`Giáo`/`TEST-001`/1-char/unauthenticated) confirming real RLS-scoped results, Vietnamese
+diacritic-insensitive matching, and correct 401/empty-group edge cases. Frontend: `shell.tsx`'s
+search `TextInput` (built presentation-only in 2e) now debounces 300ms (`@mantine/hooks`
+`useDebouncedValue`, already a repo dependency — no new debounce utility written), calls
+`trpc.search.global.query`, and renders a grouped `Popover` dropdown (`GlobalSearchDropdown`).
+Selecting a CRM opportunity result navigates via `useNavigate` to the real existing deep-link
+route `/crm/opportunities/:oppId` (defined in `app.tsx`, reused as-is). Selecting a
+student/staff/class-batch result falls back to `onSectionChange` to the parent list section only
+— **known limitation, not a silent gap**: those three panels (`students-panel.tsx`, org/staff
+panel, `class-workspace.tsx`) hold per-record selection as component-local state with no
+externally-settable id today (unlike CRM, which already has a route + `selectedOppId` prop), and
+wiring that requires touching `app.tsx`/those panels, which are outside this sub-phase's file
+ownership (`shell.tsx` + `apps/api/src/routers/search.ts` only) — flagged for a follow-up phase,
+not invented around. `pnpm -w typecheck` (12/12 clean), ESLint clean on both touched files,
+`pnpm --filter @cmc/admin test` (27/27, no shell regression). GitNexus MCP tools were not
+available in this session — `gitnexus_impact`/`gitnexus_detect_changes` could not be run; `git
+diff --stat` used instead to confirm the diff is scoped to `shell.tsx` + `routers/index.ts` (plus
+the two new files). Full report: `plans/260703-2351-erp-admin-reskin-core3/reports/
+fullstack-developer-260704-0132-phase-02f-global-search-backend-report.md`.
+
+`StatCard` icon chip is now circular
 with a semantic `accent` prop and a built-in trend arrow (`IconArrowUpRight`/`IconArrowDownRight`,
 none for `flat`); `crm-director-dashboard.tsx`'s `TrendDelta` helper was trimmed to text-only
 (11-line diff) so the arrow doesn't double-render — this was the only business file touched, and

@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   AppShell, ActionIcon, Badge, Box, Button, Group, Menu, NavLink,
   Popover, ScrollArea, Stack, Text, TextInput, UnstyledButton,
 } from '@mantine/core';
-import { useSession, useStaffNotif, InitialsAvatar } from '@cmc/ui';
+import { useDebouncedValue } from '@mantine/hooks';
+import { useSession, useStaffNotif, InitialsAvatar, trpc } from '@cmc/ui';
 import type { StaffNotifItem } from '@cmc/ui';
 import { can } from '@cmc/auth/permissions';
 import { NAV_GATES } from './nav-permissions.js';
@@ -212,6 +214,93 @@ function StaffNotifDropdown({
   );
 }
 
+// ─── Global search dropdown ───────────────────────────────────────────────────
+
+type GlobalSearchResult = Awaited<ReturnType<typeof trpc.search.global.query>>;
+
+/**
+ * section: fallback navigation target (existing list screen) for entity types that have no
+ * per-record deep-link route yet. path(id): overrides with a real record deep link when one
+ * exists — currently only CRM opportunities (`/crm/opportunities/:oppId`, wired in app.tsx).
+ * Students/staff/class-batches keep their detail view as component-local state
+ * (students-panel.tsx/org-panel.tsx/class-workspace.tsx), not externally selectable — see the
+ * phase report for why full deep-linking for those three needs a follow-up outside shell.tsx.
+ */
+const SEARCH_GROUPS: {
+  key: keyof GlobalSearchResult;
+  label: string;
+  section: SectionKey;
+  path?: (id: string) => string;
+}[] = [
+  { key: 'students', label: 'Học sinh', section: 'students' },
+  { key: 'opportunities', label: 'Cơ hội CRM', section: 'crm', path: (id) => `/crm/opportunities/${id}` },
+  { key: 'staff', label: 'Nhân viên', section: 'org' },
+  { key: 'classBatches', label: 'Lớp học', section: 'classes' },
+];
+
+function GlobalSearchDropdown({
+  loading,
+  error,
+  results,
+  onSelect,
+}: {
+  loading: boolean;
+  error: boolean;
+  results: GlobalSearchResult | null;
+  onSelect: (group: (typeof SEARCH_GROUPS)[number], id: string) => void;
+}) {
+  if (loading) {
+    return <Text size="sm" c="dimmed" ta="center" py="md">Đang tìm…</Text>;
+  }
+  if (error) {
+    return <Text size="sm" c="red" ta="center" py="md">Không thể tải kết quả tìm kiếm</Text>;
+  }
+  if (!results) return null;
+
+  const groups = SEARCH_GROUPS.map((g) => ({ ...g, items: results[g.key] }));
+  const hasAny = groups.some((g) => g.items.length > 0);
+  if (!hasAny) {
+    return <Text size="sm" c="dimmed" ta="center" py="md">Không tìm thấy kết quả</Text>;
+  }
+
+  return (
+    <Stack gap={0} style={{ maxHeight: 360, overflowY: 'auto' }}>
+      {groups
+        .filter((g) => g.items.length > 0)
+        .map((g) => (
+          <Box key={g.key} py={4}>
+            <Text
+              size="xs"
+              fw={600}
+              c="dimmed"
+              px="sm"
+              py={4}
+              style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}
+            >
+              {g.label}
+            </Text>
+            {g.items.map((item) => (
+              <UnstyledButton
+                key={item.id}
+                onClick={() => onSelect(g, item.id)}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '6px 12px',
+                  textAlign: 'left',
+                  borderRadius: 6,
+                }}
+                styles={{ root: { '&:hover': { backgroundColor: 'var(--cmc-surface-2)' } } }}
+              >
+                <Text size="sm">{item.label}</Text>
+              </UnstyledButton>
+            ))}
+          </Box>
+        ))}
+    </Stack>
+  );
+}
+
 // ─── Shell ─────────────────────────────────────────────────────────────────────
 
 export function Shell({
@@ -228,11 +317,59 @@ export function Shell({
   children: React.ReactNode;
 }) {
   const { me, logout } = useSession();
+  const navigate = useNavigate();
   const [mobileOpened, setMobileOpened] = useState(false);
-  // Presentation-only for now — Phase 2f wires this to a real global-search backend endpoint.
-  const [searchQuery, setSearchQuery] = useState('');
   const facilityId = me.facilityIds[0] ?? null;
   const { unreadCount, notifications, fetchList, markAllRead, isMarkingAll } = useStaffNotif(facilityId);
+
+  // ── Global search (2f) ──────────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchResults, setSearchResults] = useState<GlobalSearchResult | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState(false);
+  const [debouncedQuery] = useDebouncedValue(searchQuery, 300);
+
+  useEffect(() => {
+    const q = debouncedQuery.trim();
+    if (q.length < 2) {
+      setSearchResults(null);
+      setSearchError(false);
+      setSearchLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSearchLoading(true);
+    setSearchError(false);
+    trpc.search.global
+      .query({ q, facilityId: facilityId ?? undefined })
+      .then((res) => {
+        if (cancelled) return;
+        setSearchResults(res);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSearchResults(null);
+        setSearchError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setSearchLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedQuery, facilityId]);
+
+  function handleSelectSearchResult(group: (typeof SEARCH_GROUPS)[number], id: string) {
+    setSearchOpen(false);
+    setSearchQuery('');
+    setSearchResults(null);
+    if (group.path) {
+      navigate(group.path(id));
+      return;
+    }
+    onSectionChange(group.section);
+  }
 
   return (
     <AppShell
@@ -273,16 +410,39 @@ export function Shell({
             </Text>
           </Group>
           <Group gap="sm">
-            <TextInput
-              placeholder="Tìm kiếm…"
-              leftSection={<IconSearch size={16} stroke={1.5} />}
-              size="sm"
-              visibleFrom="sm"
-              style={{ width: 220 }}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.currentTarget.value)}
-              aria-label="Tìm kiếm"
-            />
+            <Popover
+              width={340}
+              position="bottom-start"
+              withArrow
+              shadow="md"
+              opened={searchOpen && debouncedQuery.trim().length >= 2}
+              onClose={() => setSearchOpen(false)}
+            >
+              <Popover.Target>
+                <TextInput
+                  placeholder="Tìm kiếm…"
+                  leftSection={<IconSearch size={16} stroke={1.5} />}
+                  size="sm"
+                  visibleFrom="sm"
+                  style={{ width: 220 }}
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.currentTarget.value);
+                    setSearchOpen(true);
+                  }}
+                  onFocus={() => setSearchOpen(true)}
+                  aria-label="Tìm kiếm"
+                />
+              </Popover.Target>
+              <Popover.Dropdown style={{ padding: 0 }}>
+                <GlobalSearchDropdown
+                  loading={searchLoading}
+                  error={searchError}
+                  results={searchResults}
+                  onSelect={handleSelectSearchResult}
+                />
+              </Popover.Dropdown>
+            </Popover>
             <ActionIcon
               variant="subtle"
               aria-label="Trợ giúp"
