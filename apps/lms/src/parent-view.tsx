@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   trpc,
   useNotificationStream,
+  useLmsSession,
   API_URL,
   BadgeShelf,
   Leaderboard,
@@ -22,6 +23,7 @@ import {
   Group,
   Loader,
   Modal,
+  PasswordInput,
   Select,
   Stack,
   Switch,
@@ -396,6 +398,7 @@ const LINK_REQUEST_STATUS: Record<LinkRequestRow['status'], { label: string; col
  * request — it never creates a Guardian row directly, so this tab cannot grant access by itself.
  */
 function ProfileTab({ principal }: { principal: LmsPrincipal }) {
+  const { logout } = useLmsSession();
   const [displayName, setDisplayName] = useState(principal.displayName);
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -406,6 +409,12 @@ function ProfileTab({ principal }: { principal: LmsPrincipal }) {
   const [linkPhone, setLinkPhone] = useState('');
   const [submittingLink, setSubmittingLink] = useState(false);
   const [requests, setRequests] = useState<LinkRequestRow[] | null>(null);
+
+  // Family login (student's primary credential, decision 0033) — self-service change, no old
+  // password required (the caller IS the family credential via the authenticated parent session).
+  const [newFamilyPassword, setNewFamilyPassword] = useState('');
+  const [confirmFamilyPassword, setConfirmFamilyPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const loadRequests = useCallback(() => {
     trpc.guardian.linkRequestListMine
@@ -433,6 +442,27 @@ function ProfileTab({ principal }: { principal: LmsPrincipal }) {
       notifyError(e, 'Cập nhật thất bại');
     } finally {
       setSavingProfile(false);
+    }
+  }
+
+  async function changeFamilyPassword() {
+    if (newFamilyPassword.length < 6) {
+      notifyError(new Error('Mật khẩu tối thiểu 6 ký tự.'), 'Thông tin chưa đủ');
+      return;
+    }
+    if (newFamilyPassword !== confirmFamilyPassword) {
+      notifyError(new Error('Hai mật khẩu không khớp.'), 'Thông tin chưa đủ');
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await trpc.guardian.changeFamilyPassword.mutate({ newPassword: newFamilyPassword });
+      notifySuccess('Đổi mật khẩu thành công, vui lòng đăng nhập lại.');
+      await logout();
+    } catch (e) {
+      notifyError(e, 'Đổi mật khẩu thất bại');
+    } finally {
+      setChangingPassword(false);
     }
   }
 
@@ -482,9 +512,34 @@ function ProfileTab({ principal }: { principal: LmsPrincipal }) {
       </Card>
 
       <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} mb="xs" style={{ color: 'var(--cmc-text)' }}>Đổi mật khẩu đăng nhập gia đình</Text>
+        <Text size="sm" c="dimmed" mb="md">
+          Đây là mật khẩu con bạn dùng để đăng nhập cùng số điện thoại này. Sau khi đổi, hãy báo lại
+          mật khẩu mới cho con.
+        </Text>
+        <Group grow align="flex-end">
+          <PasswordInput
+            label="Mật khẩu mới"
+            value={newFamilyPassword}
+            onChange={(e) => setNewFamilyPassword(e.currentTarget.value)}
+          />
+          <PasswordInput
+            label="Xác nhận mật khẩu mới"
+            value={confirmFamilyPassword}
+            onChange={(e) => setConfirmFamilyPassword(e.currentTarget.value)}
+          />
+        </Group>
+        <Group justify="flex-end" mt="md">
+          <Button variant="filled" radius={9999} loading={changingPassword} onClick={changeFamilyPassword}>
+            Đổi mật khẩu
+          </Button>
+        </Group>
+      </Card>
+
+      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
         <Text fw={600} mb="xs" style={{ color: 'var(--cmc-text)' }}>Liên kết thêm con</Text>
         <Text size="sm" c="dimmed" mb="md">
-          Nhập mã học sinh hoặc số điện thoại đã đăng ký của con. Yêu cầu sẽ được nhà trường xét duyệt trước khi liên kết.
+          Nhập mã học sinh hoặc số điện thoại đã đăng ký của con. Yêu cầu sẽ được trung tâm xét duyệt trước khi liên kết.
         </Text>
         <Group grow align="flex-end">
           <TextInput label="Mã học sinh" value={linkCode} onChange={(e) => setLinkCode(e.currentTarget.value)} />
