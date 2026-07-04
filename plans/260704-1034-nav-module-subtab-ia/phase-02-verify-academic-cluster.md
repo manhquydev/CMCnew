@@ -1,6 +1,25 @@
 # Phase 2 — Verify academic cluster (Giảng dạy, Lớp học, Học sinh)
 
-Status: pending
+Status: verified
+
+## Verification outcome (2026-07-04)
+
+No `nav-modules.ts` changes were needed — the mechanism (Phase 1) derives subtabs entirely from
+`buildNavGroups`, so there is no hand-authored subtab list to refine for this cluster.
+
+- Deterministic `buildNavGroups()` check confirmed the exact visible-subtab set for all 5 roles
+  in the verification matrix (`giam_doc_dao_tao`, `giam_doc_kinh_doanh`, `sale`, `ctv_mkt`,
+  multi-role `giao_vien`+`giam_doc_dao_tao`) — every prediction in the matrix table matched
+  exactly, including `giam_doc_dao_tao`/`sale`/`giam_doc_kinh_doanh` differing on `hoc-sinh`
+  (guardians-only vs. students-only vs. both) per their distinct `student.update`/
+  `guardian.parentList` grants.
+- Live Playwright smoke (super_admin): `giang-day` renders all 5 subtabs; `certificate` is
+  correctly absent from `lop-hoc`'s 4 visible subtabs (visible:false, unconditional); clicking a
+  class batch heading in the schedule view (`goToClass` closure) correctly navigates to
+  `/classes` with the `lop-hoc` module + `classes` subtab active and the exact batch
+  pre-selected — confirming the switch's per-panel closures survive the new nav mechanism
+  unchanged.
+- `nav-teacher-consolidation.test.ts` already green (Phase 1, unchanged).
 Blocked by: Phase 1.
 Owns (files): `nav-modules.ts` (subtab list refinement for these 3 modules only), the
 relevant nav-test assertions. No panel/business-logic changes.
