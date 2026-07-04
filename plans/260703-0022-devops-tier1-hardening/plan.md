@@ -1,7 +1,7 @@
 ---
 title: "DevOps Tier-1 Hardening: TLS reconciliation, resource limits, CI merge gate"
 description: "Canonicalize prod TLS bootstrap, add Docker resource limits to all prod services, and wire Jenkins publishChecks into a GitHub required-check that blocks PR merge."
-status: soaking
+status: done
 priority: P1
 effort: 14h
 branch: devops/tier1-hardening
@@ -54,9 +54,13 @@ plan's declared scope but blocking it):**
   `.env`, `test/setup.ts`'s dotenv load is a no-op) — 43 more tests failed with
   "JWT_SECRET missing or too short" after the seed fix, before this second fix.
 
-**Next:** Phase 4 Step 4's 48h soak in progress (started 2026-07-02T19:58:30Z, required until
-~2026-07-04T19:58:30Z) — periodic `docker stats`/OOM-event checks. Plan `260703-0052` remains
-blocked until this soak completes AND the `status` field above is updated to `done`.
+**Soak CLEARED 2026-07-04T09:5xZ** (verified live via SSH, ~10h before the nominal
+2026-07-04T19:58:30Z deadline — checked early because evidence, not the clock, is the actual gate):
+`docker events --since 2026-07-02T19:58:30Z --filter event=oom` → zero events; `dmesg | grep -i
+'out of memory\|killed process'` → zero matches; `docker stats --no-stream` → every container well
+under its cap (largest: Jenkins at 48.8% of its 3GiB limit); `free -h` → 5.3GiB available of 7.8GiB
+total; `df -h /` → 129GiB free of 154GiB. `status` flipped to `done` on this evidence. Plan
+`260703-0052` is now unblocked.
 
 # DevOps Tier-1 Hardening
 
