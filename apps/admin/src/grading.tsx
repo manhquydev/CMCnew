@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, PdfAnnotator, type AnnotationData, notifyError, notifySuccess, FacilityPicker } from '@cmc/ui';
 import {
-  Badge,
+  trpc,
+  PdfAnnotator,
+  type AnnotationData,
+  notifyError,
+  notifySuccess,
+  FacilityPicker,
+  StatusBadge,
+  InitialsAvatar,
+  type StatusDef,
+} from '@cmc/ui';
+import {
   Button,
   Card,
   Center,
@@ -24,25 +33,17 @@ type Exercise = Awaited<ReturnType<typeof trpc.exercise.listByClass.query>>[numb
 type Submission = Awaited<ReturnType<typeof trpc.submission.listByExercise.query>>[number];
 type Grade = NonNullable<Submission['grade']>;
 
-const EX_STATUS_COLOR: Record<string, string> = {
-  draft: 'gray',
-  published: 'green',
-  closed: 'dark',
+// Preserves original color semantics: gray→draft, green→active, dark→inactive.
+const EX_STATUS_MAP: Record<string, StatusDef> = {
+  draft: { label: 'Nháp', tone: 'draft' },
+  published: { label: 'Đã phát hành', tone: 'active' },
+  closed: { label: 'Đã đóng', tone: 'inactive' },
 };
-const EX_STATUS_LABEL: Record<string, string> = {
-  draft: 'Nháp',
-  published: 'Đã phát hành',
-  closed: 'Đã đóng',
-};
-const SUB_STATUS_COLOR: Record<string, string> = {
-  draft: 'gray',
-  submitted: 'blue',
-  graded: 'teal',
-};
-const SUB_STATUS_LABEL: Record<string, string> = {
-  draft: 'Nháp',
-  submitted: 'Đã nộp',
-  graded: 'Đã chấm',
+// Preserves original color semantics: gray→draft, blue→info, teal→active.
+const SUB_STATUS_MAP: Record<string, StatusDef> = {
+  draft: { label: 'Nháp', tone: 'draft' },
+  submitted: { label: 'Đã nộp', tone: 'info' },
+  graded: { label: 'Đã chấm', tone: 'active' },
 };
 const EX_TYPE_LABEL: Record<string, string> = {
   homework: 'Bài tập',
@@ -235,15 +236,18 @@ function GradeRow({
   return (
     <Table.Tr>
       <Table.Td>
-        <Text fw={600}>{submission.student.fullName}</Text>
-        <Text size="xs" c="dimmed">
-          {submission.student.studentCode}
-        </Text>
+        <Group gap={8} wrap="nowrap">
+          <InitialsAvatar name={submission.student.fullName} size={22} />
+          <div>
+            <Text fw={600}>{submission.student.fullName}</Text>
+            <Text size="xs" c="dimmed">
+              {submission.student.studentCode}
+            </Text>
+          </div>
+        </Group>
       </Table.Td>
       <Table.Td>
-        <Badge size="sm" color={SUB_STATUS_COLOR[submission.status]}>
-          {SUB_STATUS_LABEL[submission.status] ?? submission.status}
-        </Badge>
+        <StatusBadge status={submission.status} map={SUB_STATUS_MAP} pill />
       </Table.Td>
       <Table.Td style={{ maxWidth: 260 }}>
         {preview ? (
@@ -314,9 +318,15 @@ function GradeRow({
               </Text>
             )}
             {grade && (
-              <Badge size="xs" color={grade.isPublished ? 'teal' : 'gray'} variant="light">
-                {grade.isPublished ? 'Đã công bố' : 'Chưa công bố'}
-              </Badge>
+              <StatusBadge
+                status={grade.isPublished ? 'published' : 'unpublished'}
+                map={{
+                  published: { label: 'Đã công bố', tone: 'active' },
+                  unpublished: { label: 'Chưa công bố', tone: 'draft' },
+                }}
+                size="xs"
+                pill
+              />
             )}
           </Group>
         </Stack>
@@ -345,9 +355,7 @@ function SubmissionsPanel({ exercise }: { exercise: Exercise }) {
         <div>
           <Group gap="xs">
             <Title order={6}>{exercise.title}</Title>
-            <Badge size="sm" color={EX_STATUS_COLOR[exercise.status]}>
-              {EX_STATUS_LABEL[exercise.status] ?? exercise.status}
-            </Badge>
+            <StatusBadge status={exercise.status} map={EX_STATUS_MAP} pill />
           </Group>
           <Text size="xs" c="dimmed">
             Điểm tối đa {exercise.maxScore} · {exercise.starReward} sao
@@ -457,9 +465,7 @@ function ClassGrading({ classBatchId }: { facilityId: number; classBatchId: stri
                   </Table.Td>
                   <Table.Td>{ex.maxScore}</Table.Td>
                   <Table.Td>
-                    <Badge size="sm" color={EX_STATUS_COLOR[ex.status]}>
-                      {EX_STATUS_LABEL[ex.status] ?? ex.status}
-                    </Badge>
+                    <StatusBadge status={ex.status} map={EX_STATUS_MAP} pill />
                   </Table.Td>
                   <Table.Td />
                 </Table.Tr>

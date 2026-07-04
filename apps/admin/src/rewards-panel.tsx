@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { trpc, notifyError, notifySuccess } from '@cmc/ui';
+import { trpc, notifyError, notifySuccess, StatusBadge, InitialsAvatar, type StatusDef } from '@cmc/ui';
 import {
   Badge,
   Button,
@@ -26,6 +26,11 @@ const PROGRAMS = [
 
 type GiftRow = Awaited<ReturnType<typeof trpc.rewards.giftListAdmin.query>>[number];
 type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
+
+const GIFT_STATUS_MAP: Record<string, StatusDef> = {
+  active: { label: 'Đang hoạt động', tone: 'active' },
+  archived: { label: 'Đã lưu trữ', tone: 'inactive' },
+};
 
 // ─── Gift create ──────────────────────────────────────────────────────────────
 
@@ -287,15 +292,7 @@ function GiftListCard() {
                   </Badge>
                 </Table.Td>
                 <Table.Td>
-                  {g.isActive ? (
-                    <Badge color="teal" variant="light">
-                      Đang hoạt động
-                    </Badge>
-                  ) : (
-                    <Badge color="gray" variant="light">
-                      Đã lưu trữ
-                    </Badge>
-                  )}
+                  <StatusBadge status={g.isActive ? 'active' : 'archived'} map={GIFT_STATUS_MAP} pill />
                 </Table.Td>
                 <Table.Td>
                   <Group gap="xs" wrap="nowrap">
@@ -523,10 +520,15 @@ function PendingReviewCard() {
             {rows.map((r) => (
               <Table.Tr key={r.id}>
                 <Table.Td>
-                  <Text fw={500}>{r.studentName}</Text>
-                  <Text size="xs" c="dimmed">
-                    {r.studentCode}
-                  </Text>
+                  <Group gap={8} wrap="nowrap">
+                    <InitialsAvatar name={r.studentName} size={22} />
+                    <div>
+                      <Text fw={500}>{r.studentName}</Text>
+                      <Text size="xs" c="dimmed">
+                        {r.studentCode}
+                      </Text>
+                    </div>
+                  </Group>
                 </Table.Td>
                 <Table.Td>{r.giftName}</Table.Td>
                 <Table.Td>

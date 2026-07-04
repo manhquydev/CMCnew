@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useSession, notifyError, notifySuccess, required } from '@cmc/ui';
+import { useSession, notifyError, notifySuccess, required, StatusBadge, InitialsAvatar, type StatusDef } from '@cmc/ui';
 import { useForm } from '@mantine/form';
 import { useDisclosure } from '@mantine/hooks';
 import {
@@ -64,16 +64,6 @@ function isScoreEntry(value: unknown): value is ScoreEntry {
 
 const todayMonth = () => new Date().toISOString().slice(0, 7);
 
-function statusColor(status: string): string {
-  switch (status) {
-    case 'draft': return 'gray';
-    case 'submitted': return 'blue';
-    case 'confirmed': return 'orange';
-    case 'approved': return 'green';
-    default: return 'gray';
-  }
-}
-
 function statusLabel(status: string): string {
   switch (status) {
     case 'draft': return 'Nháp';
@@ -83,6 +73,15 @@ function statusLabel(status: string): string {
     default: return status;
   }
 }
+
+// Preserves original color semantics as closely as the 6-tone palette allows: gray→draft,
+// blue→info, orange→pending (amber, closest warm tone to orange), green→active.
+const KPI_STATUS_MAP: Record<string, StatusDef> = {
+  draft: { label: statusLabel('draft'), tone: 'draft' },
+  submitted: { label: statusLabel('submitted'), tone: 'info' },
+  confirmed: { label: statusLabel('confirmed'), tone: 'pending' },
+  approved: { label: statusLabel('approved'), tone: 'active' },
+};
 
 function previewTotal(criteria: CriterionConfig[], scores: ScoreEntry[]): string {
   const totalWeight = criteria.reduce((s, c) => s + c.weight, 0);
@@ -208,9 +207,10 @@ function KpiDetailCard({
     <Card radius="lg" mt="sm" style={{ border: '1px solid var(--cmc-border)' }}>
       <Group justify="space-between" mb="sm">
         <Group gap="xs">
+          <InitialsAvatar name={staffName} size={22} />
           <Text fw={600} size="sm" style={{ color: 'var(--cmc-text)' }}>{staffName}</Text>
           <Badge size="sm" color={row.block === 'sales' ? 'violet' : 'cyan'} variant="light" radius="xl">{row.block}</Badge>
-          <Badge size="sm" color={statusColor(row.status)} variant="light" radius="xl">{statusLabel(row.status)}</Badge>
+          <StatusBadge status={row.status} map={KPI_STATUS_MAP} pill />
         </Group>
         <Button size="xs" variant="subtle" onClick={onClose}>Đóng</Button>
       </Group>
@@ -307,14 +307,17 @@ function KanbanColumn({
   return (
     <Stack gap="xs">
       <Group gap="xs">
-        <Badge color={statusColor(status)}>{statusLabel(status)}</Badge>
+        <StatusBadge status={status} map={KPI_STATUS_MAP} pill />
         <Text size="xs" c="dimmed">({rows.length})</Text>
       </Group>
       {rows.length === 0 && <Text size="xs" c="dimmed">Không có phiếu</Text>}
       {rows.map((r) => (
         <Card key={r.id} radius="lg" padding="xs" style={{ cursor: 'pointer', border: '1px solid var(--cmc-border)', transition: 'box-shadow 200ms' }}>
           <Stack gap={4} onClick={() => onSelect(selectedId === r.id ? null : r.id)}>
-            <Text size="sm" fw={500}>{rosterMap.get(r.userId) ?? r.userId}</Text>
+            <Group gap={6} wrap="nowrap">
+              <InitialsAvatar name={rosterMap.get(r.userId) ?? r.userId} size={22} />
+              <Text size="sm" fw={500}>{rosterMap.get(r.userId) ?? r.userId}</Text>
+            </Group>
             <Group gap="xs">
               <Badge size="xs" color={r.block === 'sales' ? 'violet' : 'cyan'}>{r.block}</Badge>
               {r.autoScore != null && r.status === 'approved' && (

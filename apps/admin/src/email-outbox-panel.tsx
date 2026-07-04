@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, notifyError, notifySuccess, required } from '@cmc/ui';
+import { trpc, notifyError, notifySuccess, required, StatusBadge, type StatusDef } from '@cmc/ui';
 import { useForm } from '@mantine/form';
 import { useDisclosure } from '@mantine/hooks';
 import {
@@ -28,12 +28,14 @@ const STATUS_OPTIONS = [
   { value: 'skipped', label: 'Bỏ qua' },
 ];
 
-const STATUS_COLOR: Record<string, string> = {
-  queued: 'gray',
-  sending: 'blue',
-  sent: 'green',
-  failed: 'red',
-  skipped: 'yellow',
+// Preserves original color semantics 1:1: gray→draft, blue→info, green→active, red→rejected,
+// yellow→pending.
+const OUTBOX_STATUS_MAP: Record<string, StatusDef> = {
+  queued: { label: 'Đang chờ', tone: 'draft' },
+  sending: { label: 'Đang gửi', tone: 'info' },
+  sent: { label: 'Đã gửi', tone: 'active' },
+  failed: { label: 'Thất bại', tone: 'rejected' },
+  skipped: { label: 'Bỏ qua', tone: 'pending' },
 };
 
 // ─── Send receipt by email ──────────────────────────────────────────────────────
@@ -196,9 +198,7 @@ function OutboxTable() {
                   </Group>
                 </Table.Td>
                 <Table.Td>
-                  <Badge size="sm" color={STATUS_COLOR[r.status] ?? 'gray'}>
-                    {r.status}
-                  </Badge>
+                  <StatusBadge status={r.status} map={OUTBOX_STATUS_MAP} pill />
                 </Table.Td>
                 <Table.Td>{r.attempts}</Table.Td>
                 <Table.Td>

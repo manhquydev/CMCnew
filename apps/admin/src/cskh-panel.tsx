@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, notifyError, notifySuccess, Chatter, FacilityPicker } from '@cmc/ui';
+import { trpc, notifyError, notifySuccess, Chatter, FacilityPicker, InitialsAvatar } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -300,7 +300,16 @@ export function CskhPanel() {
               {cases.map((c) => (
                 <Table.Tr key={c.id}>
                   <Table.Td>{c.subject}</Table.Td>
-                  <Table.Td>{studentName(c.studentId)}</Table.Td>
+                  <Table.Td>
+                    {c.studentId ? (
+                      <Group gap={8} wrap="nowrap">
+                        <InitialsAvatar name={studentName(c.studentId)} size={22} />
+                        <Text size="sm">{studentName(c.studentId)}</Text>
+                      </Group>
+                    ) : (
+                      studentName(c.studentId)
+                    )}
+                  </Table.Td>
                   <Table.Td>
                     <Badge
                       color={
