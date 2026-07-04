@@ -2,6 +2,12 @@
 
 **Status:** designed 2026-06-26 · supersedes the password-based auth additions in this branch
 **Decisions:** [0013](decisions/0013-email-microsoft-graph-integration.md) (email) + this doc (auth shift)
+**Update (2026-07-04):** row 34's "student login (loginCode+password) unchanged" claim is
+**superseded** — the student LMS login primary path is now parent phone + a fixed default
+password, with the per-child `loginCode`+password retained only as a break-glass fallback. See
+[decision 0033](decisions/0033-student-login-phone-identity.md) for the full model
+(`lmsAuth.loginFamilyByPhone` + `lmsAuth.enterChildProfile`, Netflix-style profile picker). The
+parent Email-OTP flow described below (§4) is unaffected by this change.
 **Entra app:** `CMC` · Client ID `bf0f8dc1-48c5-4f1f-9199-d5e5b41e4a75` · Tenant `4dd49669-ef56-4163-9210-dba5b7101600` · Single-tenant · **Client Secret** (not certificate)
 
 This is the authoritative log of how staff (ERP) and parent (LMS) sign-in change, what is removed,
@@ -30,8 +36,8 @@ The same shared mailbox + Graph sender built for transactional email is reused t
 | Payslip + parent-meeting emails | KEEP | Phase 03/05 unchanged |
 | Graph auth | CHANGE | certificate → **client secret** (`GRAPH_CLIENT_SECRET`); cert stays optional |
 | Staff login (password) | CHANGE | demoted to **break-glass for super_admin only**; everyone else uses SSO |
-| Parent login (password) | REMOVE | replaced by Email OTP; `ParentAccount.passwordHash` becomes nullable/unused |
-| Student login (loginCode+password) | KEEP | untouched — parent is the LMS actor; student path unchanged |
+| Parent login (password) | REMOVE | replaced by Email OTP; `ParentAccount.passwordHash` becomes nullable/unused (**revived 2026-07-04**: same column now backs the family student-login credential, decision 0033 — a different login purpose, not a reversal of this OTP change) |
+| Student login (loginCode+password) | SUPERSEDED (2026-07-04) | primary path is now parent phone + `Cmc2026@` (decision 0033); loginCode+password kept as break-glass fallback |
 | Activation links (parent_welcome / staff_welcome) | REMOVE | onboarding handled by SSO (staff) / first OTP (parent) |
 | Password reset (staff + parent) | REMOVE | no passwords to reset; staff use SSO, parents use OTP |
 | `ActivationToken` model + service | REMOVE | dropped via a new migration; replaced by `login_otp` |
