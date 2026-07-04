@@ -41,14 +41,14 @@ pipeline {
     }
 
     stage('Integration tests') {
-      when { anyOf { branch 'main'; changeRequest() } }   // gate PRs too — a red integration test must block merge, not just fire post-merge on main
+      when { anyOf { branch 'main'; branch 'develop'; changeRequest() } }   // gate PRs + both deploy branches — a red integration test must block deploy/merge
       steps {
         sh 'bash scripts/ci-integration-tests.sh'   // spins an ephemeral Postgres, runs vitest, tears down
       }
     }
 
-    stage('Build + Deploy') {
-      when { branch 'main' }   // deploy the live stack only from main
+    stage('Build + Deploy (prod)') {
+      when { branch 'main' }   // deploy the live prod stack only from main
       steps {
         sh '''
           # Surface the deployed revision at GET /health so a deploy is externally verifiable.
@@ -85,7 +85,7 @@ pipeline {
       }
     }
 
-    stage('Smoke') {
+    stage('Smoke (prod)') {
       when { branch 'main' }   // smoke-test the deploy that only main performs
       steps {
         sh '''
@@ -93,9 +93,57 @@ pipeline {
           $COMPOSE exec -T api wget -qO- http://localhost:4000/health
           # public end-to-end reachability (Jenkins runs in its own container, so hit the
           # real domains via egress→Cloudflare→origin rather than 127.0.0.1, which is not nginx here)
-          curl -fsS https://erp.cmcvn.edu.vn/api/health | grep -q '"ok":true'
+          RESP="$(curl -fsS https://erp.cmcvn.edu.vn/api/health)"; echo "$RESP" | grep -q '"ok":true'
           curl -fsS -o /dev/null https://hoc.cmcvn.edu.vn/
-          echo "smoke OK"
+          echo "branch=main url=https://erp.cmcvn.edu.vn commit=${GIT_COMMIT} health=$RESP smoke OK"
+        '''
+      }
+    }
+
+    // ── DEV branch: deploy the cmcnew-dev stack (deverp/devlms), never touch prod ──
+    stage('Build + Deploy (dev)') {
+      when { branch 'develop' }   // deploy the dev stack only from develop
+      steps {
+        sh '''
+          # Surface the deployed revision at GET /health so a dev deploy is externally verifiable.
+          export APP_COMMIT="${GIT_COMMIT:-unknown}"
+          export APP_BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          export COMPOSE_PARALLEL_LIMIT=1   # 2 vCPU box: serialize image builds so dev+prod+jenkins don't OOM
+          # The dev app tier joins the shared cmcnew-edge network; create it before `up` (external).
+          docker network create cmcnew-edge 2>/dev/null || true
+          # Explicit branch-to-environment mapping — dev project, dev env file, dev compose. No prod vars.
+          DEV="docker compose -f docker/docker-compose.dev.tls.yml --env-file /secrets/.env.dev"
+          echo "deploying: project=cmcnew-dev env=/secrets/.env.dev commit=$APP_COMMIT"
+          $DEV up -d dev-postgres dev-redis
+          for i in $(seq 1 30); do
+            [ "$($DEV ps -q dev-postgres | xargs -r docker inspect -f '{{.State.Health.Status}}' 2>/dev/null)" = healthy ] && break
+            sleep 2
+          done
+          # --build for the same stale-image reason as prod (see the prod deploy stage note).
+          $DEV --profile migrate run --rm --build dev-api-migrate
+          # Align the cmc_app RLS role password with the runtime secret (idempotent; required on a
+          # fresh dev DB where the RLS migration creates cmc_app with a default password).
+          DBU="$(grep -m1 '^DB_USER=' /secrets/.env.dev | cut -d= -f2-)"; DBU="${DBU:-cmc}"
+          DBN="$(grep -m1 '^DB_NAME=' /secrets/.env.dev | cut -d= -f2-)"; DBN="${DBN:-cmc}"
+          DBP="$(grep -m1 '^DB_APP_PASSWORD=' /secrets/.env.dev | cut -d= -f2-)"
+          $DEV exec -T dev-postgres psql -U "$DBU" -d "$DBN" -c "ALTER ROLE cmc_app PASSWORD '$DBP';"
+          $DEV up -d --build dev-api dev-admin dev-lms
+          # The shared prod nginx caches the dev upstream IPs; recreated dev containers get new IPs,
+          # so reload (NOT restart — zero-downtime, and it must not disrupt prod) to re-resolve them.
+          docker exec cmcnew-prod-nginx-1 nginx -s reload
+        '''
+      }
+    }
+
+    stage('Smoke (dev)') {
+      when { branch 'develop' }   // smoke-test the deploy that only develop performs
+      steps {
+        sh '''
+          DEV="docker compose -f docker/docker-compose.dev.tls.yml --env-file /secrets/.env.dev"
+          $DEV exec -T dev-api wget -qO- http://localhost:4000/health
+          RESP="$(curl -fsS https://deverp.cmcvn.edu.vn/api/health)"; echo "$RESP" | grep -q '"ok":true'
+          curl -fsS -o /dev/null https://devlms.cmcvn.edu.vn/
+          echo "branch=develop url=https://deverp.cmcvn.edu.vn commit=${GIT_COMMIT} health=$RESP smoke OK"
         '''
       }
     }
