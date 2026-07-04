@@ -63,7 +63,9 @@ type AttendanceHistoryPunch = {
   id: string;
   timestamp: string | Date;
   method: string;
-  ipAddress: string;
+  // Absent on self-view (server strips it — employees don't need their own IP);
+  // present when a manager views someone else's history (audit).
+  ipAddress?: string;
   shiftTemplateId: string | null;
 };
 type KpiRow = {

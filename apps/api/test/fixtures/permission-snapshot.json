@@ -167,6 +167,7 @@
   "checkInOut.monthlyReport": ["giam_doc_kinh_doanh", "giam_doc_dao_tao", "hr", "ke_toan"],
   "checkInOut.pendingManual": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "checkInOut.approveManual": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
+  "checkInOut.rejectManual": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "facilityNetwork.list": ["super_admin", "giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "facilityNetwork.create": ["super_admin", "giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "facilityNetwork.delete": ["super_admin", "giam_doc_kinh_doanh", "giam_doc_dao_tao"],

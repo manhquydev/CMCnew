@@ -330,6 +330,7 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     monthlyReport: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'hr', 'ke_toan'],
     pendingManual: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     approveManual: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    rejectManual: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
 
   facilityNetwork: {

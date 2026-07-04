@@ -15,12 +15,12 @@ A four-module subsystem for scheduling and tracking staff work time.
 |--------|--------|---------|
 | ShiftConfig | `shift-config.ts` | Shift group catalog (KINH_DOANH / GIAO_VIEN) with templates. Two default groups: KD has SINGLE selection with 3x 8h shifts; GV has MULTIPLE selection with 3x 4h shifts. |
 | ShiftRegistration | `shift-registration.ts` | Timesheet requests. Workflow: Draft -> Submitted -> Approved. Supports work/leave types. Manager chain resolved from EmploymentProfile.managerId or auto-resolved by role. Supersede chain replaces older approved registrations. Create-lock enforces 1-ticket-at-a-time (no new registration if user has ANY draft/submitted ticket). Editable draft dates with future-date validation. List query returns staff identity (displayName, email, employeeCode). |
-| CheckInOut | `check-in-out.ts` | Punch-based attendance. Earliest punch = check-in, latest = check-out. Penalty: 500d/min late, 1000d/min early leave. IP validated against FacilityNetwork CIDR rules. |
+| CheckInOut | `check-in-out.ts` | Punch-based attendance. Earliest punch = check-in, latest = check-out (updates on every punch — no lock after checkout). Penalty: 500d/min late, 1000d/min early leave. IP validated against FacilityNetwork CIDR rules. Outside-WiFi punches require a `ManualAttendanceTicket` (1/person/ICT-day): first punch of the day needs a reason, later punches attach silently; manager approves/rejects the ticket once (stamps/un-stamps all that day's manual punches), not per-punch. Self-view `history` strips `ipAddress` (manager/audit view keeps it). |
 | FacilityNetwork | `facility-ip.ts` | IP whitelist per facility (supports CIDR ranges) for check-in validation. |
 
 ### Schema
 
-6 shift-specific models in `packages/db/prisma/schema.prisma`: `ShiftGroup`, `ShiftTemplate`, `ShiftRegistration`, `ShiftRegistrationEntry`, `TimePunch`, `FacilityNetwork`, plus `ShiftCodeCounter` (atomic sequence for SR-YYYY-NNNN codes). Related model: `EmployeeCodeCounter` (global 1-row counter for auto-incrementing `EmploymentProfile.employeeCode` in format CMC0001..).
+7 shift-specific models in `packages/db/prisma/schema.prisma`: `ShiftGroup`, `ShiftTemplate`, `ShiftRegistration`, `ShiftRegistrationEntry`, `TimePunch`, `ManualAttendanceTicket`, `FacilityNetwork`, plus `ShiftCodeCounter` (atomic sequence for SR-YYYY-NNNN codes). Related model: `EmployeeCodeCounter` (global 1-row counter for auto-incrementing `EmploymentProfile.employeeCode` in format CMC0001..).
 
 ### Data flow
 
@@ -30,6 +30,8 @@ Staff submits ShiftRegistration (Draft)
   -> submit -> Submitted
   -> manager approves -> Approved (supersedes old registration)
   -> daily punch (TimePunch) validated against FacilityNetwork
+     -> outside WiFi: first punch/day requires reason -> ManualAttendanceTicket (pending)
+     -> manager approves/rejects ticket once -> stamps/un-stamps all that day's manual punches
   -> penalty computed at end-of-day (late min * 500 + early min * 1000)
 ```
 
