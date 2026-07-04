@@ -148,6 +148,9 @@ describe('user.create welcome email (SSO onboarding, no password)', () => {
       roles: [Role.giam_doc_kinh_doanh],
       primaryRole: Role.giam_doc_kinh_doanh,
       facilityIds: [FACILITY_1],
+      nationalId: '0010000000001',
+      startedAt: '2026-01-01',
+      position: 'Nhân viên',
     });
 
     const row = await withRls(SUPER, (tx) =>

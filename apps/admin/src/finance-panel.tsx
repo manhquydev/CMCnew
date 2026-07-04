@@ -720,7 +720,9 @@ function ReceiptsCard({
   async function approve(id: string, parentEmail?: string) {
     try {
       const r = await trpc.finance.receiptApprove.mutate({ id, parentEmail: parentEmail || undefined });
-      notifySuccess(`Đã duyệt phiếu ${r.code}`);
+      notifySuccess(
+        r.overCapacity ? `Đã duyệt phiếu ${r.code} — ⚠ lớp đã vượt sĩ số` : `Đã duyệt phiếu ${r.code}`,
+      );
       if (r.lmsAccount) setCred(r.lmsAccount);
       loadReceipts();
       // Approve can auto-provision a new student (new-student receipt) — refresh the students

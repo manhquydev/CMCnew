@@ -81,6 +81,9 @@ describe('Business Director user.create', () => {
       roles: [Role.sale],
       primaryRole: Role.sale,
       facilityIds: [facilityA],
+      nationalId: '0010000000001',
+      startedAt: '2026-01-01',
+      position: 'Nhân viên',
     });
     expect(user.roles).toContain(Role.sale);
   });
@@ -100,6 +103,9 @@ describe('Business Director user.create', () => {
         roles: [Role.giao_vien],
         primaryRole: Role.giao_vien,
         facilityIds: [facilityA],
+        nationalId: '0010000000001',
+        startedAt: '2026-01-01',
+        position: 'Nhân viên',
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
@@ -119,6 +125,9 @@ describe('Business Director user.create', () => {
         roles: [Role.sale],
         primaryRole: Role.sale,
         facilityIds: [facilityB], // B is outside the caller's facilities
+        nationalId: '0010000000001',
+        startedAt: '2026-01-01',
+        position: 'Nhân viên',
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
@@ -138,6 +147,9 @@ describe('Business Director user.create', () => {
         roles: [Role.sale],
         primaryRole: Role.sale,
         facilityIds: [],
+        nationalId: '0010000000001',
+        startedAt: '2026-01-01',
+        position: 'Nhân viên',
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
@@ -161,6 +173,9 @@ describe('Education Director user.create', () => {
       roles: [Role.giao_vien],
       primaryRole: Role.giao_vien,
       facilityIds: [facilityA],
+      nationalId: '0010000000001',
+      startedAt: '2026-01-01',
+      position: 'Nhân viên',
     });
     expect(user.roles).toContain(Role.giao_vien);
   });
@@ -180,6 +195,9 @@ describe('Education Director user.create', () => {
         roles: [Role.sale],
         primaryRole: Role.sale,
         facilityIds: [facilityA],
+        nationalId: '0010000000001',
+        startedAt: '2026-01-01',
+        position: 'Nhân viên',
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
@@ -199,6 +217,9 @@ describe('Education Director user.create', () => {
         roles: [Role.giao_vien],
         primaryRole: Role.giao_vien,
         facilityIds: [facilityB],
+        nationalId: '0010000000001',
+        startedAt: '2026-01-01',
+        position: 'Nhân viên',
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
@@ -216,6 +237,9 @@ describe('super_admin user.create', () => {
       roles: [Role.giam_doc_kinh_doanh],
       primaryRole: Role.giam_doc_kinh_doanh,
       facilityIds: [facilityB],
+      nationalId: '0010000000001',
+      startedAt: '2026-01-01',
+      position: 'Nhân viên',
     });
     expect(user.roles).toContain(Role.giam_doc_kinh_doanh);
   });
@@ -229,6 +253,9 @@ describe('super_admin user.create', () => {
         roles: [Role.ke_toan],
         primaryRole: Role.ke_toan,
         facilityIds: [],
+        nationalId: '0010000000001',
+        startedAt: '2026-01-01',
+        position: 'Nhân viên',
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
@@ -272,6 +299,9 @@ describe('user.setPassword', () => {
       roles: [Role.sale],
       primaryRole: Role.sale,
       facilityIds: [facilityA],
+      nationalId: '0010000000001',
+      startedAt: '2026-01-01',
+      position: 'Nhân viên',
     });
     const before = await withRls(SUPER, (tx) => tx.appUser.findUniqueOrThrow({ where: { id: target.id }, select: { tokenVersion: true } }));
 

@@ -10,6 +10,8 @@ import {
   email,
   minLength,
   combine,
+  toApiDate,
+  parseApiDate,
 } from '@cmc/ui';
 import { assignableRoles, can, ROLE_LABEL } from '@cmc/auth/permissions';
 import { useForm } from '@mantine/form';
@@ -27,6 +29,7 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
+import { DateInput } from '@mantine/dates';
 import { useDisclosure } from '@mantine/hooks';
 import { IconCircleX, IconCircleCheck, IconPlus } from '@tabler/icons-react';
 import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
@@ -296,10 +299,13 @@ function UserCreateModal({
   const [facilityIds, setFacilityIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const form = useForm({
-    initialValues: { email: '', displayName: '', phone: '' },
+    initialValues: { email: '', displayName: '', phone: '', nationalId: '', startedAt: '', position: '' },
     validate: {
       email: email('Email không hợp lệ'),
       displayName: required('Nhập tên hiển thị'),
+      nationalId: required('Nhập số CCCD/CMND'),
+      startedAt: required('Chọn ngày vào làm'),
+      position: required('Nhập vị trí công việc'),
     },
   });
 
@@ -318,6 +324,9 @@ function UserCreateModal({
         roles: roles as User['roles'],
         primaryRole: (primaryRole ?? roles[0]) as User['primaryRole'],
         facilityIds: facilityIds.map(Number),
+        nationalId: values.nationalId,
+        startedAt: values.startedAt,
+        position: values.position,
       });
       notifySuccess(`Đã tạo người dùng "${values.displayName}"`);
       close();
@@ -348,6 +357,19 @@ function UserCreateModal({
           />
           <TextInput label="Tên hiển thị" withAsterisk {...form.getInputProps('displayName')} />
           <TextInput label="Số điện thoại" {...form.getInputProps('phone')} />
+          <Text size="xs" c="dimmed" mt="xs">
+            Hồ sơ nhân sự tối thiểu — bắt buộc, không thể bỏ qua (điền thêm chi tiết khác sau ở
+            trang Hồ sơ nhân sự).
+          </Text>
+          <TextInput label="Vị trí công việc" withAsterisk {...form.getInputProps('position')} />
+          <TextInput label="Số CCCD/CMND" withAsterisk {...form.getInputProps('nationalId')} />
+          <DateInput
+            label="Ngày vào làm" withAsterisk
+            valueFormat="DD/MM/YYYY"
+            value={parseApiDate(form.values.startedAt)}
+            onChange={(d) => form.setFieldValue('startedAt', toApiDate(d) ?? '')}
+            error={form.errors.startedAt}
+          />
           <MultiSelect
             label="Vai trò" data={roleOptions}
             value={roles}

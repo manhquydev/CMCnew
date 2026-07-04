@@ -132,19 +132,29 @@ describe('employee code generation & display (Plan B)', () => {
   });
 
   describe('backfill (Phase 1 migration)', () => {
-    it('pre-existing backfilled profiles have unique, sequential CMC#### codes by createdAt/id order', async () => {
+    it('pre-existing backfilled profiles have unique, monotonically increasing CMC#### codes by createdAt/id order', async () => {
       const preExisting = await preExistingCodesPromise;
       expect(preExisting.length).toBeGreaterThan(0);
 
+      // Codes are assigned gaplessly at creation time (nextEmployeeCode only ever increments by
+      // 1), but a profile whose code was already consumed can later be deleted by another test
+      // file's own cleanup (e.g. hr-onboarding.int.test.ts's afterEach) — real employeeCode numbers
+      // are never reused, so this snapshot legitimately sees gaps once other suites' user.create
+      // fixtures are cleaned up. Assert what the "assigned once, never changes" invariant actually
+      // guarantees — unique, CMC####-shaped, strictly increasing in createdAt/id order — not a
+      // gapless 1..N run (that only held back when this was the sole consumer of the counter).
       const codes = preExisting.map((p) => p.employeeCode);
-      const expected = Array.from({ length: codes.length }, (_, i) => `CMC${String(i + 1).padStart(4, '0')}`);
-      expect(codes).toEqual(expected);
+      const seqOf = (code: string | null) => Number(code?.replace('CMC', ''));
+      for (const c of codes) expect(c).toMatch(CODE_RE);
       expect(new Set(codes).size).toBe(codes.length);
+      for (let i = 1; i < codes.length; i++) {
+        expect(seqOf(codes[i])).toBeGreaterThan(seqOf(codes[i - 1]));
+      }
 
-      // Counter must have kept pace with (>=) the backfilled count — it will exceed this
-      // once this suite's own new-profile tests have run, so only a lower bound is asserted.
+      // Counter must have kept pace with (>=) the highest code actually assigned so far.
       const seq = await currentCounterSeq();
-      expect(seq).toBeGreaterThanOrEqual(preExisting.length);
+      const maxSeq = Math.max(...codes.map(seqOf));
+      expect(seq).toBeGreaterThanOrEqual(maxSeq);
     });
   });
 
