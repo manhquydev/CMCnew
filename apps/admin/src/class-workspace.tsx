@@ -1259,6 +1259,7 @@ function ClassDetail({
               <>
                 <Select
                   size="xs" w={130} placeholder="Đổi trạng thái"
+                  value={null}
                   data={['open', 'running', 'closed']}
                   onChange={(v) => v && setStatus(v)}
                 />
