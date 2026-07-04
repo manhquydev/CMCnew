@@ -1,6 +1,29 @@
 # Phase 4 — Verify ops/admin cluster (Công ca, Quản trị) + cockpit edge cases
 
-Status: pending
+Status: verified
+
+## Verification outcome (2026-07-04)
+
+No `nav-modules.ts` changes needed. Live Playwright verification (super_admin session):
+
+- `quan-tri` module shows exactly [Tổng quan, Cơ sở & Người dùng, IP WiFi chấm công, Danh mục
+  ca] for super_admin — cockpits correctly hidden, all 8 rail modules visible.
+- **Unplanned but valuable real-world confirmation of the SubTabBar unmatched-`activeSection`
+  tolerance** (the same mechanism the `hr`-role landing edge exercises, but that case turned out
+  unreachable in Phase 3): navigating directly to `/biz-director-cockpit` as super_admin — a
+  section NOT in super_admin's `quan-tri` visible set (`biz-director-cockpit` is
+  `isBizDirectorOnly`-gated) — rendered the cockpit panel correctly with the SubTabBar showing
+  its normal 4 tabs and none highlighted. No crash, no invented tab. This is the first LIVE
+  (not just reasoned-through) exercise of that tolerance path.
+- **Cross-module cockpit→KPI jump (`onNavigateToKpi`, `App.tsx:633,639`) verified live**:
+  navigating to `/kpi` (the exact URL `handleSectionChange('kpi')` produces) correctly activates
+  the `nhan-su` module in the rail (not `quan-tri`, where the cockpit itself lives) and highlights
+  the `Đánh giá KPI` subtab — confirming the rail auto-follows a cross-module jump by construction
+  (module/subtab are both derived from `activeSection`, with no special-casing needed).
+- `nav-director-kd-cockpit-consolidation.test.ts` (6 tests) and
+  `nav-director-dt-cockpit-consolidation.test.ts` (7 tests) already green, byte-for-byte
+  unchanged, across every test run since Phase 1 — the director parity gate holds.
+- `nav-consistency.test.ts` D4 (org) green (unchanged since Phase 1).
 Blocked by: Phase 1 (independent of Phases 2-3).
 Owns (files): `nav-modules.ts` (subtab refinement for these 2 modules), the two director
 cockpit nav-test assertions. No panel/business-logic changes.
