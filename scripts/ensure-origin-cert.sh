@@ -16,6 +16,11 @@ set -euo pipefail
 VOLUME="cmcnew-prod_letsencrypt"
 DOMAIN_PRIMARY="erp.cmcvn.edu.vn"
 DOMAIN_SECONDARY="hoc.cmcvn.edu.vn"
+# Dev hostnames share this same self-signed origin cert — one edge nginx serves prod + dev
+# vhosts, all behind Cloudflare "Full" (which does not validate the origin SAN, but keeping the
+# SAN complete future-proofs a possible move to "Full (strict)").
+DOMAIN_DEV_ERP="deverp.cmcvn.edu.vn"
+DOMAIN_DEV_LMS="devlms.cmcvn.edu.vn"
 CERT_PATH="live/${DOMAIN_PRIMARY}/fullchain.pem"
 KEY_PATH="live/${DOMAIN_PRIMARY}/privkey.pem"
 # Pinned digest (alpine:3.20, pulled+verified from the live VPS's own registry mirror on
@@ -29,7 +34,7 @@ exists() {
 }
 
 if ! exists; then
-  echo "→ no origin cert found in ${VOLUME}; generating self-signed SAN cert (${DOMAIN_PRIMARY}+${DOMAIN_SECONDARY})"
+  echo "→ no origin cert found in ${VOLUME}; generating self-signed SAN cert (${DOMAIN_PRIMARY}+${DOMAIN_SECONDARY}+${DOMAIN_DEV_ERP}+${DOMAIN_DEV_LMS})"
   docker run --rm -v "${VOLUME}:/etc/letsencrypt" "$ALPINE_IMG" sh -c "
     set -e
     apk add --no-cache openssl >/dev/null 2>&1
@@ -38,7 +43,7 @@ if ! exists; then
       -keyout /etc/letsencrypt/${KEY_PATH} \
       -out /etc/letsencrypt/${CERT_PATH} \
       -subj '/CN=${DOMAIN_PRIMARY}' \
-      -addext 'subjectAltName=DNS:${DOMAIN_PRIMARY},DNS:${DOMAIN_SECONDARY}'
+      -addext 'subjectAltName=DNS:${DOMAIN_PRIMARY},DNS:${DOMAIN_SECONDARY},DNS:${DOMAIN_DEV_ERP},DNS:${DOMAIN_DEV_LMS}'
   "
 fi
 
@@ -51,11 +56,13 @@ VERIFY_OUT=$(docker run --rm -v "${VOLUME}:/le" "$ALPINE_IMG" sh -c "
   exit 1
 }
 
-echo "$VERIFY_OUT" | grep -q "$DOMAIN_PRIMARY" && echo "$VERIFY_OUT" | grep -q "$DOMAIN_SECONDARY" || {
-  echo "FATAL: origin cert in ${VOLUME} is missing required SANs (${DOMAIN_PRIMARY}, ${DOMAIN_SECONDARY})" >&2
-  echo "$VERIFY_OUT" >&2
-  exit 1
-}
+for san in "$DOMAIN_PRIMARY" "$DOMAIN_SECONDARY" "$DOMAIN_DEV_ERP" "$DOMAIN_DEV_LMS"; do
+  echo "$VERIFY_OUT" | grep -q "$san" || {
+    echo "FATAL: origin cert in ${VOLUME} is missing required SAN (${san})" >&2
+    echo "$VERIFY_OUT" >&2
+    exit 1
+  }
+done
 
 echo "✓ origin cert OK:"
 echo "$VERIFY_OUT"
