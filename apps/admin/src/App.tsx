@@ -71,6 +71,7 @@ import { ShiftConfigPanel } from './shift-config-panel';
 import { Workspace, type NavAction } from './class-workspace';
 
 import { Shell, buildNavGroups, SECTION_TITLES, type SectionKey } from './shell';
+import { moduleOf } from './nav-modules';
 import { applyAdminMetadata, getAdminMetadata } from './link-preview-metadata';
 import { StaffProfilePanel } from './staff-profile';
 import { ProfileSettingsPanel } from './profile-settings-panel';
@@ -564,6 +565,7 @@ function Dashboard() {
   // Single "is this a real section?" check, reused by the active-section pick and the redirect.
   const knownSection = !!(rawSection && ALL_SECTION_KEYS.has(rawSection));
   const activeSection: SectionKey = knownSection ? (rawSection as SectionKey) : defaultSection(me);
+  const activeModuleKey = moduleOf(activeSection);
 
   // Normalise "/" or an unknown section to the canonical persona-default path so the URL bar
   // always reflects a real section.
@@ -888,6 +890,7 @@ function Dashboard() {
       onSectionChange={handleSectionChange}
       onSearchNavigate={handleSearchNavigate}
       navGroups={navGroups}
+      activeModuleKey={activeModuleKey}
       sectionTitle={SECTION_TITLES[activeSection]}
     >
       {renderContent()}
