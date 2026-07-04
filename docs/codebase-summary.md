@@ -6,7 +6,7 @@
 > For roadmap/status, read [roadmap.md](roadmap.md). This file describes *what
 > exists today* and *where to find it*.
 
-Last reviewed: 2026-07-03 (branch `develop`).
+Last reviewed: 2026-07-04 (branch `develop`).
 
 ## What this is
 

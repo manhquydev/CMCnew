@@ -34,7 +34,7 @@ Thực tế hiện tại: **3 lãnh đạo chủ chốt + vai trò Giáo viên +
 
 ## Lộ trình build (slice dọc)
 - **S1 — Lõi tính lương:** `packages/domain-payroll` (PIT 7 bậc + prorate + kpiRatio + assemblePayslip) **thuần + test**. *Done:* test phủ các mốc bậc thuế + xếp loại KPI + prorate.
-- **S2 — Hồ sơ & mức lương:** `EmploymentProfile` + `SalaryRate` (effective-dated) + RLS hr-only + router config + UI HR. *Done:* tạo hồ sơ + mức lương, đọc bị chặn với non-HR (live).
+- **S2 — Hồ sơ & mức lương:** `EmploymentProfile` (with auto-incrementing `employeeCode` field CMC0001..) + `SalaryRate` (effective-dated) + RLS hr-only + router config + UI HR. *Done:* tạo hồ sơ + mức lương + mã nhân sự, đọc bị chặn với non-HR (live).
 - **S3 — Payslip:** tính (draft) → finalize → paid (gating) + RLS + audit + UI HR. *Done:* tính kỳ → finalize đóng băng → paid; non-HR 403; số khớp domain-payroll (live).
 - **S4 — Bảng lương kỳ & chi trả:** danh sách payslip theo kỳ, tổng quỹ lương, đánh dấu đã trả hàng loạt; (xem payslip cá nhân → portal nhân sự, sau).
 

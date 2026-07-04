@@ -1412,10 +1412,20 @@ model EmploymentProfile {
   bankName    String?   @map("bank_name")
   archivedAt  DateTime? @map("archived_at")
   createdAt   DateTime  @default(now()) @map("created_at")
+  /// Mã nhân sự CMC + đệm 4 số (CMC0001…), cấp một lần khi tạo hồ sơ, không đổi khi update.
+  employeeCode String?  @unique @map("employee_code")
 
   @@index([facilityId])
   @@index([managerId])
   @@map("employment_profile")
+}
+
+/// Bộ đếm mã nhân sự — global 1 dòng (id cố định = 1). Theo pattern ShiftCodeCounter/ReceiptCodeCounter.
+model EmployeeCodeCounter {
+  id      Int @id @default(1)
+  lastSeq Int @default(0) @map("last_seq")
+
+  @@map("employee_code_counter")
 }
 
 /// Snapshot số liệu cuộc gọi Callio theo (nhân sự, kỳ) — đóng băng để payslip tái lập (decision

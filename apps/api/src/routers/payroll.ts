@@ -480,6 +480,18 @@ export const payrollRouter = router({
           },
         });
 
+        // Cấp mã nhân sự một lần khi hồ sơ chưa có mã (backfill Phase 1 chạy trước, counter tiếp nối).
+        if (!profile.employeeCode) {
+          const counter = await tx.$queryRawUnsafe<{ next: number }[]>(
+            `INSERT INTO employee_code_counter (id, last_seq) VALUES (1, 1)
+             ON CONFLICT (id) DO UPDATE SET last_seq = employee_code_counter.last_seq + 1
+             RETURNING last_seq AS next`,
+          );
+          const employeeCode = `CMC${String(counter[0]?.next ?? 1).padStart(4, '0')}`;
+          await tx.employmentProfile.update({ where: { id: profile.id }, data: { employeeCode } });
+          profile.employeeCode = employeeCode;
+        }
+
         // Audit: grade change (with reason) and/or sensitive-field change (field names only).
         const auditParts: string[] = [];
         if (gradeChanged) auditParts.push(`Đổi bậc lương ${existing!.grade}→${input.grade}: ${input.reason!.trim()}`);

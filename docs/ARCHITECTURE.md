@@ -14,13 +14,13 @@ A four-module subsystem for scheduling and tracking staff work time.
 | Module | Router | Purpose |
 |--------|--------|---------|
 | ShiftConfig | `shift-config.ts` | Shift group catalog (KINH_DOANH / GIAO_VIEN) with templates. Two default groups: KD has SINGLE selection with 3x 8h shifts; GV has MULTIPLE selection with 3x 4h shifts. |
-| ShiftRegistration | `shift-registration.ts` | Timesheet requests. Workflow: Draft -> Submitted -> Approved. Supports work/leave types. Manager chain resolved from EmploymentProfile.managerId or auto-resolved by role. Supersede chain replaces older approved registrations. |
+| ShiftRegistration | `shift-registration.ts` | Timesheet requests. Workflow: Draft -> Submitted -> Approved. Supports work/leave types. Manager chain resolved from EmploymentProfile.managerId or auto-resolved by role. Supersede chain replaces older approved registrations. Create-lock enforces 1-ticket-at-a-time (no new registration if user has ANY draft/submitted ticket). Editable draft dates with future-date validation. List query returns staff identity (displayName, email, employeeCode). |
 | CheckInOut | `check-in-out.ts` | Punch-based attendance. Earliest punch = check-in, latest = check-out. Penalty: 500d/min late, 1000d/min early leave. IP validated against FacilityNetwork CIDR rules. |
 | FacilityNetwork | `facility-ip.ts` | IP whitelist per facility (supports CIDR ranges) for check-in validation. |
 
 ### Schema
 
-6 new models in `packages/db/prisma/schema.prisma`: `ShiftGroup`, `ShiftTemplate`, `ShiftRegistration`, `ShiftRegistrationEntry`, `TimePunch`, `FacilityNetwork`, plus `ShiftCodeCounter` (atomic sequence for SR-YYYY-NNNN codes).
+6 shift-specific models in `packages/db/prisma/schema.prisma`: `ShiftGroup`, `ShiftTemplate`, `ShiftRegistration`, `ShiftRegistrationEntry`, `TimePunch`, `FacilityNetwork`, plus `ShiftCodeCounter` (atomic sequence for SR-YYYY-NNNN codes). Related model: `EmployeeCodeCounter` (global 1-row counter for auto-incrementing `EmploymentProfile.employeeCode` in format CMC0001..).
 
 ### Data flow
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { trpc, useSession, notifyError, notifySuccess, StatusBadge, type StatusDef } from '@cmc/ui';
-import { Alert, Badge, Button, Card, Checkbox, Group, Radio, Stack, Table, Text } from '@mantine/core';
+import { Alert, Badge, Button, Card, Checkbox, Group, Stack, Table, Text } from '@mantine/core';
 import { DateInput } from '@mantine/dates';
 
 // Preserves original color semantics: gray→draft, blue→pending, green→active.
@@ -146,6 +146,19 @@ export function ShiftRegDetailPanel({ regId, onBack }: { regId: string; onBack: 
     } finally { setBusy(false); }
   }
 
+  // Update draft's date range — reload grid + entries on success
+  async function handleUpdateDates(fromDate: string, toDate: string) {
+    if (!reg?.id) return;
+    setBusy(true);
+    try {
+      await trpc.shiftRegistration.updateDates.mutate({ id: reg.id, fromDate, toDate });
+      notifySuccess('Đã cập nhật khoảng ngày');
+      loadReg();
+    } catch (e) {
+      notifyError(e, 'Không cập nhật được khoảng ngày');
+    } finally { setBusy(false); }
+  }
+
   // Create new registration
   async function handleCreate(fromDate: string, toDate: string) {
     if (!fid) return;
@@ -179,6 +192,9 @@ export function ShiftRegDetailPanel({ regId, onBack }: { regId: string; onBack: 
   const isDraft = reg.status === 'draft';
   const canWithdraw = me.isSuperAdmin || me.roles.some((r: string) => ['giao_vien', 'sale', 'cskh'].includes(r));
   const templates = group?.templates ?? [];
+  const tomorrow = dayjs().add(1, 'day').toDate();
+  const regFromDate = dayjs(reg.fromDate).format('YYYY-MM-DD');
+  const regToDate = dayjs(reg.toDate).format('YYYY-MM-DD');
 
   // Calculate daily and total hours
   function dayHours(date: string): number {
@@ -214,14 +230,47 @@ export function ShiftRegDetailPanel({ regId, onBack }: { regId: string; onBack: 
             <Text size="xs" style={{ color: 'var(--cmc-text-muted)' }}>Phiếu</Text>
             <Text fw={600}>{reg.code ?? 'Nháp'}</Text>
           </div>
-          <div>
-            <Text size="xs" style={{ color: 'var(--cmc-text-muted)' }}>Từ ngày</Text>
-            <Text fw={600}>{dayjs(reg.fromDate).format('DD/MM/YYYY')}</Text>
-          </div>
-          <div>
-            <Text size="xs" style={{ color: 'var(--cmc-text-muted)' }}>Đến ngày</Text>
-            <Text fw={600}>{dayjs(reg.toDate).format('DD/MM/YYYY')}</Text>
-          </div>
+          {isDraft ? (
+            <>
+              <div>
+                <Text size="xs" style={{ color: 'var(--cmc-text-muted)' }} mb={4}>Từ ngày</Text>
+                <DateInput
+                  value={dayjs(regFromDate).toDate()}
+                  minDate={tomorrow}
+                  disabled={busy}
+                  valueFormat="DD/MM/YYYY"
+                  onChange={(d) => {
+                    if (!d) return;
+                    void handleUpdateDates(dayjs(d).format('YYYY-MM-DD'), regToDate);
+                  }}
+                />
+              </div>
+              <div>
+                <Text size="xs" style={{ color: 'var(--cmc-text-muted)' }} mb={4}>Đến ngày</Text>
+                <DateInput
+                  value={dayjs(regToDate).toDate()}
+                  minDate={dayjs(regFromDate).isAfter(tomorrow) ? dayjs(regFromDate).toDate() : tomorrow}
+                  disabled={busy}
+                  valueFormat="DD/MM/YYYY"
+                  onChange={(d) => {
+                    if (!d) return;
+                    void handleUpdateDates(regFromDate, dayjs(d).format('YYYY-MM-DD'));
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <Text size="xs" style={{ color: 'var(--cmc-text-muted)' }}>Từ ngày</Text>
+                <Text fw={600}>{dayjs(reg.fromDate).format('DD/MM/YYYY')}</Text>
+              </div>
+              <div>
+                <Text size="xs" style={{ color: 'var(--cmc-text-muted)' }}>Đến ngày</Text>
+                <Text fw={600}>{dayjs(reg.toDate).format('DD/MM/YYYY')}</Text>
+              </div>
+            </>
+          )}
           <div>
             <Text size="xs" style={{ color: 'var(--cmc-text-muted)' }}>Nhóm</Text>
             <Text fw={600}>{group?.name ?? '—'}</Text>
@@ -270,11 +319,12 @@ export function ShiftRegDetailPanel({ regId, onBack }: { regId: string; onBack: 
                   {templates.map((t) => (
                     <Table.Td key={t.id} align="center">
                       {group?.selectionMode === 'SINGLE' ? (
-                        <Radio
+                        <Checkbox
+                          radius="xl"
                           checked={cur.has(t.id)}
                           onChange={() => isDraft && toggle(date, t.id)}
                           disabled={!isDraft}
-                          styles={{ radio: { cursor: isDraft ? 'pointer' : 'default' } }}
+                          styles={{ input: { cursor: isDraft ? 'pointer' : 'default' } }}
                         />
                       ) : (
                         <Checkbox
@@ -332,9 +382,10 @@ export function ShiftRegDetailPanel({ regId, onBack }: { regId: string; onBack: 
 
 /// New registration creation form.
 function NewRegForm({ onCreate, onBack }: { onCreate: (from: string, to: string) => Promise<void>; onBack: () => void }) {
-  const today = dayjs().format('YYYY-MM-DD');
+  const tomorrow = dayjs().add(1, 'day').format('YYYY-MM-DD');
   const nextMonth = dayjs().add(1, 'month').format('YYYY-MM-DD');
-  const [fromDate, setFromDate] = useState(today);
+  const minDate = dayjs().add(1, 'day').toDate();
+  const [fromDate, setFromDate] = useState(tomorrow);
   const [toDate, setToDate] = useState(nextMonth);
   const [busy, setBusy] = useState(false);
 
@@ -362,6 +413,7 @@ function NewRegForm({ onCreate, onBack }: { onCreate: (from: string, to: string)
               value={fromDate ? dayjs(fromDate).toDate() : null}
               onChange={(d) => setFromDate(d ? dayjs(d).format('YYYY-MM-DD') : '')}
               valueFormat="DD/MM/YYYY"
+              minDate={minDate}
             />
           </div>
           <div>
@@ -370,6 +422,7 @@ function NewRegForm({ onCreate, onBack }: { onCreate: (from: string, to: string)
               value={toDate ? dayjs(toDate).toDate() : null}
               onChange={(d) => setToDate(d ? dayjs(d).format('YYYY-MM-DD') : '')}
               valueFormat="DD/MM/YYYY"
+              minDate={minDate}
             />
           </div>
         </Group>
