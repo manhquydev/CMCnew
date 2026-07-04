@@ -28,6 +28,7 @@ export {
 export { FacilityPicker, type FacilityOption, type FacilityPickerProps } from './facility-picker.js';
 export { ViewSwitcher, useViewSwitcher, type ViewMode, type ViewSwitcherProps } from './view-switcher.js';
 export { FilterBar, type FilterBarProps } from './filter-bar.js';
+export { toApiDate, toApiMonth, parseApiDate, parseApiMonth, fmtDate } from './date-format.js';
 export { BadgeShelf } from './badge-shelf.js';
 export { Leaderboard } from './leaderboard.js';
 export { NotificationCenter } from './notification-center.js';
