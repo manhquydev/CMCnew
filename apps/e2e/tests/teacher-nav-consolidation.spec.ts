@@ -1,9 +1,11 @@
 import { test, expect } from '@playwright/test';
 
-// Verifies the teacher nav consolidation (Lịch 360): a giao_vien-only account sees 3
-// aggregate nav sections (Lịch dạy, Quản lý học sinh, Lương & chấm công) instead of the
-// 9 original standalone items, and each tab inside the aggregate screens still respects
-// its own underlying permission.
+// Verifies the teacher nav consolidation (Lịch 360): a giao_vien-only account's module rail
+// (Plan D: module + sub-tab IA) resolves to 5 modules with a reduced/consolidated set of
+// screens per module, instead of the 9 original standalone leaf sections. "Lớp học" and
+// "Nhân sự" each collapse to a single visible sub-tab (student-mgmt / payroll-checkin), so
+// their SubTabBar is suppressed (design §5.4) — the rail shows the MODULE label, and clicking
+// it lands directly on the sole consolidated aggregate screen (itself internally tabbed).
 
 const EMAIL = process.env.TEST_TEACHER_EMAIL ?? 'giaovien@cmc.local';
 const PASSWORD = process.env.TEST_ADMIN_PASSWORD ?? 'ChangeMe!123';
@@ -15,38 +17,42 @@ async function login(page: import('@playwright/test').Page) {
   await page.getByLabel('Email').fill(EMAIL);
   await page.getByLabel('Mật khẩu').fill(PASSWORD);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
-  await expect(page.locator('nav').getByText('Lịch dạy')).toBeVisible({ timeout: 10_000 });
+  // giao_vien-only's default landing module is "Giảng dạy" (section 'schedule').
+  await expect(page.locator('nav a').filter({ hasText: 'Giảng dạy' })).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe('teacher nav consolidation', () => {
-  test('giao_vien sees the 3 consolidated sections, not the 9 originals', async ({ page }) => {
+  test('giao_vien sees exactly the 5 modules with >=1 visible sub-tab, not the business/admin-only modules', async ({ page }) => {
     await login(page);
     // Anchored exact-text match — plain `hasText` substring matching would false-match e.g.
-    // the hidden label "Chấm công" against the visible aggregate label "Lương & chấm công".
+    // "CRM" against "CRM & Kinh doanh".
     const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const navLink = (label: string) => page.locator('nav a').filter({ hasText: new RegExp(`^${escapeRegExp(label)}$`) });
 
-    await expect(navLink('Lịch dạy')).toBeVisible();
-    await expect(navLink('Quản lý học sinh')).toBeVisible();
-    await expect(navLink('Lương & chấm công')).toBeVisible();
+    await expect(navLink('Giảng dạy')).toBeVisible();
+    await expect(navLink('Lớp học')).toBeVisible();
+    await expect(navLink('CRM & Kinh doanh')).toBeVisible();
+    await expect(navLink('Nhân sự')).toBeVisible();
+    await expect(navLink('Công ca')).toBeVisible();
 
-    for (const hidden of ['Điểm danh', 'Chấm bài', 'Học bạ', 'Lớp học', 'Khóa học', 'Họp PH', 'Phiếu lương của tôi', 'Chấm công']) {
-      await expect(navLink(hidden)).toHaveCount(0);
+    // Modules with zero visible sub-tabs for a teacher-only account must not render at all.
+    for (const hiddenModule of ['Học sinh', 'Tài chính', 'Quản trị']) {
+      await expect(navLink(hiddenModule)).toHaveCount(0);
     }
   });
 
-  test('Quản lý học sinh shows Lớp học/Khóa học/Học bạ as tabs', async ({ page }) => {
+  test('Lớp học (single sub-tab, bar suppressed) shows the consolidated Quản lý học sinh screen with Lớp học/Khóa học/Học bạ as tabs', async ({ page }) => {
     await login(page);
-    await page.locator('nav a').filter({ hasText: 'Quản lý học sinh' }).click();
+    await page.locator('nav a').filter({ hasText: 'Lớp học' }).click();
 
     await expect(page.getByRole('tab', { name: 'Lớp học' })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('tab', { name: 'Khóa học' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Học bạ' })).toBeVisible();
   });
 
-  test('Lương & chấm công shows Phiếu lương/Chấm công as tabs', async ({ page }) => {
+  test('Nhân sự (single sub-tab, bar suppressed) shows the consolidated Chấm công & lương screen with Phiếu lương/Chấm công as tabs', async ({ page }) => {
     await login(page);
-    await page.locator('nav a').filter({ hasText: 'Lương & chấm công' }).click();
+    await page.locator('nav a').filter({ hasText: 'Nhân sự' }).click();
 
     await expect(page.getByRole('tab', { name: 'Phiếu lương' })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('tab', { name: 'Chấm công' })).toBeVisible();

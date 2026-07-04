@@ -41,7 +41,8 @@ async function loginAdmin(page: Page) {
   await page.getByLabel('Email').fill(EMAIL);
   await page.getByLabel('Mật khẩu').fill(PASSWORD);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
-  await expect(page.locator('nav').getByText('Tổng quan')).toBeVisible({ timeout: 10_000 });
+  // super_admin's default landing module is "Quản trị" (Plan D: module rail, not leaf nav).
+  await expect(page.locator('nav a').filter({ hasText: 'Quản trị' })).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe('Room edit + archive', () => {
