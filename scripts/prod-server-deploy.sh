@@ -37,14 +37,21 @@ for i in $(seq 1 30); do
 done
 
 echo "=== [2/5] migrate (builds api image) ==="
-$COMPOSE --profile migrate run --rm api-migrate
+# --build is required here: `docker compose run` without it reuses whatever image is already
+# tagged cmcnew-prod-api-migrate, which can be stale (built from an older checkout) even though
+# the source on disk is current — this silently skips newly-added migrations. Same failure class
+# as the 2026-07-02 Jenkins deploy incident (docs/journals/260702-2100-jenkins-migrate-stale-image-fix.md),
+# found again live in this script during the 2026-07-05 clean prod reinstall (3 migrations missing:
+# manual_attendance_ticket, manual_attendance_notif_events, employee_code — until forced --build).
+$COMPOSE --profile migrate run --rm --build api-migrate
 
 echo "=== [3/5] align cmc_app password with DB_APP_PASSWORD ==="
 # The RLS migration creates cmc_app with a default password; set it to the runtime secret.
 $COMPOSE exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -c "ALTER ROLE cmc_app PASSWORD '$DB_APP_PASSWORD';"
 
 echo "=== [4/5] seed (super_admin + 2 directors, idempotent) ==="
-$COMPOSE --profile seed run --rm api-seed
+# Same staleness risk as api-migrate above — force a fresh image.
+$COMPOSE --profile seed run --rm --build api-seed
 
 echo "=== [5/5] build + start all services ==="
 $COMPOSE up -d --build
