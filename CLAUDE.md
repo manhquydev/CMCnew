@@ -19,6 +19,22 @@ Lane-dependent context (`README.md`, `docs/HARNESS.md`, `docs/ARCHITECTURE.md`,
 imported — read it per lane, as `docs/CONTEXT_RULES.md` prescribes.
 <!-- HARNESS:END -->
 
+## Decision Lookup (Hard Rule)
+
+Before editing any file matched by a row in `docs/DECISION_INDEX.md`, MUST:
+1. Read the linked decision doc under `docs/decisions/`.
+2. Restate the governing rule in the response, before writing any code.
+3. If the planned change would contradict that rule, STOP — do not silently
+   reinterpret or override it. Follow `.claude/rules/review-audit-self-decision.md`
+   → "User Decisions": present the original decision, the new concern, the
+   trade-off, and concrete options, then wait for the user.
+
+Only update `docs/DECISION_INDEX.md` when: (a) a new decision doc is created per
+`docs/FEATURE_INTAKE.md`'s hard-gate, or (b) the user explicitly confirms a
+changed decision mid-work (new decision doc supersedes the old one; index row
+updated to point at it; old doc kept, not deleted). Never add or edit an index
+row speculatively without a backing decision doc.
+
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
