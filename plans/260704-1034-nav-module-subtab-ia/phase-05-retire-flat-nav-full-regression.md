@@ -1,6 +1,51 @@
 # Phase 5 — Retire flat-nav remnants + full regression
 
-Status: pending
+Status: done
+
+## Outcome (2026-07-04)
+
+`SidebarItem`/`GroupLabel` were already fully replaced (not left dead) in Phase 1's
+`ModuleItem`/`SubTabBar` rewrite — grep-confirmed zero remaining references anywhere in
+`apps/admin/src` (also independently confirmed by the Phase 1 code review). `SECTION_TITLES` and
+`ALL_SECTION_KEYS` unchanged and still consumed as designed. No dead-code deletion needed.
+
+### Full regression matrix — all green
+
+- **Every role's nav**: deterministic `buildNavGroups()` checks across 12 role combinations
+  (super_admin, `giao_vien`-only, `giam_doc_dao_tao`, `giam_doc_kinh_doanh`, `ke_toan`, `sale`,
+  `ctv_mkt`, `cskh`, `hr`, multi-role `giao_vien`+`giam_doc_dao_tao`) across Phases 1-4 — all
+  matched the verification matrices (2 stale plan-doc predictions corrected in Phase 3, not
+  mechanism bugs).
+- **Every section reachable**: the Phase 1 derivation-completeness guard test asserts every
+  `SectionKey` except `profile` maps to exactly one module (total, non-overlapping).
+- **Deep-links**: live-verified `/crm/opportunities/:oppId`, plus direct navigation to `/finance`,
+  `/reconcile-worklist`, `/schedule`, `/classes`, `/kpi`, `/biz-director-cockpit` — all resolve to
+  the correct module + subtab.
+- **Search navigation**: live-verified students→`hoc-sinh` module with the exact record
+  pre-selected; CRM opportunity→`crm-kinh-doanh`+`crm` with the record rendered.
+- **Default landing**: super_admin→`overview`/`quan-tri` confirmed live; director/teacher/staff
+  landings confirmed structurally (`defaultSection` is completely unchanged code, and `moduleOf`
+  is a pure lookup on whatever section it returns).
+- **Cross-module jumps**: `goToClass` (schedule→class workspace with the batch pre-selected) and
+  cockpit→KPI (`nhan-su` module correctly activated) both live-verified.
+- **Nav tests**: all 4 `__tests__/nav-*.test.ts` green (28 tests); the 3 untouched suites are
+  byte-for-byte identical in every diff since Phase 1 — the per-role parity gate holds throughout.
+- **Typecheck / lint**: `pnpm -w typecheck` clean across all 12 workspace packages; ESLint clean
+  on every touched file (one pre-existing, unrelated warning in `course-exercise-manager.tsx`,
+  a file this plan never touches).
+- **gitnexus**: `detect_changes({scope:'compare', base_ref:'feat/phase-d-facility-picker-and-stitch-wireframes'})`
+  confirms only `App.tsx` (`Dashboard`), `shell.tsx` (`Shell`/`buildNavGroups`/`ModuleItem`/
+  `SubTabBar`/`firstVisibleSubtab`), and `nav-modules.ts` (all 3 exports) changed — zero
+  business-logic symbols touched, matching the plan's acceptance criterion exactly.
+- **`pnpm -w test` (unit)**: the only failure (`@cmc/e2e#test`, `SyntaxError: Cannot use
+  'import.meta' outside a module`) was confirmed via `git checkout` to the base branch to be
+  pre-existing — identical failure with zero Plan D changes present. Not a regression.
+- **Code review**: the mechanism was reviewed once in Phase 1 (zero blocking findings); Phases
+  2-4 made no code changes (pure verification + one comment fix in Phase 3, itself reviewed by
+  re-running the full test suite + typecheck after the edit). No new code exists for Phase 5 to
+  review.
+
+Plan D is ready for PR.
 Blocked by: Phases 2, 3, 4 (all modules verified).
 Owns (files): `shell.tsx` (remove dead `SidebarItem`/`GroupLabel` if fully unused), any
 lingering flat-nav helpers. Full-app regression.

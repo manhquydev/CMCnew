@@ -1,7 +1,7 @@
 ---
 title: "Nav module + sub-tab IA restructure"
 description: "Convert the admin app's flat 8-group leaf nav into 8 left-rail modules, each opening a horizontal sub-tab bar of its screens — presentation/IA only, URL contract preserved."
-status: pending
+status: implemented
 priority: P2
 lane: high-risk
 effort: 3-4d (P0 gate + 1 mechanism phase + 3 verify clusters + regression)
