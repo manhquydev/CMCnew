@@ -33,6 +33,7 @@ import { IconCircleCheck, IconClock, IconPencil, IconAlertCircle, IconStar, Icon
 import { ClimbView } from './climb-view';
 import { SessionEvidenceTab } from './session-evidence-tab';
 import { CurriculumSessionsTab } from './curriculum-sessions-tab';
+import { AttendanceHistoryCard } from './attendance-history-card';
 
 export type StudentTab = 'overview' | 'exercises' | 'results' | 'gradebook' | 'badges' | 'ranking' | 'rewards' | 'courses' | 'sessions' | 'schedule';
 
@@ -1117,7 +1118,10 @@ export function StudentView({ principal, activeTab, onTabChange: _onTabChange, o
         return <CoursesTab refreshKey={refreshKey} />;
       case 'sessions':
         return principal.studentIds[0] ? (
-          <SessionEvidenceTab studentId={principal.studentIds[0]} refreshKey={refreshKey} />
+          <Stack gap="xl">
+            <AttendanceHistoryCard studentId={principal.studentIds[0]} refreshKey={refreshKey} />
+            <SessionEvidenceTab studentId={principal.studentIds[0]} refreshKey={refreshKey} />
+          </Stack>
         ) : (
           <Text c="dimmed">Không có học sinh liên kết.</Text>
         );

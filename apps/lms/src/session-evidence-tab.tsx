@@ -60,7 +60,7 @@ export function SessionEvidenceTab({
   if (items.length === 0) {
     return (
       <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-        <Text c="dimmed">Chưa có ảnh hoặc nhận xét buổi học được publish.</Text>
+        <Text c="dimmed">Chưa có ảnh hoặc nhận xét buổi học được xuất bản.</Text>
       </Card>
     );
   }
@@ -80,7 +80,7 @@ export function SessionEvidenceTab({
                   </Text>
                 </div>
                 <Badge color="teal" variant="light" radius="xl">
-                  Đã publish
+                  Đã xuất bản
                 </Badge>
               </Group>
 

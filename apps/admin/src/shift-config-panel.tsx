@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, useSession, notifyError, notifySuccess } from '@cmc/ui';
+import { trpc, useSession, notifyError, notifySuccess, required } from '@cmc/ui';
+import { useForm } from '@mantine/form';
+import { useDisclosure } from '@mantine/hooks';
 import {
-  ActionIcon, Badge, Button, Card, Group, Loader, Select, Stack, Table, Text, TextInput, NumberInput,
+  ActionIcon, Badge, Button, Card, Group, Loader, Modal, Select, Stack, Table, Text, TextInput, NumberInput,
 } from '@mantine/core';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 
@@ -20,18 +22,36 @@ export function ShiftConfigPanel() {
   const [groups, setGroups] = useState<ShiftGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [grpCode, setGrpCode] = useState('');
-  const [grpName, setGrpName] = useState('');
-  const [grpMode, setGrpMode] = useState<'SINGLE' | 'MULTIPLE'>('SINGLE');
+  const [grpOpened, { open: openGrp, close: closeGrp }] = useDisclosure(false);
   const [savingGrp, setSavingGrp] = useState(false);
+  const grpForm = useForm({
+    initialValues: { code: '', name: '', selectionMode: 'SINGLE' as 'SINGLE' | 'MULTIPLE' },
+    validate: {
+      code: required('Nhập mã nhóm ca'),
+      name: required('Nhập tên nhóm ca'),
+    },
+  });
 
-  const [tmplGroupId, setTmplGroupId] = useState<string | null>(null);
-  const [tmplCode, setTmplCode] = useState('');
-  const [tmplName, setTmplName] = useState('');
-  const [tmplStart, setTmplStart] = useState('');
-  const [tmplEnd, setTmplEnd] = useState('');
-  const [tmplHours, setTmplHours] = useState<number | ''>('');
+  const [tmplOpened, { open: openTmpl, close: closeTmpl }] = useDisclosure(false);
   const [savingTmpl, setSavingTmpl] = useState(false);
+  const tmplForm = useForm({
+    initialValues: {
+      groupId: '' as string | null,
+      code: '',
+      name: '',
+      start: '',
+      end: '',
+      hours: '' as number | '',
+    },
+    validate: {
+      groupId: required('Chọn nhóm ca'),
+      code: required('Nhập mã ca'),
+      name: required('Nhập tên ca'),
+      start: required('Nhập giờ bắt đầu'),
+      end: required('Nhập giờ kết thúc'),
+      hours: (v) => (v === '' || v === null ? 'Nhập số giờ' : null),
+    },
+  });
 
   const loadGroups = useCallback((fid: number) => {
     setLoading(true);
@@ -50,27 +70,30 @@ export function ShiftConfigPanel() {
 
     const fid = activeFacilityId ?? me.facilityIds[0];
 
-  async function createGroup() {
-    if (!fid || !grpCode.trim() || !grpName.trim()) return;
+  async function createGroup(values: typeof grpForm.values) {
+    if (!fid) return;
     setSavingGrp(true);
     try {
-      await trpc.shiftConfig.create.mutate({ facilityId: fid, code: grpCode.trim(), name: grpName.trim(), selectionMode: grpMode });
-      notifySuccess('Đã tạo nhóm ca'); setGrpCode(''); setGrpName('');
+      await trpc.shiftConfig.create.mutate({ facilityId: fid, code: values.code.trim(), name: values.name.trim(), selectionMode: values.selectionMode });
+      notifySuccess('Đã tạo nhóm ca');
+      closeGrp();
+      grpForm.reset();
       loadGroups(fid);
     } catch (e) { notifyError(e, 'Tạo nhóm ca thất bại'); }
     finally { setSavingGrp(false); }
   }
 
-  async function createTemplate() {
-    if (!fid || !tmplGroupId || !tmplCode.trim() || !tmplName.trim() || !tmplStart || !tmplEnd || tmplHours === '') return;
+  async function createTemplate(values: typeof tmplForm.values) {
+    if (!fid || !values.groupId || values.hours === '') return;
     setSavingTmpl(true);
     try {
       await trpc.shiftConfig.createTemplate.mutate({
-        facilityId: fid, shiftGroupId: tmplGroupId, code: tmplCode.trim(), name: tmplName.trim(),
-        startTime: tmplStart, endTime: tmplEnd, hours: Number(tmplHours),
+        facilityId: fid, shiftGroupId: values.groupId, code: values.code.trim(), name: values.name.trim(),
+        startTime: values.start, endTime: values.end, hours: Number(values.hours),
       });
       notifySuccess('Đã tạo mẫu ca');
-      setTmplCode(''); setTmplName(''); setTmplStart(''); setTmplEnd(''); setTmplHours('');
+      closeTmpl();
+      tmplForm.reset();
       loadGroups(fid);
     } catch (e) { notifyError(e, 'Tạo mẫu ca thất bại'); }
     finally { setSavingTmpl(false); }
@@ -92,28 +115,10 @@ export function ShiftConfigPanel() {
         ))}
       </Group>
 
-      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-        <Text fw={700} size="sm" mb="md" style={{ color: 'var(--cmc-text)' }}>Thêm nhóm ca</Text>
-        <Group gap="sm" align="flex-end">
-          <TextInput label="Mã" placeholder="KINH_DOANH" value={grpCode} onChange={(e) => setGrpCode(e.target.value)} style={{ flex: 1 }} />
-          <TextInput label="Tên" placeholder="Kinh doanh" value={grpName} onChange={(e) => setGrpName(e.target.value)} style={{ flex: 1 }} />
-          <Select label="Chế độ" data={[{ value: 'SINGLE', label: '1 ca/ngày' }, { value: 'MULTIPLE', label: 'Nhiều ca' }]} value={grpMode} onChange={(_v) => setGrpMode((_v ?? 'SINGLE') as 'SINGLE' | 'MULTIPLE')} w={140} />
-          <Button leftSection={<IconPlus size={16} />} loading={savingGrp} onClick={createGroup}>Thêm</Button>
-        </Group>
-      </Card>
-
-      <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
-        <Text fw={700} size="sm" mb="md" style={{ color: 'var(--cmc-text)' }}>Thêm mẫu ca</Text>
-        <Group gap="sm" align="flex-end" wrap="wrap">
-          <Select label="Nhóm ca" data={groups.map((g) => ({ value: g.id, label: g.name }))} value={tmplGroupId} onChange={setTmplGroupId} w={150} />
-          <TextInput label="Mã" placeholder="CA1" value={tmplCode} onChange={(e) => setTmplCode(e.target.value)} w={80} />
-          <TextInput label="Tên" placeholder="Ca sáng" value={tmplName} onChange={(e) => setTmplName(e.target.value)} style={{ flex: 1, minWidth: 120 }} />
-          <TextInput label="Bắt đầu" placeholder="08:00" value={tmplStart} onChange={(e) => setTmplStart(e.target.value)} w={90} />
-          <TextInput label="Kết thúc" placeholder="12:00" value={tmplEnd} onChange={(e) => setTmplEnd(e.target.value)} w={90} />
-          <NumberInput label="Giờ" placeholder="4" value={tmplHours} onChange={(v) => setTmplHours(typeof v === 'number' ? v : '')} w={70} />
-          <Button leftSection={<IconPlus size={16} />} loading={savingTmpl} onClick={createTemplate}>Thêm</Button>
-        </Group>
-      </Card>
+      <Group gap="sm">
+        <Button leftSection={<IconPlus size={16} />} onClick={openGrp}>Tạo nhóm ca</Button>
+        <Button leftSection={<IconPlus size={16} />} variant="light" onClick={openTmpl}>Tạo mẫu ca</Button>
+      </Group>
 
       {loading ? (
         <Group justify="center"><Loader /></Group>
@@ -149,6 +154,50 @@ export function ShiftConfigPanel() {
           </Card>
         ))
       )}
+
+      <Modal opened={grpOpened} onClose={closeGrp} title="Tạo nhóm ca" radius="xl" centered>
+        <form onSubmit={grpForm.onSubmit(createGroup)}>
+          <Stack>
+            <TextInput label="Mã" placeholder="KINH_DOANH" withAsterisk {...grpForm.getInputProps('code')} />
+            <TextInput label="Tên" placeholder="Kinh doanh" withAsterisk {...grpForm.getInputProps('name')} />
+            <Select
+              label="Chế độ"
+              data={[{ value: 'SINGLE', label: '1 ca/ngày' }, { value: 'MULTIPLE', label: 'Nhiều ca' }]}
+              {...grpForm.getInputProps('selectionMode')}
+            />
+            <Group justify="flex-end" mt="xs">
+              <Button variant="subtle" onClick={closeGrp}>Hủy</Button>
+              <Button type="submit" variant="filled" radius={9999} loading={savingGrp}>Thêm</Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
+
+      <Modal opened={tmplOpened} onClose={closeTmpl} title="Tạo mẫu ca" radius="xl" centered>
+        <form onSubmit={tmplForm.onSubmit(createTemplate)}>
+          <Stack>
+            <Select
+              label="Nhóm ca"
+              withAsterisk
+              data={groups.map((g) => ({ value: g.id, label: g.name }))}
+              {...tmplForm.getInputProps('groupId')}
+            />
+            <Group grow>
+              <TextInput label="Mã" placeholder="CA1" withAsterisk {...tmplForm.getInputProps('code')} />
+              <TextInput label="Tên" placeholder="Ca sáng" withAsterisk {...tmplForm.getInputProps('name')} />
+            </Group>
+            <Group grow>
+              <TextInput label="Bắt đầu" placeholder="08:00" withAsterisk {...tmplForm.getInputProps('start')} />
+              <TextInput label="Kết thúc" placeholder="12:00" withAsterisk {...tmplForm.getInputProps('end')} />
+              <NumberInput label="Giờ" placeholder="4" withAsterisk {...tmplForm.getInputProps('hours')} />
+            </Group>
+            <Group justify="flex-end" mt="xs">
+              <Button variant="subtle" onClick={closeTmpl}>Hủy</Button>
+              <Button type="submit" variant="filled" radius={9999} loading={savingTmpl}>Thêm</Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
     </Stack>
   );
 }

@@ -56,6 +56,7 @@ type AssignmentLog = Awaited<ReturnType<typeof trpc.crm.assignmentHistory.query>
 type TestAppt = Awaited<ReturnType<typeof trpc.crm.testList.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
 type OwnReceipt = Awaited<ReturnType<typeof trpc.finance.receiptListOwn.query>>[number];
+type ClassBatchOption = Awaited<ReturnType<typeof trpc.classBatch.list.query>>[number];
 
 function testStatus(t: TestAppt): { label: string; tone: ReturnType<typeof statusOf>['tone'] } {
   if (t.status === 'done') return { label: 'Đã test', tone: 'active' };
@@ -81,16 +82,42 @@ const RECEIPT_STATUS: Record<string, { label: string; color: string }> = {
   cancelled: { label: 'Đã hủy', color: 'red' },
 };
 
-/** Two-column read-only field row (matches student/staff/schedule detail visual language). */
+/** Two-column read-only field row — matches @cmc/ui's record-detail.tsx label conventions
+ *  (160px right-aligned label) used across student/staff/schedule detail panels. */
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <Group justify="space-between" wrap="nowrap" gap="xl">
-      <Text size="sm" c="dimmed">
+    <Group wrap="nowrap" gap="md" align="center">
+      <Text
+        size="sm"
+        style={{
+          width: 'var(--cmc-form-label-w)',
+          minWidth: 'var(--cmc-form-label-w)',
+          flexShrink: 0,
+          textAlign: 'right',
+          fontSize: 'var(--cmc-form-label-font)',
+          color: 'var(--cmc-form-label-color)',
+        }}
+      >
         {label}
       </Text>
       {/* component="div" so non-text values (e.g. a <Badge>) don't nest a block inside a <p>. */}
-      <Text component="div" size="sm" style={{ textAlign: 'right' }}>
+      <Text component="div" size="sm" style={{ flex: 1, minWidth: 0 }}>
         {value ?? '—'}
+      </Text>
+    </Group>
+  );
+}
+
+/** Section heading with the shared accent-bar convention (matches record-detail.tsx). */
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <Group gap="xs" wrap="nowrap" align="center" mb="sm">
+      <span
+        aria-hidden="true"
+        style={{ display: 'inline-block', width: 4, height: 20, borderRadius: 2, background: 'var(--cmc-brand)' }}
+      />
+      <Text fw={600} style={{ fontSize: 'var(--cmc-form-group-title)', color: 'var(--cmc-text)' }}>
+        {children}
       </Text>
     </Group>
   );
@@ -120,7 +147,7 @@ function StageBar({
             key={s.value}
             size="xs"
             variant={active ? 'filled' : done ? 'light' : 'default'}
-            color={active ? 'cmcRed' : done ? 'teal' : 'gray'}
+            color={active ? 'cmc' : done ? 'teal' : 'gray'}
             disabled={disabled || active || done}
             onClick={() => onPick(s.value)}
             radius={0}
@@ -211,6 +238,7 @@ export function OpportunityDetailPanel({
   const [tests, setTests] = useState<TestAppt[]>([]);
   const [testsLoading, setTestsLoading] = useState(true);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [classBatches, setClassBatches] = useState<ClassBatchOption[]>([]);
   const [ownReceipts, setOwnReceipts] = useState<OwnReceipt[]>([]);
 
   const [reassignOpen, setReassignOpen] = useState(false);
@@ -228,6 +256,7 @@ export function OpportunityDetailPanel({
   const [receiptCourseId, setReceiptCourseId] = useState<string | null>(null);
   const [receiptYears, setReceiptYears] = useState('1');
   const [receiptVoucher, setReceiptVoucher] = useState('');
+  const [receiptClassBatchId, setReceiptClassBatchId] = useState<string | null>(null);
   const [receiptBusy, setReceiptBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -246,6 +275,10 @@ export function OpportunityDetailPanel({
             .query()
             .then(setCourses)
             .catch(() => setCourses([])),
+          trpc.classBatch.list
+            .query()
+            .then(setClassBatches)
+            .catch(() => setClassBatches([])),
           canCreateReceipt
             ? trpc.finance.receiptListOwn
                 .query({ opportunityId: oppId })
@@ -384,12 +417,14 @@ export function OpportunityDetailPanel({
         parentPhone: opp.contact.phone,
         parentName: opp.contact.fullName,
         studentName: (opp.studentName || opp.contact.fullName).trim(),
+        classBatchId: receiptClassBatchId ?? undefined,
       });
       notifySuccess(`Đã tạo phiếu nháp ${receipt.code ?? ''}`.trim());
       setReceiptOpen(false);
       setReceiptCourseId(null);
       setReceiptYears('1');
       setReceiptVoucher('');
+      setReceiptClassBatchId(null);
       refresh();
     } catch (e) {
       notifyError(e, 'Tạo phiếu thu thất bại');
@@ -516,7 +551,7 @@ export function OpportunityDetailPanel({
       </Group>
 
       {/* Clickable stage statusbar */}
-      <Card withBorder p="sm" radius="md">
+      <Card withBorder p="sm" radius="sm">
         <StageBar current={opp.stage} disabled={closed} onPick={pickStage} />
         {closed && (
           <Text size="xs" c="dimmed" mt="xs">
@@ -527,10 +562,8 @@ export function OpportunityDetailPanel({
 
       {/* Lead + attribution info */}
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xl">
-        <Card withBorder p="md" radius="md">
-          <Title order={6} mb="sm">
-            Thông tin liên hệ
-          </Title>
+        <Card withBorder p="lg" radius="sm">
+          <SectionHeading>Thông tin liên hệ</SectionHeading>
           <Stack gap="xs">
             <Field label="Liên hệ" value={opp.contact.fullName} />
             <Field label="Số điện thoại" value={opp.contact.phone} />
@@ -542,10 +575,8 @@ export function OpportunityDetailPanel({
             />
           </Stack>
         </Card>
-        <Card withBorder p="md" radius="md">
-          <Title order={6} mb="sm">
-            Phân bổ &amp; nguồn
-          </Title>
+        <Card withBorder p="lg" radius="sm">
+          <SectionHeading>Phân bổ &amp; nguồn</SectionHeading>
           <Stack gap="xs">
             <Field
               label="Người phụ trách"
@@ -560,10 +591,8 @@ export function OpportunityDetailPanel({
       </SimpleGrid>
 
       {canCreateReceipt && ownReceipts.length > 0 && (
-        <Card withBorder p="md" radius="md">
-          <Title order={6} mb="sm">
-            Phiếu thu của tôi
-          </Title>
+        <Card withBorder p="lg" radius="sm">
+          <SectionHeading>Phiếu thu của tôi</SectionHeading>
           <Stack gap="xs">
             {ownReceipts.map((receipt) => {
               const status = RECEIPT_STATUS[receipt.status] ?? {
@@ -691,12 +720,16 @@ export function OpportunityDetailPanel({
             label="Thời gian test"
             value={testAt}
             onChange={(v: Date | null) => setTestAt(v)}
+            error={testAt && testAt.getHours() === 0 && testAt.getMinutes() === 0 ? 'Chọn giờ cụ thể, chưa chỉ chọn ngày' : undefined}
           />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setTestOpen(false)}>
               Đóng
             </Button>
-            <Button disabled={!testAt} onClick={scheduleTest}>
+            <Button
+              disabled={!testAt || (testAt.getHours() === 0 && testAt.getMinutes() === 0)}
+              onClick={scheduleTest}
+            >
               Đặt lịch
             </Button>
           </Group>
@@ -720,6 +753,28 @@ export function OpportunityDetailPanel({
             data={courses.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` }))}
             value={receiptCourseId}
             onChange={setReceiptCourseId}
+          />
+          <Select
+            label="Lớp học (tùy chọn)"
+            description="Ghi danh học sinh vào lớp này ngay khi phiếu thu được duyệt — không cần thao tác Ghi danh riêng"
+            searchable
+            clearable
+            placeholder={
+              classBatches.filter((b) => b.facilityId === opp.facilityId).length
+                ? 'Chọn lớp'
+                : 'Chưa có lớp tại cơ sở này'
+            }
+            // Scoped to this opportunity's facility — receiptApprove rejects a cross-facility
+            // batch server-side too, but filtering here keeps the picker from listing options
+            // that are guaranteed to fail on submit for a multi-facility staff member.
+            data={classBatches
+              .filter((b) => b.facilityId === opp.facilityId)
+              .map((b) => ({
+                value: b.id,
+                label: `${b.code} — ${b.name} · ${b.course.code}`,
+              }))}
+            value={receiptClassBatchId}
+            onChange={setReceiptClassBatchId}
           />
           <Group grow align="flex-end">
             <Select

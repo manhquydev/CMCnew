@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, notifyError, notifySuccess } from '@cmc/ui';
-import { Alert, Badge, Button, Card, Group, Select, Table, Text, TextInput, Title } from '@mantine/core';
+import { trpc, notifyError, notifySuccess, FacilityPicker, StatusBadge, type StatusDef } from '@cmc/ui';
+import { Alert, Button, Card, Group, Table, Text, TextInput, Title } from '@mantine/core';
 import { IconRefresh } from '@tabler/icons-react';
 
 type WorklistRow = Awaited<ReturnType<typeof trpc.finance.reconcileWorklist.query>>[number];
@@ -8,9 +8,10 @@ type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 
 const vnd = (n: number) => n.toLocaleString('vi-VN') + 'đ';
 
-const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  approved: { label: 'Đã duyệt', color: 'teal' },
-  sent: { label: 'Đã gửi', color: 'blue' },
+// Preserves original color semantics: teal→active, blue→info.
+const STATUS_LABEL: Record<string, StatusDef> = {
+  approved: { label: 'Đã duyệt', tone: 'active' },
+  sent: { label: 'Đã gửi', tone: 'info' },
 };
 
 function todayIso(): string {
@@ -85,13 +86,11 @@ export function ReconcileWorklistPanel() {
       <Group align="flex-end" mb="sm">
         <TextInput label="Từ ngày" placeholder="YYYY-MM-DD" value={from} onChange={(e) => setFrom(e.currentTarget.value)} w={160} />
         <TextInput label="Đến ngày (không bao gồm)" placeholder="YYYY-MM-DD" value={to} onChange={(e) => setTo(e.currentTarget.value)} w={200} />
-        <Select
-          label="Cơ sở"
+        <FacilityPicker
+          facilities={facilities}
           placeholder="Tất cả"
-          data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-          value={facilityId}
-          onChange={setFacilityId}
-          clearable
+          value={facilityId ? Number(facilityId) : null}
+          onChange={(v) => setFacilityId(v ? String(v) : null)}
           w={220}
         />
         <Button leftSection={<IconRefresh size={14} />} onClick={runQuery} loading={load === 'loading'}>
@@ -128,7 +127,6 @@ export function ReconcileWorklistPanel() {
           </Table.Thead>
           <Table.Tbody>
             {rows.map((r) => {
-              const st = STATUS_LABEL[r.status] ?? { label: r.status, color: 'gray' };
               return (
                 <Table.Tr key={r.id}>
                   <Table.Td>{r.code ?? '—'}</Table.Td>
@@ -136,7 +134,7 @@ export function ReconcileWorklistPanel() {
                   <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>{vnd(r.netAmount)}</Table.Td>
                   <Table.Td>{r.approvedAt ? new Date(r.approvedAt).toLocaleDateString('vi-VN') : '—'}</Table.Td>
                   <Table.Td>
-                    <Badge color={st.color}>{st.label}</Badge>
+                    <StatusBadge status={r.status} map={STATUS_LABEL} pill />
                   </Table.Td>
                   <Table.Td>
                     <Button

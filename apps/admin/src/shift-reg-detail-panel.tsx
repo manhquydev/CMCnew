@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
-import { trpc, useSession, notifyError, notifySuccess } from '@cmc/ui';
+import { trpc, useSession, notifyError, notifySuccess, StatusBadge, type StatusDef } from '@cmc/ui';
 import { Alert, Badge, Button, Card, Checkbox, Group, Radio, Stack, Table, Text } from '@mantine/core';
+
+// Preserves original color semantics: gray→draft, blue→pending, green→active.
+const SHIFT_REG_STATUS_MAP: Record<string, StatusDef> = {
+  draft: { label: 'Nháp', tone: 'draft' },
+  submitted: { label: 'Chờ duyệt', tone: 'pending' },
+  approved: { label: 'Đã duyệt', tone: 'active' },
+};
 import { IconAlertCircle, IconArrowLeft } from '@tabler/icons-react';
 
 const TH_STYLE: React.CSSProperties = {
@@ -220,9 +227,7 @@ export function ShiftRegDetailPanel({ regId, onBack }: { regId: string; onBack: 
           </div>
           <div>
             <Text size="xs" style={{ color: 'var(--cmc-text-muted)' }}>Trạng thái</Text>
-            <Badge size="sm" color={reg.status === 'draft' ? 'gray' : reg.status === 'submitted' ? 'blue' : 'green'} variant="light" radius="xl">
-              {reg.status === 'draft' ? 'Nháp' : reg.status === 'submitted' ? 'Chờ duyệt' : 'Đã duyệt'}
-            </Badge>
+            <StatusBadge status={reg.status} map={SHIFT_REG_STATUS_MAP} pill />
           </div>
         </Group>
       </Card>

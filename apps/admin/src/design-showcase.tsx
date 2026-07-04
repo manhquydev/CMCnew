@@ -39,6 +39,7 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import {
   IconBell,
+  IconCash,
   IconCheck,
   IconChevronLeft,
   IconChevronRight,
@@ -50,11 +51,13 @@ import {
   IconPlus,
   IconSearch,
   IconSettings,
+  IconTargetArrow,
   IconTrash,
   IconUser,
   IconUsers,
   IconX,
 } from '@tabler/icons-react';
+import { StatCard, StatusBadge, InitialsAvatar, PipelineFunnel } from '@cmc/ui';
 
 /* ─── Section wrapper ────────────────────────────────────────────────────── */
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -313,7 +316,7 @@ export function DesignShowcase() {
               </Box>
               <Group gap={8}>
                 <Button variant="subtle" color="cmc">Xem tài liệu</Button>
-                <Button variant="filled" radius="xl">Tạo mới</Button>
+                <Button variant="filled">Tạo mới</Button>
               </Group>
             </Group>
           </Box>
@@ -337,14 +340,14 @@ export function DesignShowcase() {
               <Swatch color="var(--cmc-bg)"           label="Background"  hex="#F5F5F7" />
               <Swatch color="var(--cmc-surface)"      label="Surface"     hex="#FFFFFF" />
               <Swatch color="var(--cmc-surface-2)"    label="Surface-2"   hex="#F9F9FB" />
-              <Swatch color="var(--cmc-border)"       label="Border"      hex="#D2D2D7" />
+              <Swatch color="var(--cmc-border)"       label="Border"      hex="#E5E7EB" />
             </Group>
           </Section>
 
           <Section title="Màu sắc — Semantic">
             <Group gap={20} wrap="wrap">
-              <Swatch color="var(--cmc-ok)"           label="Success"     hex="#34C759" />
-              <Swatch color="var(--cmc-ok-bg)"        label="Success bg"  hex="#F0FBF3" />
+              <Swatch color="var(--cmc-ok)"           label="Success"     hex="#06C167" />
+              <Swatch color="var(--cmc-ok-bg)"        label="Success bg"  hex="#E6F9F0" />
               <Swatch color="var(--cmc-warn)"         label="Warning"     hex="#FF9F0A" />
               <Swatch color="var(--cmc-warn-bg)"      label="Warning bg"  hex="#FFF8EC" />
               <Swatch color="var(--cmc-danger)"       label="Danger"      hex="#FF3B30" />
@@ -395,42 +398,42 @@ export function DesignShowcase() {
               <Box>
                 <Text size="xs" c="dimmed" mb={10}>Variants</Text>
                 <Group gap={10} wrap="wrap">
-                  <Button variant="filled"  radius="xl">Filled (Primary)</Button>
-                  <Button variant="light"   radius="xl">Light</Button>
-                  <Button variant="outline" radius="md">Outline</Button>
-                  <Button variant="subtle"  radius="md">Subtle</Button>
-                  <Button variant="default" radius="md">Default</Button>
+                  <Button variant="filled">Filled (Primary)</Button>
+                  <Button variant="light">Light</Button>
+                  <Button variant="outline">Outline</Button>
+                  <Button variant="subtle">Subtle</Button>
+                  <Button variant="default">Default</Button>
                 </Group>
               </Box>
               <Box>
                 <Text size="xs" c="dimmed" mb={10}>Sizes</Text>
                 <Group gap={10} align="center" wrap="wrap">
-                  <Button size="xs" radius="xl">Extra Small</Button>
-                  <Button size="sm" radius="xl">Small</Button>
-                  <Button size="md" radius="xl">Medium</Button>
-                  <Button size="lg" radius="xl">Large</Button>
+                  <Button size="xs">Extra Small</Button>
+                  <Button size="sm">Small</Button>
+                  <Button size="md">Medium</Button>
+                  <Button size="lg">Large</Button>
                 </Group>
               </Box>
               <Box>
                 <Text size="xs" c="dimmed" mb={10}>Colors & States</Text>
                 <Group gap={10} wrap="wrap">
-                  <Button variant="filled" color="cmc"     radius="xl">Brand</Button>
-                  <Button variant="filled" color="cmcRed"  radius="xl">Destructive</Button>
-                  <Button variant="filled" color="cmcGreen" radius="xl">Success</Button>
-                  <Button variant="filled" radius="xl" loading>Loading</Button>
-                  <Button variant="filled" radius="xl" disabled>Disabled</Button>
+                  <Button variant="filled" color="cmc">Brand</Button>
+                  <Button variant="filled" color="cmcRed">Destructive</Button>
+                  <Button variant="filled" color="cmcGreen">Success</Button>
+                  <Button variant="filled" loading>Loading</Button>
+                  <Button variant="filled" disabled>Disabled</Button>
                 </Group>
               </Box>
               <Box>
                 <Text size="xs" c="dimmed" mb={10}>With icons</Text>
                 <Group gap={10} wrap="wrap">
-                  <Button radius="xl" leftSection={<IconCheck size={15} />}>
+                  <Button leftSection={<IconCheck size={15} />}>
                     Duyệt
                   </Button>
-                  <Button variant="light" radius="xl" leftSection={<IconPencil size={15} />}>
+                  <Button variant="light" leftSection={<IconPencil size={15} />}>
                     Chỉnh sửa
                   </Button>
-                  <Button variant="subtle" color="red" radius="xl" leftSection={<IconTrash size={15} />}>
+                  <Button variant="subtle" color="red" leftSection={<IconTrash size={15} />}>
                     Xóa
                   </Button>
                   <ActionIcon variant="subtle" radius="md" aria-label="Edit">
@@ -511,7 +514,7 @@ export function DesignShowcase() {
                 </Group>
                 <Group justify="flex-end" gap={8} mt={8}>
                   <Button variant="subtle">Hủy</Button>
-                  <Button variant="filled" radius="xl">Lưu</Button>
+                  <Button variant="filled">Lưu</Button>
                 </Group>
               </Stack>
             </Card>
@@ -533,7 +536,7 @@ export function DesignShowcase() {
                       leftSection={<IconSearch size={14} />}
                       style={{ width: 200 }}
                     />
-                    <Button size="sm" radius="xl">+ Thêm</Button>
+                    <Button size="sm">+ Thêm</Button>
                   </Group>
                 </Group>
               </Box>
@@ -555,7 +558,7 @@ export function DesignShowcase() {
                       <Table.Td>{row.facility}</Table.Td>
                       <Table.Td>{statusBadge(row.status)}</Table.Td>
                       <Table.Td>
-                        <Menu shadow="lg" radius="md">
+                        <Menu shadow="sm" radius="md">
                           <Menu.Target>
                             <ActionIcon variant="subtle" radius="md" aria-label="Options">
                               <IconDots size={14} />
@@ -626,6 +629,102 @@ export function DesignShowcase() {
             </Group>
           </Section>
 
+          {/* ── STAT CARD (2a re-skin) ── */}
+          <Section title="StatCard — Circular Accent Chip + Trend Arrow">
+            <Group gap={16} wrap="wrap" align="stretch">
+              <Box style={{ width: 220 }}>
+                <StatCard
+                  label="Doanh thu"
+                  value="24.8 tỷ"
+                  icon={<IconCash size={18} stroke={1.5} />}
+                  accent="brand"
+                  delta="+12.5%"
+                  deltaDir="up"
+                  deltaHint="so với tuần trước"
+                />
+              </Box>
+              <Box style={{ width: 220 }}>
+                <StatCard
+                  label="Cơ hội chốt"
+                  value="42"
+                  icon={<IconTargetArrow size={18} stroke={1.5} />}
+                  accent="ok"
+                  delta="+8"
+                  deltaDir="up"
+                  deltaHint="tháng này"
+                />
+              </Box>
+              <Box style={{ width: 220 }}>
+                <StatCard
+                  label="Cảnh báo KPI"
+                  value="7"
+                  icon={<IconTargetArrow size={18} stroke={1.5} />}
+                  accent="warn"
+                  delta="+2"
+                  deltaDir="down"
+                  deltaHint="so với tháng trước"
+                />
+              </Box>
+              <Box style={{ width: 220 }}>
+                <StatCard
+                  label="Khiếu nại"
+                  value="3"
+                  icon={<IconTargetArrow size={18} stroke={1.5} />}
+                  accent="danger"
+                  delta="0%"
+                  deltaDir="flat"
+                  deltaHint="không đổi"
+                />
+              </Box>
+            </Group>
+          </Section>
+
+          {/* ── STATUS BADGE PILL (2b re-skin) ── */}
+          <Section title="StatusBadge — Pill Variant">
+            <Stack gap={16}>
+              <Box>
+                <Text size="xs" c="dimmed" mb={10}>Mặc định (dot + light badge)</Text>
+                <Group gap={10} wrap="wrap">
+                  <StatusBadge status="active" label="Hoạt động" tone="active" />
+                  <StatusBadge status="pending" label="Chờ duyệt" tone="pending" />
+                  <StatusBadge status="rejected" label="Từ chối" tone="rejected" />
+                </Group>
+              </Box>
+              <Box>
+                <Text size="xs" c="dimmed" mb={10}>Pill (uppercase, dotless — cockpit wireframe)</Text>
+                <Group gap={10} wrap="wrap">
+                  <StatusBadge status="active" label="Vượt KPI" tone="active" pill />
+                  <StatusBadge status="pending" label="Cảnh báo" tone="pending" pill />
+                  <StatusBadge status="rejected" label="Chưa đạt" tone="rejected" pill />
+                </Group>
+              </Box>
+            </Stack>
+          </Section>
+
+          {/* ── INITIALS AVATAR (2c) ── */}
+          <Section title="InitialsAvatar — Deterministic Color">
+            <Group gap={16} wrap="wrap" align="center">
+              <InitialsAvatar name="Nguyễn Thành Trung" />
+              <InitialsAvatar name="Trần Thị Bình" />
+              <InitialsAvatar name="Lê Minh Châu" />
+              <InitialsAvatar name="Phạm Thu Dung" />
+              <InitialsAvatar name="Hoàng Văn Em" size={44} />
+            </Group>
+          </Section>
+
+          {/* ── PIPELINE FUNNEL (2d) ── */}
+          <Section title="PipelineFunnel — Gradient Chevron Funnel">
+            <PipelineFunnel
+              stages={[
+                { label: 'O1: Lead mới', count: 840, value: '100% Volume' },
+                { label: 'O2: Liên hệ', count: 512, value: '61% Chuyển đổi' },
+                { label: 'O3: Giải pháp', count: 204, value: '40% Chuyển đổi' },
+                { label: 'O4: Đàm phán', count: 88, value: '43% Chuyển đổi' },
+                { label: 'O5: Thành công', count: 42, value: '48% Chuyển đổi' },
+              ]}
+            />
+          </Section>
+
           {/* ── TABS ── */}
           <Section title="Tabs">
             <Tabs defaultValue="general">
@@ -645,7 +744,7 @@ export function DesignShowcase() {
           <Section title="Modal & Notifications">
             <Stack gap={16}>
               <Group gap={10}>
-                <Button variant="filled" radius="xl" onClick={openModal}>
+                <Button variant="filled" onClick={openModal}>
                   Mở Modal
                 </Button>
               </Group>
@@ -661,7 +760,7 @@ export function DesignShowcase() {
                 </Text>
                 <Group justify="flex-end" gap={8}>
                   <Button variant="subtle" onClick={closeModal}>Hủy</Button>
-                  <Button variant="filled" radius="xl" onClick={closeModal}>
+                  <Button variant="filled" onClick={closeModal}>
                     Xác nhận duyệt
                   </Button>
                 </Group>
@@ -728,14 +827,19 @@ export function DesignShowcase() {
 
           {/* ── SHADOW SCALE ── */}
           <Section title="Shadow Scale">
+            <Text size="xs" c="dimmed" mb={12}>
+              Zero Elevation doctrine: Card/Paper/Notification use <b>none</b> (decorative, border-only).
+              Modal/Menu/Select/Drawer use <b>sm</b> (functional minimum depth-cue). md/lg/xl remain
+              reserved for opportunistic use (e.g. hover-elevated cards) — no component defaults to them.
+            </Text>
             <Group gap={24} wrap="wrap" align="flex-start">
               {[
-                { label: 'none',  shadow: 'none',                   border: '1px solid var(--cmc-border)' },
-                { label: 'xs',    shadow: 'var(--cmc-shadow-xs)',   border: 'none' },
-                { label: 'sm',    shadow: 'var(--cmc-shadow-sm)',   border: 'none' },
-                { label: 'md',    shadow: 'var(--cmc-shadow-md)',   border: 'none' },
-                { label: 'lg',    shadow: 'var(--cmc-shadow-lg)',   border: 'none' },
-                { label: 'xl',    shadow: 'var(--cmc-shadow-xl)',   border: 'none' },
+                { label: 'none',  usage: 'Card, Paper, Notification', shadow: 'none',                   border: '1px solid var(--cmc-border)' },
+                { label: 'xs',    usage: 'reserved',                  shadow: 'var(--cmc-shadow-xs)',   border: 'none' },
+                { label: 'sm',    usage: 'Modal, Menu, Select, Drawer', shadow: 'var(--cmc-shadow-sm)', border: 'none' },
+                { label: 'md',    usage: 'reserved (hover opt-in)',   shadow: 'var(--cmc-shadow-md)',   border: 'none' },
+                { label: 'lg',    usage: 'reserved',                  shadow: 'var(--cmc-shadow-lg)',   border: 'none' },
+                { label: 'xl',    usage: 'reserved',                  shadow: 'var(--cmc-shadow-xl)',   border: 'none' },
               ].map((item) => (
                 <Stack key={item.label} gap={8} align="center">
                   <Box
@@ -750,6 +854,9 @@ export function DesignShowcase() {
                   />
                   <Text size="xs" c="dimmed" style={{ fontFamily: 'var(--cmc-font-mono)' }}>
                     {item.label}
+                  </Text>
+                  <Text size="xs" c="dimmed" ta="center" style={{ maxWidth: 90 }}>
+                    {item.usage}
                   </Text>
                 </Stack>
               ))}
@@ -791,7 +898,7 @@ export function DesignShowcase() {
                 <Text size="sm" c="var(--cmc-text-muted)" maw={320}>
                   Chưa có nhân viên nào trong hệ thống. Thêm nhân sự đầu tiên để bắt đầu quản lý.
                 </Text>
-                <Button variant="filled" radius={9999} leftSection={<IconPlus size={14} />}>
+                <Button variant="filled" leftSection={<IconPlus size={14} />}>
                   Thêm nhân sự
                 </Button>
               </Stack>

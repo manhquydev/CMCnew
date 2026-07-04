@@ -15,7 +15,7 @@ Apple-inspired minimalism adapted for ERP density. Single interactive blue, flat
 | Single blue for all interaction | Same: `#0071E3` for every clickable element |
 | Flat surfaces, no card shadow | Subtle border + `xs` shadow, no decorative depth |
 | Typography carries hierarchy | Column headers in uppercase 11px, data in 13px |
-| Pill CTAs | Pill for primary buttons only; secondary = text link |
+| Square, precise CTAs | Buttons use `radius="xs"` (4px, DESIGN.md literal spec — not pill); secondary = text link |
 
 ---
 
@@ -52,7 +52,7 @@ Apple-inspired minimalism adapted for ERP density. Single interactive blue, flat
 
 | Token | Value | Use |
 |-------|-------|-----|
-| `--cmc-border` | `#D2D2D7` | Default input borders, card borders |
+| `--cmc-border` | `#E5E7EB` | Default input borders, card borders |
 | `--cmc-border-focus` | `#0071E3` | Focused input ring |
 | `--cmc-border-faint` | `#E8E8ED` | Subtle row dividers inside cards |
 
@@ -60,7 +60,7 @@ Apple-inspired minimalism adapted for ERP density. Single interactive blue, flat
 
 | Token | Bg token | Text token | Use |
 |-------|----------|------------|-----|
-| `#34C759` ok | `--cmc-ok-bg` `#F0FBF3` | `--cmc-ok-text` `#1A6B34` | Success, active |
+| `#06C167` ok | `--cmc-ok-bg` `#E6F9F0` | `--cmc-ok-text` `#1A6B34` | Success, active |
 | `#FF9F0A` warn | `--cmc-warn-bg` `#FFF8EC` | `--cmc-warn-text` `#7A4A00` | Pending, warning |
 | `#FF3B30` danger | `--cmc-danger-bg` `#FFF0EF` | `--cmc-danger-text` `#C0160D` | Error, rejected |
 | `#0071E3` info | `--cmc-info-bg` `#E8F1FC` | `--cmc-info-text` `#003D99` | Info, draft |
@@ -70,7 +70,7 @@ Apple-inspired minimalism adapted for ERP density. Single interactive blue, flat
 ### Status Dot Colors (kanban, table chips)
 
 ```
---cmc-status-active:   #34C759   active / approved
+--cmc-status-active:   #06C167   active / approved
 --cmc-status-pending:  #FF9F0A   pending / in-review
 --cmc-status-inactive: #AEAEB2   inactive / archived
 --cmc-status-rejected: #FF3B30   rejected / error
@@ -81,8 +81,12 @@ Apple-inspired minimalism adapted for ERP density. Single interactive blue, flat
 
 ## Typography
 
-**Font stack:** `-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif`  
-Renders as SF Pro on Apple devices, Segoe UI on Windows — no Google Fonts dependency.
+**Font stack:** `'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, 'Helvetica Neue', Arial, sans-serif`  
+Inter is self-hosted via `@fontsource/inter` (weights 400/500/600/700), imported once in
+`apps/admin/src/main.tsx` — no Google Fonts network call. `packages/ui/src/tokens.css`
+stays font-agnostic (no `@import`/`url()`), so LMS (which overrides with its own
+Fredoka/Quicksand stack via `.lms-app-root`) never loads Inter. The system-font fallback
+stack still applies before Inter finishes loading or in any consumer that doesn't import it.
 
 ### Scale
 
@@ -160,24 +164,43 @@ h6 → 11px / 600   column headers (combine with uppercase + tracking)
 | — | 24px | `--cmc-radius-xl` (inline use only) |
 | 9999 | 9999px | `--cmc-radius-pill` |
 
-**Rule:** Inputs/compact fields use `radius="md"` (10px). Cards/panels use `radius="lg"` (14px). Modals use `radius="xl"` (18px). Primary CTA buttons use explicit `radius={9999}` for true pill.
+**Rule:** Inputs/compact fields use `radius="md"` (10px). Cards/panels default to `radius="sm"`
+(8px, DESIGN.md "no rounded corners should exceed 8px" — set via `Card`/`Paper` `defaultProps`,
+no need to pass it explicitly). Modals use `radius="xl"` (18px). Buttons default to `radius="xs"`
+(4px, square — set via `Button` `defaultProps`); do not override to a pill radius for CTAs.
 
 ---
 
 ## Elevation
 
-Flat aesthetic. Shadows communicate depth only when content floats above another layer.
+**Zero Elevation doctrine**: shadows are reserved for content that genuinely
+floats above another layer (functional depth-cue). Decorative surfaces
+(Card, Paper, Notification) render flat — definition comes from
+`border: 1px solid var(--cmc-border)` only, never `box-shadow`.
+
+| Component | Doctrine | Token |
+|-----------|----------|-------|
+| Card, Paper, Notification | Decorative — flatten fully | `--cmc-shadow-none` |
+| Modal, Menu, Select dropdown, Drawer | Functional — floats above content, needs a minimum depth-cue | `--cmc-shadow-sm` (minimum, do not go below) |
+
+Why the split: on the near-white `#F5F5F7` background, a fully flat Modal or
+open dropdown would be visually indistinguishable from the page behind it.
+Cards and toasts sit *in* the page flow, so a border alone communicates their
+boundary.
 
 | Token | Value | Use |
 |-------|-------|-----|
-| `--cmc-shadow-none` | `none` | Cards flush to bg |
-| `--cmc-shadow-xs` | `0 1px 2px rgba(29,29,31,0.06)` | Subtle lift, table header |
-| `--cmc-shadow-sm` | `0 1px 4px ... 0 2px 8px ...` | Default card |
-| `--cmc-shadow-md` | `0 4px 16px ...` | Hovered card, dropdown |
-| `--cmc-shadow-lg` | `0 8px 32px ...` | Menus, popovers |
-| `--cmc-shadow-xl` | `0 20px 60px ...` | Modals, drawers |
+| `--cmc-shadow-none` | `none` | Card, Paper, Notification (default) |
+| `--cmc-shadow-xs` | `0 1px 2px rgba(29,29,31,0.06)` | Reserved |
+| `--cmc-shadow-sm` | `0 1px 4px ... 0 2px 8px ...` | Modal, Menu, Select dropdown, Drawer (functional minimum) |
+| `--cmc-shadow-md` | `0 4px 16px ...` | Reserved — opt-in only (e.g. hover-elevated interactive card) |
+| `--cmc-shadow-lg` | `0 8px 32px ...` | Reserved, scale reference |
+| `--cmc-shadow-xl` | `0 20px 60px ...` | Reserved, scale reference |
 
-**Never use:** `box-shadow` on cards that sit on `--cmc-bg`. Use `border: 1px solid var(--cmc-border)` instead.
+**Never use:** `box-shadow` on Card/Paper/Notification. Use
+`border: 1px solid var(--cmc-border)` instead. Never drop Modal/Menu/Select/
+Drawer below `--cmc-shadow-sm` — they need a depth-cue to stay
+distinguishable from the page.
 
 ---
 
@@ -186,8 +209,8 @@ Flat aesthetic. Shadows communicate depth only when content floats above another
 ### Button
 
 ```tsx
-// Primary — pill, filled blue
-<Button variant="filled" radius="xl">Tạo mới</Button>
+// Primary — square 4px radius (theme default), filled blue
+<Button variant="filled">Tạo mới</Button>
 
 // Secondary — ghost, no border (Apple text-link style)
 <Button variant="subtle" color="cmc">Xem chi tiết</Button>
@@ -266,10 +289,10 @@ Always pair badge with icon in table cells for color-independent meaning:
 
 ### Form Section
 
-Group related fields with a `Card` container using `radius="lg"`:
+Group related fields with a `Card` container (theme default `radius="sm"`, 8px):
 
 ```tsx
-<Card radius="lg" p="xl" withBorder>
+<Card p="xl" withBorder>
   <Text size="lg" fw={600} mb="lg">Thông tin cá nhân</Text>
   <Stack gap="md">
     <TextInput label="Họ tên" required />
@@ -318,25 +341,25 @@ Group related fields with a `Card` container using `radius="lg"`:
 ### Card
 
 ```tsx
-// Standard data card
-<Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+// Standard data card (theme default radius="sm", 8px — no need to pass it)
+<Card p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
   <Text size="sm" c="dimmed" mb={4}>Tổng thu nhập</Text>
   <Text size="xl" fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>
     24,500,000 ₫
   </Text>
 </Card>
 
-// Hover-interactive card (kanban, list item)
+// Hover-interactive card (kanban, list item) — Zero Elevation: hover
+// communicates via border color, not shadow (Card is decorative-flat).
 <Card
-  radius="lg"
   p="lg"
   style={{
     border: '1px solid var(--cmc-border)',
     cursor: 'pointer',
-    transition: 'box-shadow var(--cmc-transition)',
+    transition: 'border-color var(--cmc-transition)',
   }}
-  onMouseEnter={e => e.currentTarget.style.boxShadow = 'var(--cmc-shadow-md)'}
-  onMouseLeave={e => e.currentTarget.style.boxShadow = 'var(--cmc-shadow-sm)'}
+  onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--cmc-brand)'}
+  onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--cmc-border)'}
 >
   …
 </Card>
@@ -399,7 +422,9 @@ Group related fields with a `Card` container using `radius="lg"`:
 |----------|--------------|
 | Gradient backgrounds on cards | Flat `#FFFFFF` surface with `1px solid --cmc-border` |
 | Multiple accent colors (purple, teal, orange CTAs) | Single `--cmc-brand` blue for all interaction |
-| Heavy card shadows | `--cmc-shadow-sm` border-only for resting cards |
+| Heavy card shadows | `--cmc-shadow-none` + `border: 1px solid var(--cmc-border)` for resting cards |
+| Shadow below `--cmc-shadow-sm` on Modal/Menu/Select/Drawer | Keep `--cmc-shadow-sm` minimum — these float above content and need a depth-cue |
+| Mixed date formats (`DD/MM/YYYY` in one screen, raw `YYYY-MM-DD` in another) | Display dates as `DD/MM/YYYY` (Vietnamese convention) everywhere user-facing; keep ISO `YYYY-MM-DD` only at the API/storage boundary, never rendered raw to users |
 | Color-only status (no icon/text) | Badge + icon always paired |
 | Placeholder-only form labels | Visible `<label>` above every input |
 | Custom hex values in components | Always use `var(--cmc-*)` tokens |

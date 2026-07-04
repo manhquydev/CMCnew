@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   trpc,
   notifyError,
@@ -6,7 +6,9 @@ import {
   PageHeader,
   DataTable,
   StatusBadge,
+  InitialsAvatar,
   EmptyState,
+  FacilityPicker,
   type DataTableColumn,
   type StatusDef,
 } from '@cmc/ui';
@@ -15,7 +17,6 @@ import {
   Button,
   Group,
   Modal,
-  Select,
   Stack,
   Text,
   TextInput,
@@ -36,7 +37,14 @@ const LIFECYCLE: Record<string, StatusDef> = {
   completed: { label: 'Hoàn thành', tone: 'active' },
 };
 
-export function StudentsPanel() {
+export function StudentsPanel({
+  initialDetailId,
+}: {
+  /** Global-search deep link: pre-select a student record on mount/update. `ts` is a
+   *  monotonic timestamp (same trick as class-workspace.tsx's NavAction) so selecting the
+   *  same student again still re-opens the detail view. */
+  initialDetailId?: { id: string; ts: number } | null;
+} = {}) {
   const [students, setStudents] = useState<StudentT[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +52,13 @@ export function StudentsPanel() {
 
   const [detailStudentId, setDetailStudentId] = useState<string | null>(null);
   const [facilityId, setFacilityId] = useState<string | null>(null);
+
+  const appliedNavTs = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!initialDetailId || initialDetailId.ts === appliedNavTs.current) return;
+    appliedNavTs.current = initialDetailId.ts;
+    setDetailStudentId(initialDetailId.id);
+  }, [initialDetailId]);
 
   const [editTarget, setEditTarget] = useState<StudentT | null>(null);
   const [editBusy, setEditBusy] = useState(false);
@@ -128,7 +143,12 @@ export function StudentsPanel() {
       key: 'name',
       header: 'Họ tên',
       sortValue: (s) => s.fullName,
-      render: (s) => s.fullName,
+      render: (s) => (
+        <Group gap={6} wrap="nowrap">
+          <InitialsAvatar name={s.fullName} size={22} />
+          <Text size="sm" lineClamp={1}>{s.fullName}</Text>
+        </Group>
+      ),
     },
     {
       key: 'program',
@@ -143,7 +163,7 @@ export function StudentsPanel() {
       key: 'lifecycle',
       header: 'Vòng đời',
       sortValue: (s) => s.lifecycle ?? '',
-      render: (s) => <StatusBadge status={s.lifecycle ?? ''} map={LIFECYCLE} />,
+      render: (s) => <StatusBadge status={s.lifecycle ?? ''} map={LIFECYCLE} pill />,
     },
     {
       key: 'facility',
@@ -209,13 +229,11 @@ export function StudentsPanel() {
         searchPlaceholder="Mã hoặc tên học sinh"
         onRowClick={(s) => setDetailStudentId(s.id)}
         toolbar={
-          <Select
-            label="Cơ sở"
+          <FacilityPicker
+            facilities={facilities}
             placeholder="Tất cả"
-            data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-            value={facilityId}
-            onChange={setFacilityId}
-            clearable
+            value={facilityId ? Number(facilityId) : null}
+            onChange={(v) => setFacilityId(v ? String(v) : null)}
             w={220}
           />
         }

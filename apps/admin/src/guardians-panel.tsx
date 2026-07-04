@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { trpc, notifyError, notifySuccess } from '@cmc/ui';
+import { trpc, notifyError, notifySuccess, StatusBadge, InitialsAvatar } from '@cmc/ui';
 import {
   Badge,
+  Box,
   Button,
   Card,
   Group,
@@ -77,12 +78,17 @@ function LinkRequestQueue() {
         {requests.map((r) => (
           <Group key={r.id} align="flex-end" wrap="nowrap" gap="sm">
             <div style={{ flex: 1 }}>
-              <Text size="sm" fw={600}>{r.requestedBy.displayName}</Text>
+              <Group gap={6} wrap="nowrap">
+                <InitialsAvatar name={r.requestedBy.displayName} size={22} />
+                <Text size="sm" fw={600}>{r.requestedBy.displayName}</Text>
+              </Group>
               <Text size="sm" c="dimmed">
                 {r.requestedBy.email ?? r.requestedBy.phone ?? '—'} · Tra cứu: {r.studentCode ?? r.studentPhone}
               </Text>
               {r.matchedStudentId ? (
-                <Badge size="sm" color="teal" variant="light" radius="xl" mt={4}>Đã khớp 1 học sinh</Badge>
+                <Box mt={4}>
+                  <StatusBadge status="matched" label="Đã khớp 1 học sinh" tone="active" pill />
+                </Box>
               ) : r.candidates.length > 0 ? (
                 <Select
                   mt={4}
@@ -94,7 +100,9 @@ function LinkRequestQueue() {
                   onChange={(v) => setPicked((m) => ({ ...m, [r.id]: v ?? '' }))}
                 />
               ) : (
-                <Badge size="sm" color="gray" variant="light" radius="xl" mt={4}>Không tìm thấy học sinh khớp</Badge>
+                <Box mt={4}>
+                  <StatusBadge status="unmatched" label="Không tìm thấy học sinh khớp" tone="inactive" pill />
+                </Box>
               )}
             </div>
             <Button
@@ -263,7 +271,12 @@ export function GuardiansPanel() {
               <Table.Tbody>
                 {guardians.map((g) => (
                   <Table.Tr key={g.id}>
-                    <Table.Td><Text size="sm">{g.parent.displayName}</Text></Table.Td>
+                    <Table.Td>
+                      <Group gap={6} wrap="nowrap">
+                        <InitialsAvatar name={g.parent.displayName} size={22} />
+                        <Text size="sm">{g.parent.displayName}</Text>
+                      </Group>
+                    </Table.Td>
                     <Table.Td><Text size="sm" style={{ color: 'var(--cmc-text-muted)' }}>{g.parent.email ?? g.parent.phone ?? '—'}</Text></Table.Td>
                     <Table.Td>
                       <Badge variant="light" radius="xl" size="sm">{RELATION_LABEL[g.relation] ?? g.relation}</Badge>

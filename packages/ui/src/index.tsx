@@ -11,6 +11,20 @@ export { LoginGate, useSession } from './login-gate.js';
 export { LmsLoginGate, useLmsSession, type LmsPrincipal } from './lms-login-gate.js';
 export { Chatter } from './chatter.js';
 export { ActivityLog, type ActivityEntry, type ActivityLogProps } from './activity-log.js';
+export {
+  RecordDetailPanel,
+  resolveOptions as recordDetailResolveOptions,
+  displayValue as recordDetailDisplayValue,
+  getValidationError as recordDetailGetValidationError,
+  type RecordDetailConfig,
+  type RecordDetailField,
+  type RecordDetailFieldOption,
+  type RecordDetailSection,
+  type RecordDetailTab,
+  type RecordDetailActivityLogConfig,
+  type RecordDetailPanelProps,
+  type RecordDetailHandle,
+} from './record-detail.js';
 export { FacilityPicker, type FacilityOption, type FacilityPickerProps } from './facility-picker.js';
 export { ViewSwitcher, useViewSwitcher, type ViewMode, type ViewSwitcherProps } from './view-switcher.js';
 export { FilterBar, type FilterBarProps } from './filter-bar.js';
@@ -22,13 +36,19 @@ export { useStaffNotif, type StaffNotifItem } from './use-staff-notif.js';
 // ─── UI primitives (screen-composition kit) ────────────────────────────────
 export { PageHeader, type PageHeaderProps } from './page-header.js';
 export { EmptyState, type EmptyStateProps } from './empty-state.js';
-export { StatCard, type StatCardProps } from './stat-card.js';
+export { StatCard, type StatCardProps, type StatCardAccent } from './stat-card.js';
 export {
   StatusBadge,
   type StatusBadgeProps,
   type StatusDef,
   type StatusTone,
 } from './status-badge.js';
+export { InitialsAvatar, initialsOf, colorOf, type InitialsAvatarProps } from './avatar-initials.js';
+export {
+  PipelineFunnel,
+  type PipelineFunnelProps,
+  type PipelineFunnelStage,
+} from './pipeline-funnel.js';
 export {
   DataTable,
   type DataTableProps,
@@ -41,3 +61,14 @@ export {
   pageCount,
   type SortDir,
 } from './data-table-utils.js';
+export {
+  CalendarView,
+  getWeekRange,
+  getMonthGridCells,
+  placeEventsInDay,
+  type CalendarEvent,
+  type CalendarViewMode,
+  type CalendarViewProps,
+  type PlacedEvent,
+  type HourWindow,
+} from './calendar-view.js';

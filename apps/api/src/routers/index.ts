@@ -37,6 +37,7 @@ import { shiftRegistrationRouter } from './shift-registration.js';
 import { checkInOutRouter } from './check-in-out.js';
 import { facilityNetworkRouter } from './facility-ip.js';
 import { emailRouter } from './email.js';
+import { searchRouter } from './search.js';
 
 export const appRouter = router({
   health: publicProcedure.query(() => ({ ok: true, ts: new Date().toISOString() })),
@@ -78,6 +79,7 @@ export const appRouter = router({
   checkInOut: checkInOutRouter,
   facilityNetwork: facilityNetworkRouter,
   email: emailRouter,
+  search: searchRouter,
 });
 
 export type AppRouter = typeof appRouter;

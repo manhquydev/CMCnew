@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, useSession, notifyError, notifySuccess } from '@cmc/ui';
+import { trpc, useSession, notifyError, notifySuccess, FacilityPicker, StatusBadge, type StatusDef } from '@cmc/ui';
 import { can } from '@cmc/auth/permissions';
 import { badgeApi, type BadgeRow } from './shallow-trpc';
 import {
-  Badge,
   Button,
   Card,
   Group,
@@ -20,6 +19,11 @@ import {
 import { useForm } from '@mantine/form';
 
 type CriteriaKind = 'stars_total' | 'homework_count';
+
+const BADGE_STATUS_MAP: Record<string, StatusDef> = {
+  active: { label: 'Đang hoạt động', tone: 'active' },
+  archived: { label: 'Đã lưu trữ', tone: 'inactive' },
+};
 
 type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
 
@@ -167,15 +171,7 @@ function BadgeListCard({
                 <Table.Td>{b.name}</Table.Td>
                 <Table.Td>{criteriaSummary(b.unlockCriteria)}</Table.Td>
                 <Table.Td>
-                  {b.isActive ? (
-                    <Badge color="teal" variant="light">
-                      Đang hoạt động
-                    </Badge>
-                  ) : (
-                    <Badge color="gray" variant="light">
-                      Đã lưu trữ
-                    </Badge>
-                  )}
+                  <StatusBadge status={b.isActive ? 'active' : 'archived'} map={BADGE_STATUS_MAP} pill />
                 </Table.Td>
                 {canArchive && (
                   <Table.Td>
@@ -306,12 +302,12 @@ export function BadgePanel() {
 
   return (
     <Stack>
-      <Select
-        label="Cơ sở"
+      <FacilityPicker
+        facilities={facilities}
         withAsterisk
-        data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-        value={facilityId}
-        onChange={setFacilityId}
+        clearable={false}
+        value={facilityId ? Number(facilityId) : null}
+        onChange={(v) => setFacilityId(v ? String(v) : null)}
         w={280}
       />
 

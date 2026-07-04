@@ -134,4 +134,9 @@ export const NAV_GATES: Record<SectionKey, NavGate> = {
   // Same placeholder pattern as biz-director-cockpit above — real visibility lives in
   // buildNavGroups() (shell.tsx, isEduDirectorOnly), not here.
   'edu-director-cockpit': { kind: 'open' },
+
+  // ── Profile/settings ─────────────────────────────────────────────────────
+  // Reachable via the avatar dropdown menu (shell.tsx), not the sidebar — every authenticated
+  // staff member views/manages their own account, so this is unconditionally open.
+  profile: { kind: 'open' },
 };

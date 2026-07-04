@@ -1,5 +1,5 @@
 import '@mantine/dates/styles.css';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   LoginGate,
   trpc,
@@ -73,12 +73,20 @@ import { Workspace, type NavAction } from './class-workspace';
 import { Shell, buildNavGroups, SECTION_TITLES, type SectionKey } from './shell';
 import { applyAdminMetadata, getAdminMetadata } from './link-preview-metadata';
 import { StaffProfilePanel } from './staff-profile';
+import { ProfileSettingsPanel } from './profile-settings-panel';
 import { ScheduleDetailPanel } from './schedule-detail';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type User = Awaited<ReturnType<typeof trpc.user.list.query>>[number];
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
 type Session = ReturnType<typeof useSession>['me'];
+
+// ts is a monotonic timestamp so selecting the same record twice in a row still re-triggers —
+// same trick as class-workspace.tsx's NavAction.
+export interface SearchNavAction {
+  id: string;
+  ts: number;
+}
 
 // ─── Table header style ────────────────────────────────────────────────────────
 
@@ -427,13 +435,25 @@ function Users({
 
 // ─── Org (Cơ sở & Users) ─────────────────────────────────────────────────────
 
-function OrgPanel() {
+function OrgPanel({ initialStaffNav }: { initialStaffNav?: SearchNavAction | null }) {
   const { me } = useSession();
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   // When a user is selected, the org section shows their staff record page (view + inline edit)
   // instead of the lists. Back returns to the lists.
   const [viewing, setViewing] = useState<User | null>(null);
+
+  // Global-search deep link: pre-select a staff record once `users` has loaded. Retries on every
+  // `users` change until the id is found (or the nav is superseded by a new ts), which tolerates
+  // the async loadUsers() below still being in flight when this component mounts.
+  const appliedStaffNavTs = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!initialStaffNav || initialStaffNav.ts === appliedStaffNavTs.current) return;
+    const found = users.find((u) => u.id === initialStaffNav.id);
+    if (!found) return;
+    appliedStaffNavTs.current = initialStaffNav.ts;
+    setViewing(found);
+  }, [initialStaffNav, users]);
 
   const loadFacilities = () =>
     trpc.facility.list.query().then(setFacilities).catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
@@ -507,6 +527,7 @@ const ALL_SECTION_KEYS = new Set<string>([
   'checkin', 'shift-registration', 'facility-network', 'shift-config',
   'student-mgmt', 'payroll-checkin',
   'biz-director-cockpit', 'edu-director-cockpit',
+  'profile',
 ]);
 
 // ─── Work Shift Section ──────────────────────────────────────────────────────
@@ -530,6 +551,11 @@ function Dashboard() {
   const [navAction, setNavAction] = useState<NavAction | null>(null);
   // Selected lesson for the connected Session Detail view inside the schedule section.
   const [selectedSession, setSelectedSession] = useState<MySession | null>(null);
+  // Global-search deep-link targets for entity types with no per-record URL route (students,
+  // staff): mirrors navAction's ts-timestamp re-trigger trick so selecting the same record twice
+  // in a row still re-applies. classBatches search results reuse goToClass/navAction as-is.
+  const [studentNav, setStudentNav] = useState<SearchNavAction | null>(null);
+  const [staffNav, setStaffNav] = useState<SearchNavAction | null>(null);
 
   // Active section is derived from the URL (single source of truth). A CRM record route
   // forces the crm section; a bare/unknown path falls back to the persona default.
@@ -567,7 +593,26 @@ function Dashboard() {
   function handleSectionChange(key: SectionKey) {
     setNavAction(null);
     setSelectedSession(null);
+    setStudentNav(null);
+    setStaffNav(null);
     navigate('/' + key);
+  }
+
+  // Global-search "deep link to a record" handler (shell.tsx GlobalSearchDropdown). classBatches
+  // reuses the existing goToClass mechanism as-is; students/staff pre-select via component-local
+  // state consumed by StudentsPanel/OrgPanel below.
+  function handleSearchNavigate(entityKey: 'students' | 'staff' | 'classBatches', id: string) {
+    if (entityKey === 'classBatches') {
+      goToClass(id, 'sessions');
+      return;
+    }
+    if (entityKey === 'students') {
+      setStudentNav({ id, ts: Date.now() });
+      navigate('/students');
+      return;
+    }
+    setStaffNav({ id, ts: Date.now() });
+    navigate('/org');
   }
 
   const navGroups = buildNavGroups({ roles: me.roles as string[], isSuperAdmin: me.isSuperAdmin });
@@ -607,11 +652,11 @@ function Dashboard() {
         );
 
       case 'org':
-        return <OrgPanel />;
+        return <OrgPanel initialStaffNav={staffNav} />;
 
       // ── Students ──────────────────────────────────────────────────────────
       case 'students':
-        return <StudentsPanel />;
+        return <StudentsPanel initialDetailId={studentNav} />;
 
       case 'guardians':
         return (
@@ -828,6 +873,10 @@ function Dashboard() {
           </Stack>
         );
 
+      // ── Profile/settings (reachable via the avatar menu, not the sidebar) ────
+      case 'profile':
+        return <ProfileSettingsPanel />;
+
       default:
         return null;
     }
@@ -837,6 +886,7 @@ function Dashboard() {
     <Shell
       activeSection={activeSection}
       onSectionChange={handleSectionChange}
+      onSearchNavigate={handleSearchNavigate}
       navGroups={navGroups}
       sectionTitle={SECTION_TITLES[activeSection]}
     >

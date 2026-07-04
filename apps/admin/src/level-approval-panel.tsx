@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { trpc, notifyError, notifySuccess } from '@cmc/ui';
+import { trpc, notifyError, notifySuccess, InitialsAvatar } from '@cmc/ui';
 import { Badge, Button, Card, Group, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 
 const TH_STYLE: React.CSSProperties = {
@@ -58,10 +58,15 @@ export function LevelApprovalPanel() {
               {rows.map((r) => (
                 <Table.Tr key={r.id}>
                   <Table.Td>
-                    <Text fw={600}>{r.student.fullName}</Text>
-                    <Text size="xs" c="dimmed">
-                      {r.student.studentCode}
-                    </Text>
+                    <Group gap={8} wrap="nowrap">
+                      <InitialsAvatar name={r.student.fullName} size={22} />
+                      <div>
+                        <Text fw={600}>{r.student.fullName}</Text>
+                        <Text size="xs" c="dimmed">
+                          {r.student.studentCode}
+                        </Text>
+                      </div>
+                    </Group>
                   </Table.Td>
                   <Table.Td>
                     <Badge variant="light">{r.fromLevel ?? '—'} → {r.toLevel}</Badge>

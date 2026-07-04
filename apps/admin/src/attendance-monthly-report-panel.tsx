@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import dayjs from 'dayjs';
-import { notifyError } from '@cmc/ui';
+import { notifyError, InitialsAvatar } from '@cmc/ui';
 import { Badge, Button, Card, Group, Stack, Table, Text, TextInput } from '@mantine/core';
 import { attendanceApi } from './shallow-trpc';
 
@@ -94,7 +94,12 @@ export function AttendanceMonthlyReportPanel({ facilityId }: { facilityId: numbe
             <Table.Tbody>
               {rows.map((row) => (
                 <Table.Tr key={row.userId}>
-                  <Table.Td><Text fw={500} size="sm">{row.displayName}</Text></Table.Td>
+                  <Table.Td>
+                    <Group gap={8} wrap="nowrap">
+                      <InitialsAvatar name={row.displayName} size={22} />
+                      <Text fw={500} size="sm">{row.displayName}</Text>
+                    </Group>
+                  </Table.Td>
                   <Table.Td>{row.workdays}</Table.Td>
                   <Table.Td>{row.lateMinutes}p</Table.Td>
                   <Table.Td>{row.earlyMinutes}p</Table.Td>
