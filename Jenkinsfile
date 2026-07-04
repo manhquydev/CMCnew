@@ -57,6 +57,10 @@ pipeline {
           # Ensure an origin cert exists (self-signed for CF Full) so nginx can start —
           # self-heals a fresh volume, fails loud on a corrupt/invalid one.
           bash scripts/ensure-origin-cert.sh
+          # The prod nginx joins the shared cmcnew-edge network (declared `external` in the compose
+          # file) to reach the dev app tier. Create it before `up` or compose aborts; idempotent,
+          # and `|| true` because this shell runs with -e and the network persists between deploys.
+          docker network create cmcnew-edge 2>/dev/null || true
           # Refresh the nginx config at the stable host path the compose mount references
           # (the deploy runs from the ephemeral Jenkins workspace, so sync to /root/cmcnew).
           docker run --rm -v /root/cmcnew/docker:/dest -v "$WORKSPACE/docker":/src:ro alpine \

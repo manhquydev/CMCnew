@@ -33,6 +33,8 @@ services:
       - ./jenkins-casc.yaml:/var/jenkins_home/casc.yaml:ro
       # The app's prod secrets, read-only — the deploy stage references this path.
       - /root/cmcnew/.env.production:/secrets/.env.production:ro
+      # The dev stack's secrets, read-only — the develop-branch deploy stage references this path.
+      - /root/cmcnew/.env.dev:/secrets/.env.dev:ro
     deploy:
       resources:
         limits:
