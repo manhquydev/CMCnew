@@ -55,3 +55,6 @@ repomix-product-source.md
 
 # Local DB backups / dumps — never commit (may contain data)
 backups/
+
+# Local-only operator goal prompts (may contain infra credentials)
+goal/
