@@ -77,13 +77,37 @@ const PHASE_META: Record<SessionPhase, { label: string; color: string; hint: str
   },
 };
 
-/** Two-column read-only field row (matches student/staff detail visual language). */
+/** Two-column read-only field row — matches @cmc/ui's record-detail.tsx label conventions
+ *  (160px right-aligned label) used across student/staff/opportunity detail panels. */
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <Group justify="space-between" wrap="nowrap" gap="xl">
-      <Text size="sm" c="dimmed">{label}</Text>
-      <Text size="sm" style={{ textAlign: 'right' }}>{value ?? '—'}</Text>
+    <Group wrap="nowrap" gap="md" align="center">
+      <Text
+        size="sm"
+        style={{
+          width: 'var(--cmc-form-label-w)',
+          minWidth: 'var(--cmc-form-label-w)',
+          flexShrink: 0,
+          textAlign: 'right',
+          fontSize: 'var(--cmc-form-label-font)',
+          color: 'var(--cmc-form-label-color)',
+        }}
+      >
+        {label}
+      </Text>
+      <Text size="sm" style={{ flex: 1, minWidth: 0 }}>{value ?? '—'}</Text>
     </Group>
+  );
+}
+
+/** Section-heading accent bar (matches record-detail.tsx's `w-1 h-5 bg-primary` wireframe
+ *  pattern) — inline-composable so it can sit alongside a badge/button in the same row. */
+function HeadingAccent() {
+  return (
+    <span
+      aria-hidden="true"
+      style={{ display: 'inline-block', width: 4, height: 20, borderRadius: 2, background: 'var(--cmc-brand)', marginRight: 8, verticalAlign: 'middle' }}
+    />
   );
 }
 
@@ -99,7 +123,7 @@ function WorkflowCard({
   children?: React.ReactNode;
 }) {
   return (
-    <Card withBorder radius="md" p="md" style={{ opacity: enabled ? 1 : 0.62 }}>
+    <Card withBorder radius="sm" p="lg" style={{ opacity: enabled ? 1 : 0.62 }}>
       <Stack gap="xs">
         <Group justify="space-between" align="flex-start" wrap="nowrap">
           <div>
@@ -164,11 +188,11 @@ function SessionWorkflowPanel({ session }: { session: MySession }) {
 
   return (
     <Stack gap="md">
-      <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
+      <Card radius="sm" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
       <Stack gap="md">
         <Group justify="space-between" align="flex-start">
           <div>
-            <Text fw={600}>Quy trình buổi học 360</Text>
+            <Text fw={600}><HeadingAccent />Quy trình buổi học 360</Text>
             <Text size="sm" c="dimmed">{meta.hint}</Text>
           </div>
           <Badge color={meta.color} variant="light" radius="xl">{meta.label}</Badge>
@@ -331,11 +355,11 @@ export function ScheduleDetailPanel({
       </Group>
 
       {/* Header + class card */}
-      <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
+      <Card radius="sm" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
         <Stack gap="xs">
           <Group justify="space-between" wrap="nowrap">
             <div>
-              <Text fw={600}>{session.batch.code} — {session.batch.name}</Text>
+              <Text fw={600}><HeadingAccent />{session.batch.code} — {session.batch.name}</Text>
               <Text size="xs" c="dimmed">Lớp học của buổi này</Text>
             </div>
             <Button
@@ -356,14 +380,14 @@ export function ScheduleDetailPanel({
       <SessionWorkflowPanel session={session} />
 
       {/* Roster — deep-links to student detail */}
-      <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
-        <Text fw={600} mb="sm">Học viên trong buổi</Text>
+      <Card radius="sm" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} mb="sm"><HeadingAccent />Học viên trong buổi</Text>
         <SessionRoster classBatchId={session.classBatchId} onOpenStudent={setDetailStudentId} />
       </Card>
 
       {/* Attendance — reuse the shared roster marker (permission self-gated) */}
-      <Card radius="lg" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
-        <Text fw={600} mb="sm">Điểm danh</Text>
+      <Card radius="sm" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Text fw={600} mb="sm"><HeadingAccent />Điểm danh</Text>
         <AttendanceRoster
           classSessionId={session.id}
           batchId={session.classBatchId}

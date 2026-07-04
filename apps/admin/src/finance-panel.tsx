@@ -1,8 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, API_URL, Chatter, notifyError, notifySuccess } from '@cmc/ui';
+import {
+  trpc,
+  API_URL,
+  Chatter,
+  notifyError,
+  notifySuccess,
+  FacilityPicker,
+  StatusBadge,
+  InitialsAvatar,
+  toApiDate,
+  parseApiDate,
+  type StatusDef,
+} from '@cmc/ui';
 import {
   Alert,
-  Badge,
   Button,
   Card,
   Group,
@@ -17,6 +28,7 @@ import {
   Textarea,
   Title,
 } from '@mantine/core';
+import { DateInput } from '@mantine/dates';
 import { useForm } from '@mantine/form';
 import { IconRefresh } from '@tabler/icons-react';
 import { DISCOUNT_CAP_PERCENT } from '@cmc/domain-finance';
@@ -36,12 +48,12 @@ const YEARS = [
   { value: '2', label: '2 năm (−20%)' },
   { value: '3', label: '3 năm (−30%)' },
 ];
-const STATUS: Record<string, { label: string; color: string }> = {
-  draft: { label: 'Nháp', color: 'gray' },
-  approved: { label: 'Đã duyệt', color: 'teal' },
-  sent: { label: 'Đã gửi', color: 'blue' },
-  reconciled: { label: 'Đã đối soát', color: 'green' },
-  cancelled: { label: 'Đã hủy', color: 'red' },
+const STATUS: Record<string, StatusDef> = {
+  draft: { label: 'Nháp', tone: 'draft' },
+  approved: { label: 'Đã duyệt', tone: 'active' },
+  sent: { label: 'Đã gửi', tone: 'info' },
+  reconciled: { label: 'Đã đối soát', tone: 'active' },
+  cancelled: { label: 'Đã hủy', tone: 'rejected' },
 };
 
 const RECEIPT_PAGE_SIZE = 20;
@@ -150,11 +162,13 @@ function CoursePriceCard({ courses, facilities }: { courses: CourseT[]; faciliti
               step={100000}
               {...priceForm.getInputProps('amount')}
             />
-            <TextInput
+            <DateInput
               label="Hiệu lực từ"
               withAsterisk
-              placeholder="YYYY-MM-DD"
-              {...priceForm.getInputProps('effectiveFrom')}
+              valueFormat="DD/MM/YYYY"
+              value={parseApiDate(priceForm.values.effectiveFrom)}
+              onChange={(d) => priceForm.setFieldValue('effectiveFrom', toApiDate(d) ?? '')}
+              error={priceForm.errors.effectiveFrom}
             />
           </Group>
           <Group>
@@ -342,15 +356,21 @@ function VoucherCard({ facilities }: { facilities: Facility[] }) {
             />
           </Group>
           <Group grow align="flex-end">
-            <TextInput
+            <DateInput
               label="Hiệu lực từ (tùy chọn)"
-              placeholder="YYYY-MM-DD"
-              {...form.getInputProps('validFrom')}
+              valueFormat="DD/MM/YYYY"
+              clearable
+              value={parseApiDate(form.values.validFrom)}
+              onChange={(d) => form.setFieldValue('validFrom', toApiDate(d) ?? '')}
+              error={form.errors.validFrom}
             />
-            <TextInput
+            <DateInput
               label="Hết hạn (tùy chọn)"
-              placeholder="YYYY-MM-DD"
-              {...form.getInputProps('validTo')}
+              valueFormat="DD/MM/YYYY"
+              clearable
+              value={parseApiDate(form.values.validTo)}
+              onChange={(d) => form.setFieldValue('validTo', toApiDate(d) ?? '')}
+              error={form.errors.validTo}
             />
           </Group>
           <Group>
@@ -520,13 +540,11 @@ function DiscountTierCard({ facilities }: { facilities: Facility[] }) {
         Bậc giảm giá theo năm đóng trước
       </Title>
 
-      <Select
-        label="Cơ sở"
+      <FacilityPicker
+        facilities={facilities}
         placeholder="Chọn cơ sở để cấu hình"
-        data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-        value={facilityId}
-        onChange={handleFacilitySelect}
-        clearable
+        value={facilityId ? Number(facilityId) : null}
+        onChange={(v) => handleFacilitySelect(v ? String(v) : null)}
         w={280}
         mb="sm"
       />
@@ -662,6 +680,10 @@ function ReceiptsCard({
   const [refundReason, setRefundReason] = useState('');
   // Refund total per receipt id — fetched lazily for cancelled rows on the current page.
   const [refundTotals, setRefundTotals] = useState<Record<string, number>>({});
+  // Approve-time parent-email prompt — only shown for new-student receipts with no email captured
+  // yet (intake didn't collect it), so LMS parent access (OTP) stays reachable. Optional/skippable.
+  const [approveEmailTarget, setApproveEmailTarget] = useState<Receipt | null>(null);
+  const [approveEmailValue, setApproveEmailValue] = useState('');
 
   const studentName = (id: string | null) =>
     id ? (students.find((s) => s.id === id)?.fullName ?? id.slice(0, 8)) : '—';
@@ -695,9 +717,9 @@ function ReceiptsCard({
   const totalPages = Math.max(1, Math.ceil(filtered.length / RECEIPT_PAGE_SIZE));
   const paged = filtered.slice((page - 1) * RECEIPT_PAGE_SIZE, page * RECEIPT_PAGE_SIZE);
 
-  async function approve(id: string) {
+  async function approve(id: string, parentEmail?: string) {
     try {
-      const r = await trpc.finance.receiptApprove.mutate({ id });
+      const r = await trpc.finance.receiptApprove.mutate({ id, parentEmail: parentEmail || undefined });
       notifySuccess(`Đã duyệt phiếu ${r.code}`);
       if (r.lmsAccount) setCred(r.lmsAccount);
       loadReceipts();
@@ -707,6 +729,30 @@ function ReceiptsCard({
     } catch (e) {
       notifyError(e, 'Duyệt phiếu thu thất bại');
     }
+  }
+
+  // New-student receipts with no email captured at intake get one more chance to collect it here —
+  // enables LMS parent OTP login once provisioned. Existing-student/renewal receipts (studentId
+  // already set) and receipts that already have an email skip straight to approve, unchanged.
+  function onApproveClick(r: Receipt) {
+    if (!r.studentId && !r.parentEmail) {
+      setApproveEmailTarget(r);
+      setApproveEmailValue('');
+    } else {
+      approve(r.id);
+    }
+  }
+
+  function confirmApproveWithEmail() {
+    if (!approveEmailTarget) return;
+    approve(approveEmailTarget.id, approveEmailValue.trim());
+    setApproveEmailTarget(null);
+  }
+
+  function skipApproveEmail() {
+    if (!approveEmailTarget) return;
+    approve(approveEmailTarget.id);
+    setApproveEmailTarget(null);
   }
 
   async function markSent(id: string) {
@@ -826,6 +872,37 @@ function ReceiptsCard({
         )}
       </Modal>
 
+      <Modal
+        opened={!!approveEmailTarget}
+        onClose={() => setApproveEmailTarget(null)}
+        title="Duyệt phiếu thu — email phụ huynh"
+        centered
+      >
+        {approveEmailTarget && (
+          <Stack gap="sm">
+            <Text size="sm">
+              Học sinh mới, chưa có email phụ huynh. Nhập email để phụ huynh đăng nhập LMS bằng OTP
+              (có thể bỏ qua, thêm sau).
+            </Text>
+            <TextInput
+              label="Email phụ huynh (tùy chọn)"
+              type="email"
+              placeholder="parent@example.com"
+              value={approveEmailValue}
+              onChange={(e) => setApproveEmailValue(e.currentTarget.value)}
+            />
+            <Group justify="flex-end">
+              <Button variant="default" onClick={skipApproveEmail}>
+                Bỏ qua, duyệt luôn
+              </Button>
+              <Button onClick={confirmApproveWithEmail} disabled={!approveEmailValue.trim()}>
+                Duyệt
+              </Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
+
       <Group align="flex-end" mb="sm">
         <Select
           label="Lọc theo cơ sở"
@@ -887,18 +964,28 @@ function ReceiptsCard({
             </Table.Thead>
             <Table.Tbody>
               {paged.map((r) => {
-                const st = STATUS[r.status] ?? { label: r.status, color: 'gray' };
+                const st: StatusDef = STATUS[r.status] ?? { label: r.status, tone: 'inactive' };
+                const sName = studentName(r.studentId);
                 return (
                   <Table.Tr key={r.id}>
                     <Table.Td>{r.code ?? '—'}</Table.Td>
-                    <Table.Td>{studentName(r.studentId)}</Table.Td>
+                    <Table.Td>
+                      {sName === '—' ? (
+                        sName
+                      ) : (
+                        <Group gap={6} wrap="nowrap">
+                          <InitialsAvatar name={sName} size={22} />
+                          <Text size="sm" lineClamp={1}>{sName}</Text>
+                        </Group>
+                      )}
+                    </Table.Td>
                     <Table.Td>{courseName(r.courseId)}</Table.Td>
                     <Table.Td>{r.effectiveDiscountPercent}%</Table.Td>
                     <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>
                       {vnd(r.netAmount)}
                     </Table.Td>
                     <Table.Td>
-                      <Badge color={st.color}>{st.label}</Badge>
+                      <StatusBadge status={r.status} label={st.label} tone={st.tone} pill />
                     </Table.Td>
                     <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>
                       {r.status === 'cancelled' ? vnd(refundTotals[r.id] ?? 0) : '—'}
@@ -914,7 +1001,7 @@ function ReceiptsCard({
                           Nhật ký
                         </Button>
                         {r.status === 'draft' && (
-                          <Button size="compact-xs" onClick={() => approve(r.id)}>
+                          <Button size="compact-xs" onClick={() => onApproveClick(r)}>
                             Duyệt
                           </Button>
                         )}
@@ -1269,17 +1356,14 @@ function ReceiptCreateCard({
       ) : (
         <Stack gap="sm">
           <Group grow align="flex-end">
-            <Select
-              label="Cơ sở"
+            <FacilityPicker
+              facilities={facilities}
               withAsterisk
+              clearable={false}
               placeholder="Chọn cơ sở"
-              data={facilities.map((f) => ({
-                value: String(f.id),
-                label: `${f.code} — ${f.name}`,
-              }))}
-              value={newFacilityId}
+              value={newFacilityId ? Number(newFacilityId) : null}
               onChange={(v) => {
-                setNewFacilityId(v);
+                setNewFacilityId(v ? String(v) : null);
                 setClassBatchId(null);
               }}
             />
@@ -1310,11 +1394,12 @@ function ReceiptCreateCard({
             />
           </Group>
           <Group grow align="flex-end">
-            <TextInput
+            <DateInput
               label="Ngày sinh (tùy chọn)"
-              placeholder="YYYY-MM-DD"
-              value={studentDob}
-              onChange={(e) => setStudentDob(e.currentTarget.value)}
+              valueFormat="DD/MM/YYYY"
+              clearable
+              value={parseApiDate(studentDob)}
+              onChange={(d) => setStudentDob(toApiDate(d) ?? '')}
             />
             <Select
               label="Lớp học (tùy chọn)"

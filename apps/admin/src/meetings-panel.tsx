@@ -1,30 +1,38 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
-import { trpc, notifyError, notifySuccess } from '@cmc/ui';
+import { trpc, notifyError, notifySuccess, FacilityPicker, CalendarView, StatusBadge, type CalendarEvent, type CalendarViewMode, type StatusDef } from '@cmc/ui';
 import {
-  Badge,
   Button,
   Card,
   Group,
   Loader,
   Modal,
-  Select,
   SegmentedControl,
   Stack,
-  Table,
   Text,
   Textarea,
-  TextInput,
 } from '@mantine/core';
-import { DateInput } from '@mantine/dates';
+import { DateInput, TimeInput } from '@mantine/dates';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type ParentMeeting = Awaited<ReturnType<typeof trpc.parentMeeting.list.query>>[number];
 
-const MEETING_ST: Record<string, { label: string; color: string }> = {
-  scheduled: { label: 'Đã lên lịch', color: 'blue' },
-  done: { label: 'Đã họp', color: 'teal' },
-  cancelled: { label: 'Đã hủy', color: 'gray' },
+// Meetings have no native duration field (scheduledAt only) — CalendarView requires `end`,
+// so synthesize a default 60-minute block (P6 phase file, P3's "caller must synthesize end" note).
+const DEFAULT_MEETING_DURATION_MIN = 60;
+
+// Label + tone for StatusBadge (admin card/modal chips).
+const MEETING_STATUS_DEF: Record<string, StatusDef> = {
+  scheduled: { label: 'Đã lên lịch', tone: 'info' },
+  done: { label: 'Đã họp', tone: 'active' },
+  cancelled: { label: 'Đã hủy', tone: 'inactive' },
+};
+
+// Mantine color slug for CalendarEvent tinting (accent bar + tint on calendar-view.tsx cards).
+const MEETING_EVENT_COLOR: Record<string, string> = {
+  scheduled: 'blue',
+  done: 'teal',
+  cancelled: 'gray',
 };
 
 type StatusFilter = 'all' | 'scheduled' | 'done' | 'cancelled';
@@ -69,7 +77,7 @@ function SetScheduleModal({
       <Stack>
         <Group grow align="flex-end">
           <DateInput label="Ngày" value={date} onChange={setDate} valueFormat="DD/MM/YYYY" />
-          <TextInput label="Giờ (HH:mm)" value={time} onChange={(e) => setTime(e.currentTarget.value)} />
+          <TimeInput label="Giờ" value={time} onChange={(e) => setTime(e.currentTarget.value)} />
         </Group>
         {err && <Text c="red" size="sm">{err}</Text>}
         <Group justify="flex-end">
@@ -129,10 +137,69 @@ function SetNoteModal({
   );
 }
 
+// CalendarView has no inline-action slot (onEventClick only) — clicking a meeting event opens
+// this detail/action dispatcher instead of the old table row's inline buttons (P6 red-team note).
+function MeetingDetailModal({
+  meeting,
+  onClose,
+  onSetStatus,
+  onSchedule,
+  onNote,
+}: {
+  meeting: ParentMeeting;
+  onClose: () => void;
+  onSetStatus: (status: 'done' | 'cancelled') => void;
+  onSchedule: () => void;
+  onNote: () => void;
+}) {
+  return (
+    <Modal opened onClose={onClose} title={meeting.title}>
+      <Stack>
+        <Group justify="space-between" wrap="nowrap">
+          <Text size="sm" c="dimmed">Thời gian</Text>
+          <Group gap={6} wrap="nowrap">
+            <Text size="sm">{dayjs(meeting.scheduledAt).format('DD/MM/YYYY HH:mm')}</Text>
+            {!meeting.timeConfirmed && <StatusBadge status="unconfirmed" tone="pending" label="Chưa chốt" size="xs" />}
+          </Group>
+        </Group>
+        <Group justify="space-between" wrap="nowrap">
+          <Text size="sm" c="dimmed">Địa điểm</Text>
+          <Text size="sm">{meeting.location ?? '—'}</Text>
+        </Group>
+        <Group justify="space-between" wrap="nowrap">
+          <Text size="sm" c="dimmed">Trạng thái</Text>
+          <StatusBadge status={meeting.status} map={MEETING_STATUS_DEF} />
+        </Group>
+        {meeting.note && (
+          <Stack gap={2}>
+            <Text size="sm" c="dimmed">Ghi chú</Text>
+            <Text size="sm">{meeting.note}</Text>
+          </Stack>
+        )}
+        <Group justify="flex-end" gap="xs" wrap="wrap">
+          {meeting.status === 'scheduled' && (
+            <>
+              <Button size="compact-xs" variant="subtle" onClick={onSchedule}>Chốt giờ</Button>
+              <Button size="compact-xs" color="teal" variant="subtle" onClick={() => onSetStatus('done')}>Đã họp</Button>
+              <Button size="compact-xs" color="gray" variant="subtle" onClick={() => onSetStatus('cancelled')}>Hủy</Button>
+            </>
+          )}
+          <Button size="compact-xs" variant="subtle" color="grape" onClick={onNote}>
+            {meeting.note ? 'Sửa ghi chú' : 'Ghi chú'}
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
 /**
  * Cross-class parent-meeting panel — shows all meetings for the active facility
  * (no single-batch filter). Mirrors MeetingsTab logic but operates facility-wide.
- * Confirms / marks done / cancels via parentMeeting.setStatus.
+ * Confirms / marks done / cancels via parentMeeting.setStatus. Renders on @cmc/ui's
+ * CalendarView primitive (P6 — first real consumer of P3's calendar-view.tsx for
+ * parentMeeting); per-row actions moved into a click-triggered detail modal since
+ * the primitive has no inline-action slot.
  */
 export function MeetingsPanel({
   initialFacilityId,
@@ -146,8 +213,11 @@ export function MeetingsPanel({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [selected, setSelected] = useState<ParentMeeting | null>(null);
   const [scheduling, setScheduling] = useState<ParentMeeting | null>(null);
   const [notingMeeting, setNotingMeeting] = useState<ParentMeeting | null>(null);
+  const [calView, setCalView] = useState<CalendarViewMode>('week');
+  const [calDate, setCalDate] = useState(new Date());
 
   // Load facility list once
   useEffect(() => {
@@ -181,6 +251,7 @@ export function MeetingsPanel({
     try {
       await trpc.parentMeeting.setStatus.mutate({ id, status });
       notifySuccess('Đã cập nhật trạng thái cuộc họp phụ huynh');
+      setSelected(null);
       loadMeetings();
     } catch (e) {
       notifyError(e, 'Cập nhật thất bại');
@@ -190,15 +261,33 @@ export function MeetingsPanel({
   const filtered: ParentMeeting[] =
     statusFilter === 'all' ? meetings : meetings.filter((m) => m.status === statusFilter);
 
+  const events: CalendarEvent[] = useMemo(
+    () =>
+      filtered.map((m) => ({
+        id: m.id,
+        title: m.title,
+        start: new Date(m.scheduledAt),
+        end: dayjs(m.scheduledAt).add(DEFAULT_MEETING_DURATION_MIN, 'minute').toDate(),
+        status: m.status,
+        color: `var(--mantine-color-${MEETING_EVENT_COLOR[m.status] ?? MEETING_EVENT_COLOR.scheduled}-6)`,
+      })),
+    [filtered],
+  );
+
+  function handleEventClick(event: CalendarEvent) {
+    const meeting = meetings.find((m) => m.id === event.id);
+    if (meeting) setSelected(meeting);
+  }
+
   return (
     <Stack>
       <Group align="flex-end" wrap="wrap">
-        <Select
-          label="Cơ sở"
+        <FacilityPicker
+          facilities={facilities}
           w={220}
-          data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-          value={facilityId ? String(facilityId) : null}
-          onChange={(v) => setFacilityId(v ? Number(v) : null)}
+          clearable={false}
+          value={facilityId}
+          onChange={setFacilityId}
         />
         <SegmentedControl
           size="xs"
@@ -230,78 +319,24 @@ export function MeetingsPanel({
       )}
 
       {!loading && !error && filtered.length > 0 && (
-        <Table striped>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Thời gian</Table.Th>
-              <Table.Th>Tiêu đề</Table.Th>
-              <Table.Th>Địa điểm</Table.Th>
-              <Table.Th>Trạng thái</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {filtered.map((m) => {
-              const st = MEETING_ST[m.status] ?? { label: m.status, color: 'gray' };
-              return (
-                <Table.Tr key={m.id}>
-                  <Table.Td>
-                    {dayjs(m.scheduledAt).format('DD/MM/YYYY HH:mm')}
-                    {!m.timeConfirmed && (
-                      <Badge size="xs" color="orange" ml={6} variant="light">Chưa chốt</Badge>
-                    )}
-                  </Table.Td>
-                  <Table.Td>{m.title}</Table.Td>
-                  <Table.Td>{m.location ?? '—'}</Table.Td>
-                  <Table.Td>
-                    <Badge size="sm" color={st.color}>
-                      {st.label}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td w={280}>
-                    <Group gap="xs" wrap="wrap">
-                      {m.status === 'scheduled' && (
-                        <>
-                          <Button
-                            size="compact-xs"
-                            variant="subtle"
-                            onClick={() => setScheduling(m)}
-                          >
-                            Chốt giờ
-                          </Button>
-                          <Button
-                            size="compact-xs"
-                            color="teal"
-                            variant="subtle"
-                            onClick={() => setStatus(m.id, 'done')}
-                          >
-                            Đã họp
-                          </Button>
-                          <Button
-                            size="compact-xs"
-                            color="gray"
-                            variant="subtle"
-                            onClick={() => setStatus(m.id, 'cancelled')}
-                          >
-                            Hủy
-                          </Button>
-                        </>
-                      )}
-                      <Button
-                        size="compact-xs"
-                        variant="subtle"
-                        color="grape"
-                        onClick={() => setNotingMeeting(m)}
-                      >
-                        {m.note ? 'Sửa ghi chú' : 'Ghi chú'}
-                      </Button>
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
-              );
-            })}
-          </Table.Tbody>
-        </Table>
+        <CalendarView
+          events={events}
+          view={calView}
+          onViewChange={setCalView}
+          date={calDate}
+          onDateChange={setCalDate}
+          onEventClick={handleEventClick}
+        />
+      )}
+
+      {selected && (
+        <MeetingDetailModal
+          meeting={selected}
+          onClose={() => setSelected(null)}
+          onSetStatus={(status) => setStatus(selected.id, status)}
+          onSchedule={() => { setScheduling(selected); setSelected(null); }}
+          onNote={() => { setNotingMeeting(selected); setSelected(null); }}
+        />
       )}
 
       {scheduling && (

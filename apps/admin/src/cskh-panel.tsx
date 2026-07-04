@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, notifyError, notifySuccess, Chatter } from '@cmc/ui';
+import { trpc, notifyError, notifySuccess, Chatter, FacilityPicker, InitialsAvatar } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -209,13 +209,12 @@ export function CskhPanel() {
 
   return (
     <Stack>
-      <Select
-        label="Cơ sở"
+      <FacilityPicker
+        facilities={facilities}
         w={280}
-        data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-        value={facilityId ? String(facilityId) : null}
-        onChange={(v) => setFacilityId(v ? Number(v) : null)}
-        allowDeselect={false}
+        value={facilityId}
+        onChange={setFacilityId}
+        clearable={false}
       />
 
       {/* ─── Create ── */}
@@ -301,7 +300,16 @@ export function CskhPanel() {
               {cases.map((c) => (
                 <Table.Tr key={c.id}>
                   <Table.Td>{c.subject}</Table.Td>
-                  <Table.Td>{studentName(c.studentId)}</Table.Td>
+                  <Table.Td>
+                    {c.studentId ? (
+                      <Group gap={8} wrap="nowrap">
+                        <InitialsAvatar name={studentName(c.studentId)} size={22} />
+                        <Text size="sm">{studentName(c.studentId)}</Text>
+                      </Group>
+                    ) : (
+                      studentName(c.studentId)
+                    )}
+                  </Table.Td>
                   <Table.Td>
                     <Badge
                       color={

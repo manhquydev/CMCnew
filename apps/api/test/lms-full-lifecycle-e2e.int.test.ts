@@ -16,7 +16,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { Role, loginStudent } from '@cmc/auth';
+import { Role, loginStudent, DEFAULT_STUDENT_PASSWORD } from '@cmc/auth';
 import { seedCurriculum, defaultCsvPath, courseCode } from '@cmc/db';
 import { staffCaller, withRls, SUPER, uniq, superAdminUserId, lmsCaller, prisma } from './helpers.js';
 
@@ -166,7 +166,7 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
 
     const { loginCode, tempPassword } = approved.lmsAccount!;
     expect(loginCode).toMatch(/^HQ-HS-/); // facility-prefixed for global uniqueness
-    expect(tempPassword).toHaveLength(12);
+    expect(tempPassword).toBe(DEFAULT_STUDENT_PASSWORD);
 
     const studentId = approved.studentId!;
     cleanup.studentIds.push(studentId);

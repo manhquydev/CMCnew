@@ -11,6 +11,7 @@ import {
   IconTargetArrow,
 } from '@tabler/icons-react';
 import { OverviewPanel } from './overview-panel';
+import { CrmDirectorDashboardCard } from './crm-director-dashboard';
 
 type ApprovalItem = Awaited<ReturnType<typeof trpc.dashboard.myApprovals.query>>[number];
 
@@ -221,13 +222,16 @@ function ApprovalInboxCard({ onNavigateToKpi }: { onNavigateToKpi: () => void })
 
 /** Executive Cockpit for giam_doc_kinh_doanh-only accounts (Phase 3,
  *  plans/260701-2344-nav-restructuring-operator-executive). Replaces the standalone 'overview'
- *  nav item — composes the existing dashboard.summary widget (via OverviewPanel, unmodified) with
- *  a new approval-inbox widget built on dashboard.myApprovals (Phase 1). No new mutations: every
- *  action button in the inbox calls an existing router procedure directly. */
+ *  nav item — composes the existing dashboard.summary widget (via OverviewPanel, unmodified), the
+ *  CRM team-metrics dashboard (finding #26 — KPI cards, pipeline funnel, consultant leaderboard;
+ *  see crm-director-dashboard.tsx for data-shape notes), and the approval-inbox widget built on
+ *  dashboard.myApprovals (Phase 1). No new mutations: every action button in the inbox calls an
+ *  existing router procedure directly. */
 export function BizDirectorCockpitPanel({ onNavigateToKpi }: { onNavigateToKpi: () => void }) {
   return (
     <Stack>
       <OverviewPanel />
+      <CrmDirectorDashboardCard />
       <ApprovalInboxCard onNavigateToKpi={onNavigateToKpi} />
     </Stack>
   );

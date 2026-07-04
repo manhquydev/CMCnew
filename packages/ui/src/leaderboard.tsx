@@ -114,9 +114,14 @@ export function Leaderboard({ studentId, refreshKey = 0 }: { studentId: string; 
               <Group justify="center" align="flex-end" gap="sm" style={{ margin: '24px 0 32px' }}>
                 {/* 2nd Place */}
                 {rank2 && (
-                  <Stack align="center" gap={4} style={{ width: 100 }}>
+                  <Stack align="center" gap={4} style={{ width: rank2.isMe ? 130 : 100 }}>
                     <Medal2SVG />
-                    <Text size="xs" fw={800} style={{ color: '#475569', textAlign: 'center' }} lineClamp={1}>
+                    <Text
+                      size="xs"
+                      fw={800}
+                      style={{ color: '#475569', textAlign: 'center' }}
+                      lineClamp={rank2.isMe ? undefined : 1}
+                    >
                       {rank2.name}
                     </Text>
                     <Box
@@ -142,9 +147,14 @@ export function Leaderboard({ studentId, refreshKey = 0 }: { studentId: string; 
 
                 {/* 1st Place */}
                 {rank1 && (
-                  <Stack align="center" gap={4} style={{ width: 110 }}>
+                  <Stack align="center" gap={4} style={{ width: rank1.isMe ? 140 : 110 }}>
                     <CrownSVG />
-                    <Text size="sm" fw={900} style={{ color: '#b45309', textAlign: 'center' }} lineClamp={1}>
+                    <Text
+                      size="sm"
+                      fw={900}
+                      style={{ color: '#b45309', textAlign: 'center' }}
+                      lineClamp={rank1.isMe ? undefined : 1}
+                    >
                       {rank1.name}
                     </Text>
                     <Box
@@ -171,9 +181,14 @@ export function Leaderboard({ studentId, refreshKey = 0 }: { studentId: string; 
 
                 {/* 3rd Place */}
                 {rank3 && (
-                  <Stack align="center" gap={4} style={{ width: 100 }}>
+                  <Stack align="center" gap={4} style={{ width: rank3.isMe ? 130 : 100 }}>
                     <Medal3SVG />
-                    <Text size="xs" fw={800} style={{ color: '#c2410c', textAlign: 'center' }} lineClamp={1}>
+                    <Text
+                      size="xs"
+                      fw={800}
+                      style={{ color: '#c2410c', textAlign: 'center' }}
+                      lineClamp={rank3.isMe ? undefined : 1}
+                    >
                       {rank3.name}
                     </Text>
                     <Box

@@ -1,13 +1,25 @@
-// Staff record page (Odoo-style single surface) — plan R0/R1/R2.
-// ONE page for a staff member: read by default, a header "Chỉnh sửa" unlocks only the fields the
-// caller may write (super_admin for F0), with a single Lưu/Hủy that batches the underlying mutations
-// (updateProfile + setRoles/setFacilities/setActive) so a partial save can't happen. The activity
-// log is INLINE in a right column (stacks below on mobile), fed by the SECURE audit.staffTimeline
-// endpoint (facility-scoped + permission-gated) — never the open Chatter path. Salary/employment
-// tabs lazy-load behind their own permission gates so unprivileged roles never over-fetch them.
+// Staff record page (Odoo-style single surface) — plan R0/R1/R2, migrated onto @cmc/ui's
+// RecordDetailPanel primitive (P5 of the ERP UI rebuild — first real consumer of P2's primitive,
+// decision 0032). ONE page for a staff member: read by default, a header "Chỉnh sửa" unlocks only
+// the fields the caller may write (super_admin for F0), with a single Lưu/Hủy that batches the
+// underlying mutations (updateProfile + setRoles/setFacilities/setActive) so a partial save can't
+// happen. The activity log is INLINE in a right column (stacks below on mobile), fed by the SECURE
+// audit.staffTimeline endpoint (facility-scoped + permission-gated) — never the open Chatter path.
+// Salary/employment tabs lazy-load behind their own permission gates so unprivileged roles never
+// over-fetch them.
+//
+// Header chrome (back button, title, badge, edit/save/cancel, reset-password modal) stays
+// caller-owned per P2's FIX #4 scope boundary — RecordDetailPanel owns only the sheet+tabs+
+// activity-rail region. Save is triggered via the imperative `RecordDetailHandle` ref (decision
+// 0032); `onStateChange` keeps the header's Save button reactive (loading/disabled) since ref
+// mutation alone doesn't trigger a re-render.
 
-import { useEffect, useState } from 'react';
-import { trpc, useSession, notifyError, notifySuccess, ActivityLog } from '@cmc/ui';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  trpc, useSession, notifyError, notifySuccess,
+  RecordDetailPanel, type RecordDetailConfig, type RecordDetailHandle,
+  InitialsAvatar, StatusBadge, toApiDate, parseApiDate,
+} from '@cmc/ui';
 import { can, canReadSensitiveHr, maskSensitive, ROLE_LABEL } from '@cmc/auth/permissions';
 import {
   ActionIcon,
@@ -15,27 +27,22 @@ import {
   Button,
   Card,
   Fieldset,
-  Grid,
   Group,
   Modal,
-  MultiSelect,
-  Select,
-  SimpleGrid,
   Skeleton,
+  SimpleGrid,
   Stack,
-  Switch,
   Table,
-  Tabs,
   Text,
   TextInput,
   Title,
 } from '@mantine/core';
+import { DateInput } from '@mantine/dates';
 import { IconArrowLeft, IconPencil } from '@tabler/icons-react';
 
 type EmploymentProfile = Awaited<ReturnType<typeof trpc.payroll.profileList.query>>[number];
 type SalaryRate = Awaited<ReturnType<typeof trpc.payroll.rateList.query>>[number];
 type Payslip = Awaited<ReturnType<typeof trpc.payroll.listByStaff.query>>[number];
-type TimelineEntry = Awaited<ReturnType<typeof trpc.audit.staffTimeline.query>>[number];
 // Role union/array shapes, derived from the mutation input so casts stay in sync with the API.
 type RoleArr = Parameters<typeof trpc.user.setRoles.mutate>[0]['roles'];
 
@@ -152,7 +159,13 @@ function EmploymentTab({ user }: { user: StaffProfileUser }) {
               <TextInput label="Vị trí" value={form.position} onChange={(e) => setForm({ ...form, position: e.currentTarget.value })} />
               <TextInput label="Bậc lương" value={form.grade} onChange={(e) => setForm({ ...form, grade: e.currentTarget.value })} />
               <TextInput label="Người phụ thuộc" type="number" value={form.dependents} onChange={(e) => setForm({ ...form, dependents: Number(e.currentTarget.value) })} />
-              <TextInput label="Ngày vào làm" value={form.startedAt} onChange={(e) => setForm({ ...form, startedAt: e.currentTarget.value })} placeholder="YYYY-MM-DD" />
+              <DateInput
+                label="Ngày vào làm"
+                valueFormat="DD/MM/YYYY"
+                clearable
+                value={parseApiDate(form.startedAt)}
+                onChange={(d) => setForm({ ...form, startedAt: toApiDate(d) ?? '' })}
+              />
               <TextInput label="Số máy nhánh (Callio)" value={form.callioExt} onChange={(e) => setForm({ ...form, callioExt: e.currentTarget.value })} />
               <TextInput label="Mã quản lý (UUID)" value={form.managerId} onChange={(e) => setForm({ ...form, managerId: e.currentTarget.value })} placeholder="Để trống = tự động" />
             </SimpleGrid>
@@ -259,8 +272,42 @@ function PayrollTab({ user }: { user: StaffProfileUser }) {
   );
 }
 
-// ─── Activity log (secure fetch + shared <ActivityLog> primitive) ────────────
-// Field labels + value formatting for the staff entity; the generic rendering lives in @cmc/ui.
+// ─── RecordDetailTab adapters — EmploymentTab/PayrollTab expect `{ user }`, the
+// primitive's tab contract is `{ data: unknown }` (P5 red-team gap #6). Rebuild the
+// StaffProfileUser shape from the primitive's live form data, memoized on only the
+// fields each tab actually reads so their own fetch-effects don't re-fire on every
+// unrelated keystroke while editing. ─────────────────────────────────────────────
+function toStaffProfileUser(d: Record<string, unknown>): StaffProfileUser {
+  return {
+    id: d.id as string,
+    email: d.email as string,
+    phone: (d.phone as string) || null,
+    displayName: d.displayName as string,
+    roles: (d.roles as string[]) ?? [],
+    primaryRole: d.primaryRole as string,
+    isActive: !!d.isActive,
+    facilities: ((d.facilityIds as string[]) ?? []).map((id) => ({ facilityId: Number(id) })),
+  };
+}
+
+function EmploymentTabAdapter({ data }: { data: unknown }) {
+  const d = data as Record<string, unknown>;
+  const facilityIdsKey = ((d.facilityIds as string[]) ?? []).slice().sort().join(',');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const user = useMemo(() => toStaffProfileUser(d), [d.id, facilityIdsKey]);
+  return <EmploymentTab user={user} />;
+}
+
+function PayrollTabAdapter({ data }: { data: unknown }) {
+  const d = data as Record<string, unknown>;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const user = useMemo(() => toStaffProfileUser(d), [d.id]);
+  return <PayrollTab user={user} />;
+}
+
+// ─── Activity log field labels + value formatting — passed into the primitive's
+// built-in activity rail (RecordDetailConfig.activityLog); the generic rendering
+// lives in @cmc/ui's <ActivityLog>. ───────────────────────────────────────────
 const STAFF_FIELD_LABELS: Record<string, string> = {
   displayName: 'Tên hiển thị',
   phone: 'Số điện thoại',
@@ -274,26 +321,6 @@ function staffFormatValue(field: string, v: unknown): string {
   if (field === 'isActive') return v ? 'Đang hoạt động' : 'Ngừng';
   if (Array.isArray(v)) return v.join(', ');
   return String(v);
-}
-
-function StaffActivityLog({ userId, refreshKey }: { userId: string; refreshKey: number }) {
-  const [rows, setRows] = useState<TimelineEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setLoading(true);
-    trpc.audit.staffTimeline
-      .query({ userId })
-      .then(setRows)
-      .catch((e) => notifyError(e, 'Không tải được nhật ký'))
-      .finally(() => setLoading(false));
-  }, [userId, refreshKey]);
-
-  return (
-    <div style={{ position: 'sticky', top: 12 }}>
-      <ActivityLog entries={rows} loading={loading} fieldLabels={STAFF_FIELD_LABELS} formatValue={staffFormatValue} />
-    </div>
-  );
 }
 
 // ─── Main: single record page ────────────────────────────────────────────────
@@ -339,54 +366,135 @@ export function StaffProfilePanel({
   useEffect(() => setView(user), [user]);
 
   const [editing, setEditing] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [activityKey, setActivityKey] = useState(0);
+  // Bumped on Hủy to force-remount RecordDetailPanel (via `key`) so its internal form
+  // state resets to the committed `view` — the primitive only auto-resets on entityId
+  // change, not on an edit→cancel transition (P5 red-team note: read-mode inside the
+  // primitive renders from the same live form data as edit-mode, so a stale unsaved
+  // draft would otherwise leak into the read view after Cancel).
+  const [formResetToken, setFormResetToken] = useState(0);
 
-  // Edit form state
-  const [displayName, setDisplayName] = useState(view.displayName);
-  const [phone, setPhone] = useState(view.phone ?? '');
-  const [roles, setRoles] = useState<string[]>([...view.roles]);
-  const [primaryRole, setPrimaryRole] = useState<string | null>(view.primaryRole);
-  const [facilityIds, setFacilityIds] = useState<string[]>(view.facilities.map((f) => String(f.facilityId)));
-  const [isActive, setIsActive] = useState(view.isActive);
+  const recordRef = useRef<RecordDetailHandle>(null);
+  const [recordState, setRecordState] = useState<Pick<RecordDetailHandle, 'busy' | 'isDirty' | 'validationError' | 'data'>>({
+    busy: false, isDirty: false, validationError: null, data: {},
+  });
 
-  function beginEdit() {
-    setDisplayName(view.displayName);
-    setPhone(view.phone ?? '');
-    setRoles([...view.roles]);
-    setPrimaryRole(view.primaryRole);
-    setFacilityIds(view.facilities.map((f) => String(f.facilityId)));
-    setIsActive(view.isActive);
-    setEditing(true);
-  }
+  const config: RecordDetailConfig = {
+    entityType: 'staff',
+    entityId: view.id,
+    data: {
+      id: view.id,
+      email: view.email,
+      displayName: view.displayName,
+      phone: view.phone ?? '',
+      roles: [...view.roles],
+      primaryRole: view.primaryRole,
+      facilityIds: view.facilities.map((f) => String(f.facilityId)),
+      isActive: view.isActive,
+    },
+    canEdit: (session) => session.isSuperAdmin,
+    // Mirrors the pre-migration `roleEditInvalid` + displayName-required Save gate —
+    // `view` closes over the last-committed record so "unchanged roles" never trips
+    // the ≥1-role/primary-role check (only an in-progress edit can reach that state).
+    validate: (data) => {
+      if (!String(data.displayName ?? '').trim()) return 'Tên hiển thị không được để trống';
+      const roles = (data.roles as string[]) ?? [];
+      const primaryRole = (data.primaryRole as string | null) ?? null;
+      const rolesChanged =
+        roles.slice().sort().join(',') !== [...view.roles].sort().join(',') || primaryRole !== view.primaryRole;
+      if (rolesChanged && (roles.length === 0 || !primaryRole)) {
+        return roles.length === 0 ? 'Phải có ít nhất một vai trò.' : 'Chọn vai trò chính để lưu.';
+      }
+      return null;
+    },
+    sections: [
+      {
+        name: 'Định danh',
+        fields: [
+          { key: 'displayName', label: 'Tên hiển thị', type: 'text' },
+          { key: 'email', label: 'Email (SSO — khóa)', type: 'email', readOnly: true },
+          { key: 'phone', label: 'Số điện thoại', type: 'text' },
+          {
+            key: 'isActive', label: 'Trạng thái', type: 'switch', readOnly: true,
+            render: (value) => (value ? 'Đang hoạt động' : 'Ngừng'),
+          },
+        ],
+      },
+      {
+        name: 'Phân quyền',
+        fields: [
+          {
+            key: 'roles', label: 'Vai trò', type: 'multiselect', options: roleOptions,
+            onFieldChange: (data) => {
+              const roles = (data.roles as string[]) ?? [];
+              const primaryRole = data.primaryRole as string | null;
+              if (primaryRole && !roles.includes(primaryRole)) return { primaryRole: null };
+            },
+            render: (value, data) => (
+              <>
+                {((value as string[]) ?? []).map((r, i) => (
+                  <Badge key={r} variant="light" radius="xl" ml={i > 0 ? 4 : 0}>
+                    {ROLE_LABEL[r] ?? r}{r === data.primaryRole ? ' ★' : ''}
+                  </Badge>
+                ))}
+              </>
+            ),
+          },
+          {
+            key: 'primaryRole', label: 'Vai trò chính', type: 'select',
+            options: (data) => ((data.roles as string[]) ?? []).map((r) => ({ value: r, label: r })),
+          },
+          {
+            key: 'facilityIds', label: 'Cơ sở được truy cập', type: 'multiselect', options: facilityData,
+            render: (value) => {
+              const ids = (value as string[]) ?? [];
+              return ids.length === 0 ? '—' : (
+                <>
+                  {ids.map((id, i) => (
+                    <Badge key={id} variant="outline" radius="xl" ml={i > 0 ? 4 : 0}>
+                      {facilityLabels[Number(id)] ?? `#${id}`}
+                    </Badge>
+                  ))}
+                </>
+              );
+            },
+          },
+          { key: 'isActive', label: 'Đang hoạt động', type: 'switch' },
+        ],
+      },
+    ],
+    tabs: [
+      { value: 'employment', label: 'Hồ sơ nhân sự', component: EmploymentTabAdapter },
+      ...(canPayroll ? [{
+        value: 'payroll', label: 'Lương & phụ cấp', component: PayrollTabAdapter,
+      }] : []),
+    ],
+    ...(canActivity ? {
+      activityLog: {
+        fetchEndpoint: (entityId: string) => trpc.audit.staffTimeline.query({ userId: entityId }),
+        fieldLabels: STAFF_FIELD_LABELS,
+        formatValue: staffFormatValue,
+      },
+    } : {}),
+    onSave: async (data) => {
+      const displayName = String(data.displayName ?? '').trim();
+      const phone = String(data.phone ?? '').trim();
+      const roles = (data.roles as string[]) ?? [];
+      const primaryRole = (data.primaryRole as string | null) ?? null;
+      const facilityIds = ((data.facilityIds as string[]) ?? []).map(Number);
+      const isActive = !!data.isActive;
+      const rolesChanged =
+        roles.slice().sort().join(',') !== [...view.roles].sort().join(',') || primaryRole !== view.primaryRole;
 
-  const rolesChanged =
-    roles.slice().sort().join(',') !== [...view.roles].sort().join(',')
-    || primaryRole !== view.primaryRole;
-  // A role edit is only valid with ≥1 role AND a primary role within them. Surfacing this (vs the
-  // earlier silent skip) prevents a dropped setRoles call from showing a false "saved" state.
-  const roleEditInvalid = rolesChanged && (roles.length === 0 || !primaryRole);
-
-  async function save() {
-    if (roleEditInvalid) {
-      notifyError(
-        new Error(roles.length === 0 ? 'Phải có ít nhất một vai trò' : 'Chọn vai trò chính'),
-        'Lưu thất bại',
-      );
-      return;
-    }
-    setBusy(true);
-    try {
-      const fIds = facilityIds.map(Number);
       // Batch only the mutations whose values actually changed — one logical save.
-      if (displayName.trim() !== view.displayName || (phone.trim() || null) !== (view.phone ?? null)) {
-        await trpc.user.updateProfile.mutate({ id: view.id, displayName: displayName.trim(), phone: phone.trim() || null });
+      if (displayName !== view.displayName || (phone || null) !== (view.phone ?? null)) {
+        await trpc.user.updateProfile.mutate({ id: view.id, displayName, phone: phone || null });
       }
       if (rolesChanged && primaryRole) {
         await trpc.user.setRoles.mutate({ id: view.id, roles: roles as RoleArr, primaryRole: primaryRole as RoleArr[number] });
       }
-      if (sortedNums(fIds) !== sortedNums(view.facilities.map((f) => f.facilityId))) {
-        await trpc.user.setFacilities.mutate({ id: view.id, facilityIds: fIds });
+      if (sortedNums(facilityIds) !== sortedNums(view.facilities.map((f) => f.facilityId))) {
+        await trpc.user.setFacilities.mutate({ id: view.id, facilityIds });
       }
       if (isActive !== view.isActive) {
         await trpc.user.setActive.mutate({ id: view.id, isActive });
@@ -394,93 +502,18 @@ export function StaffProfilePanel({
       // Reflect locally + refresh the list behind + re-pull the activity log.
       setView({
         ...view,
-        displayName: displayName.trim(),
-        phone: phone.trim() || null,
+        displayName,
+        phone: phone || null,
         roles: [...roles],
         primaryRole: primaryRole ?? view.primaryRole,
         isActive,
-        facilities: fIds.map((facilityId) => ({ facilityId })),
+        facilities: facilityIds.map((facilityId) => ({ facilityId })),
       });
-      setEditing(false);
       setActivityKey((k) => k + 1);
       reload();
       notifySuccess('Đã lưu thay đổi');
-    } catch (e) {
-      notifyError(e, 'Lưu thất bại');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const sheet = (
-    <Stack>
-      <Fieldset legend="Định danh">
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-          {editing ? (
-            <TextInput label="Tên hiển thị" value={displayName} onChange={(e) => setDisplayName(e.currentTarget.value)} />
-          ) : (
-            <Field label="Tên hiển thị" value={view.displayName} />
-          )}
-          <Field label="Email (SSO — khóa)" value={view.email} />
-          {editing ? (
-            <TextInput label="Số điện thoại" value={phone} onChange={(e) => setPhone(e.currentTarget.value)} />
-          ) : (
-            <Field label="Số điện thoại" value={view.phone || '—'} />
-          )}
-          <Field label="Trạng thái" value={view.isActive ? 'Đang hoạt động' : 'Ngừng'} />
-        </SimpleGrid>
-      </Fieldset>
-
-      <Fieldset legend="Phân quyền">
-        {editing && canEdit ? (
-          <Stack gap="sm">
-            <MultiSelect
-              label="Vai trò" data={roleOptions} value={roles}
-              onChange={(v) => { setRoles(v); if (primaryRole && !v.includes(primaryRole)) setPrimaryRole(null); }}
-            />
-            <Select label="Vai trò chính" data={roles} value={primaryRole} onChange={setPrimaryRole} disabled={roles.length === 0} />
-            {roleEditInvalid && (
-              <Text size="xs" c="red">
-                {roles.length === 0 ? 'Phải có ít nhất một vai trò.' : 'Chọn vai trò chính để lưu.'}
-              </Text>
-            )}
-            <MultiSelect label="Cơ sở được truy cập" data={facilityData} value={facilityIds} onChange={setFacilityIds} />
-            <Switch label="Đang hoạt động" checked={isActive} onChange={(e) => setIsActive(e.currentTarget.checked)} />
-            <Text size="xs" c="dimmed">Đổi vai trò / cơ sở / trạng thái sẽ vô hiệu hóa các phiên đăng nhập hiện tại.</Text>
-          </Stack>
-        ) : (
-          <Stack gap="sm">
-            <div>
-              <Text size="sm" c="dimmed" mb={4}>Vai trò</Text>
-              <Group gap="xs">
-                {view.roles.map((r) => (
-                  <Badge key={r} variant="light" radius="xl">{ROLE_LABEL[r] ?? r}{r === view.primaryRole ? ' ★' : ''}</Badge>
-                ))}
-              </Group>
-            </div>
-            <div>
-              <Text size="sm" c="dimmed" mb={4}>Cơ sở được truy cập</Text>
-              <Group gap="xs">
-                {view.facilities.length === 0 ? <Text size="sm" c="dimmed">—</Text> :
-                  view.facilities.map((f) => (
-                    <Badge key={f.facilityId} variant="outline" radius="xl">{facilityLabels[f.facilityId] ?? `#${f.facilityId}`}</Badge>
-                  ))}
-              </Group>
-            </div>
-          </Stack>
-        )}
-      </Fieldset>
-
-      <Tabs defaultValue="employment" variant="outline">
-        <Tabs.List>
-          <Tabs.Tab value="employment">Hồ sơ nhân sự</Tabs.Tab>
-          {canPayroll && <Tabs.Tab value="payroll">Lương &amp; phụ cấp</Tabs.Tab>}
-        </Tabs.List>
-        <Tabs.Panel value="employment" pt="md"><EmploymentTab user={view} /></Tabs.Panel>
-        {canPayroll && <Tabs.Panel value="payroll" pt="md"><PayrollTab user={view} /></Tabs.Panel>}
-      </Tabs>
-    </Stack>
-  );
+    },
+  };
 
   return (
     <Stack>
@@ -495,17 +528,35 @@ export function StaffProfilePanel({
         {canEdit && (
           editing ? (
             <Group gap="xs">
-              <Button variant="default" size="xs" onClick={() => setEditing(false)} disabled={busy}>Hủy</Button>
-              <Button variant="filled" radius={9999} size="xs" loading={busy} onClick={save} disabled={displayName.trim().length === 0 || roleEditInvalid}>Lưu</Button>
+              <Button
+                variant="default" size="xs" disabled={recordState.busy}
+                onClick={() => { setEditing(false); setFormResetToken((k) => k + 1); }}
+              >
+                Hủy
+              </Button>
+              <Button
+                variant="filled" radius={9999} size="xs" loading={recordState.busy}
+                onClick={() => recordRef.current?.save()}
+                disabled={!!recordState.validationError}
+              >
+                Lưu
+              </Button>
             </Group>
           ) : (
             <Group gap="xs">
               <Button variant="default" size="xs" loading={pwBusy} onClick={resetPassword}>Đặt lại mật khẩu</Button>
-              <Button variant="light" size="xs" leftSection={<IconPencil size={14} />} onClick={beginEdit}>Chỉnh sửa</Button>
+              <Button variant="light" size="xs" leftSection={<IconPencil size={14} />} onClick={() => setEditing(true)}>Chỉnh sửa</Button>
             </Group>
           )
         )}
       </Group>
+
+      {editing && (
+        <Stack gap={2}>
+          <Text size="xs" c="dimmed">Đổi vai trò / cơ sở / trạng thái sẽ vô hiệu hóa các phiên đăng nhập hiện tại.</Text>
+          {recordState.validationError && <Text size="xs" c="red">{recordState.validationError}</Text>}
+        </Stack>
+      )}
 
       <Modal opened={!!pwResult} onClose={() => setPwResult(null)} title="Mật khẩu mới" size="sm">
         <Stack>
@@ -515,14 +566,54 @@ export function StaffProfilePanel({
         </Stack>
       </Modal>
 
-      {canActivity ? (
-        <Grid gutter="lg">
-          <Grid.Col span={{ base: 12, md: 8 }}>{sheet}</Grid.Col>
-          <Grid.Col span={{ base: 12, md: 4 }}><StaffActivityLog userId={view.id} refreshKey={activityKey} /></Grid.Col>
-        </Grid>
-      ) : (
-        sheet
-      )}
+      <Card radius="sm" p="lg" style={{ border: '1px solid var(--cmc-border)' }}>
+        <Group align="center" gap="lg" wrap="nowrap">
+          <div style={{ position: 'relative', width: 128, height: 128, flexShrink: 0 }}>
+            <InitialsAvatar name={view.displayName} size={128} />
+            {view.isActive && (
+              <span
+                aria-hidden="true"
+                title="Đang hoạt động"
+                style={{
+                  position: 'absolute',
+                  bottom: 6,
+                  right: 6,
+                  width: 18,
+                  height: 18,
+                  borderRadius: '50%',
+                  background: 'var(--cmc-status-active)',
+                  border: '3px solid var(--cmc-surface)',
+                }}
+              />
+            )}
+          </div>
+          <Stack gap="xs" style={{ minWidth: 0 }}>
+            <Text fw={600} size="lg">{view.displayName}</Text>
+            <Text size="sm" c="dimmed">{view.email}</Text>
+            <Group gap="xs" wrap="wrap">
+              {view.roles.map((r) => (
+                <StatusBadge
+                  key={r}
+                  status={r}
+                  tone="info"
+                  pill
+                  label={`${ROLE_LABEL[r] ?? r}${r === view.primaryRole ? ' ★' : ''}`}
+                />
+              ))}
+            </Group>
+          </Stack>
+        </Group>
+      </Card>
+
+      <RecordDetailPanel
+        key={`${view.id}-${formResetToken}`}
+        ref={recordRef}
+        config={config}
+        refreshKey={activityKey}
+        editing={editing}
+        onEditingChange={setEditing}
+        onStateChange={setRecordState}
+      />
     </Stack>
   );
 }

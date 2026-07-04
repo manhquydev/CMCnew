@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import dayjs from 'dayjs';
-import { notifyError } from '@cmc/ui';
-import { Badge, Button, Card, Group, Stack, Table, Text, TextInput } from '@mantine/core';
+import { notifyError, InitialsAvatar, toApiMonth, parseApiMonth } from '@cmc/ui';
+import { Badge, Button, Card, Group, Stack, Table, Text } from '@mantine/core';
+import { MonthPickerInput } from '@mantine/dates';
 import { attendanceApi } from './shallow-trpc';
 
 const TH_STYLE: React.CSSProperties = {
@@ -56,11 +57,12 @@ export function AttendanceMonthlyReportPanel({ facilityId }: { facilityId: numbe
           </Text>
         </div>
         <Group align="flex-end">
-          <TextInput
+          <MonthPickerInput
             label="Kỳ"
-            placeholder="YYYY-MM"
-            value={periodKey}
-            onChange={(e) => setPeriodKey(e.currentTarget.value)}
+            valueFormat="YYYY-MM"
+            clearable={false}
+            value={parseApiMonth(periodKey)}
+            onChange={(d) => setPeriodKey(toApiMonth(d) ?? '')}
             error={periodKey && !periodKey.match(/^\d{4}-\d{2}$/) ? 'YYYY-MM' : undefined}
             w={130}
           />
@@ -94,7 +96,12 @@ export function AttendanceMonthlyReportPanel({ facilityId }: { facilityId: numbe
             <Table.Tbody>
               {rows.map((row) => (
                 <Table.Tr key={row.userId}>
-                  <Table.Td><Text fw={500} size="sm">{row.displayName}</Text></Table.Td>
+                  <Table.Td>
+                    <Group gap={8} wrap="nowrap">
+                      <InitialsAvatar name={row.displayName} size={22} />
+                      <Text fw={500} size="sm">{row.displayName}</Text>
+                    </Group>
+                  </Table.Td>
                   <Table.Td>{row.workdays}</Table.Td>
                   <Table.Td>{row.lateMinutes}p</Table.Td>
                   <Table.Td>{row.earlyMinutes}p</Table.Td>

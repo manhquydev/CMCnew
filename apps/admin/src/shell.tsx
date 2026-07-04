@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  AppShell, ActionIcon, Avatar, Badge, Box, Button, Group, NavLink,
-  Popover, ScrollArea, Stack, Text, UnstyledButton,
+  AppShell, ActionIcon, Badge, Box, Button, Group, Menu, NavLink,
+  Popover, ScrollArea, Stack, Tabs, Text, TextInput, UnstyledButton,
 } from '@mantine/core';
-import { useSession, useStaffNotif } from '@cmc/ui';
+import { useDebouncedValue } from '@mantine/hooks';
+import { useSession, useStaffNotif, InitialsAvatar, trpc } from '@cmc/ui';
 import type { StaffNotifItem } from '@cmc/ui';
 import { can } from '@cmc/auth/permissions';
 import { NAV_GATES } from './nav-permissions.js';
@@ -22,15 +24,20 @@ import {
   IconGift,
   IconAward,
   IconHeadset,
+  IconHelpCircle,
   IconId,
   IconLayoutDashboard,
+  IconLayoutGrid,
   IconInbox,
+  IconLogout,
   IconPencil,
   IconReceipt,
   IconReport,
   IconSchool,
+  IconSearch,
   IconTargetArrow,
   IconTrendingUp,
+  IconUser,
   IconUsers,
   IconWallet,
 } from '@tabler/icons-react';
@@ -80,7 +87,9 @@ export type SectionKey =
   // Executive Cockpit (Phase 3) — giam_doc_kinh_doanh-only aggregate screen
   | 'biz-director-cockpit'
   // Executive Cockpit (Phase 4) — giam_doc_dao_tao-only aggregate screen
-  | 'edu-director-cockpit';
+  | 'edu-director-cockpit'
+  // Profile/settings — reachable by any logged-in staff via the avatar menu, not the sidebar.
+  | 'profile';
 
 // ─── Nav types ────────────────────────────────────────────────────────────────
 
@@ -92,25 +101,39 @@ type NavItem = {
 };
 
 type NavGroup = {
+  /** Module slug (rail item id) — one group = one module (design doc §2). */
+  key: string;
   groupLabel: string;
+  /** Module rail icon — reuses the group's lead-leaf icon (design doc §2). */
+  icon: React.ReactNode;
   items: NavItem[];
 };
 
-// ─── Sidebar item ─────────────────────────────────────────────────────────────
+/** First visible subtab of a module's group, in declaration order — the click-through target
+ *  when a user picks a module from the rail (design §5.2). Re-exported from nav-modules.ts. */
+export function firstVisibleSubtab(group: NavGroup): SectionKey | null {
+  return group.items.find((i) => i.visible)?.key ?? null;
+}
 
-function SidebarItem({
-  item,
+// ─── Module rail item ─────────────────────────────────────────────────────────
+// One per module (design doc §5.4: always the MODULE's icon+label, uniform — even for a
+// persona whose module resolves to a single visible subtab).
+
+function ModuleItem({
+  label,
+  icon,
   active,
   onClick,
 }: {
-  item: NavItem;
+  label: string;
+  icon: React.ReactNode;
   active: boolean;
   onClick: () => void;
 }) {
   return (
     <NavLink
-      label={item.label}
-      leftSection={item.icon}
+      label={label}
+      leftSection={icon}
       active={active}
       onClick={onClick}
       styles={{
@@ -134,26 +157,39 @@ function SidebarItem({
   );
 }
 
-// ─── Section label ─────────────────────────────────────────────────────────────
-
-function GroupLabel({ label }: { label: string }) {
+// ─── SubTabBar ─────────────────────────────────────────────────────────────────
+// Horizontal sub-tab strip for the active module's visible screens. Controlled Tabs
+// (value/onChange derived from the URL-backed activeSection) so browser back/forward and
+// search deep-links stay in sync — NOT the uncontrolled defaultValue pattern used by
+// student-management-panel.tsx (that precedent proves the visual style, not this mechanism).
+// Tab strip only — no Tabs.Panel; panel content stays in the existing renderContent switch.
+// Suppressed entirely when the module has ≤1 visible subtab (design §5.4 — uniform module
+// label in the rail already carries that case; a lone tab would be redundant chrome).
+function SubTabBar({
+  subtabs,
+  activeSection,
+  onChange,
+}: {
+  subtabs: NavItem[];
+  activeSection: SectionKey;
+  onChange: (key: SectionKey) => void;
+}) {
+  if (subtabs.length <= 1) return null;
   return (
-    <Text
-      size="xs"
-      style={{
-        fontSize: 11,
-        textTransform: 'uppercase',
-        letterSpacing: '0.06em',
-        color: 'var(--cmc-text-faint)',
-        fontWeight: 600,
-        paddingLeft: 12,
-        paddingTop: 16,
-        paddingBottom: 4,
-        userSelect: 'none',
-      }}
+    <Tabs
+      value={activeSection}
+      onChange={(v) => v && onChange(v as SectionKey)}
+      mb="lg"
+      styles={{ list: { overflowX: 'auto', flexWrap: 'nowrap' } }}
     >
-      {label}
-    </Text>
+      <Tabs.List>
+        {subtabs.map((item) => (
+          <Tabs.Tab key={item.key} value={item.key} style={{ whiteSpace: 'nowrap' }}>
+            {item.label}
+          </Tabs.Tab>
+        ))}
+      </Tabs.List>
+    </Tabs>
   );
 }
 
@@ -205,25 +241,178 @@ function StaffNotifDropdown({
   );
 }
 
+// ─── Global search dropdown ───────────────────────────────────────────────────
+
+type GlobalSearchResult = Awaited<ReturnType<typeof trpc.search.global.query>>;
+
+/**
+ * section: navigation target (existing screen) for the entity's owning section.
+ * path(id): overrides with a real record URL when one exists — currently only CRM
+ * opportunities (`/crm/opportunities/:oppId`, wired in App.tsx).
+ * Students/staff/class-batches have no per-record URL route; instead App.tsx's
+ * `onSearchNavigate` callback pre-selects the record via component-local state
+ * (students-panel.tsx's `initialDetailId`, OrgPanel's `initialStaffNav` in App.tsx, and
+ * class-workspace.tsx's existing `navAction`/`goToClass` mechanism), exactly mirroring how
+ * clicking into a batch from the schedule panel already works.
+ */
+const SEARCH_GROUPS: {
+  key: keyof GlobalSearchResult;
+  label: string;
+  section: SectionKey;
+  path?: (id: string) => string;
+}[] = [
+  { key: 'students', label: 'Học sinh', section: 'students' },
+  { key: 'opportunities', label: 'Cơ hội CRM', section: 'crm', path: (id) => `/crm/opportunities/${id}` },
+  { key: 'staff', label: 'Nhân viên', section: 'org' },
+  { key: 'classBatches', label: 'Lớp học', section: 'classes' },
+];
+
+function GlobalSearchDropdown({
+  loading,
+  error,
+  results,
+  onSelect,
+}: {
+  loading: boolean;
+  error: boolean;
+  results: GlobalSearchResult | null;
+  onSelect: (group: (typeof SEARCH_GROUPS)[number], id: string) => void;
+}) {
+  if (loading) {
+    return <Text size="sm" c="dimmed" ta="center" py="md">Đang tìm…</Text>;
+  }
+  if (error) {
+    return <Text size="sm" c="red" ta="center" py="md">Không thể tải kết quả tìm kiếm</Text>;
+  }
+  if (!results) return null;
+
+  const groups = SEARCH_GROUPS.map((g) => ({ ...g, items: results[g.key] }));
+  const hasAny = groups.some((g) => g.items.length > 0);
+  if (!hasAny) {
+    return <Text size="sm" c="dimmed" ta="center" py="md">Không tìm thấy kết quả</Text>;
+  }
+
+  return (
+    <Stack gap={0} style={{ maxHeight: 360, overflowY: 'auto' }}>
+      {groups
+        .filter((g) => g.items.length > 0)
+        .map((g) => (
+          <Box key={g.key} py={4}>
+            <Text
+              size="xs"
+              fw={600}
+              c="dimmed"
+              px="sm"
+              py={4}
+              style={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}
+            >
+              {g.label}
+            </Text>
+            {g.items.map((item) => (
+              <UnstyledButton
+                key={item.id}
+                onClick={() => onSelect(g, item.id)}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '6px 12px',
+                  textAlign: 'left',
+                  borderRadius: 6,
+                }}
+                styles={{ root: { '&:hover': { backgroundColor: 'var(--cmc-surface-2)' } } }}
+              >
+                <Text size="sm">{item.label}</Text>
+              </UnstyledButton>
+            ))}
+          </Box>
+        ))}
+    </Stack>
+  );
+}
+
 // ─── Shell ─────────────────────────────────────────────────────────────────────
 
 export function Shell({
   activeSection,
   onSectionChange,
+  onSearchNavigate,
   navGroups,
+  activeModuleKey,
   sectionTitle,
   children,
 }: {
   activeSection: SectionKey;
   onSectionChange: (key: SectionKey) => void;
+  /** Deep-link into a specific record for entity types with no per-record URL route
+   *  (students/staff/classBatches) — see SEARCH_GROUPS comment above. */
+  onSearchNavigate: (entityKey: 'students' | 'staff' | 'classBatches', id: string) => void;
   navGroups: NavGroup[];
+  /** Module slug containing activeSection (from nav-modules.ts's moduleOf), or null for
+   *  sections outside the rail (profile). Tolerates activeSection not being in the resolved
+   *  module's visible subtabs (design §4 hr-role landing edge case) — SubTabBar just
+   *  highlights none rather than crashing or inventing a tab. */
+  activeModuleKey: string | null;
   sectionTitle: string;
   children: React.ReactNode;
 }) {
   const { me, logout } = useSession();
+  const navigate = useNavigate();
   const [mobileOpened, setMobileOpened] = useState(false);
   const facilityId = me.facilityIds[0] ?? null;
   const { unreadCount, notifications, fetchList, markAllRead, isMarkingAll } = useStaffNotif(facilityId);
+
+  // ── Global search (2f) ──────────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchResults, setSearchResults] = useState<GlobalSearchResult | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState(false);
+  const [debouncedQuery] = useDebouncedValue(searchQuery, 300);
+
+  useEffect(() => {
+    const q = debouncedQuery.trim();
+    if (q.length < 2) {
+      setSearchResults(null);
+      setSearchError(false);
+      setSearchLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSearchLoading(true);
+    setSearchError(false);
+    trpc.search.global
+      .query({ q, facilityId: facilityId ?? undefined })
+      .then((res) => {
+        if (cancelled) return;
+        setSearchResults(res);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSearchResults(null);
+        setSearchError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setSearchLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedQuery, facilityId]);
+
+  function handleSelectSearchResult(group: (typeof SEARCH_GROUPS)[number], id: string) {
+    setSearchOpen(false);
+    setSearchQuery('');
+    setSearchResults(null);
+    if (group.path) {
+      navigate(group.path(id));
+      return;
+    }
+    if (group.key === 'students' || group.key === 'staff' || group.key === 'classBatches') {
+      onSearchNavigate(group.key, id);
+      return;
+    }
+    onSectionChange(group.section);
+  }
 
   return (
     <AppShell
@@ -264,6 +453,53 @@ export function Shell({
             </Text>
           </Group>
           <Group gap="sm">
+            <Popover
+              width={340}
+              position="bottom-start"
+              withArrow
+              shadow="md"
+              opened={searchOpen && debouncedQuery.trim().length >= 2}
+              onClose={() => setSearchOpen(false)}
+            >
+              <Popover.Target>
+                <TextInput
+                  placeholder="Tìm kiếm…"
+                  leftSection={<IconSearch size={16} stroke={1.5} />}
+                  size="sm"
+                  visibleFrom="sm"
+                  style={{ width: 220 }}
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.currentTarget.value);
+                    setSearchOpen(true);
+                  }}
+                  onFocus={() => setSearchOpen(true)}
+                  aria-label="Tìm kiếm"
+                />
+              </Popover.Target>
+              <Popover.Dropdown style={{ padding: 0 }}>
+                <GlobalSearchDropdown
+                  loading={searchLoading}
+                  error={searchError}
+                  results={searchResults}
+                  onSelect={handleSelectSearchResult}
+                />
+              </Popover.Dropdown>
+            </Popover>
+            <ActionIcon
+              variant="subtle"
+              aria-label="Trợ giúp"
+              style={{ color: 'var(--cmc-text-muted)' }}
+            >
+              <IconHelpCircle size={20} stroke={1.5} />
+            </ActionIcon>
+            <ActionIcon
+              variant="subtle"
+              aria-label="Ứng dụng"
+              style={{ color: 'var(--cmc-text-muted)' }}
+            >
+              <IconLayoutGrid size={20} stroke={1.5} />
+            </ActionIcon>
             <Popover width={320} position="bottom-end" withArrow>
               <Popover.Target>
                 <UnstyledButton
@@ -310,10 +546,26 @@ export function Shell({
                 />
               </Popover.Dropdown>
             </Popover>
-            <Avatar size={32} radius="xl" color="blue" title={me.displayName}>
-              {me.displayName.slice(0, 2).toUpperCase()}
-            </Avatar>
-            <Button variant="subtle" size="xs" color="gray" onClick={logout}>Đăng xuất</Button>
+            <Menu position="bottom-end" withArrow shadow="md" width={200}>
+              <Menu.Target>
+                <UnstyledButton aria-label="Tài khoản" style={{ borderRadius: '50%' }}>
+                  <InitialsAvatar name={me.displayName} size={32} />
+                </UnstyledButton>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Label>{me.displayName}</Menu.Label>
+                <Menu.Item
+                  leftSection={<IconUser size={14} />}
+                  onClick={() => onSectionChange('profile')}
+                >
+                  Hồ sơ
+                </Menu.Item>
+                <Menu.Divider />
+                <Menu.Item color="red" leftSection={<IconLogout size={14} />} onClick={logout}>
+                  Đăng xuất
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
           </Group>
         </Group>
       </AppShell.Header>
@@ -331,17 +583,17 @@ export function Shell({
           const visible = group.items.filter((i) => i.visible);
           if (visible.length === 0) return null;
           return (
-            <div key={group.groupLabel}>
-              <GroupLabel label={group.groupLabel} />
-              {visible.map((item) => (
-                <SidebarItem
-                  key={item.key}
-                  item={item}
-                  active={activeSection === item.key}
-                  onClick={() => { onSectionChange(item.key); setMobileOpened(false); }}
-                />
-              ))}
-            </div>
+            <ModuleItem
+              key={group.key}
+              label={group.groupLabel}
+              icon={group.icon}
+              active={activeModuleKey === group.key}
+              onClick={() => {
+                const target = firstVisibleSubtab(group);
+                if (target) onSectionChange(target);
+                setMobileOpened(false);
+              }}
+            />
           );
         })}
       </AppShell.Navbar>
@@ -349,6 +601,11 @@ export function Shell({
       {/* ── Content ── */}
       <AppShell.Main style={{ backgroundColor: 'var(--cmc-bg)', minHeight: '100vh' }}>
         <div style={{ maxWidth: 1280, margin: '0 auto', padding: 32 }}>
+          <SubTabBar
+            subtabs={navGroups.find((g) => g.key === activeModuleKey)?.items.filter((i) => i.visible) ?? []}
+            activeSection={activeSection}
+            onChange={onSectionChange}
+          />
           {children}
         </div>
       </AppShell.Main>
@@ -405,7 +662,9 @@ export function buildNavGroups({
 
   const groups: NavGroup[] = [
     {
+      key: 'giang-day',
       groupLabel: 'Giảng dạy',
+      icon: <IconCalendar {...I()} />,
       items: [
         { key: 'schedule' as const, label: 'Lịch dạy', icon: <IconCalendar {...I()} />, visible: visible('schedule') },
         // Điểm danh/Chấm bài đã gộp vào "Lịch dạy" (Lịch 360 mở rộng — điểm danh nhúng sẵn trong
@@ -417,7 +676,9 @@ export function buildNavGroups({
       ],
     },
     {
+      key: 'lop-hoc',
       groupLabel: 'Lớp học',
+      icon: <IconDoor {...I()} />,
       items: [
         { key: 'classes' as const, label: 'Lớp học', icon: <IconDoor {...I()} />, visible: !isTeacherOnly && visible('classes') },
         // Course catalogue is a shared read-only reference that belongs next to classes, not under
@@ -433,14 +694,18 @@ export function buildNavGroups({
       ],
     },
     {
+      key: 'hoc-sinh',
       groupLabel: 'Học sinh',
+      icon: <IconSchool {...I()} />,
       items: [
         { key: 'students' as const, label: 'Học sinh', icon: <IconSchool {...I()} />, visible: visible('students') },
         { key: 'guardians' as const, label: 'Phụ huynh', icon: <IconUsers {...I()} />, visible: visible('guardians') },
       ],
     },
     {
+      key: 'crm-kinh-doanh',
       groupLabel: 'CRM & Kinh doanh',
+      icon: <IconTrendingUp {...I()} />,
       items: [
         { key: 'crm' as const, label: 'CRM', icon: <IconTrendingUp {...I()} />, visible: visible('crm') },
         { key: 'cskh' as const, label: 'Chăm sóc KH', icon: <IconHeadset {...I()} />, visible: visible('cskh') },
@@ -449,7 +714,9 @@ export function buildNavGroups({
       ],
     },
     {
+      key: 'tai-chinh',
       groupLabel: 'Tài chính',
+      icon: <IconReceipt {...I()} />,
       items: [
         { key: 'finance' as const, label: 'Tài chính', icon: <IconReceipt {...I()} />, visible: visible('finance') },
         { key: 'email-outbox' as const, label: 'Hộp thư gửi đi', icon: <IconInbox {...I()} />, visible: visible('email-outbox') },
@@ -458,25 +725,33 @@ export function buildNavGroups({
       ],
     },
     {
+      key: 'nhan-su',
       groupLabel: 'Nhân sự',
+      icon: <IconId {...I()} />,
       items: [
         { key: 'hr' as const, label: 'Nhân sự & Lương', icon: <IconId {...I()} />, visible: visible('hr') },
         { key: 'kpi' as const, label: 'Đánh giá KPI', icon: <IconTargetArrow {...I()} />, visible: visible('kpi') },
         { key: 'compensation' as const, label: 'Cơ cấu lương', icon: <IconCurrencyDong {...I()} />, visible: visible('compensation') },
         { key: 'my-payslips' as const, label: 'Phiếu lương của tôi', icon: <IconWallet {...I()} />, visible: !isTeacherOnly && visible('my-payslips') },
-        // Giáo viên (chỉ role này): Phiếu lương + Chấm công gộp thành 1 màn có tab.
-        { key: 'payroll-checkin' as const, label: 'Lương & chấm công', icon: <IconWallet {...I()} />, visible: isTeacherOnly },
+        // Giáo viên (chỉ role này): Phiếu lương + Chấm công gộp thành 1 màn có tab. Label dẫn đầu
+        // bằng "Chấm công" (thay vì "Lương & chấm công") vì đây là phần khó tìm hơn với giáo viên
+        // mới — chấm công đứng trước giúp scan trái-sang-phải bắt được ngay (finding #12, relabel-only).
+        { key: 'payroll-checkin' as const, label: 'Chấm công & lương', icon: <IconWallet {...I()} />, visible: isTeacherOnly },
       ],
     },
     {
+      key: 'cong-ca',
       groupLabel: 'Công ca',
+      icon: <IconClipboardCheck {...I()} />,
       items: [
         { key: 'checkin' as const, label: 'Chấm công', icon: <IconClipboardCheck {...I()} />, visible: !isTeacherOnly && visible('checkin') },
         { key: 'shift-registration' as const, label: 'Đăng ký ca', icon: <IconCalendar {...I()} />, visible: visible('shift-registration') },
       ],
     },
     {
+      key: 'quan-tri',
       groupLabel: 'Quản trị',
+      icon: <IconLayoutDashboard {...I()} />,
       items: [
         { key: 'overview' as const, label: 'Tổng quan', icon: <IconLayoutDashboard {...I()} />, visible: !isBizDirectorOnly && !isEduDirectorOnly && visible('overview') },
         // GĐ Kinh doanh (chỉ role này): "Tổng quan" thay bằng Executive Cockpit (summary +
@@ -485,7 +760,7 @@ export function buildNavGroups({
         // GĐ Đào tạo (chỉ role này): "Tổng quan" thay bằng Executive Cockpit (summary +
         // hộp duyệt nhanh). Đặt gate 'open' (nav-permissions.ts) vì visibility thật nằm ở đây.
         { key: 'edu-director-cockpit' as const, label: 'Cockpit điều hành', icon: <IconLayoutDashboard {...I()} />, visible: isEduDirectorOnly },
-        { key: 'org' as const, label: 'Cơ sở & Users', icon: <IconBuilding {...I()} />, visible: visible('org') },
+        { key: 'org' as const, label: 'Cơ sở & Người dùng', icon: <IconBuilding {...I()} />, visible: visible('org') },
         { key: 'facility-network' as const, label: 'IP WiFi chấm công', icon: <IconWifi {...I()} />, visible: visible('facility-network') },
         { key: 'shift-config' as const, label: 'Danh mục ca', icon: <IconAdjustments {...I()} />, visible: visible('shift-config') },
       ],
@@ -530,9 +805,11 @@ export const SECTION_TITLES: Record<SectionKey, string> = {
   'shift-config': 'Danh mục ca',
   // Teacher nav consolidation (Lịch 360)
   'student-mgmt': 'Quản lý học sinh',
-  'payroll-checkin': 'Lương & chấm công',
+  'payroll-checkin': 'Chấm công & lương',
   // Executive Cockpit (Phase 3)
   'biz-director-cockpit': 'Cockpit điều hành',
   // Executive Cockpit (Phase 4)
   'edu-director-cockpit': 'Cockpit điều hành',
+  // Profile/settings
+  profile: 'Hồ sơ cá nhân',
 };

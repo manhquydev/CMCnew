@@ -1,5 +1,11 @@
 import { withRls, verifyPassword, type RlsContext, type StudentLifecycle } from '@cmc/db';
-import { signLmsSession, verifyLmsToken } from './jwt.js';
+import {
+  signLmsSession,
+  verifyLmsToken,
+  signChildSelectionTicket,
+  decodeChildSelectionTicket,
+} from './jwt.js';
+import { normalizeLoginPhone } from './login-phone.js';
 
 /** Lifecycle states that revoke LMS access. `completed` intentionally excluded — those students
  * still read transcripts/certificates. `active`/`admitted` are unaffected (normal access). */
@@ -124,4 +130,72 @@ export async function resolveLmsSession(token: string): Promise<LmsSession | nul
   if (!resolved) return null;
   if (resolved._tokenVersion !== claims.tokenVersion) return null;
   return strip(resolved);
+}
+
+// ── Family login (student LMS login = parent phone + Netflix-style profile picker) ──────────
+//
+// SECURITY INVARIANT (decision 0033 D4): this path must NEVER mint or set a `kind:'parent'`
+// (parent-portal-capable) session. `loginFamilyByPhone` only returns a short-lived signed
+// child-selection ticket; `enterChildProfile` is the ONLY place that sets the LMS cookie, and it
+// always mints a `kind:'student'` session. The weak, public default credential (phone printed on
+// receipts + fixed `Cmc2026@`) must never reach `parentProcedure`.
+
+/** Phone+password login for the family credential. Returns a child-selection ticket (NOT a
+ * session, NOT a cookie) plus the parent's non-blocked children. `null` on any auth failure —
+ * callers must not distinguish "wrong phone" from "wrong password" (no account enumeration). */
+export async function loginFamilyByPhone(
+  phone: string,
+  password: string,
+): Promise<{ ticket: string; children: { id: string; fullName: string }[] } | null> {
+  const normalized = normalizeLoginPhone(phone);
+  if (!normalized) return null;
+  const acc = await withRls(SYSTEM_RLS, (tx) => tx.parentAccount.findUnique({ where: { phone: normalized } }));
+  if (!acc || !acc.isActive || !acc.passwordHash) return null;
+  if (!(await verifyPassword(password, acc.passwordHash))) return null;
+  const resolved = await parentSession(acc.id);
+  if (!resolved || resolved.students.length === 0) return null;
+  const ticket = await signChildSelectionTicket({
+    parentAccountId: acc.id,
+    tokenVersion: acc.tokenVersion,
+  });
+  return { ticket, children: resolved.students };
+}
+
+/** Verify a child-selection ticket's signature, expiry, and that the parent's tokenVersion
+ * hasn't moved since issuance (a family password change/reset revokes outstanding tickets). */
+export async function verifyChildSelectionTicket(
+  ticket: string,
+): Promise<{ parentAccountId: string } | null> {
+  const claims = await decodeChildSelectionTicket(ticket);
+  if (!claims) return null;
+  const acc = await withRls(SYSTEM_RLS, (tx) =>
+    tx.parentAccount.findUnique({
+      where: { id: claims.parentAccountId },
+      select: { tokenVersion: true, isActive: true },
+    }),
+  );
+  if (!acc || !acc.isActive || acc.tokenVersion !== claims.tokenVersion) return null;
+  return { parentAccountId: claims.parentAccountId };
+}
+
+export type EnterChildProfileResult =
+  | { ok: true; token: string; session: LmsSession }
+  | { ok: false; reason: 'forbidden' | 'not_found' };
+
+/** Mint a `kind:'student'` session for one of the ticket-holder's children. Re-resolves the
+ * parent's non-blocked children server-side (NEVER trusts a client-supplied child list) — a
+ * `studentId` outside that set (another family, or a blocked child) is `forbidden`, not silently
+ * ignored. A child with no provisioned `StudentAccount` is `not_found` (staff must provision). */
+export async function mintStudentSessionForStudent(
+  studentId: string,
+  parentAccountId: string,
+): Promise<EnterChildProfileResult> {
+  const resolved = await parentSession(parentAccountId);
+  if (!resolved || !resolved.studentIds.includes(studentId)) return { ok: false, reason: 'forbidden' };
+  const acc = await withRls(SYSTEM_RLS, (tx) => tx.studentAccount.findUnique({ where: { studentId } }));
+  if (!acc || !acc.isActive) return { ok: false, reason: 'not_found' };
+  const studentResolved = await studentSession(acc.id);
+  if (!studentResolved) return { ok: false, reason: 'not_found' };
+  const token = await signLmsSession({ sub: acc.id, kind: 'student', tokenVersion: acc.tokenVersion });
+  return { ok: true, token, session: strip(studentResolved) };
 }

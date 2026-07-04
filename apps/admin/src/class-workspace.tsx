@@ -6,10 +6,19 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dayjs from 'dayjs';
-import { trpc, Chatter, notifyError, notifySuccess, useSession } from '@cmc/ui';
+import {
+  trpc,
+  Chatter,
+  notifyError,
+  notifySuccess,
+  useSession,
+  FacilityPicker,
+  StatusBadge,
+  InitialsAvatar,
+  type StatusDef,
+} from '@cmc/ui';
 import { can } from '@cmc/auth/permissions';
 import {
-  Badge,
   Button,
   Card,
   Checkbox,
@@ -28,7 +37,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { DateInput } from '@mantine/dates';
+import { DateInput, TimeInput } from '@mantine/dates';
 import { useDisclosure } from '@mantine/hooks';
 import { AttendanceRoster } from './attendance-roster.js';
 import { StudentDetailPanel } from './student-detail.js';
@@ -42,25 +51,31 @@ type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
 type Room = Awaited<ReturnType<typeof trpc.room.list.query>>[number];
 type Teacher = Awaited<ReturnType<typeof trpc.user.listTeachers.query>>[number];
 
-const STATUS_COLOR: Record<string, string> = {
-  planned: 'gray',
-  open: 'blue',
-  running: 'green',
-  closed: 'dark',
-  cancelled: 'red',
+// ClassStatus tone map — preserves original color semantics: gray→draft, blue→info,
+// green→active, dark→inactive, red→rejected.
+const BATCH_STATUS_MAP: Record<string, StatusDef> = {
+  planned: { label: 'Đã lên kế hoạch', tone: 'draft' },
+  open: { label: 'Đang mở', tone: 'info' },
+  running: { label: 'Đang học', tone: 'active' },
+  closed: { label: 'Đã đóng', tone: 'inactive' },
+  cancelled: { label: 'Đã hủy', tone: 'rejected' },
 };
-const STATUS_LABEL: Record<string, string> = {
-  planned: 'Đã lên kế hoạch',
-  open: 'Đang mở',
-  running: 'Đang học',
-  closed: 'Đã đóng',
-  cancelled: 'Đã hủy',
+// Session table previously reused the class-batch color map keyed by SessionStatus — planned
+// matched (gray), cancelled matched (red), confirmed had no entry (Mantine default ≈ blue).
+// Preserve that visual outcome explicitly: planned→draft, confirmed→info, cancelled→rejected.
+const SESSION_STATUS_MAP: Record<string, StatusDef> = {
+  planned: { label: 'Đã lên lịch', tone: 'draft' },
+  confirmed: { label: 'Đã xác nhận', tone: 'info' },
+  cancelled: { label: 'Đã hủy', tone: 'rejected' },
 };
-// SessionStatus (per session, not per class batch) is a distinct, smaller enum.
-const SESSION_STATUS_LABEL: Record<string, string> = {
-  planned: 'Đã lên lịch',
-  confirmed: 'Đã xác nhận',
-  cancelled: 'Đã hủy',
+// EnrollmentStatus — original UI only distinguished 'completed' (teal) from everything else
+// (default/blue-ish). Preserve that exact grouping rather than inventing new distinctions.
+const ENROLLMENT_STATUS_MAP: Record<string, StatusDef> = {
+  active: { label: 'active', tone: 'info' },
+  completed: { label: 'completed', tone: 'active' },
+  reserved: { label: 'reserved', tone: 'info' },
+  transferred: { label: 'transferred', tone: 'info' },
+  withdrawn: { label: 'withdrawn', tone: 'info' },
 };
 const DOW = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 const fmtDate = (d: string | Date) => dayjs(d).format('DD/MM/YYYY');
@@ -603,7 +618,7 @@ function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Roo
             <Table.Td>{roomLabel(s.roomId)}</Table.Td>
             <Table.Td>{teacherLabel(s.teacherId)}</Table.Td>
             <Table.Td>
-              <Badge size="sm" color={STATUS_COLOR[s.status]}>{SESSION_STATUS_LABEL[s.status] ?? s.status}</Badge>
+              <StatusBadge status={s.status} map={SESSION_STATUS_MAP} pill />
             </Table.Td>
           </Table.Tr>
         ))}
@@ -682,8 +697,8 @@ function CreateMakeupSessionModal({
         <Stack>
           <DateInput label="Ngày" value={sessionDate} onChange={setSessionDate} valueFormat="DD/MM/YYYY" />
           <Group grow>
-            <TextInput label="Giờ bắt đầu (HH:mm)" placeholder="08:00" value={startTime} onChange={(e) => setStartTime(e.currentTarget.value)} />
-            <TextInput label="Giờ kết thúc (HH:mm)" placeholder="10:00" value={endTime} onChange={(e) => setEndTime(e.currentTarget.value)} />
+            <TimeInput label="Giờ bắt đầu" value={startTime} onChange={(e) => setStartTime(e.currentTarget.value)} />
+            <TimeInput label="Giờ kết thúc" value={endTime} onChange={(e) => setEndTime(e.currentTarget.value)} />
           </Group>
           <Select
             label="Phòng (tùy chọn)"
@@ -869,10 +884,13 @@ function EnrollTab({ batch, facilityId }: { batch: Batch; facilityId: number }) 
                 onClick={() => setDetailStudentId(e.studentId)}
                 title="Xem hồ sơ học viên"
               >
-                {e.student.fullName}
+                <Group gap={8} wrap="nowrap">
+                  <InitialsAvatar name={e.student.fullName} size={22} />
+                  <span>{e.student.fullName}</span>
+                </Group>
               </Table.Td>
               <Table.Td>
-                <Badge size="sm" color={e.status === 'completed' ? 'teal' : undefined}>{e.status}</Badge>
+                <StatusBadge status={e.status} map={ENROLLMENT_STATUS_MAP} pill />
               </Table.Td>
               <Table.Td w={190}>
                 {e.status === 'active' && (
@@ -928,10 +946,10 @@ function MeetingsTab({ batch, facilityId }: { batch: Batch; facilityId: number }
     }
   }
 
-  const ST: Record<string, { label: string; color: string }> = {
-    scheduled: { label: 'Đã lên lịch', color: 'blue' },
-    done: { label: 'Đã họp', color: 'teal' },
-    cancelled: { label: 'Đã hủy', color: 'gray' },
+  const ST: Record<string, StatusDef> = {
+    scheduled: { label: 'Đã lên lịch', tone: 'info' },
+    done: { label: 'Đã họp', tone: 'active' },
+    cancelled: { label: 'Đã hủy', tone: 'inactive' },
   };
 
   if (loading) return <Loader size="sm" />;
@@ -941,14 +959,13 @@ function MeetingsTab({ batch, facilityId }: { batch: Batch; facilityId: number }
       <Table striped>
         <Table.Tbody>
           {meetings.map((m) => {
-            const st = ST[m.status] ?? { label: m.status, color: 'gray' };
             return (
               <Table.Tr key={m.id}>
                 <Table.Td>{dayjs(m.scheduledAt).format('DD/MM/YYYY HH:mm')}</Table.Td>
                 <Table.Td>{m.title}</Table.Td>
                 <Table.Td>{m.location ?? ''}</Table.Td>
                 <Table.Td>
-                  <Badge size="sm" color={st.color}>{st.label}</Badge>
+                  <StatusBadge status={m.status} map={ST} pill />
                 </Table.Td>
                 <Table.Td w={170}>
                   {m.status === 'scheduled' && (
@@ -1231,7 +1248,7 @@ function ClassDetail({
         <div>
           <Group gap="xs">
             <Title order={5}>{batch.code}</Title>
-            <Badge color={STATUS_COLOR[batch.status]}>{STATUS_LABEL[batch.status] ?? batch.status}</Badge>
+            <StatusBadge status={batch.status} map={BATCH_STATUS_MAP} pill />
           </Group>
           <Text c="dimmed" size="sm">{batch.name} · {batch.course.code}</Text>
         </div>
@@ -1242,6 +1259,7 @@ function ClassDetail({
               <>
                 <Select
                   size="xs" w={130} placeholder="Đổi trạng thái"
+                  value={null}
                   data={['open', 'running', 'closed']}
                   onChange={(v) => v && setStatus(v)}
                 />
@@ -1544,11 +1562,11 @@ export function Workspace({ navAction }: { navAction: NavAction | null }) {
   return (
     <Stack>
       <Group justify="space-between">
-        <Select
-          label="Cơ sở"
-          data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} — ${f.name}` }))}
-          value={facilityId ? String(facilityId) : null}
-          onChange={(v) => { setFacilityId(v ? Number(v) : null); setClassPage(1); }}
+        <FacilityPicker
+          facilities={facilities}
+          clearable={false}
+          value={facilityId}
+          onChange={(v) => { setFacilityId(v); setClassPage(1); }}
           w={240}
         />
         {facilityId && canManageClass && (
@@ -1582,11 +1600,11 @@ export function Workspace({ navAction }: { navAction: NavAction | null }) {
                 onChange={(v) => { setClassStatusFilter(v); setClassPage(1); }}
                 data={[
                   { value: 'all', label: 'Tất cả' },
-                  { value: 'planned', label: STATUS_LABEL.planned },
-                  { value: 'open', label: STATUS_LABEL.open },
-                  { value: 'running', label: STATUS_LABEL.running },
-                  { value: 'closed', label: STATUS_LABEL.closed },
-                  { value: 'cancelled', label: STATUS_LABEL.cancelled },
+                  { value: 'planned', label: 'Đã lên kế hoạch' },
+                  { value: 'open', label: 'Đang mở' },
+                  { value: 'running', label: 'Đang học' },
+                  { value: 'closed', label: 'Đã đóng' },
+                  { value: 'cancelled', label: 'Đã hủy' },
                 ]}
               />
             </Stack>
@@ -1604,7 +1622,7 @@ export function Workspace({ navAction }: { navAction: NavAction | null }) {
                       <Text size="xs" c="dimmed">{b.name}</Text>
                     </Table.Td>
                     <Table.Td>
-                      <Badge size="sm" color={STATUS_COLOR[b.status]}>{STATUS_LABEL[b.status] ?? b.status}</Badge>
+                      <StatusBadge status={b.status} map={BATCH_STATUS_MAP} size="xs" pill />
                     </Table.Td>
                   </Table.Tr>
                 ))}

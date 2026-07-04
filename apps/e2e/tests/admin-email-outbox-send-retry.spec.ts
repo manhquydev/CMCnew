@@ -27,7 +27,8 @@ test('send a receipt email → visible in outbox admin surface → retry path if
   await page.getByLabel('Email').fill(EMAIL);
   await page.getByLabel('Mật khẩu').fill(PASSWORD);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
-  await expect(page.locator('nav').getByText('Tổng quan')).toBeVisible({ timeout: 10_000 });
+  // super_admin's default landing module is "Quản trị" (Plan D: module rail, not leaf nav).
+  await expect(page.locator('nav a').filter({ hasText: 'Quản trị' })).toBeVisible({ timeout: 10_000 });
 
   await page.locator('nav a').filter({ hasText: 'Tài chính' }).click();
 
@@ -71,7 +72,8 @@ test('send a receipt email → visible in outbox admin surface → retry path if
   expect(uuidMatch).toBeTruthy();
   const uuid = uuidMatch![1];
 
-  await page.locator('nav a').filter({ hasText: 'Hộp thư gửi đi' }).click();
+  // "Hộp thư gửi đi" is now a Tài chính sub-tab (Plan D) — module is already active, click the tab.
+  await page.getByRole('tab', { name: 'Hộp thư gửi đi' }).click();
   const sendCard = page.locator('.mantine-Card-root').filter({ hasText: 'Gửi phiếu thu qua email' });
   await sendCard.getByLabel('Mã phiếu thu (ID)').fill(uuid);
   await sendCard.getByLabel(/Email người nhận/).fill(parentEmail);

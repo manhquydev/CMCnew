@@ -11,10 +11,23 @@
  *   (b) PERMISSIONS was updated without updating NAV_GATES — fix NAV_GATES.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { can, PERMISSIONS } from '@cmc/auth/permissions';
 import { NAV_GATES } from '../nav-permissions.js';
 import type { SectionKey } from '../shell.js';
+
+// nav-modules.ts transitively imports shell.tsx, which transitively imports @cmc/ui's
+// pdf-viewer, which references the browser-only DOMMatrix at module-init time. This suite runs
+// under environment: 'node' (no DOM) — stub it before nav-modules.js is evaluated via a dynamic
+// import (static imports are hoisted ahead of any top-level statement). Same pattern as
+// nav-teacher-consolidation.test.ts.
+let sectionsWithoutModule: (typeof import('../nav-modules.js'))['sectionsWithoutModule'];
+let sectionsWithDuplicateModule: (typeof import('../nav-modules.js'))['sectionsWithDuplicateModule'];
+
+beforeAll(async () => {
+  (globalThis as { DOMMatrix?: unknown }).DOMMatrix ??= class DOMMatrix {};
+  ({ sectionsWithoutModule, sectionsWithDuplicateModule } = await import('../nav-modules.js'));
+});
 
 // All non-super_admin staff roles. super_admin bypasses can() entirely (isSuperAdmin=true path).
 // (quan_ly/head_teacher/bgd retired — the two directors giam_doc_kinh_doanh/giam_doc_dao_tao
@@ -151,7 +164,22 @@ describe('nav-permissions consistency', () => {
     // placeholders only to satisfy the Record<SectionKey, NavGate> completeness check — real
     // visibility for these is decided in buildNavGroups() (shell.tsx), gated on
     // isTeacherOnly/isBizDirectorOnly/isEduDirectorOnly, not on this NAV_GATES entry.
-    const expectedOpen: SectionKey[] = ['schedule', 'classes', 'courses', 'my-payslips', 'student-mgmt', 'payroll-checkin', 'biz-director-cockpit', 'edu-director-cockpit'];
+    // 'profile' is genuinely open — any authenticated staff member reaches their own account via
+    // the avatar menu, not the sidebar, so it carries no isXOnly gate in buildNavGroups().
+    const expectedOpen: SectionKey[] = ['schedule', 'classes', 'courses', 'my-payslips', 'student-mgmt', 'payroll-checkin', 'biz-director-cockpit', 'edu-director-cockpit', 'profile'];
     expect(openSections.sort()).toEqual(expectedOpen.sort());
+  });
+
+  // ── Nav-module derivation guard (Plan D — module + sub-tab IA) ────────────
+  // nav-modules.ts derives SECTION_TO_MODULE by scanning buildNavGroups() output rather than
+  // hand-authoring a second membership list (design doc §6.1, decision B2). This guard asserts
+  // that derivation is TOTAL (every section reaches exactly one module) — a hand-list presence
+  // check would only catch a MISSING section, not one placed in the wrong/an extra group.
+  it('every SectionKey except profile maps to exactly one module (buildNavGroups derivation is total + non-overlapping)', () => {
+    const allSections = Object.keys(NAV_GATES) as SectionKey[];
+    const unmapped = sectionsWithoutModule(allSections);
+    // profile is the one deliberate exception — reached via the avatar menu, not the module rail.
+    expect(unmapped).toEqual(['profile']);
+    expect(sectionsWithDuplicateModule()).toEqual([]);
   });
 });

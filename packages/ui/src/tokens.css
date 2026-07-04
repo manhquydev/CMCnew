@@ -26,15 +26,15 @@
   --cmc-surface-dark: #1D1D1F;   /* dark header sections (hero/nav)            */
 
   /* ─── Borders ────────────────────────────────────────────────────────────  */
-  --cmc-border:       #D2D2D7;   /* default dividers, input borders            */
+  --cmc-border:       #E5E7EB;   /* default dividers, input borders            */
   --cmc-border-focus: #0071E3;   /* focused input border                       */
   --cmc-border-faint: #E8E8ED;   /* subtle separators inside cards             */
 
   /* ─── Semantic / Status ──────────────────────────────────────────────────
      All statuses include icon + color so they're not color-only (WCAG).      */
-  --cmc-ok:           #34C759;   /* success green — Apple iOS style            */
-  --cmc-ok-bg:        #F0FBF3;   /* success tint background                    */
-  --cmc-ok-text:      #1A6B34;   /* success text (contrast ≥ 4.5:1 on white)  */
+  --cmc-ok:           #06C167;   /* success green — Vietnamese Enterprise Core */
+  --cmc-ok-bg:        #E6F9F0;   /* success tint background (green-hue-matched, contrast verified ≥4.5:1 with ok-text) */
+  --cmc-ok-text:      #1A6B34;   /* success text (contrast ≥ 4.5:1 on white and on new ok-bg — verified ~6.0:1) */
   --cmc-warn:         #FF9F0A;   /* warning amber — Apple iOS style            */
   --cmc-warn-bg:      #FFF8EC;   /* warning tint background                    */
   --cmc-warn-text:    #7A4A00;   /* warning text                               */
@@ -46,16 +46,19 @@
   --cmc-info-text:    #003D99;   /* info text                                  */
 
   /* Badge / status dot colors (for kanban, table chips) */
-  --cmc-status-active:   #34C759;
+  --cmc-status-active:   #06C167;
   --cmc-status-pending:  #FF9F0A;
   --cmc-status-inactive: #AEAEB2;
   --cmc-status-rejected: #FF3B30;
   --cmc-status-draft:    #6E6E73;
 
   /* ─── Typography ─────────────────────────────────────────────────────────
-     -apple-system renders SF Pro on Apple devices; falls back to system-ui.
-     Add Inter as optional web font override via theme.ts if needed.          */
-  --cmc-font:         -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui,
+     Inter first (self-hosted via @fontsource/inter in admin/main.tsx), then
+     the Apple/system fallback stack for apps that don't load the web font
+     (e.g. before Inter finishes loading, or non-admin consumers). This file
+     itself stays network-free — no @import/url() — so LMS (which overrides
+     font-family via .lms-app-root) never pays for a font it doesn't use.    */
+  --cmc-font:         'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui,
                       'Helvetica Neue', Arial, sans-serif;
   --cmc-font-mono:    'SF Mono', 'Cascadia Code', 'Fira Code', 'Courier New', monospace;
 
@@ -100,17 +103,23 @@
   --cmc-radius-pill: 9999px;  /* primary CTA buttons, pill badges              */
 
   /* ─── Elevation / Shadow ─────────────────────────────────────────────────
-     Apple flat aesthetic: no heavy shadows on cards. Reserve depth for modals. */
+     Zero Elevation doctrine: decorative surfaces (Card, Paper, Notification)
+     are flat — border-only, no shadow. Functional floating layers (Modal,
+     Menu, Select dropdown, Drawer) keep --cmc-shadow-sm as the minimum
+     depth-cue so they stay visually distinguishable from the page behind
+     them. --cmc-shadow-md/lg/xl remain in the scale for reference (Shadow
+     Scale demo) and opportunistic use (e.g. hover-elevated interactive
+     cards), but no component defaults to them anymore. */
   --cmc-shadow-none: none;
   --cmc-shadow-xs:   0 1px 2px rgba(29, 29, 31, 0.06);             /* subtle lift  */
   --cmc-shadow-sm:   0 1px 4px rgba(29, 29, 31, 0.08),
-                     0 2px 8px rgba(29, 29, 31, 0.04);             /* default card */
+                     0 2px 8px rgba(29, 29, 31, 0.04);             /* functional minimum: Modal/Menu/Select/Drawer */
   --cmc-shadow-md:   0 4px 16px rgba(29, 29, 31, 0.10),
-                     0 1px 4px  rgba(29, 29, 31, 0.06);             /* hover card   */
+                     0 1px 4px  rgba(29, 29, 31, 0.06);             /* hover-elevated interactive card (opt-in) */
   --cmc-shadow-lg:   0 8px 32px rgba(29, 29, 31, 0.12),
-                     0 2px 8px  rgba(29, 29, 31, 0.06);             /* dropdowns    */
+                     0 2px 8px  rgba(29, 29, 31, 0.06);             /* reserved, scale reference */
   --cmc-shadow-xl:   0 20px 60px rgba(29, 29, 31, 0.18),
-                     0 4px 16px  rgba(29, 29, 31, 0.08);            /* modals       */
+                     0 4px 16px  rgba(29, 29, 31, 0.08);            /* reserved, scale reference */
 
   /* ─── Layout ─────────────────────────────────────────────────────────────  */
   --cmc-sidebar-w:        240px;   /* collapsed variants via media query       */

@@ -62,7 +62,7 @@ export function CurriculumSessionsTab({
             <Stack gap="sm">
               <Group justify="space-between" align="flex-start">
                 <div>
-                  <Title order={5}>{unit ? unit.theme : s.batch.name}</Title>
+                  <Title order={5}>{unit ? unit.theme : 'Buổi học'}</Title>
                   <Text size="sm" c="dimmed">
                     {fmtDate(s.sessionDate)} · {s.startTime}-{s.endTime} · {s.batch.name}
                   </Text>
@@ -85,7 +85,7 @@ export function CurriculumSessionsTab({
                   )}
                 </Stack>
               ) : (
-                <Text size="sm" c="dimmed">Buổi này chưa gắn nội dung khung chương trình.</Text>
+                <Text size="sm" c="dimmed">Nội dung buổi học chưa được cập nhật.</Text>
               )}
             </Stack>
           </Card>

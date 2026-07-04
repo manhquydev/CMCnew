@@ -41,7 +41,8 @@ async function loginAdmin(page: Page) {
   await page.getByLabel('Email').fill(ADMIN_EMAIL);
   await page.getByLabel('Mật khẩu').fill(ADMIN_PASSWORD);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
-  await expect(page.locator('nav').getByText('Lịch dạy')).toBeVisible({ timeout: 10_000 });
+  // Navigating to /schedule lands on the "Giảng dạy" module (Plan D: module rail, not leaf nav).
+  await expect(page.locator('nav a').filter({ hasText: 'Giảng dạy' })).toBeVisible({ timeout: 10_000 });
   await page.goto('http://localhost:5173/schedule');
 }
 

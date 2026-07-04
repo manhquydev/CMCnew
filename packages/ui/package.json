@@ -14,12 +14,14 @@
   },
   "dependencies": {
     "@cmc/api": "workspace:*",
+    "@fontsource/inter": "^5.1.0",
     "@mantine/core": "^7.15.2",
     "@mantine/form": "^7.15.2",
     "@mantine/hooks": "^7.15.2",
     "@mantine/notifications": "^7.15.2",
     "@tabler/icons-react": "^3.26.0",
     "@trpc/client": "^11.0.0",
+    "dayjs": "^1.11.13",
     "pdfjs-dist": "^6.0.227"
   },
   "peerDependencies": {

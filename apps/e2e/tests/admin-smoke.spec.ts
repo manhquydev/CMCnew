@@ -20,9 +20,9 @@ test.describe('admin smoke', () => {
     await page.getByLabel('Mật khẩu').fill(PASSWORD);
     await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
 
-    // After successful login the sidebar nav appears (AppShell layout).
-    // "Tổng quan" is the first nav item in the sidebar.
-    await expect(page.locator('nav').getByText('Tổng quan')).toBeVisible({ timeout: 10_000 });
+    // After successful login the module rail appears (AppShell layout); super_admin's default
+    // landing module is "Quản trị".
+    await expect(page.locator('nav a').filter({ hasText: 'Quản trị' })).toBeVisible({ timeout: 10_000 });
   });
 
   test('wrong password shows error', async ({ page }) => {
@@ -41,10 +41,12 @@ test.describe('admin smoke', () => {
     await page.getByLabel('Email').fill(EMAIL);
     await page.getByLabel('Mật khẩu').fill(PASSWORD);
     await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
-    await expect(page.locator('nav').getByText('Tổng quan')).toBeVisible({ timeout: 10_000 });
+    // super_admin's default landing module is "Quản trị" (Plan D: module rail, not leaf nav).
+    await expect(page.locator('nav a').filter({ hasText: 'Quản trị' })).toBeVisible({ timeout: 10_000 });
 
-    // Navigate to Khóa học via sidebar nav (NavLink renders as a button in the nav).
-    await page.locator('nav').getByText('Khóa học').click();
+    // Navigate to Khóa học: click the Lớp học module, then its Khóa học sub-tab.
+    await page.locator('nav a').filter({ hasText: 'Lớp học' }).click();
+    await page.getByRole('tab', { name: 'Khóa học' }).click();
     // Button uses an SVG icon (not text "+") so exact name is "Tạo khóa".
     await page.getByRole('button', { name: 'Tạo khóa' }).click();
 
