@@ -70,3 +70,45 @@ export async function verifyLmsToken(token: string): Promise<LmsClaims | null> {
     return null;
   }
 }
+
+/**
+ * Short-lived family-login child-selection ticket. NOT an LmsSession: it carries no `kind`
+ * field, so `verifyLmsToken` (and therefore `resolveLmsSession` / the LMS cookie) rejects it.
+ * It authorizes exactly one thing — `enterChildProfile` — which mints the real student session.
+ */
+export interface ChildSelectionTicketClaims {
+  parentAccountId: string;
+  tokenVersion: number;
+}
+
+const CHILD_SELECTION_TICKET_TYP = 'child-selection-ticket';
+
+export async function signChildSelectionTicket(
+  claims: ChildSelectionTicketClaims,
+  ttl = '5m',
+): Promise<string> {
+  return new SignJWT({
+    parentAccountId: claims.parentAccountId,
+    tokenVersion: claims.tokenVersion,
+    typ: CHILD_SELECTION_TICKET_TYP,
+  })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime(ttl)
+    .sign(secret());
+}
+
+export async function decodeChildSelectionTicket(
+  ticket: string,
+): Promise<ChildSelectionTicketClaims | null> {
+  try {
+    const { payload } = await jwtVerify(ticket, secret());
+    if (payload.typ !== CHILD_SELECTION_TICKET_TYP) return null;
+    return {
+      parentAccountId: String(payload.parentAccountId),
+      tokenVersion: Number(payload.tokenVersion),
+    };
+  } catch {
+    return null;
+  }
+}

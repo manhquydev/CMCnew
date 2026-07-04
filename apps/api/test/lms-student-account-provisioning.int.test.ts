@@ -11,7 +11,7 @@
  *   7. resetLmsPassword: NOT_FOUND when student has no LMS account
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { loginStudent } from '@cmc/auth';
+import { loginStudent, resolveLmsSession, DEFAULT_STUDENT_PASSWORD } from '@cmc/auth';
 import { staffCaller, withRls, SUPER, uniq, superAdminUserId } from './helpers.js';
 
 const FACILITY = 1;
@@ -102,7 +102,7 @@ describe('LMS StudentAccount provisioning', () => {
     expect(approved.lmsAccount).not.toBeNull();
     const { loginCode, tempPassword } = approved.lmsAccount!;
     expect(loginCode).toMatch(/^HQ-HS-/); // facility-prefixed for global uniqueness
-    expect(tempPassword).toHaveLength(12); // 6 random bytes as hex
+    expect(tempPassword).toBe(DEFAULT_STUDENT_PASSWORD); // fixed default, not random
 
     if (approved.studentId) cleanup.studentIds.push(approved.studentId);
 
@@ -257,9 +257,12 @@ describe('LMS StudentAccount provisioning', () => {
     if (parent) cleanup.parentAccountIds.push(parent.id);
   });
 
-  // ── 6. resetLmsPassword: old password fails, new one works, tokenVersion bumps ─
+  // ── 6. resetLmsPassword: fixed default returned, tokenVersion bump kicks out live sessions ─
+  // The break-glass password is now a fixed constant (decision 0033 D2), so old/new password
+  // strings are identical by design — the reset's real security value is the tokenVersion bump,
+  // which invalidates any already-issued LMS JWT for this account.
 
-  it('6. resetLmsPassword invalidates old password and returns a working new one', async () => {
+  it('6. resetLmsPassword returns the fixed default and revokes prior sessions via tokenVersion bump', async () => {
     if (!dbReachable) return;
     const caller = await staffCaller();
     const course = await createCourseWithPrice();
@@ -276,34 +279,34 @@ describe('LMS StudentAccount provisioning', () => {
     const studentId = approved.studentId!;
     cleanup.studentIds.push(studentId);
     const { loginCode, tempPassword: oldPw } = approved.lmsAccount!;
+    expect(oldPw).toBe(DEFAULT_STUDENT_PASSWORD);
 
     const parent = await withRls(SUPER, (tx) => tx.parentAccount.findFirst({ where: { phone } }));
     if (parent) cleanup.parentAccountIds.push(parent.id);
 
-    // Verify old password works before reset
+    // Mint a session BEFORE the reset — this token must be revoked once tokenVersion bumps.
     const before = await loginStudent(loginCode, oldPw);
     expect(before).not.toBeNull();
+    expect(await resolveLmsSession(before!.token)).not.toBeNull();
 
-    // Reset the password
+    // Reset — fixed default (non-vacuous: still returns the same known constant), bumps tokenVersion.
     const reset = await caller.student.resetLmsPassword({ studentId });
     expect(reset.loginCode).toBe(loginCode);
-    expect(reset.tempPassword).not.toBe(oldPw);
-    expect(reset.tempPassword).toHaveLength(12);
+    expect(reset.tempPassword).toBe(DEFAULT_STUDENT_PASSWORD);
 
-    // Old password no longer works
-    const withOld = await loginStudent(loginCode, oldPw);
-    expect(withOld).toBeNull();
+    // The pre-reset token is now dead (stale tokenVersion) — the security-meaningful effect.
+    expect(await resolveLmsSession(before!.token)).toBeNull();
 
-    // New password works
-    const withNew = await loginStudent(loginCode, reset.tempPassword);
-    expect(withNew).not.toBeNull();
-    expect(withNew!.session.studentIds).toContain(studentId);
+    // The password itself is unchanged (still the fixed default) — a fresh login still works.
+    const after = await loginStudent(loginCode, DEFAULT_STUDENT_PASSWORD);
+    expect(after).not.toBeNull();
+    expect(after!.session.studentIds).toContain(studentId);
   });
 
   // ── 7. resetLmsPassword CREATES an LMS account for a student that has none ─────
   // (create-or-reset: covers students made before auto-provisioning, or dedupe-matched ones).
 
-  it('7. resetLmsPassword creates an LMS account when the student has none', async () => {
+  it('7. resetLmsPassword creates a facility-prefixed LMS account when the student has none', async () => {
     if (!dbReachable) return;
     const caller = await staffCaller();
 
@@ -322,11 +325,16 @@ describe('LMS StudentAccount provisioning', () => {
     );
     expect(before).toBeNull();
 
-    // resetLmsPassword now provisions on demand: returns loginCode (= studentCode) + tempPassword.
+    const facility = await withRls(SUPER, (tx) =>
+      tx.facility.findUniqueOrThrow({ where: { id: FACILITY }, select: { code: true } }),
+    );
+
+    // resetLmsPassword now provisions on demand: returns the facility-prefixed loginCode (decision
+    // 0033 M1 — aligns to the SAME scheme finance.ts's provisioning uses, so login_code's global
+    // @unique never collides across facilities) + the fixed default tempPassword.
     const res = await caller.student.resetLmsPassword({ studentId: student.id });
-    expect(res.loginCode).toBe(code);
-    expect(typeof res.tempPassword).toBe('string');
-    expect(res.tempPassword.length).toBeGreaterThan(0);
+    expect(res.loginCode).toBe(`${facility.code}-${code}`);
+    expect(res.tempPassword).toBe(DEFAULT_STUDENT_PASSWORD);
 
     // Account now exists and is active.
     const after = await withRls(SUPER, (tx) =>
@@ -335,7 +343,7 @@ describe('LMS StudentAccount provisioning', () => {
         select: { loginCode: true, isActive: true },
       }),
     );
-    expect(after?.loginCode).toBe(code);
+    expect(after?.loginCode).toBe(`${facility.code}-${code}`);
     expect(after?.isActive).toBe(true);
   });
 });

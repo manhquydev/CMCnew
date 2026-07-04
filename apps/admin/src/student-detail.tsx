@@ -120,7 +120,7 @@ function LmsAccountSection({ studentId }: { studentId: string }) {
   const [err, setErr] = useState('');
 
   function handleReset() {
-    if (!confirm('Đặt lại mật khẩu LMS sẽ đăng xuất học sinh ngay lập tức. Tiếp tục?')) return;
+    if (!confirm('Đặt lại mật khẩu dự phòng (break-glass) của học sinh về mặc định. Tiếp tục?')) return;
     setLoading(true);
     setErr('');
     setResult(null);
@@ -140,7 +140,7 @@ function LmsAccountSection({ studentId }: { studentId: string }) {
   return (
     <Stack gap="xs" mt="sm">
       <Group>
-        <Text size="sm" fw={600}>Mật khẩu LMS</Text>
+        <Text size="sm" fw={600}>Đăng nhập dự phòng (break-glass)</Text>
         <Button
           size="xs"
           variant="light"
@@ -151,19 +151,20 @@ function LmsAccountSection({ studentId }: { studentId: string }) {
           Đặt lại mật khẩu
         </Button>
       </Group>
+      <Text size="xs" c="dimmed">
+        Đăng nhập chính của học sinh là SĐT phụ huynh + mật khẩu chuẩn (đặt lại ở hồ sơ phụ huynh).
+        Mã bên dưới chỉ dùng khi phụ huynh không có SĐT hợp lệ.
+      </Text>
       {err && <Text c="red" size="xs">{err}</Text>}
       {result && (
-        <Card withBorder p="xs" radius="sm" bg="yellow.0">
-          <Text size="xs" c="dimmed" mb={4}>
-            Mật khẩu mới (hiển thị một lần — lưu ngay):
-          </Text>
+        <Card withBorder p="xs" radius="sm" bg="blue.0">
           <Group gap="md">
             <Stack gap={0}>
-              <Text size="xs" c="dimmed">Mã đăng nhập</Text>
+              <Text size="xs" c="dimmed">Mã đăng nhập dự phòng</Text>
               <Text size="sm" fw={700} ff="monospace">{result.loginCode}</Text>
             </Stack>
             <Stack gap={0}>
-              <Text size="xs" c="dimmed">Mật khẩu tạm</Text>
+              <Text size="xs" c="dimmed">Mật khẩu chuẩn</Text>
               <Text size="sm" fw={700} ff="monospace">{result.tempPassword}</Text>
             </Stack>
           </Group>

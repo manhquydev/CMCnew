@@ -133,6 +133,62 @@ function LinkRequestQueue() {
   );
 }
 
+/**
+ * Family login (parent phone + Cmc2026@) reset — the PRIMARY student-login credential
+ * (decision 0033). Confirm-only; no input field since the password is a known constant.
+ */
+function ParentPasswordResetCard({ parents }: { parents: ParentT[] }) {
+  const [parentId, setParentId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function reset() {
+    if (!parentId) return;
+    if (!confirm('Đặt lại mật khẩu đăng nhập gia đình về mặc định. Tiếp tục?')) return;
+    setBusy(true);
+    setDone(false);
+    try {
+      await trpc.guardian.resetFamilyPassword.mutate({ parentAccountId: parentId });
+      notifySuccess('Mật khẩu đã đặt lại về Cmc2026@');
+      setDone(true);
+    } catch (e) {
+      notifyError(e, 'Đặt lại mật khẩu thất bại');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+      <Text fw={600} style={{ color: 'var(--cmc-text)' }} mb="md">
+        Đặt lại mật khẩu đăng nhập gia đình
+      </Text>
+      <Text size="xs" c="dimmed" mb="sm">
+        Học sinh đăng nhập bằng SĐT phụ huynh + mật khẩu chuẩn. Đặt lại ở đây khi phụ huynh quên
+        mật khẩu đã đổi.
+      </Text>
+      <Group align="flex-end">
+        <Select
+          label="Phụ huynh"
+          searchable
+          w={320}
+          placeholder="Chọn phụ huynh"
+          disabled={busy}
+          data={parents.map((p) => ({ value: p.id, label: `${p.displayName} (${p.phone ?? p.email ?? ''})` }))}
+          value={parentId}
+          onChange={(v) => { setParentId(v); setDone(false); }}
+        />
+        <Button variant="filled" radius={9999} loading={busy} disabled={!parentId} onClick={reset}>
+          Đặt lại mật khẩu
+        </Button>
+      </Group>
+      {done && (
+        <Text size="xs" c="dimmed" mt="xs">Mật khẩu đã đặt lại về Cmc2026@.</Text>
+      )}
+    </Card>
+  );
+}
+
 export function GuardiansPanel() {
   const [students, setStudents] = useState<StudentT[]>([]);
   const [parents, setParents] = useState<ParentT[]>([]);
@@ -238,6 +294,8 @@ export function GuardiansPanel() {
   return (
     <Stack>
       <LinkRequestQueue />
+
+      <ParentPasswordResetCard parents={parents} />
 
       <Select
         label="Học sinh"

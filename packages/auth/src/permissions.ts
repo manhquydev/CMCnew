@@ -199,6 +199,9 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     // creates a Guardian row from a parent-initiated request).
     linkRequestList: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     linkRequestReview: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    // Family-login password reset: both directors (account-level action with security impact,
+    // mirrors student.resetLmsPassword).
+    resetFamilyPassword: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
 
   // parentMeeting.runReminders / runCadence are super_admin-only (superAdminProcedure).

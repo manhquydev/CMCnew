@@ -1,8 +1,8 @@
-import { randomBytes, createHash } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls, hashPassword, type Program, type Prisma } from '@cmc/db';
-import { rlsContextOf } from '@cmc/auth';
+import { rlsContextOf, normalizeLoginPhone, DEFAULT_STUDENT_PASSWORD } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import {
   resolvePrice,
@@ -19,11 +19,6 @@ import { classifyCancelRollback } from '../services/student-provisioning.js';
 import { router, requirePermission } from '../trpc.js';
 import { emitStaffNotif } from '../lib/emit-staff-notif.js';
 import { enqueueEmail } from '../services/email-outbox.js';
-
-/** Generate a random 12-char hex temp password. Never stored plaintext — caller bcrypt-hashes it. */
-function genTempPassword(): string {
-  return randomBytes(6).toString('hex');
-}
 
 /** Discount tiers configured for a facility, or the charter defaults when none are set. */
 async function tiersFor(
@@ -681,6 +676,9 @@ export const financeRouter = router({
         // ── Student provisioning ────────────────────────────────────────────────────
         let resolvedStudentId: string;
         let wasNewStudent = false;
+        // Set only on the new-student path — the family-login phone to surface in the
+        // provisioning email (null when the parent's phone didn't normalize to a valid VN mobile).
+        let normalizedFamilyPhone: string | null = null;
 
         if (receipt.studentId) {
           // Existing student (renewal or explicit-link path): use the id already on the receipt.
@@ -718,28 +716,44 @@ export const financeRouter = router({
           }
           const program = receipt.course.program as Program;
 
-          // Find or create the ParentAccount by phone.
-          let parentAcc = await tx.parentAccount.findFirst({
-            where: { phone: receipt.parentPhone },
-          });
+          // Canonical family-login phone (decision 0033 D1). Falls back to the raw value when it
+          // doesn't look like a plausible VN mobile — dedupe/storage never throws on a bad phone,
+          // it just means that family has no phone-login, only the break-glass loginStudent path.
+          normalizedFamilyPhone = normalizeLoginPhone(receipt.parentPhone);
+          const loginPhone = normalizedFamilyPhone ?? receipt.parentPhone;
+
+          // Find or create the ParentAccount by phone. RACE-SAFE (decision 0033 D5/S1): two
+          // brand-new siblings of the SAME not-yet-existing phone approved concurrently must NOT
+          // abort this money transaction. `INSERT ... ON CONFLICT DO NOTHING` never raises — the
+          // loser's insert silently no-ops and both siblings converge on the winner's refetched row.
+          let parentAcc = await tx.parentAccount.findFirst({ where: { phone: loginPhone } });
           if (!parentAcc) {
-            parentAcc = await tx.parentAccount.create({
-              data: {
-                phone: receipt.parentPhone,
-                displayName: receipt.parentName ?? receipt.parentPhone,
-                // Capture email if provided — enables OTP passwordless login for the parent.
-                // Approve-time input takes priority (director-supplied) over intake-time (sale-supplied).
-                email: input.parentEmail ?? receipt.parentEmail ?? null,
-                isActive: true,
-              },
-            });
-            await logEvent(tx, {
-              facilityId: receipt.facilityId,
-              entityType: 'parent_account',
-              entityId: parentAcc.id,
-              type: 'created',
-              body: `Tài khoản phụ huynh tạo tự động khi duyệt phiếu ${code}`,
-              actorId: ctx.session.userId,
+            const newId = randomUUID();
+            const email = input.parentEmail ?? receipt.parentEmail ?? null;
+            const displayName = receipt.parentName ?? loginPhone;
+            const inserted = await tx.$executeRaw`
+              INSERT INTO "parent_account" ("id", "phone", "display_name", "email", "is_active")
+              VALUES (${newId}::uuid, ${loginPhone}, ${displayName}, ${email}, true)
+              ON CONFLICT ("phone") DO NOTHING`;
+            parentAcc = await tx.parentAccount.findFirstOrThrow({ where: { phone: loginPhone } });
+            if (inserted > 0) {
+              await logEvent(tx, {
+                facilityId: receipt.facilityId,
+                entityType: 'parent_account',
+                entityId: parentAcc.id,
+                type: 'created',
+                body: `Tài khoản phụ huynh tạo tự động khi duyệt phiếu ${code}`,
+                actorId: ctx.session.userId,
+              });
+            }
+          }
+          // Family password set ONCE, idempotent: a returning parent's existing family password is
+          // NEVER overwritten (this is what lets a 2nd sibling just link, no new credential minted).
+          if (!parentAcc.passwordHash) {
+            const familyPasswordHash = await hashPassword(DEFAULT_STUDENT_PASSWORD);
+            parentAcc = await tx.parentAccount.update({
+              where: { id: parentAcc.id },
+              data: { passwordHash: familyPasswordHash },
             });
           }
 
@@ -921,7 +935,9 @@ export const financeRouter = router({
         });
 
         if (!existingLmsAcc && wasNewStudent) {
-          const tempPassword = genTempPassword();
+          // Fixed default (decision 0033 D2) — this is the break-glass loginStudent fallback for
+          // when the family has no usable phone; the family login (above) is the primary path.
+          const tempPassword = DEFAULT_STUDENT_PASSWORD;
           const passwordHash = await hashPassword(tempPassword);
           // loginCode must be GLOBALLY unique (student_account.login_code is a global @unique), but
           // studentCode is only facility-scoped (receipt codes are allocated per-facility), so two
@@ -964,6 +980,7 @@ export const financeRouter = router({
               data: {
                 parentName,
                 studentName: student.fullName,
+                familyPhone: normalizedFamilyPhone ?? undefined,
                 loginCode: lmsRec.loginCode,
                 tempPassword,
               },
