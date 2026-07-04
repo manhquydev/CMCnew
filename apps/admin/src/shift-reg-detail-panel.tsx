@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { trpc, useSession, notifyError, notifySuccess, StatusBadge, type StatusDef } from '@cmc/ui';
 import { Alert, Badge, Button, Card, Checkbox, Group, Radio, Stack, Table, Text } from '@mantine/core';
+import { DateInput } from '@mantine/dates';
 
 // Preserves original color semantics: gray→draft, blue→pending, green→active.
 const SHIFT_REG_STATUS_MAP: Record<string, StatusDef> = {
@@ -357,13 +358,19 @@ function NewRegForm({ onCreate, onBack }: { onCreate: (from: string, to: string)
         <Group mb="md">
           <div>
             <Text size="xs" style={{ color: 'var(--cmc-text-muted)' }} mb={4}>Từ ngày</Text>
-            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}
-              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--cmc-border)', fontSize: 14 }} />
+            <DateInput
+              value={fromDate ? dayjs(fromDate).toDate() : null}
+              onChange={(d) => setFromDate(d ? dayjs(d).format('YYYY-MM-DD') : '')}
+              valueFormat="DD/MM/YYYY"
+            />
           </div>
           <div>
             <Text size="xs" style={{ color: 'var(--cmc-text-muted)' }} mb={4}>Đến ngày</Text>
-            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)}
-              style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--cmc-border)', fontSize: 14 }} />
+            <DateInput
+              value={toDate ? dayjs(toDate).toDate() : null}
+              onChange={(d) => setToDate(d ? dayjs(d).format('YYYY-MM-DD') : '')}
+              valueFormat="DD/MM/YYYY"
+            />
           </div>
         </Group>
         <Group justify="flex-end">
