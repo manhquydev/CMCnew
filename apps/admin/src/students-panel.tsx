@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   trpc,
   notifyError,
@@ -37,7 +37,14 @@ const LIFECYCLE: Record<string, StatusDef> = {
   completed: { label: 'Hoàn thành', tone: 'active' },
 };
 
-export function StudentsPanel() {
+export function StudentsPanel({
+  initialDetailId,
+}: {
+  /** Global-search deep link: pre-select a student record on mount/update. `ts` is a
+   *  monotonic timestamp (same trick as class-workspace.tsx's NavAction) so selecting the
+   *  same student again still re-opens the detail view. */
+  initialDetailId?: { id: string; ts: number } | null;
+} = {}) {
   const [students, setStudents] = useState<StudentT[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,6 +52,13 @@ export function StudentsPanel() {
 
   const [detailStudentId, setDetailStudentId] = useState<string | null>(null);
   const [facilityId, setFacilityId] = useState<string | null>(null);
+
+  const appliedNavTs = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!initialDetailId || initialDetailId.ts === appliedNavTs.current) return;
+    appliedNavTs.current = initialDetailId.ts;
+    setDetailStudentId(initialDetailId.id);
+  }, [initialDetailId]);
 
   const [editTarget, setEditTarget] = useState<StudentT | null>(null);
   const [editBusy, setEditBusy] = useState(false);

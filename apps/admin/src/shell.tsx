@@ -219,12 +219,14 @@ function StaffNotifDropdown({
 type GlobalSearchResult = Awaited<ReturnType<typeof trpc.search.global.query>>;
 
 /**
- * section: fallback navigation target (existing list screen) for entity types that have no
- * per-record deep-link route yet. path(id): overrides with a real record deep link when one
- * exists — currently only CRM opportunities (`/crm/opportunities/:oppId`, wired in app.tsx).
- * Students/staff/class-batches keep their detail view as component-local state
- * (students-panel.tsx/org-panel.tsx/class-workspace.tsx), not externally selectable — see the
- * phase report for why full deep-linking for those three needs a follow-up outside shell.tsx.
+ * section: navigation target (existing screen) for the entity's owning section.
+ * path(id): overrides with a real record URL when one exists — currently only CRM
+ * opportunities (`/crm/opportunities/:oppId`, wired in App.tsx).
+ * Students/staff/class-batches have no per-record URL route; instead App.tsx's
+ * `onSearchNavigate` callback pre-selects the record via component-local state
+ * (students-panel.tsx's `initialDetailId`, OrgPanel's `initialStaffNav` in App.tsx, and
+ * class-workspace.tsx's existing `navAction`/`goToClass` mechanism), exactly mirroring how
+ * clicking into a batch from the schedule panel already works.
  */
 const SEARCH_GROUPS: {
   key: keyof GlobalSearchResult;
@@ -306,12 +308,16 @@ function GlobalSearchDropdown({
 export function Shell({
   activeSection,
   onSectionChange,
+  onSearchNavigate,
   navGroups,
   sectionTitle,
   children,
 }: {
   activeSection: SectionKey;
   onSectionChange: (key: SectionKey) => void;
+  /** Deep-link into a specific record for entity types with no per-record URL route
+   *  (students/staff/classBatches) — see SEARCH_GROUPS comment above. */
+  onSearchNavigate: (entityKey: 'students' | 'staff' | 'classBatches', id: string) => void;
   navGroups: NavGroup[];
   sectionTitle: string;
   children: React.ReactNode;
@@ -366,6 +372,10 @@ export function Shell({
     setSearchResults(null);
     if (group.path) {
       navigate(group.path(id));
+      return;
+    }
+    if (group.key === 'students' || group.key === 'staff' || group.key === 'classBatches') {
+      onSearchNavigate(group.key, id);
       return;
     }
     onSectionChange(group.section);
