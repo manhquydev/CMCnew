@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
-import { trpc, notifyError, StatCard } from '@cmc/ui';
-import { Alert, Button, Card, Group, Select, SimpleGrid, Table, Text, TextInput, Title } from '@mantine/core';
+import { trpc, notifyError, StatCard, toApiDate, parseApiDate } from '@cmc/ui';
+import { Alert, Button, Card, Group, Select, SimpleGrid, Table, Text, Title } from '@mantine/core';
+import { DateInput } from '@mantine/dates';
 import { IconCash, IconDownload, IconReceiptRefund, IconRefresh, IconTrendingUp } from '@tabler/icons-react';
 
 type RevenueBucket = Awaited<ReturnType<typeof trpc.finance.revenueReport.query>>[number];
@@ -83,8 +84,8 @@ export function RevenueReportPanel() {
       </Title>
 
       <Group align="flex-end" mb="sm">
-        <TextInput label="Từ ngày" placeholder="YYYY-MM-DD" value={from} onChange={(e) => setFrom(e.currentTarget.value)} w={160} />
-        <TextInput label="Đến ngày (không bao gồm)" placeholder="YYYY-MM-DD" value={to} onChange={(e) => setTo(e.currentTarget.value)} w={200} />
+        <DateInput label="Từ ngày" valueFormat="DD/MM/YYYY" value={parseApiDate(from)} onChange={(d) => setFrom(toApiDate(d) ?? '')} w={160} />
+        <DateInput label="Đến ngày (không bao gồm)" valueFormat="DD/MM/YYYY" value={parseApiDate(to)} onChange={(d) => setTo(toApiDate(d) ?? '')} w={200} />
         <Select
           label="Gom nhóm"
           data={GROUP_BY_OPTIONS}

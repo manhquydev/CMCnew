@@ -8,6 +8,8 @@ import {
   FacilityPicker,
   StatusBadge,
   InitialsAvatar,
+  toApiDate,
+  parseApiDate,
   type StatusDef,
 } from '@cmc/ui';
 import {
@@ -26,6 +28,7 @@ import {
   Textarea,
   Title,
 } from '@mantine/core';
+import { DateInput } from '@mantine/dates';
 import { useForm } from '@mantine/form';
 import { IconRefresh } from '@tabler/icons-react';
 import { DISCOUNT_CAP_PERCENT } from '@cmc/domain-finance';
@@ -159,11 +162,13 @@ function CoursePriceCard({ courses, facilities }: { courses: CourseT[]; faciliti
               step={100000}
               {...priceForm.getInputProps('amount')}
             />
-            <TextInput
+            <DateInput
               label="Hiệu lực từ"
               withAsterisk
-              placeholder="YYYY-MM-DD"
-              {...priceForm.getInputProps('effectiveFrom')}
+              valueFormat="DD/MM/YYYY"
+              value={parseApiDate(priceForm.values.effectiveFrom)}
+              onChange={(d) => priceForm.setFieldValue('effectiveFrom', toApiDate(d) ?? '')}
+              error={priceForm.errors.effectiveFrom}
             />
           </Group>
           <Group>
@@ -351,15 +356,21 @@ function VoucherCard({ facilities }: { facilities: Facility[] }) {
             />
           </Group>
           <Group grow align="flex-end">
-            <TextInput
+            <DateInput
               label="Hiệu lực từ (tùy chọn)"
-              placeholder="YYYY-MM-DD"
-              {...form.getInputProps('validFrom')}
+              valueFormat="DD/MM/YYYY"
+              clearable
+              value={parseApiDate(form.values.validFrom)}
+              onChange={(d) => form.setFieldValue('validFrom', toApiDate(d) ?? '')}
+              error={form.errors.validFrom}
             />
-            <TextInput
+            <DateInput
               label="Hết hạn (tùy chọn)"
-              placeholder="YYYY-MM-DD"
-              {...form.getInputProps('validTo')}
+              valueFormat="DD/MM/YYYY"
+              clearable
+              value={parseApiDate(form.values.validTo)}
+              onChange={(d) => form.setFieldValue('validTo', toApiDate(d) ?? '')}
+              error={form.errors.validTo}
             />
           </Group>
           <Group>
@@ -1383,11 +1394,12 @@ function ReceiptCreateCard({
             />
           </Group>
           <Group grow align="flex-end">
-            <TextInput
+            <DateInput
               label="Ngày sinh (tùy chọn)"
-              placeholder="YYYY-MM-DD"
-              value={studentDob}
-              onChange={(e) => setStudentDob(e.currentTarget.value)}
+              valueFormat="DD/MM/YYYY"
+              clearable
+              value={parseApiDate(studentDob)}
+              onChange={(d) => setStudentDob(toApiDate(d) ?? '')}
             />
             <Select
               label="Lớp học (tùy chọn)"
