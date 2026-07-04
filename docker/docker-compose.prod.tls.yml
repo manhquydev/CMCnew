@@ -223,6 +223,11 @@ services:
         reservations:
           memory: 32m
     restart: unless-stopped
+    # `default` keeps prod service + cmcnew-jenkins (ci vhost) resolution unchanged;
+    # `cmcnew-edge` additionally lets this same nginx reach the cmcnew-dev app tier.
+    networks:
+      - default
+      - cmcnew-edge
 
   # Certbot — ALTERNATE-path renewal only (real Let's Encrypt cert obtained out-of-band by
   # scripts/prod-tls-bootstrap.sh). Meaningless for the canonical 10y self-signed cert, so it's
@@ -248,3 +253,12 @@ volumes:
   redisdata:
   letsencrypt:
   certbot_www:
+
+networks:
+  # Project default (cmcnew-prod_default) — all prod services + cmcnew-jenkins live here.
+  default:
+  # Shared edge network so the prod nginx can also reach the cmcnew-dev app tier
+  # (dev-api/dev-admin/dev-lms via their cmcnew-dev-* aliases) WITHOUT reaching dev DB/Redis.
+  # External — created out-of-band on the VPS before deploy: docker network create cmcnew-edge.
+  cmcnew-edge:
+    external: true

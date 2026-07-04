@@ -1,7 +1,7 @@
 ---
 title: "Dev/prod CI/CD environments with real SSO"
 description: "Split CMCnew into realistic dev and prod environments: develop auto-deploys dev, main deploys prod, PRs only validate."
-status: pending
+status: implemented
 priority: P1
 branch: "develop"
 lane: high-risk
@@ -119,11 +119,11 @@ Stop before implementation if any of these appear:
 
 | Phase | Name | Status | Depends |
 | --- | --- | --- | --- |
-| 1 | [Safety baseline and external prerequisites](./phase-01-safety-baseline-and-external-prerequisites.md) | Pending | none |
-| 2 | [Dev stack configuration and data isolation](./phase-02-dev-stack-configuration-and-data-isolation.md) | Pending | 1 |
-| 3 | [Edge routing TLS and domain cutover](./phase-03-edge-routing-tls-and-domain-cutover.md) | Pending | 2 |
-| 4 | [Jenkins branch pipeline split](./phase-04-jenkins-branch-pipeline-split.md) | Pending | 2, 3 |
-| 5 | [SSO parity smoke and rollback runbook](./phase-05-sso-parity-smoke-and-rollback-runbook.md) | Pending | 3, 4 |
+| 1 | [Safety baseline and external prerequisites](./phase-01-safety-baseline-and-external-prerequisites.md) | Done | none |
+| 2 | [Dev stack configuration and data isolation](./phase-02-dev-stack-configuration-and-data-isolation.md) | Done | 1 |
+| 3 | [Edge routing TLS and domain cutover](./phase-03-edge-routing-tls-and-domain-cutover.md) | Done | 2 |
+| 4 | [Jenkins branch pipeline split](./phase-04-jenkins-branch-pipeline-split.md) | Done | 2, 3 |
+| 5 | [SSO parity smoke and rollback runbook](./phase-05-sso-parity-smoke-and-rollback-runbook.md) | Done | 3, 4 |
 
 ## Files Likely To Change
 
@@ -325,3 +325,38 @@ own Red Team Review + Validation Log above). Findings, all applied:
 `260703-0022` soak-validates on prod (already enforced via `blockedBy`), and (b) the 4 human
 checkpoints being satisfied by the operator at the point the autonomous session reaches them — not
 before the whole run starts, since earlier phases (1-2 minus the Entra/CF items) don't need them yet.
+
+## Implementation Summary — 2026-07-04 (autonomous execution)
+
+All 5 phases implemented live on the VPS by an autonomous run on branch
+`devops/dev-prod-cicd-split`. Every phase ran Implement → Review → live-apply → verify →
+audit → commit → harness trace.
+
+**Live evidence (verified 2026-07-04):**
+
+- `erp`/`hoc` → prod commit `84ff0d22`; `deverp`/`devlms` → develop commit `8277022` — health
+  markers DIFFER, the core cutover proof. `ci.cmcvn.edu.vn` stayed 200 throughout.
+- `cmcnew-dev` stack live: `dev-postgres`/`dev-redis` isolated on `cmcnew-dev_default` (no edge,
+  no host ports); `dev-api`/`dev-admin`/`dev-lms` reachable by the prod nginx over `cmcnew-edge`.
+- Prod was never disrupted: nginx joined the edge network via a zero-downtime `docker network
+  connect`; nginx changes used `nginx -t` + reload, never restart.
+- Dev SSO start 302s to Entra with the dev redirect URI + host-only `cmc.sso_tx`; prod SSO
+  unaffected (Entra credential validated non-interactively via `client_credentials`).
+- Memory held (~5.2 GiB available, no OOM) with `COMPOSE_PARALLEL_LIMIT=1`.
+
+**Deviations from the plan text (all intentional):**
+
+- Decision record is **0032**, not 0020 — slot 0020 was already taken by
+  `0020-work-shift-manager-ownership.md`.
+- The Jenkins `develop`→dev deploy and PR-no-deploy behavior are wired and the Jenkinsfile passes
+  the declarative linter, but the **live** CI proof only fires after this branch merges to
+  `develop` (Jenkins needs the dev stages + dev compose on that branch). The manual Phase 2/3
+  bring-up already proves the dev stack deploys and serves correctly.
+- Dev reuses the shared Entra app's client secret (redirect URI, cookies, DB, origin all
+  dev-scoped and separate) — a dedicated dev secret can be swapped into `.env.dev` later.
+
+**Remaining human-only step:** the full interactive Entra login on `deverp.cmcvn.edu.vn`
+(MFA-gated browser sign-in completing the callback + dev session cookie). Everything up to that
+is verified. See `docs/dev-prod-cicd-runbook.md` → SSO redirect checklist.
+
+Phase statuses below updated to Done.
