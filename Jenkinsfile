@@ -128,6 +128,13 @@ pipeline {
           DBP="$(grep -m1 '^DB_APP_PASSWORD=' /secrets/.env.dev | cut -d= -f2-)"
           $DEV exec -T dev-postgres psql -U "$DBU" -d "$DBN" -c "ALTER ROLE cmc_app PASSWORD '$DBP';"
           $DEV up -d --build dev-api dev-admin dev-lms
+          # Wait for dev-api to become healthy before reloading nginx and smoking. dev-api has a
+          # start_period (Node + Prisma boot); smoking the instant the container reports "Started"
+          # hits "connection refused" on a still-booting app and fails an otherwise-good deploy.
+          for i in $(seq 1 40); do
+            [ "$($DEV ps -q dev-api | xargs -r docker inspect -f '{{.State.Health.Status}}' 2>/dev/null)" = healthy ] && break
+            sleep 3
+          done
           # The shared prod nginx caches the dev upstream IPs; recreated dev containers get new IPs,
           # so reload (NOT restart — zero-downtime, and it must not disrupt prod) to re-resolve them.
           docker exec cmcnew-prod-nginx-1 nginx -s reload
