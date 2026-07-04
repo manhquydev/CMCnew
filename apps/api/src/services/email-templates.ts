@@ -215,7 +215,7 @@ const renderers: { [K in EmailTemplateKind]: Renderer<K> } = {
 </table>`) +
         button('Đăng nhập LMS', BRAND.lmsUrl) +
         p('Vui lòng bảo quản thông tin đăng nhập này.') +
-        p('Nếu bạn có câu hỏi, hãy liên hệ với nhà trường để được hỗ trợ.'),
+        p('Nếu bạn có câu hỏi, hãy liên hệ với trung tâm để được hỗ trợ.'),
     }),
   }),
 
