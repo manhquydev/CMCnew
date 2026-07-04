@@ -18,7 +18,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   trpc, useSession, notifyError, notifySuccess,
   RecordDetailPanel, type RecordDetailConfig, type RecordDetailHandle,
-  InitialsAvatar, StatusBadge,
+  InitialsAvatar, StatusBadge, toApiDate, parseApiDate,
 } from '@cmc/ui';
 import { can, canReadSensitiveHr, maskSensitive, ROLE_LABEL } from '@cmc/auth/permissions';
 import {
@@ -37,6 +37,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+import { DateInput } from '@mantine/dates';
 import { IconArrowLeft, IconPencil } from '@tabler/icons-react';
 
 type EmploymentProfile = Awaited<ReturnType<typeof trpc.payroll.profileList.query>>[number];
@@ -158,7 +159,13 @@ function EmploymentTab({ user }: { user: StaffProfileUser }) {
               <TextInput label="Vị trí" value={form.position} onChange={(e) => setForm({ ...form, position: e.currentTarget.value })} />
               <TextInput label="Bậc lương" value={form.grade} onChange={(e) => setForm({ ...form, grade: e.currentTarget.value })} />
               <TextInput label="Người phụ thuộc" type="number" value={form.dependents} onChange={(e) => setForm({ ...form, dependents: Number(e.currentTarget.value) })} />
-              <TextInput label="Ngày vào làm" value={form.startedAt} onChange={(e) => setForm({ ...form, startedAt: e.currentTarget.value })} placeholder="YYYY-MM-DD" />
+              <DateInput
+                label="Ngày vào làm"
+                valueFormat="DD/MM/YYYY"
+                clearable
+                value={parseApiDate(form.startedAt)}
+                onChange={(d) => setForm({ ...form, startedAt: toApiDate(d) ?? '' })}
+              />
               <TextInput label="Số máy nhánh (Callio)" value={form.callioExt} onChange={(e) => setForm({ ...form, callioExt: e.currentTarget.value })} />
               <TextInput label="Mã quản lý (UUID)" value={form.managerId} onChange={(e) => setForm({ ...form, managerId: e.currentTarget.value })} placeholder="Để trống = tự động" />
             </SimpleGrid>

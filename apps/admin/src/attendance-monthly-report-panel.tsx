@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import dayjs from 'dayjs';
-import { notifyError, InitialsAvatar } from '@cmc/ui';
-import { Badge, Button, Card, Group, Stack, Table, Text, TextInput } from '@mantine/core';
+import { notifyError, InitialsAvatar, toApiMonth, parseApiMonth } from '@cmc/ui';
+import { Badge, Button, Card, Group, Stack, Table, Text } from '@mantine/core';
+import { MonthPickerInput } from '@mantine/dates';
 import { attendanceApi } from './shallow-trpc';
 
 const TH_STYLE: React.CSSProperties = {
@@ -56,11 +57,12 @@ export function AttendanceMonthlyReportPanel({ facilityId }: { facilityId: numbe
           </Text>
         </div>
         <Group align="flex-end">
-          <TextInput
+          <MonthPickerInput
             label="Kỳ"
-            placeholder="YYYY-MM"
-            value={periodKey}
-            onChange={(e) => setPeriodKey(e.currentTarget.value)}
+            valueFormat="YYYY-MM"
+            clearable={false}
+            value={parseApiMonth(periodKey)}
+            onChange={(d) => setPeriodKey(toApiMonth(d) ?? '')}
             error={periodKey && !periodKey.match(/^\d{4}-\d{2}$/) ? 'YYYY-MM' : undefined}
             w={130}
           />

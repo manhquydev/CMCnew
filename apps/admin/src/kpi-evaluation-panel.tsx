@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useSession, notifyError, notifySuccess, required, StatusBadge, InitialsAvatar, type StatusDef } from '@cmc/ui';
+import { useSession, notifyError, notifySuccess, required, StatusBadge, InitialsAvatar, toApiMonth, parseApiMonth, type StatusDef } from '@cmc/ui';
 import { useForm } from '@mantine/form';
 import { useDisclosure } from '@mantine/hooks';
 import {
@@ -16,6 +16,7 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
+import { MonthPickerInput } from '@mantine/dates';
 import { IconPlus } from '@tabler/icons-react';
 import { payrollApi } from './shallow-trpc';
 
@@ -432,11 +433,12 @@ export function KpiEvaluationPanel() {
           {me.facilityIds.length > 1 && (
             <Select label="Cơ sở" data={facilityOptions} value={facilityId} onChange={setFacilityId} w={160} />
           )}
-          <TextInput
+          <MonthPickerInput
             label="Kỳ lương (YYYY-MM)"
-            value={periodKey}
-            onChange={(e) => setPeriodKey(e.currentTarget.value)}
-            placeholder="YYYY-MM"
+            valueFormat="YYYY-MM"
+            clearable={false}
+            value={parseApiMonth(periodKey)}
+            onChange={(d) => setPeriodKey(toApiMonth(d) ?? '')}
             w={150}
           />
           <Button variant="subtle" onClick={() => { loadRoster(); loadKpiList(); }}>

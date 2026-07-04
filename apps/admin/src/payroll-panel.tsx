@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { notifyError, notifySuccess, useSession, StatusBadge, InitialsAvatar, type StatusDef } from '@cmc/ui';
+import { notifyError, notifySuccess, useSession, StatusBadge, InitialsAvatar, toApiMonth, parseApiMonth, type StatusDef } from '@cmc/ui';
 import { can } from '@cmc/auth/permissions';
 import {
   Alert,
@@ -17,6 +17,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+import { MonthPickerInput } from '@mantine/dates';
 import { payrollApi } from './shallow-trpc';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -102,11 +103,12 @@ function PeriodSummaryCard({ facilityId }: { facilityId: number }) {
         Tóm tắt kỳ lương
       </Title>
       <Group align="flex-end" mb="sm">
-        <TextInput
+        <MonthPickerInput
           label="Kỳ (YYYY-MM)"
-          placeholder="2026-06"
-          value={periodKey}
-          onChange={(e) => setPeriodKey(e.currentTarget.value)}
+          valueFormat="YYYY-MM"
+          clearable={false}
+          value={parseApiMonth(periodKey)}
+          onChange={(d) => setPeriodKey(toApiMonth(d) ?? '')}
           w={160}
           error={error && !periodKey.match(/^\d{4}-\d{2}$/) ? error : undefined}
         />
@@ -237,11 +239,12 @@ function ComputeForm({
       {err && <Alert color="red" mb="sm">{err}</Alert>}
       <Stack gap="sm">
         <Group grow align="flex-end">
-          <TextInput
+          <MonthPickerInput
             label="Kỳ (YYYY-MM)"
-            placeholder="2026-06"
-            value={periodKey}
-            onChange={(e) => setPeriodKey(e.currentTarget.value)}
+            valueFormat="YYYY-MM"
+            clearable={false}
+            value={parseApiMonth(periodKey)}
+            onChange={(d) => setPeriodKey(toApiMonth(d) ?? '')}
           />
           <NumberInput
             label="Ngày chuẩn"
