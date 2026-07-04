@@ -37,7 +37,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { DateInput } from '@mantine/dates';
+import { DateInput, TimeInput } from '@mantine/dates';
 import { useDisclosure } from '@mantine/hooks';
 import { AttendanceRoster } from './attendance-roster.js';
 import { StudentDetailPanel } from './student-detail.js';
@@ -697,8 +697,8 @@ function CreateMakeupSessionModal({
         <Stack>
           <DateInput label="Ngày" value={sessionDate} onChange={setSessionDate} valueFormat="DD/MM/YYYY" />
           <Group grow>
-            <TextInput label="Giờ bắt đầu (HH:mm)" placeholder="08:00" value={startTime} onChange={(e) => setStartTime(e.currentTarget.value)} />
-            <TextInput label="Giờ kết thúc (HH:mm)" placeholder="10:00" value={endTime} onChange={(e) => setEndTime(e.currentTarget.value)} />
+            <TimeInput label="Giờ bắt đầu" value={startTime} onChange={(e) => setStartTime(e.currentTarget.value)} />
+            <TimeInput label="Giờ kết thúc" value={endTime} onChange={(e) => setEndTime(e.currentTarget.value)} />
           </Group>
           <Select
             label="Phòng (tùy chọn)"

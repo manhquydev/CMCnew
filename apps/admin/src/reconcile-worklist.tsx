@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
-import { trpc, notifyError, notifySuccess, FacilityPicker, StatusBadge, type StatusDef } from '@cmc/ui';
-import { Alert, Button, Card, Group, Table, Text, TextInput, Title } from '@mantine/core';
+import { trpc, notifyError, notifySuccess, FacilityPicker, StatusBadge, toApiDate, parseApiDate, type StatusDef } from '@cmc/ui';
+import { Alert, Button, Card, Group, Table, Text, Title } from '@mantine/core';
+import { DateInput } from '@mantine/dates';
 import { IconRefresh } from '@tabler/icons-react';
 
 type WorklistRow = Awaited<ReturnType<typeof trpc.finance.reconcileWorklist.query>>[number];
@@ -84,8 +85,8 @@ export function ReconcileWorklistPanel() {
       </Title>
 
       <Group align="flex-end" mb="sm">
-        <TextInput label="Từ ngày" placeholder="YYYY-MM-DD" value={from} onChange={(e) => setFrom(e.currentTarget.value)} w={160} />
-        <TextInput label="Đến ngày (không bao gồm)" placeholder="YYYY-MM-DD" value={to} onChange={(e) => setTo(e.currentTarget.value)} w={200} />
+        <DateInput label="Từ ngày" valueFormat="DD/MM/YYYY" value={parseApiDate(from)} onChange={(d) => setFrom(toApiDate(d) ?? '')} w={160} />
+        <DateInput label="Đến ngày (không bao gồm)" valueFormat="DD/MM/YYYY" value={parseApiDate(to)} onChange={(d) => setTo(toApiDate(d) ?? '')} w={200} />
         <FacilityPicker
           facilities={facilities}
           placeholder="Tất cả"

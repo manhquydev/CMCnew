@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { notifyError, notifySuccess } from '@cmc/ui';
+import { notifyError, notifySuccess, toApiDate, parseApiDate } from '@cmc/ui';
 import { useForm } from '@mantine/form';
 import { useDisclosure } from '@mantine/hooks';
 import { Badge, Button, Card, Group, JsonInput, Modal, Stack, Table, Text, TextInput } from '@mantine/core';
+import { DateInput } from '@mantine/dates';
 import { IconPlus } from '@tabler/icons-react';
 import { compensationApi, type CompensationPolicyRow } from './shallow-trpc';
 
@@ -134,7 +135,13 @@ export function CompensationConfigPanel() {
         <form onSubmit={form.onSubmit(createVersion)}>
           <Stack>
             <Group grow align="flex-end">
-              <TextInput label="Hiệu lực từ" placeholder="YYYY-MM-DD" {...form.getInputProps('effectiveFrom')} />
+              <DateInput
+                label="Hiệu lực từ"
+                valueFormat="DD/MM/YYYY"
+                value={parseApiDate(form.values.effectiveFrom)}
+                onChange={(d) => form.setFieldValue('effectiveFrom', toApiDate(d) ?? '')}
+                error={form.errors.effectiveFrom}
+              />
               <TextInput label="Ghi chú" placeholder="vd: điều chỉnh hoa hồng Q3" {...form.getInputProps('note')} />
               <Button variant="subtle" onClick={loadDefaults}>Nạp mặc định</Button>
             </Group>
