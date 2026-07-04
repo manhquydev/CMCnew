@@ -56,6 +56,9 @@ Keep `ci.cmcvn.edu.vn` routing to Jenkins unchanged.
 
 ## Implementation Steps
 
+0. **(2026-07-04 validation Session 2, added)** Before any edit: `cp
+   /root/cmcnew/docker/nginx-prod.conf /root/cmcnew/docker/nginx-prod.conf.bak.$(date +%Y%m%d%H%M%S)`
+   on the VPS. Rollback = restore this file and reload.
 1. Add upstreams or direct proxy targets for dev API, dev admin, and dev LMS through the edge network aliases.
 2. Add server blocks for `deverp.cmcvn.edu.vn` and `devlms.cmcvn.edu.vn`.
 3. Ensure `/api/` handling matches the existing prod route behavior so browser clients can use same-origin API calls.

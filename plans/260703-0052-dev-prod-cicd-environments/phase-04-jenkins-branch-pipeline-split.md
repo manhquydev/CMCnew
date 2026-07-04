@@ -48,6 +48,10 @@ GitHub Actions stays out of scope because billing/runs are currently noisy.
 
 ## Implementation Steps
 
+-1. **(2026-07-04 validation Session 2, added)** Before editing `Jenkinsfile`: record current
+   `main` HEAD commit and `curl https://erp.cmcvn.edu.vn/api/health` response as the rollback
+   reference point (what a Jenkins rebuild-previous-commit should restore).
+
 0. **(2026-07-03 reconciliation, added — was a silent gap)** Before restructuring, confirm this
    phase's rewrite PRESERVES everything 260703-0022 already landed in `Jenkinsfile` (that plan ships
    and soak-validates first, per `blockedBy`): the `publishChecks` start/end calls (Phase 3 of 0022),
