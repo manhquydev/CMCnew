@@ -3,8 +3,8 @@ import { test, expect } from '@playwright/test';
 // LMS auth (post SSO/OTP redirection):
 //   - Student: login code + password (unchanged) — used for the happy/error smoke.
 //   - Parent:  passwordless Email OTP (two steps) — smoke covers step 1 (request code).
-// Seed: student loginCode TEST-001, password = SEED_SUPERADMIN_PASSWORD (default ChangeMe!123).
-const STUDENT_CODE = process.env.TEST_LMS_STUDENT_CODE ?? 'TEST-001';
+// Seed: student loginCode HS-2026-0001, password = SEED_SUPERADMIN_PASSWORD (default ChangeMe!123).
+const STUDENT_CODE = process.env.TEST_LMS_STUDENT_CODE ?? 'HS-2026-0001';
 const STUDENT_PASSWORD = process.env.TEST_LMS_STUDENT_PASSWORD ?? 'ChangeMe!123';
 const PARENT_EMAIL = process.env.TEST_LMS_PARENT_EMAIL ?? 'otp-probe@cmc.local';
 

@@ -106,6 +106,7 @@ describe('dashboard.myApprovals — approval-inbox aggregate', () => {
       await tx.recordEvent.deleteMany({ where: { entityType: 'kpi_score' } }).catch(() => {});
       await tx.kpiScore.deleteMany({ where: { userId: { in: [saleId, teacherId] } } }).catch(() => {});
       await tx.timePunch.deleteMany({ where: { userId: { in: [saleId, teacherId] } } }).catch(() => {});
+      await tx.manualAttendanceTicket.deleteMany({ where: { userId: { in: [saleId, teacherId] } } }).catch(() => {});
       await tx.shiftRegistration.deleteMany({ where: { userId: { in: [saleId, teacherId] } } }).catch(() => {});
       await tx.reward.deleteMany({ where: { studentId } }).catch(() => {});
       await tx.gift.deleteMany({ where: { facilityId: FACILITY, name: { startsWith: 'GIFT_INBOX' } } }).catch(() => {});
@@ -237,27 +238,31 @@ describe('dashboard.myApprovals — approval-inbox aggregate', () => {
   });
 
   describe('manual-punch-pending (both directors, scoped to the direct manager)', () => {
-    let punchId: string;
+    // Domain is now sourced from the daily ticket (manualAttendanceTicket), not the raw punch —
+    // one inbox item per person+day, matching checkInOut.pendingManual's per-ticket shape.
+    let ticketId: string;
 
-    it('manual punch appears only for its subject\'s manager (bizDir), not the other director', async () => {
-      const punch = await withRls(SUPER, (tx) =>
-        tx.timePunch.create({
-          data: { facilityId: FACILITY, userId: saleId, ipAddress: '203.0.113.9', method: 'manual' },
+    it('pending ticket appears only for its subject\'s manager (bizDir), not the other director', async () => {
+      const ticket = await withRls(SUPER, (tx) =>
+        tx.manualAttendanceTicket.create({
+          data: { facilityId: FACILITY, userId: saleId, dateKey: '2099-03-01', reason: 'dashboard-approvals-test' },
         }),
       );
-      punchId = punch.id;
+      ticketId = ticket.id;
 
       const bizItems = await (await bizDirCaller()).dashboard.myApprovals({ facilityId: FACILITY });
-      expect(bizItems.some((i) => i.domain === 'manualPunch' && i.id === punchId)).toBe(true);
+      expect(bizItems.some((i) => i.domain === 'manualPunch' && i.id === ticketId)).toBe(true);
 
       const eduItems = await (await eduDirCaller()).dashboard.myApprovals({ facilityId: FACILITY });
-      expect(eduItems.some((i) => i.domain === 'manualPunch' && i.id === punchId)).toBe(false);
+      expect(eduItems.some((i) => i.domain === 'manualPunch' && i.id === ticketId)).toBe(false);
     });
 
-    it('approved punch no longer appears', async () => {
-      await withRls(SUPER, (tx) => tx.timePunch.update({ where: { id: punchId }, data: { approvedAt: new Date(), approvedById: bizDirId } }));
+    it('approved ticket no longer appears', async () => {
+      await withRls(SUPER, (tx) =>
+        tx.manualAttendanceTicket.update({ where: { id: ticketId }, data: { status: 'approved', approvedAt: new Date(), approvedById: bizDirId } }),
+      );
       const bizItems = await (await bizDirCaller()).dashboard.myApprovals({ facilityId: FACILITY });
-      expect(bizItems.some((i) => i.domain === 'manualPunch' && i.id === punchId)).toBe(false);
+      expect(bizItems.some((i) => i.domain === 'manualPunch' && i.id === ticketId)).toBe(false);
     });
   });
 

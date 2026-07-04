@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { trpc, useSession, notifyError, notifySuccess } from '@cmc/ui';
-import { Badge, Button, Card, Group, Stack, Table, Text } from '@mantine/core';
+import { Badge, Button, Card, Group, Modal, Stack, Table, Text, Textarea } from '@mantine/core';
 import { IconClock, IconWifi, IconWifiOff } from '@tabler/icons-react';
 import { attendanceApi } from './shallow-trpc';
 
@@ -11,9 +11,10 @@ const TH_STYLE: React.CSSProperties = {
 };
 
 type TodayStatus = Awaited<ReturnType<typeof trpc.checkInOut.todayStatus.query>>;
-type PendingManualPunch = Awaited<ReturnType<typeof trpc.checkInOut.pendingManual.query>>[number];
+type PendingManualTicket = Awaited<ReturnType<typeof trpc.checkInOut.pendingManual.query>>[number];
 type Punch = { id: string; time: string | Date; method: string };
 type HistoryPunch = Awaited<ReturnType<typeof attendanceApi.history.query>>[number];
+type PunchResult = Awaited<ReturnType<typeof trpc.checkInOut.punch.mutate>>;
 
 export function CheckInPanel() {
   const { me } = useSession();
@@ -21,10 +22,21 @@ export function CheckInPanel() {
   const [ipCheck, setIpCheck] = useState<{ allowed: boolean; ip: string }>({ allowed: false, ip: '...' });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [approvingId, setApprovingId] = useState<string | null>(null);
-  const [pendingManual, setPendingManual] = useState<PendingManualPunch[]>([]);
+  const [actingId, setActingId] = useState<string | null>(null);
+  const [pendingManual, setPendingManual] = useState<PendingManualTicket[]>([]);
   const [history, setHistory] = useState<HistoryPunch[]>([]);
   const [clock, setClock] = useState(dayjs().format('HH:mm:ss'));
+  const [reasonModal, setReasonModal] = useState<{ resubmit: boolean } | null>(null);
+  const [reasonText, setReasonText] = useState('');
+  const [inCooldown, setInCooldown] = useState(false);
+
+  // Matches server PUNCH_DEBOUNCE_MS (check-in-out.ts) — hides the button for the same
+  // window the server would reject a repeat punch in, rather than showing a raw error.
+  const PUNCH_COOLDOWN_MS = 5_000;
+  function startCooldown() {
+    setInCooldown(true);
+    setTimeout(() => setInCooldown(false), PUNCH_COOLDOWN_MS);
+  }
 
   // Live clock
   useEffect(() => {
@@ -67,27 +79,63 @@ export function CheckInPanel() {
 
   useEffect(() => { loadStatus(); }, [loadStatus]);
 
+  function handlePunchResult(result: PunchResult) {
+    if ('requiresReason' in result) {
+      // Outside WiFi, no daily ticket yet (or it was rejected) — ask for a reason instead
+      // of silently failing. No punch was created server-side for this response.
+      setReasonModal({ resubmit: 'resubmit' in result && result.resubmit === true });
+      return;
+    }
+    notifySuccess('Chấm công thành công!');
+    startCooldown();
+    loadStatus();
+  }
+
   async function punch() {
     setBusy(true);
     try {
-      await trpc.checkInOut.punch.mutate();
-      notifySuccess('Chấm công thành công!');
-      loadStatus();
+      const result = await trpc.checkInOut.punch.mutate();
+      handlePunchResult(result);
     } catch (e) {
       notifyError(e, 'Chấm công thất bại');
     } finally { setBusy(false); }
   }
 
-  async function approveManual(punchId: string) {
-    setApprovingId(punchId);
+  async function submitReason() {
+    setBusy(true);
     try {
-      await trpc.checkInOut.approveManual.mutate({ punchId });
+      const result = await trpc.checkInOut.punch.mutate({ reason: reasonText.trim() });
+      setReasonModal(null);
+      setReasonText('');
+      handlePunchResult(result);
+    } catch (e) {
+      notifyError(e, 'Chấm công thất bại');
+    } finally { setBusy(false); }
+  }
+
+  async function approveManual(ticketId: string) {
+    setActingId(ticketId);
+    try {
+      await trpc.checkInOut.approveManual.mutate({ ticketId });
       notifySuccess('Đã duyệt chấm công thủ công');
       loadStatus();
     } catch (e) {
       notifyError(e, 'Duyệt chấm công thất bại');
     } finally {
-      setApprovingId(null);
+      setActingId(null);
+    }
+  }
+
+  async function rejectManual(ticketId: string) {
+    setActingId(ticketId);
+    try {
+      await trpc.checkInOut.rejectManual.mutate({ ticketId });
+      notifySuccess('Đã từ chối chấm công thủ công');
+      loadStatus();
+    } catch (e) {
+      notifyError(e, 'Từ chối thất bại');
+    } finally {
+      setActingId(null);
     }
   }
 
@@ -138,7 +186,21 @@ export function CheckInPanel() {
                 </Badge>
               </Group>
             )}
-            {isCompleted && (
+            {isCompleted && status?.manualApproval === 'rejected' && (
+              <Group justify="center" mb="md">
+                <Badge color="red" variant="light" radius="xl" size="lg">
+                  Bị từ chối — liên hệ quản lý ({status?.checkIn ? dayjs(status.checkIn.time).format('HH:mm') : ''} → {status?.checkOut ? dayjs(status.checkOut.time).format('HH:mm') : ''})
+                </Badge>
+              </Group>
+            )}
+            {isCompleted && status?.manualApproval === 'pending' && (
+              <Group justify="center" mb="md">
+                <Badge color="yellow" variant="light" radius="xl" size="lg">
+                  Chờ duyệt — {status?.checkIn ? dayjs(status.checkIn.time).format('HH:mm') : ''} → {status?.checkOut ? dayjs(status.checkOut.time).format('HH:mm') : ''}
+                </Badge>
+              </Group>
+            )}
+            {isCompleted && status?.manualApproval !== 'rejected' && status?.manualApproval !== 'pending' && (
               <Group justify="center" mb="md">
                 <Badge color="green" variant="light" radius="xl" size="lg">
                   Hoàn thành — {status?.checkIn ? dayjs(status.checkIn.time).format('HH:mm') : ''} → {status?.checkOut ? dayjs(status.checkOut.time).format('HH:mm') : ''}
@@ -167,9 +229,12 @@ export function CheckInPanel() {
               </Group>
             )}
 
-            {/* Action button */}
+            {/* Action button — always available (even after checkout): each new punch
+                updates the check-out time to the latest tap. Hidden for 5s after each
+                punch (cooldownUntil) so the debounce window on the server has a visible
+                UI counterpart instead of a silent 5s error. */}
             <Group justify="center">
-              {!isCompleted && (
+              {!inCooldown && (
                 <Button
                   size="lg" radius={9999}
                   color={isCheckedIn ? 'red' : 'green'}
@@ -177,11 +242,11 @@ export function CheckInPanel() {
                   onClick={punch}
                   leftSection={<IconClock size={20} />}
                 >
-                  {isCheckedIn ? 'CHECK-OUT' : 'CHECK-IN'}
+                  {isCheckedIn ? 'CHECK-OUT / Cập nhật giờ về' : 'CHECK-IN'}
                 </Button>
               )}
-              {isCompleted && (
-                <Text size="sm" c="dimmed">Hôm nay đã hoàn thành ✅</Text>
+              {inCooldown && (
+                <Text size="sm" c="dimmed">Vừa chấm công — vui lòng đợi giây lát...</Text>
               )}
             </Group>
           </>
@@ -225,7 +290,6 @@ export function CheckInPanel() {
                 <Table.Th style={TH_STYLE}>Ngày</Table.Th>
                 <Table.Th style={TH_STYLE}>Giờ</Table.Th>
                 <Table.Th style={TH_STYLE}>Phương thức</Table.Th>
-                <Table.Th style={TH_STYLE}>IP</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -238,7 +302,6 @@ export function CheckInPanel() {
                       {p.method === 'ip' ? 'WiFi' : 'Thủ công'}
                     </Badge>
                   </Table.Td>
-                  <Table.Td style={{ fontFamily: 'monospace' }}>{p.ipAddress}</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
@@ -252,22 +315,29 @@ export function CheckInPanel() {
           <Table striped highlightOnHover withTableBorder={false}>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th style={TH_STYLE}>Thời gian</Table.Th>
-                <Table.Th style={TH_STYLE}>IP</Table.Th>
+                <Table.Th style={TH_STYLE}>Ngày</Table.Th>
+                <Table.Th style={TH_STYLE}>Lý do</Table.Th>
+                <Table.Th style={TH_STYLE}>Số lần bấm</Table.Th>
                 <Table.Th style={TH_STYLE}>Ca</Table.Th>
                 <Table.Th style={TH_STYLE}>Thao tác</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {pendingManual.map((p) => (
-                <Table.Tr key={p.id}>
-                  <Table.Td>{dayjs(p.timestamp).format('DD/MM HH:mm')}</Table.Td>
-                  <Table.Td style={{ fontFamily: 'monospace' }}>{p.ipAddress}</Table.Td>
-                  <Table.Td>{p.shiftTemplate ? `${p.shiftTemplate.name} (${p.shiftTemplate.startTime}-${p.shiftTemplate.endTime})` : 'Chưa map ca'}</Table.Td>
+              {pendingManual.map((t) => (
+                <Table.Tr key={t.id}>
+                  <Table.Td>{t.dateKey}</Table.Td>
+                  <Table.Td>{t.reason}</Table.Td>
+                  <Table.Td>{t.punchCount}</Table.Td>
+                  <Table.Td>{t.shiftTemplate ? `${t.shiftTemplate.name} (${t.shiftTemplate.startTime}-${t.shiftTemplate.endTime})` : 'Chưa map ca'}</Table.Td>
                   <Table.Td>
-                    <Button size="xs" variant="light" loading={approvingId === p.id} onClick={() => approveManual(p.id)}>
-                      Duyệt
-                    </Button>
+                    <Group gap="xs">
+                      <Button size="xs" variant="light" color="green" loading={actingId === t.id} onClick={() => approveManual(t.id)}>
+                        Duyệt
+                      </Button>
+                      <Button size="xs" variant="light" color="red" loading={actingId === t.id} onClick={() => rejectManual(t.id)}>
+                        Từ chối
+                      </Button>
+                    </Group>
                   </Table.Td>
                 </Table.Tr>
               ))}
@@ -275,6 +345,34 @@ export function CheckInPanel() {
           </Table>
         </Card>
       )}
+
+      <Modal
+        opened={reasonModal !== null}
+        onClose={() => { setReasonModal(null); setReasonText(''); }}
+        title={reasonModal?.resubmit ? 'Phiếu bị từ chối — nhập lý do mới' : 'Lý do chấm công ngoài WiFi'}
+        centered
+      >
+        <Stack>
+          <Text size="sm" c="dimmed">
+            {reasonModal?.resubmit
+              ? 'Phiếu chấm công ngoài WiFi của bạn đã bị quản lý từ chối. Nhập lý do mới để nộp lại.'
+              : 'Bạn đang chấm công ngoài mạng công ty. Vui lòng nhập lý do — chỉ cần nhập 1 lần cho cả ngày hôm nay.'}
+          </Text>
+          <Textarea
+            value={reasonText}
+            onChange={(e) => setReasonText(e.currentTarget.value)}
+            placeholder="Vd: Đi gặp khách hàng, làm việc tại chi nhánh..."
+            minRows={3}
+            autosize
+          />
+          <Group justify="flex-end">
+            <Button variant="subtle" onClick={() => { setReasonModal(null); setReasonText(''); }}>Hủy</Button>
+            <Button loading={busy} disabled={reasonText.trim().length < 3} onClick={submitReason}>
+              Xác nhận chấm công
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   );
 }

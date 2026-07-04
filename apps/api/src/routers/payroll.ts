@@ -5,6 +5,7 @@ import type { Prisma } from '@cmc/db';
 import { rlsContextOf, canReadSensitiveHr, maskSensitive, isMaskedPlaceholder, type RequestSession } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { enqueueEmail } from '../services/email-outbox.js';
+import { nextEmployeeCode } from '../services/employee-code.js';
 
 // Post-commit, best-effort email runs under super-bypass so the outbox insert is decoupled from the
 // staff-scoped business tx (a mail failure never rolls back the payslip).
@@ -479,6 +480,13 @@ export const payrollRouter = router({
             bankName: input.bankName ?? null,
           },
         });
+
+        // Cấp mã nhân sự một lần khi hồ sơ chưa có mã (backfill Phase 1 chạy trước, counter tiếp nối).
+        if (!profile.employeeCode) {
+          const employeeCode = await nextEmployeeCode(tx);
+          await tx.employmentProfile.update({ where: { id: profile.id }, data: { employeeCode } });
+          profile.employeeCode = employeeCode;
+        }
 
         // Audit: grade change (with reason) and/or sensitive-field change (field names only).
         const auditParts: string[] = [];

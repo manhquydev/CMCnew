@@ -43,6 +43,9 @@ describe('HR onboarding — user.create phone + dup-email (P2)', () => {
     const user = await su.user.create({
       email, displayName: 'Phone Test', phone: '0901234567',
       roles: [Role.sale], primaryRole: Role.sale, facilityIds: [FACILITY],
+      nationalId: '0010000000001',
+      startedAt: '2026-01-01',
+      position: 'Nhân viên',
     });
     createdUserIds.push(user.id);
     expect(user.phone).toBe('0901234567');
@@ -53,11 +56,17 @@ describe('HR onboarding — user.create phone + dup-email (P2)', () => {
     const email = uniq('hr-dup') + '@cmc.test';
     const u1 = await su.user.create({
       email, displayName: 'First', roles: [Role.sale], primaryRole: Role.sale, facilityIds: [FACILITY],
+      nationalId: '0010000000001',
+      startedAt: '2026-01-01',
+      position: 'Nhân viên',
     });
     createdUserIds.push(u1.id);
     await expect(
       su.user.create({
         email, displayName: 'Second', roles: [Role.sale], primaryRole: Role.sale, facilityIds: [FACILITY],
+        nationalId: '0010000000001',
+        startedAt: '2026-01-01',
+        position: 'Nhân viên',
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
   });

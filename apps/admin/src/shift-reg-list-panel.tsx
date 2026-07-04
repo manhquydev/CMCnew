@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { trpc, useSession, notifyError, notifySuccess, StatusBadge, type StatusDef } from '@cmc/ui';
-import { Button, Card, Group, Stack, Table, Text } from '@mantine/core';
+import { Button, Card, Group, Stack, Table, Text, Tooltip } from '@mantine/core';
 import { IconPlus } from '@tabler/icons-react';
 
 const TH_STYLE: React.CSSProperties = {
@@ -41,6 +41,8 @@ export function ShiftRegListPanel({ onSelect }: { onSelect: (id: string) => void
     ['giao_vien', 'sale', 'cskh', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'].includes(r));
   const canCreate = me.isSuperAdmin || me.roles.some((r) =>
     ['giao_vien', 'sale', 'cskh'].includes(r));
+  const hasOpen = regs.some((r) => r.userId === me.userId && ['draft', 'submitted'].includes(r.status));
+  const showStaff = regs.some((r) => r.userId !== me.userId);
 
   async function doApprove(id: string) {
     try {
@@ -65,9 +67,12 @@ export function ShiftRegListPanel({ onSelect }: { onSelect: (id: string) => void
       <Group justify="space-between" mb="xs">
         <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }}>Đăng ký công ca</Text>
         {canCreate && (
-          <Button variant="filled" radius={9999} leftSection={<IconPlus size={16} />} onClick={() => onSelect('new')}>
-            Tạo phiếu
-          </Button>
+          <Tooltip label="Bạn đang có phiếu chưa hoàn tất — mở phiếu Nháp/Chờ duyệt để sửa." disabled={!hasOpen}>
+            <Button variant="filled" radius={9999} leftSection={<IconPlus size={16} />}
+              disabled={hasOpen} onClick={() => onSelect('new')}>
+              Tạo phiếu
+            </Button>
+          </Tooltip>
         )}
       </Group>
 
@@ -79,6 +84,7 @@ export function ShiftRegListPanel({ onSelect }: { onSelect: (id: string) => void
             <Table.Thead>
               <Table.Tr>
                 <Table.Th style={TH_STYLE}>Mã phiếu</Table.Th>
+                {showStaff && <Table.Th style={TH_STYLE}>Nhân sự</Table.Th>}
                 <Table.Th style={TH_STYLE}>Từ ngày</Table.Th>
                 <Table.Th style={TH_STYLE}>Đến ngày</Table.Th>
                 <Table.Th style={TH_STYLE}>Nhóm ca</Table.Th>
@@ -92,6 +98,20 @@ export function ShiftRegListPanel({ onSelect }: { onSelect: (id: string) => void
                   <Table.Td onClick={() => onSelect(r.id)} style={CLICK_CELL}>
                     <Text size="sm" fw={500}>{r.code ?? 'Nháp'}</Text>
                   </Table.Td>
+                  {showStaff && (
+                    <Table.Td onClick={() => onSelect(r.id)} style={CLICK_CELL}>
+                      {r.user ? (
+                        <>
+                          <Text size="sm" fw={500}>
+                            {r.user.employeeCode ? `${r.user.employeeCode} · ${r.user.displayName}` : r.user.displayName}
+                          </Text>
+                          <Text size="xs" c="dimmed">{r.user.email}</Text>
+                        </>
+                      ) : (
+                        <Text size="sm" c="dimmed">—</Text>
+                      )}
+                    </Table.Td>
+                  )}
                   <Table.Td onClick={() => onSelect(r.id)} style={CLICK_CELL}>
                     {dayjs(r.fromDate).format('DD/MM/YY')}
                   </Table.Td>

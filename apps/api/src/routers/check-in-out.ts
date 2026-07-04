@@ -7,6 +7,7 @@ import { router, protectedProcedure, requirePermission } from '../trpc.js';
 import { emitStaffNotif } from '../lib/emit-staff-notif.js';
 import {
   earlyLeaveMinutes,
+  ictDateKey,
   ictDateRange,
   ictDayRangeFor,
   ictPeriodRange,
@@ -38,16 +39,17 @@ function canViewStaffPunch(
   return target.userId === session.userId || target.managerId === session.userId;
 }
 
-function assertCanApprovePunch(
+// Shared guard for approve + reject — same rule for both, mirrors the pre-ticket assertCanApprovePunch.
+function assertCanHandleTicket(
   session: { userId: string; isSuperAdmin: boolean },
   target: { userId: string; managerId: string | null },
 ) {
   if (target.userId === session.userId) {
-    throw new TRPCError({ code: 'FORBIDDEN', message: 'Không tự duyệt chấm công của mình' });
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Không tự duyệt/từ chối chấm công của mình' });
   }
   if (session.isSuperAdmin) return;
   if (!target.managerId || target.managerId !== session.userId) {
-    throw new TRPCError({ code: 'FORBIDDEN', message: 'Chỉ manager trực tiếp mới duyệt chấm công thủ công' });
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Chỉ manager trực tiếp mới duyệt/từ chối chấm công thủ công' });
   }
 }
 
@@ -67,8 +69,11 @@ export const checkInOutRouter = router({
     ),
 
   // Record a punch (check-in or check-out — system derives which is which).
+  // Outside WiFi: first punch of the ICT day requires a reason (creates a daily ticket);
+  // later punches attach to it silently. A rejected ticket can be reopened with a NEW reason.
   punch: requirePermission('checkInOut', 'punch')
-    .mutation(({ ctx }) =>
+    .input(z.object({ reason: z.string().trim().min(3).max(500).optional() }).optional())
+    .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
         // Serialize concurrent punch calls for this user — without this, two
         // near-simultaneous requests both read "no punch yet" and both create a
@@ -79,7 +84,7 @@ export const checkInOutRouter = router({
           orderBy: { timestamp: 'desc' },
           select: { timestamp: true },
         });
-        const PUNCH_DEBOUNCE_MS = 30_000;
+        const PUNCH_DEBOUNCE_MS = 5_000;
         if (lastPunch && Date.now() - lastPunch.timestamp.getTime() < PUNCH_DEBOUNCE_MS) {
           throw new TRPCError({ code: 'CONFLICT', message: 'Vừa chấm công, vui lòng đợi giây lát trước khi chấm lại' });
         }
@@ -101,6 +106,46 @@ export const checkInOutRouter = router({
           where: { facilityId: profile.facilityId, isActive: true, archivedAt: null },
         });
         const ipAllowed = networks.some((n) => ipMatchesCidr(clientIP, n.ipAddress));
+
+        // Outside WiFi: resolve/create the daily ticket BEFORE writing any punch row —
+        // requiresReason must return with no side effects (H2: kept out of the post-commit .then).
+        let ticket: { id: string; status: string; approvedById: string | null; approvedAt: Date | null } | null = null;
+        let notifyKind: 'new' | 'resubmit' | null = null;
+        if (!ipAllowed) {
+          const dateKey = ictDateKey(new Date());
+          const existing = await tx.manualAttendanceTicket.findUnique({
+            where: { userId_dateKey: { userId: ctx.session.userId, dateKey } },
+          });
+          if (!existing) {
+            if (!input?.reason) {
+              return { requiresReason: true as const };
+            }
+            ticket = await tx.manualAttendanceTicket.create({
+              data: { facilityId: profile.facilityId, userId: ctx.session.userId, dateKey, reason: input.reason },
+            });
+            notifyKind = 'new';
+          } else if (existing.status === 'rejected') {
+            if (!input?.reason) {
+              return { requiresReason: true as const, resubmit: true as const };
+            }
+            ticket = await tx.manualAttendanceTicket.update({
+              where: { id: existing.id },
+              data: { reason: input.reason, status: 'pending', approvedById: null, approvedAt: null },
+            });
+            notifyKind = 'resubmit';
+            await logEvent(tx, {
+              facilityId: profile.facilityId,
+              entityType: 'manual_attendance_ticket',
+              entityId: ticket.id,
+              type: 'status_changed',
+              body: 'Nộp lại phiếu chấm công ngoài WiFi sau khi bị từ chối',
+              actorId: ctx.session.userId,
+            });
+          } else {
+            ticket = existing; // pending/approved — attach silently, no reason prompt
+          }
+        }
+
         // Link punch to today's approved shift entry (if any)
         const { start: today, end: tomorrow } = ictDayRangeFor();
         const shiftEntry = await tx.shiftRegistrationEntry.findFirst({
@@ -117,15 +162,19 @@ export const checkInOutRouter = router({
             ipAddress: clientIP,
             method: ipAllowed ? 'ip' : 'manual',
             shiftTemplateId: shiftEntry?.shiftTemplateId ?? null,
+            // Ticket already approved (e.g. manager approved earlier, employee punches again
+            // later same day) → new punch auto-inherits approval, no separate re-approval needed.
+            approvedById: ticket?.status === 'approved' ? ticket.approvedById : null,
+            approvedAt: ticket?.status === 'approved' ? ticket.approvedAt : null,
           },
         });
         // Persist notification inside tx; push fn captured to call AFTER commit
         let pushFn: (() => void) | null = null;
-        if (!ipAllowed && profile.managerId) {
+        if (notifyKind && profile.managerId) {
           pushFn = await emitStaffNotif(tx, {
             recipientIds: [profile.managerId],
-            event: 'manual_punch_pending',
-            title: 'Chấm công thủ công chờ duyệt',
+            event: notifyKind === 'resubmit' ? 'manual_punch_resubmitted' : 'manual_punch_pending',
+            title: notifyKind === 'resubmit' ? 'Chấm công thủ công nộp lại chờ duyệt' : 'Chấm công thủ công chờ duyệt',
             body: `${ctx.session.displayName} chấm công ngoài WiFi — cần duyệt`,
             facilityId: profile.facilityId,
           });
@@ -139,7 +188,9 @@ export const checkInOutRouter = router({
           actorId: ctx.session.userId,
         });
         return { punch, ipAllowed, pushFn };
-      }).then(({ punch, ipAllowed, pushFn }) => {
+      }).then((result) => {
+        if ('requiresReason' in result) return result;
+        const { punch, ipAllowed, pushFn } = result;
         if (pushFn) pushFn(); // SSE after tx commit
         return { ...punch, ipAllowed };
       }),
@@ -157,9 +208,20 @@ export const checkInOutRouter = router({
           },
           orderBy: { timestamp: 'asc' },
         });
-        if (punches.length === 0) return { status: 'not_punched' as const, punches: [] };
+        if (punches.length === 0) return { status: 'not_punched' as const, manualApproval: 'none' as const, punches: [] };
         const checkIn = punches[0]!;
         const checkOut = punches.length > 1 ? punches[punches.length - 1]! : null;
+        // Reflects the daily ticket's approval — so a rejected day never renders as green
+        // "Hoàn thành" even though the raw punch rows (first/last) still exist.
+        const hasManualPunch = punches.some((p) => p.method === 'manual');
+        const ticket = hasManualPunch
+          ? await tx.manualAttendanceTicket.findUnique({
+              where: { userId_dateKey: { userId: ctx.session.userId, dateKey } },
+              select: { status: true },
+            })
+          : null;
+        const manualApproval: 'none' | 'pending' | 'approved' | 'rejected' =
+          (ticket?.status as 'pending' | 'approved' | 'rejected' | undefined) ?? 'none';
         // Find approved shift for today
         const shiftEntry = await tx.shiftRegistrationEntry.findFirst({
           where: {
@@ -178,6 +240,7 @@ export const checkInOutRouter = router({
         }
         return {
           status: checkOut ? 'completed' as const : 'checked_in' as const,
+          manualApproval,
           checkIn: { id: checkIn.id, time: checkIn.timestamp, method: checkIn.method },
           checkOut: checkOut ? { id: checkOut.id, time: checkOut.timestamp, method: checkOut.method } : null,
           shift: shiftEntry ? { name: shiftEntry.shiftTemplate.name, startTime: shiftEntry.shiftTemplate.startTime, endTime: shiftEntry.shiftTemplate.endTime } : null,
@@ -187,58 +250,155 @@ export const checkInOutRouter = router({
       }),
     ),
 
-  // Approve a manual punch (manager only).
+  // Tickets pending manager approval (one row per person+day, not per punch).
   pendingManual: requirePermission('checkInOut', 'pendingManual')
     .input(z.object({ facilityId: z.number().int().positive() }))
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
+        const tickets = await tx.manualAttendanceTicket.findMany({
+          where: { facilityId: input.facilityId, status: 'pending' },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        });
+        if (tickets.length === 0) return [];
+
+        let scoped = tickets;
+        if (!ctx.session.isSuperAdmin) {
+          const userIds = [...new Set(tickets.map((t) => t.userId))];
+          const profiles = await tx.employmentProfile.findMany({
+            where: { userId: { in: userIds } },
+            select: { userId: true, managerId: true },
+          });
+          const managerByUser = new Map(profiles.map((p) => [p.userId, p.managerId]));
+          scoped = tickets.filter((t) => managerByUser.get(t.userId) === ctx.session.userId);
+        }
+        if (scoped.length === 0) return [];
+
+        // Batched punch-count + shift lookup — one query regardless of ticket count (no N+1).
+        const dateKeys = [...new Set(scoped.map((t) => t.dateKey))].sort();
+        const rangeStart = ictDateRange(dateKeys[0]!).start;
+        const rangeEnd = ictDateRange(dateKeys[dateKeys.length - 1]!).end;
+        const scopedUserIds = [...new Set(scoped.map((t) => t.userId))];
         const punches = await tx.timePunch.findMany({
           where: {
             facilityId: input.facilityId,
+            userId: { in: scopedUserIds },
             method: 'manual',
-            approvedAt: null,
+            timestamp: { gte: rangeStart, lt: rangeEnd },
           },
-          include: {
-            shiftTemplate: { select: { name: true, startTime: true, endTime: true } },
-          },
-          orderBy: { timestamp: 'desc' },
-          take: 50,
+          select: { userId: true, timestamp: true, shiftTemplateId: true },
         });
-        if (ctx.session.isSuperAdmin) return punches;
-        const userIds = [...new Set(punches.map((p) => p.userId))];
-        const profiles = await tx.employmentProfile.findMany({
-          where: { userId: { in: userIds } },
-          select: { userId: true, managerId: true },
+        const shiftTemplateIds = [...new Set(punches.map((p) => p.shiftTemplateId).filter((id): id is string => !!id))];
+        const shiftTemplates = shiftTemplateIds.length
+          ? await tx.shiftTemplate.findMany({
+              where: { id: { in: shiftTemplateIds } },
+              select: { id: true, name: true, startTime: true, endTime: true },
+            })
+          : [];
+        const shiftById = new Map(shiftTemplates.map((s) => [s.id, s]));
+
+        return scoped.map((ticket) => {
+          const ticketPunches = punches.filter(
+            (p) => p.userId === ticket.userId && ictDateKey(p.timestamp) === ticket.dateKey,
+          );
+          const shiftTemplateId = ticketPunches.find((p) => p.shiftTemplateId)?.shiftTemplateId ?? null;
+          return {
+            ...ticket,
+            punchCount: ticketPunches.length,
+            shiftTemplate: shiftTemplateId ? shiftById.get(shiftTemplateId) ?? null : null,
+          };
         });
-        const managerByUser = new Map(profiles.map((p) => [p.userId, p.managerId]));
-        return punches.filter((p) => managerByUser.get(p.userId) === ctx.session.userId);
       }),
     ),
 
+  // Approve a ticket — stamps approvedAt on the ticket AND every manual punch that day
+  // (monthlyReport keeps reading punch.approvedAt, unchanged).
   approveManual: requirePermission('checkInOut', 'approveManual')
-    .input(z.object({ punchId: z.string().uuid() }))
+    .input(z.object({ ticketId: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
-        const punch = await tx.timePunch.findUniqueOrThrow({ where: { id: input.punchId } });
-        if (punch.method !== 'manual') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Chỉ duyệt punch thủ công' });
-        if (punch.approvedAt) throw new TRPCError({ code: 'CONFLICT', message: 'Punch đã được duyệt' });
+        const ticket = await tx.manualAttendanceTicket.findUniqueOrThrow({ where: { id: input.ticketId } });
+        if (ticket.status !== 'pending') throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu đã được xử lý' });
         const profile = await tx.employmentProfile.findUnique({
-          where: { userId: punch.userId },
+          where: { userId: ticket.userId },
           select: { userId: true, managerId: true },
         });
-        assertCanApprovePunch(ctx.session, { userId: punch.userId, managerId: profile?.managerId ?? null });
-        const updated = await tx.timePunch.update({
-          where: { id: input.punchId },
-          data: { approvedById: ctx.session.userId, approvedAt: new Date() },
+        assertCanHandleTicket(ctx.session, { userId: ticket.userId, managerId: profile?.managerId ?? null });
+        const { start, end } = ictDateRange(ticket.dateKey);
+        const approvedAt = new Date();
+        const updated = await tx.manualAttendanceTicket.update({
+          where: { id: input.ticketId },
+          data: { status: 'approved', approvedById: ctx.session.userId, approvedAt },
+        });
+        await tx.timePunch.updateMany({
+          where: {
+            facilityId: ticket.facilityId,
+            userId: ticket.userId,
+            method: 'manual',
+            timestamp: { gte: start, lt: end },
+          },
+          data: { approvedById: ctx.session.userId, approvedAt },
         });
         await logEvent(tx, {
-          facilityId: punch.facilityId,
-          entityType: 'time_punch', entityId: punch.id,
-          type: 'status_changed', body: 'Duyệt chấm công thủ công',
-          changes: [{ field: 'approved', old: null, new: ctx.session.userId }],
+          facilityId: ticket.facilityId,
+          entityType: 'manual_attendance_ticket', entityId: ticket.id,
+          type: 'status_changed', body: 'Duyệt phiếu chấm công ngoài WiFi',
+          changes: [{ field: 'status', old: 'pending', new: 'approved' }],
           actorId: ctx.session.userId,
         });
         return updated;
+      }),
+    ),
+
+  // Reject a ticket. Rejecting a previously-approved ticket un-stamps its punches so they
+  // fall out of payroll again (monthlyReport filters on approvedAt not null).
+  rejectManual: requirePermission('checkInOut', 'rejectManual')
+    .input(z.object({ ticketId: z.string().uuid(), note: z.string().trim().max(500).optional() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const ticket = await tx.manualAttendanceTicket.findUniqueOrThrow({ where: { id: input.ticketId } });
+        if (ticket.status === 'rejected') throw new TRPCError({ code: 'CONFLICT', message: 'Phiếu đã bị từ chối' });
+        const profile = await tx.employmentProfile.findUnique({
+          where: { userId: ticket.userId },
+          select: { userId: true, managerId: true },
+        });
+        assertCanHandleTicket(ctx.session, { userId: ticket.userId, managerId: profile?.managerId ?? null });
+        const wasApproved = ticket.status === 'approved';
+        const { start, end } = ictDateRange(ticket.dateKey);
+        const updated = await tx.manualAttendanceTicket.update({
+          where: { id: input.ticketId },
+          data: { status: 'rejected', approvedById: ctx.session.userId, approvedAt: new Date() },
+        });
+        if (wasApproved) {
+          await tx.timePunch.updateMany({
+            where: {
+              facilityId: ticket.facilityId,
+              userId: ticket.userId,
+              method: 'manual',
+              timestamp: { gte: start, lt: end },
+            },
+            data: { approvedById: null, approvedAt: null },
+          });
+        }
+        const pushFn = await emitStaffNotif(tx, {
+          recipientIds: [ticket.userId],
+          event: 'manual_punch_rejected',
+          title: 'Chấm công thủ công bị từ chối',
+          body: input.note ? `Lý do: ${input.note}` : 'Phiếu chấm công ngoài WiFi của bạn đã bị từ chối',
+          facilityId: ticket.facilityId,
+        });
+        await logEvent(tx, {
+          facilityId: ticket.facilityId,
+          entityType: 'manual_attendance_ticket', entityId: ticket.id,
+          type: 'status_changed',
+          body: input.note ? `Từ chối phiếu chấm công: ${input.note}` : 'Từ chối phiếu chấm công',
+          changes: [{ field: 'status', old: ticket.status, new: 'rejected' }],
+          actorId: ctx.session.userId,
+        });
+        return { ticket: updated, pushFn };
+      }).then(({ ticket, pushFn }) => {
+        pushFn();
+        return ticket;
       }),
     ),
 
@@ -261,11 +421,18 @@ export const checkInOutRouter = router({
             throw new TRPCError({ code: 'FORBIDDEN', message: 'Không có quyền xem lịch sử chấm công này' });
           }
         }
+        // Self-view drops ipAddress — an employee viewing their own history has no use for
+        // their own IP and it shouldn't leak into the network tab. Manager/other-person view
+        // (targetUserId !== self, already permission-gated above) keeps it for audit.
+        const isSelfView = targetUserId === ctx.session.userId;
         return tx.timePunch.findMany({
           where: {
             userId: targetUserId,
             timestamp: { gte: ictDateRange(input.fromDate).start, lt: ictDateRange(input.toDate).end },
           },
+          select: isSelfView
+            ? { id: true, facilityId: true, userId: true, timestamp: true, method: true, shiftTemplateId: true, approvedById: true, approvedAt: true, createdAt: true }
+            : undefined,
           orderBy: { timestamp: 'desc' },
           take: 100,
         });

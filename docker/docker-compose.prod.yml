@@ -124,6 +124,12 @@ services:
       S3_SECRET_KEY:        ${S3_SECRET_KEY:-}
       S3_REGION:            ${S3_REGION:-}
       S3_FORCE_PATH_STYLE:  ${S3_FORCE_PATH_STYLE:-true}
+    volumes:
+      # Host bind-mounts (matches docker-compose.prod.tls.yml + scripts/backup-db.sh, which
+      # tars these directly off the host filesystem). Without them photo-store.ts/pdf-store.ts
+      # write into the container's writable layer only — lost on every redeploy.
+      - ../.data/pdf:/app/apps/api/.data/pdf
+      - ../.data/session-photos:/app/apps/api/.data/session-photos
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:4000/health || exit 1']
       interval: 10s

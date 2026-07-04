@@ -871,6 +871,8 @@ export const financeRouter = router({
         }
 
         // Create enrollment if a class batch was specified (idempotent: skip on duplicate).
+        // null when no classBatchId (no class picked at receipt time — capacity check N/A).
+        let overCapacity: boolean | null = null;
         if (receipt.classBatchId) {
           // No courseId-match guard: ClassBatch.courseId references the curriculum-content course
           // (drives LMS homework mapping), while Receipt.courseId references the priced sales
@@ -883,7 +885,7 @@ export const financeRouter = router({
           // (wrong roster, wrong attendance scoping), distinct from the courseId conflation above.
           const batchForFacilityCheck = await tx.classBatch.findUniqueOrThrow({
             where: { id: receipt.classBatchId },
-            select: { facilityId: true },
+            select: { facilityId: true, capacity: true },
           });
           if (batchForFacilityCheck.facilityId !== receipt.facilityId) {
             throw new TRPCError({
@@ -900,7 +902,14 @@ export const financeRouter = router({
             },
             select: { id: true },
           });
+          // Capacity = cảnh báo mềm (không chặn), đồng nhất với enrollment.enroll/transfer —
+          // trước đây đường tiền này không tính overCapacity, nhồi vượt sức chứa không cảnh báo.
+          const activeCount = await tx.enrollment.count({
+            where: { classBatchId: receipt.classBatchId, status: 'active', archivedAt: null },
+          });
           if (!existing) {
+            overCapacity =
+              batchForFacilityCheck.capacity != null && activeCount + 1 > batchForFacilityCheck.capacity;
             const enrollment = await tx.enrollment.create({
               data: {
                 facilityId: receipt.facilityId,
@@ -919,6 +928,10 @@ export const financeRouter = router({
               body: `Ghi danh tự động khi duyệt phiếu ${code}`,
               actorId: ctx.session.userId,
             });
+          } else {
+            // Idempotent retry: no new seat taken, activeCount already reflects it — no +1.
+            overCapacity =
+              batchForFacilityCheck.capacity != null && activeCount > batchForFacilityCheck.capacity;
           }
         }
         // ── LMS StudentAccount provisioning ────────────────────────────────────────
@@ -1086,7 +1099,7 @@ export const financeRouter = router({
         });
         // lmsAccount is returned once so staff can relay the credential to the parent.
         // tempPassword is NOT stored anywhere after this point.
-        return { ...approved, lmsAccount };
+        return { ...approved, lmsAccount, overCapacity };
       }),
     ),
 

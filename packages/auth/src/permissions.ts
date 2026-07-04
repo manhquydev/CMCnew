@@ -307,6 +307,7 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     get: ['giao_vien', 'sale', 'cskh', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'hr'],
     create: ['giao_vien', 'sale', 'cskh'],
     updateEntry: ['giao_vien', 'sale', 'cskh'],
+    updateDates: ['giao_vien', 'sale', 'cskh'],
     submit: ['giao_vien', 'sale', 'cskh'],
     withdraw: ['giao_vien', 'sale', 'cskh'],
     approve: ['giao_vien', 'sale', 'cskh', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
@@ -329,6 +330,7 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     monthlyReport: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'hr', 'ke_toan'],
     pendingManual: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     approveManual: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    rejectManual: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
 
   facilityNetwork: {

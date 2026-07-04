@@ -6,6 +6,7 @@ import { rlsContextOf, assignableRoles } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, superAdminProcedure, requirePermission } from '../trpc.js';
 import { enqueueEmail } from '../services/email-outbox.js';
+import { nextEmployeeCode } from '../services/employee-code.js';
 
 const role = z.nativeEnum(Role);
 
@@ -86,6 +87,12 @@ export const userRouter = router({
           roles: z.array(role).min(1),
           primaryRole: role,
           facilityIds: z.array(z.number().int().positive()),
+          // Hồ sơ nhân sự tối thiểu — bắt buộc ngay lúc tạo, không cho tạo tài khoản "mồ côi"
+          // hồ sơ (xem plans/reports/audit-260705-0105-teacher-parent-student-launch-readiness-report.md).
+          // Field mở rộng khác (DOB, hợp đồng, liên hệ khẩn cấp...) vẫn điền sau qua payroll.profileUpsert.
+          nationalId: z.string().trim().min(1, 'CCCD/CMND bắt buộc'),
+          startedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày vào làm bắt buộc (YYYY-MM-DD)'),
+          position: z.string().trim().min(1, 'Vị trí công việc bắt buộc'),
         })
         .refine((v) => v.roles.includes(v.primaryRole), {
           message: 'primaryRole phải nằm trong roles',
@@ -131,6 +138,9 @@ export const userRouter = router({
       }
 
 
+      // Narrowed non-empty above; first facility is the EmploymentProfile's home facility.
+      const primaryFacilityId = input.facilityIds[0] as number;
+
       // 3. Write under elevated context so the super-admin-only INSERT policy passes.
       //    All scope constraints have been enforced above; SYSTEM_CTX is only safe here.
       const actorId = ctx.session.userId;
@@ -157,6 +167,28 @@ export const userRouter = router({
           entityType: 'user',
           entityId: created.id,
           type: 'created',
+          actorId,
+        });
+
+        // Hồ sơ nhân sự tối thiểu, tạo atomic cùng tài khoản — không để lại account "mồ côi"
+        // hồ sơ. facilityIds[0] = cơ sở chính (danh sách luôn có ≥1 phần tử, đã validate ở trên).
+        const employeeCode = await nextEmployeeCode(tx);
+        const profile = await tx.employmentProfile.create({
+          data: {
+            facilityId: primaryFacilityId,
+            userId: created.id,
+            position: input.position,
+            startedAt: new Date(input.startedAt),
+            nationalId: input.nationalId,
+            employeeCode,
+          },
+        });
+        await logEvent(tx, {
+          facilityId: profile.facilityId,
+          entityType: 'employment_profile',
+          entityId: profile.id,
+          type: 'created',
+          body: `Hồ sơ NS: ${input.position} (mã ${employeeCode})`,
           actorId,
         });
         return created;

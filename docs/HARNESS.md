@@ -320,6 +320,10 @@ High-risk work needs durable decisions when it changes behavior or architecture.
 For auth, authorization, data ownership, API shape, audit/security, or
 validation changes, record the decision in both places:
 
+Before editing any file listed in `docs/DECISION_INDEX.md`, read the linked decision
+doc under `docs/decisions/` — this is a mandatory lookup. The index is your
+grep-able guide to which code areas are governed by accepted decisions.
+
 1. Add a markdown file under `docs/decisions/` from
    `docs/templates/decision.md`.
 2. Add or refresh the durable record:

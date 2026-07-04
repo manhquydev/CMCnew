@@ -52,7 +52,7 @@ const DOMAIN_ICON: Record<string, React.ReactNode> = {
 };
 
 // Domains whose aggregate `id` is directly the underlying record's PK, so the mutation can be
-// called inline with just {id} (or {punchId} for manualPunch). kpi is deliberately excluded:
+// called inline with just {id} (or {ticketId} for manualPunch). kpi is deliberately excluded:
 // kpiEvalConfirm/kpiEvalApprove require {userId, periodKey} — a composite key the aggregate item
 // does not carry (its `id` is kpiScore.id, see apps/api/src/routers/payroll.ts:216-234). The
 // existing KPI panel already resolves that composite key via payroll.kpiList before calling
@@ -119,7 +119,8 @@ function ApprovalInboxCard({ onNavigateToKpi }: { onNavigateToKpi: () => void })
           notifySuccess('Đã duyệt đăng ký ca');
           break;
         case 'manualPunch':
-          await trpc.checkInOut.approveManual.mutate({ punchId: item.id });
+          // item.id is the daily ticket id (dashboard.myApprovals → manualPunchPendingItems).
+          await trpc.checkInOut.approveManual.mutate({ ticketId: item.id });
           notifySuccess('Đã duyệt chấm công thủ công');
           break;
       }

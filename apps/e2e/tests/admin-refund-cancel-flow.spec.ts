@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test';
 // that no E2E ever drove the refund entry through the real cancel-modal UI.
 const EMAIL = process.env.TEST_ADMIN_EMAIL ?? 'admin@cmc.local';
 const PASSWORD = process.env.TEST_ADMIN_PASSWORD ?? 'ChangeMe!123';
-const PRICED_COURSE = process.env.TEST_PRICED_COURSE ?? 'CRS_10512_5483';
+const PRICED_COURSE = process.env.TEST_PRICED_COURSE ?? 'UCREA-CB';
 
 test.use({ baseURL: 'http://localhost:5173' });
 

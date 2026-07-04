@@ -62,6 +62,19 @@ function hasAnyRole(roles: readonly string[], candidates: string[]): boolean {
   return candidates.some((role) => roles.includes(role));
 }
 
+/// Today in Asia/Ho_Chi_Minh as 'YYYY-MM-DD' — fromDate/toDate are date-only strings,
+/// so we compare lexicographically instead of raw `new Date()` (which is UTC and would
+/// misjudge the boundary around midnight in Vietnam, +7h off).
+function saigonToday(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
+}
+
+function assertFutureFrom(fromDate: string) {
+  if (fromDate <= saigonToday()) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Từ ngày phải là ngày trong tương lai (từ ngày mai trở đi)' });
+  }
+}
+
 function visibleRegistrationWhere(ctx: { session: { userId: string; roles: readonly string[]; isSuperAdmin: boolean } }) {
   if (ctx.session.isSuperAdmin || hasAnyRole(ctx.session.roles, ['hr', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'])) return {};
   return {
@@ -111,8 +124,8 @@ export const shiftRegistrationRouter = router({
       userId: z.string().uuid().optional(),
     }))
     .query(({ ctx, input }) =>
-      withRls(rlsContextOf(ctx.session), (tx) =>
-        tx.shiftRegistration.findMany({
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const regs = await tx.shiftRegistration.findMany({
           where: {
             facilityId: input.facilityId,
             ...(input.status ? { status: input.status } : {}),
@@ -128,8 +141,26 @@ export const shiftRegistrationRouter = router({
             },
           },
           orderBy: { createdAt: 'desc' },
-        }),
-      ),
+        });
+        // ShiftRegistration.userId is a loose UUID ref (no Prisma relation to AppUser),
+        // so resolve owners via a separate batch-map query instead of `include`.
+        const userIds = [...new Set(regs.map((r) => r.userId))];
+        const users = await tx.appUser.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, displayName: true, email: true },
+        });
+        const userMap = new Map(users.map((u) => [u.id, u]));
+        // EmploymentProfile.userId is also a loose ref — resolve employeeCode the same way.
+        const profiles = await tx.employmentProfile.findMany({
+          where: { userId: { in: userIds } },
+          select: { userId: true, employeeCode: true },
+        });
+        const codeMap = new Map(profiles.map((p) => [p.userId, p.employeeCode]));
+        return regs.map((r) => {
+          const user = userMap.get(r.userId);
+          return { ...r, user: user ? { ...user, employeeCode: codeMap.get(r.userId) ?? null } : null };
+        });
+      }),
     ),
 
   get: requirePermission('shiftRegistration', 'get')
@@ -183,12 +214,16 @@ export const shiftRegistrationRouter = router({
         if (new Date(input.fromDate) > new Date(input.toDate)) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Khoảng ngày không hợp lệ' });
         }
-        // Lock: không tạo phiếu mới nếu có phiếu SUBMITTED
+        assertFutureFrom(input.fromDate);
+        // Lock: 1 phiếu xuyên suốt — không tạo phiếu mới nếu còn phiếu draft/submitted chưa xử lý xong
         const existing = await tx.shiftRegistration.findFirst({
-          where: { userId: ctx.session.userId, status: 'submitted', archivedAt: null },
+          where: { userId: ctx.session.userId, status: { in: ['draft', 'submitted'] }, archivedAt: null },
         });
         if (existing) {
-          throw new TRPCError({ code: 'CONFLICT', message: 'Bạn có phiếu đang chờ duyệt — không thể tạo phiếu mới' });
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message: 'Bạn đang có phiếu chưa hoàn tất (Nháp/Chờ duyệt) — hãy mở phiếu đó để sửa thay vì tạo phiếu mới.',
+          });
         }
         // Determine shift group. EmploymentProfile is set up manually by HR, not auto-created —
         // a staff account never onboarded through HR would otherwise crash with a raw Prisma error.
@@ -305,6 +340,56 @@ export const shiftRegistrationRouter = router({
       }),
     ),
 
+  updateDates: requirePermission('shiftRegistration', 'updateDates')
+    .input(z.object({
+      id: z.string().uuid(),
+      fromDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const reg = await tx.shiftRegistration.findUniqueOrThrow({
+          where: { id: input.id },
+          select: { id: true, userId: true, status: true, facilityId: true, fromDate: true, toDate: true },
+        });
+        if (reg.userId !== ctx.session.userId) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Chỉ chủ phiếu mới được sửa' });
+        }
+        if (reg.status !== 'draft') {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Chỉ sửa được phiếu ở trạng thái nháp' });
+        }
+        if (input.fromDate > input.toDate) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Khoảng ngày không hợp lệ' });
+        }
+        assertFutureFrom(input.fromDate);
+        const oldFrom = reg.fromDate.toISOString().slice(0, 10);
+        const oldTo = reg.toDate.toISOString().slice(0, 10);
+        const updated = await tx.shiftRegistration.update({
+          where: { id: input.id },
+          data: { fromDate: new Date(input.fromDate), toDate: new Date(input.toDate) },
+        });
+        const removed = await tx.shiftRegistrationEntry.deleteMany({
+          where: {
+            registrationId: input.id,
+            OR: [{ date: { lt: new Date(input.fromDate) } }, { date: { gt: new Date(input.toDate) } }],
+          },
+        });
+        await logEvent(tx, {
+          facilityId: reg.facilityId,
+          entityType: 'shift_registration',
+          entityId: reg.id,
+          type: 'updated',
+          body: `Sửa khoảng ngày: ${oldFrom} → ${oldTo} thành ${input.fromDate} → ${input.toDate}; đã dọn ${removed.count} ca ngoài khoảng`,
+          changes: [
+            { field: 'fromDate', old: oldFrom, new: input.fromDate },
+            { field: 'toDate', old: oldTo, new: input.toDate },
+          ],
+          actorId: ctx.session.userId,
+        });
+        return updated;
+      }),
+    ),
+
   submit: requirePermission('shiftRegistration', 'submit')
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ ctx, input }) =>
@@ -318,6 +403,7 @@ export const shiftRegistrationRouter = router({
         }
         if (reg.status !== 'draft') throw new TRPCError({ code: 'CONFLICT', message: 'Chỉ nộp được phiếu nháp' });
         if (reg.entries.length === 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Phiếu chưa có ca đăng ký' });
+        assertFutureFrom(reg.fromDate.toISOString().slice(0, 10));
         // Generate code: SR-YYYY-NNNN
         const year = new Date().getFullYear();
         const counter = await tx.$queryRawUnsafe<{ next: number }[]>(

@@ -451,13 +451,14 @@ model SessionStudentComment {
   @@map("session_student_comment")
 }
 
-/// Bộ đếm sinh mã lớp nguyên tử theo (cơ sở, năm).
+/// Bộ đếm sinh mã lớp nguyên tử theo (cơ sở, chương trình, năm).
 model BatchCodeCounter {
-  facilityId Int @map("facility_id")
+  facilityId Int     @map("facility_id")
+  program    Program
   year       Int
-  lastSeq    Int @default(0) @map("last_seq")
+  lastSeq    Int     @default(0) @map("last_seq")
 
-  @@id([facilityId, year])
+  @@id([facilityId, program, year])
   @@map("batch_code_counter")
 }
 
@@ -1335,6 +1336,8 @@ enum StaffNotifEvent {
   shift_reg_approved
   shift_reg_rejected
   manual_punch_pending
+  manual_punch_resubmitted
+  manual_punch_rejected
 }
 
 model StaffNotification {
@@ -1412,10 +1415,20 @@ model EmploymentProfile {
   bankName    String?   @map("bank_name")
   archivedAt  DateTime? @map("archived_at")
   createdAt   DateTime  @default(now()) @map("created_at")
+  /// Mã nhân sự CMC + đệm 4 số (CMC0001…), cấp một lần khi tạo hồ sơ, không đổi khi update.
+  employeeCode String?  @unique @map("employee_code")
 
   @@index([facilityId])
   @@index([managerId])
   @@map("employment_profile")
+}
+
+/// Bộ đếm mã nhân sự — global 1 dòng (id cố định = 1). Theo pattern ShiftCodeCounter/ReceiptCodeCounter.
+model EmployeeCodeCounter {
+  id      Int @id @default(1)
+  lastSeq Int @default(0) @map("last_seq")
+
+  @@map("employee_code_counter")
 }
 
 /// Snapshot số liệu cuộc gọi Callio theo (nhân sự, kỳ) — đóng băng để payslip tái lập (decision
@@ -1699,6 +1712,24 @@ model TimePunch {
   @@index([userId, timestamp])
   @@index([shiftTemplateId])
   @@map("time_punch")
+}
+
+/// Phiếu chấm-công-ngoài-WiFi theo ngày (ICT). 1 phiếu/người/ngày; nhập lý do 1 lần,
+/// manager duyệt/từ chối 1 lần cho cả ngày thay vì từng punch riêng lẻ.
+model ManualAttendanceTicket {
+  id           String    @id @default(uuid()) @db.Uuid
+  facilityId   Int       @map("facility_id")
+  userId       String    @map("user_id") @db.Uuid
+  dateKey      String    @map("date_key")
+  reason       String
+  status       String    @default("pending") /// "pending" | "approved" | "rejected"
+  approvedById String?   @map("approved_by_id") @db.Uuid
+  approvedAt   DateTime? @map("approved_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@unique([userId, dateKey])
+  @@index([facilityId, status])
+  @@map("manual_attendance_ticket")
 }
 
 /// Cấu hình IP cho check-in theo cơ sở. Hỗ trợ CIDR range (vd: 192.168.1.0/24).

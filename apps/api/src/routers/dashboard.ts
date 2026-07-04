@@ -109,36 +109,38 @@ async function shiftRegistrationPendingItems(
   });
 }
 
-/** Mirrors checkInOut.pendingManual (check-in-out.ts:195-220), including its post-fetch
- *  manager-scoping filter (super_admin sees all; everyone else only their direct reports). */
+/** Mirrors checkInOut.pendingManual (check-in-out.ts) — one item per daily TICKET, not
+ *  per punch, including its post-fetch manager-scoping filter (super_admin sees all;
+ *  everyone else only their direct reports). `id` is the ticketId — the FE action must
+ *  call checkInOut.approveManual({ ticketId }), not { punchId }. */
 async function manualPunchPendingItems(
   tx: Prisma.TransactionClient,
   facilityId: number,
   session: { userId: string; isSuperAdmin: boolean },
 ): Promise<ApprovalInboxItem[]> {
-  const punches = await tx.timePunch.findMany({
-    where: { facilityId, method: 'manual', approvedAt: null },
-    orderBy: { timestamp: 'desc' },
+  const tickets = await tx.manualAttendanceTicket.findMany({
+    where: { facilityId, status: 'pending' },
+    orderBy: { createdAt: 'desc' },
     take: 50,
-    select: { id: true, userId: true, timestamp: true },
+    select: { id: true, userId: true, createdAt: true },
   });
-  let scoped = punches;
+  let scoped = tickets;
   if (!session.isSuperAdmin) {
-    const userIds = [...new Set(punches.map((p) => p.userId))];
+    const userIds = [...new Set(tickets.map((t) => t.userId))];
     const profiles = await tx.employmentProfile.findMany({
       where: { userId: { in: userIds } },
       select: { userId: true, managerId: true },
     });
     const managerByUser = new Map(profiles.map((p) => [p.userId, p.managerId]));
-    scoped = punches.filter((p) => managerByUser.get(p.userId) === session.userId);
+    scoped = tickets.filter((t) => managerByUser.get(t.userId) === session.userId);
   }
   if (scoped.length === 0) return [];
-  const nameById = await displayNamesFor(tx, scoped.map((p) => p.userId));
-  return scoped.map((p) => ({
+  const nameById = await displayNamesFor(tx, scoped.map((t) => t.userId));
+  return scoped.map((t) => ({
     domain: 'manualPunch',
-    id: p.id,
-    title: `Chấm công thủ công — ${nameById.get(p.userId) ?? p.userId}`,
-    submittedAt: p.timestamp,
+    id: t.id,
+    title: `Chấm công thủ công — ${nameById.get(t.userId) ?? t.userId}`,
+    submittedAt: t.createdAt,
     actionKey: 'checkInOut.approveManual',
   }));
 }

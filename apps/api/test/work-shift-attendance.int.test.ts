@@ -3,6 +3,7 @@ import { Role, type RequestSession } from '@cmc/auth';
 import { appRouter } from '../src/routers/index.js';
 import type { ApiContext } from '../src/context.js';
 import { staffSession, withRls, SUPER, uniq } from './helpers.js';
+import { ictDateKey } from '../src/lib/attendance-penalty.js';
 
 const FACILITY_ID = 1;
 
@@ -51,6 +52,10 @@ describe('work shift registration + punch attendance hardening', () => {
   let orphanSaleId: string;
   let punchTestId: string;
   let debounceTestId: string;
+  let rejectTestId: string;
+  let allDayTestId: string;
+  let allDayTest2Id: string;
+  let dayResetTestId: string;
   let kdTemplateId: string;
   let kdTemplate2Id: string;
   let gvTemplateId: string;
@@ -65,6 +70,10 @@ describe('work shift registration + punch attendance hardening', () => {
     const orphanSale = await staff(Role.sale);
     const punchTest = await staff(Role.sale, manager.id);
     const debounceTest = await staff(Role.sale, manager.id);
+    const rejectTest = await staff(Role.sale, manager.id);
+    const allDayTest = await staff(Role.sale, manager.id);
+    const allDayTest2 = await staff(Role.sale, manager.id);
+    const dayResetTest = await staff(Role.sale, manager.id);
     managerId = manager.id;
     otherManagerId = otherManager.id;
     saleId = sale.id;
@@ -72,7 +81,11 @@ describe('work shift registration + punch attendance hardening', () => {
     orphanSaleId = orphanSale.id;
     punchTestId = punchTest.id;
     debounceTestId = debounceTest.id;
-    createdUserIds.push(manager.id, otherManager.id, sale.id, peerSale.id, orphanSale.id, punchTest.id, debounceTest.id);
+    rejectTestId = rejectTest.id;
+    allDayTestId = allDayTest.id;
+    allDayTest2Id = allDayTest2.id;
+    dayResetTestId = dayResetTest.id;
+    createdUserIds.push(manager.id, otherManager.id, sale.id, peerSale.id, orphanSale.id, punchTest.id, debounceTest.id, rejectTest.id, allDayTest.id, allDayTest2.id, dayResetTest.id);
 
     const templates = await withRls(SUPER, async (tx) => {
       const kd = await tx.shiftGroup.upsert({
@@ -211,22 +224,101 @@ describe('work shift registration + punch attendance hardening', () => {
     expect(nonOverlapAfter.status).toBe('approved');
   });
 
-  it('queues outside-IP punches for direct manager approval and scopes history', async () => {
+  it('outside-IP punch without a reason returns requiresReason and creates nothing', async () => {
+    const employee = await caller({ userId: saleId, roles: [Role.sale], primaryRole: Role.sale, isSuperAdmin: false, facilityIds: [FACILITY_ID] }, '203.0.113.44');
+    const result = await employee.checkInOut.punch();
+    expect(result).toEqual({ requiresReason: true });
+    const status = await employee.checkInOut.todayStatus();
+    expect(status.status).toBe('not_punched');
+  });
+
+  it('queues a daily ticket for direct manager approval, attaches later punches silently, and scopes history', async () => {
     const employee = await caller({ userId: saleId, roles: [Role.sale], primaryRole: Role.sale, isSuperAdmin: false, facilityIds: [FACILITY_ID] }, '203.0.113.44');
     const manager = await caller({ userId: managerId, roles: [Role.giam_doc_kinh_doanh], primaryRole: Role.giam_doc_kinh_doanh, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
     const otherManager = await caller({ userId: otherManagerId, roles: [Role.giam_doc_kinh_doanh], primaryRole: Role.giam_doc_kinh_doanh, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
     const peer = await caller({ userId: peerSaleId, roles: [Role.sale], primaryRole: Role.sale, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
 
-    const punch = await employee.checkInOut.punch();
+    const punch = await employee.checkInOut.punch({ reason: 'Khách hàng gấp, làm việc tại nhà khách' });
     expect(punch.method).toBe('manual');
-    expect((await manager.checkInOut.pendingManual({ facilityId: FACILITY_ID })).some((p) => p.id === punch.id)).toBe(true);
-    expect((await otherManager.checkInOut.pendingManual({ facilityId: FACILITY_ID })).some((p) => p.id === punch.id)).toBe(false);
+
+    // Second punch same day: no reason needed, attaches to the same ticket silently.
+    await withRls(SUPER, (tx) => tx.timePunch.update({ where: { id: punch.id }, data: { timestamp: new Date(Date.now() - 60_000) } }));
+    const secondPunch = await employee.checkInOut.punch();
+    expect(secondPunch.method).toBe('manual');
+
+    const pending = await manager.checkInOut.pendingManual({ facilityId: FACILITY_ID });
+    const ticket = pending.find((t) => t.userId === saleId);
+    expect(ticket).toBeTruthy();
+    expect(ticket!.punchCount).toBe(2);
+    expect((await otherManager.checkInOut.pendingManual({ facilityId: FACILITY_ID })).some((t) => t.id === ticket!.id)).toBe(false);
+
     await expect(peer.checkInOut.history({ userId: saleId, fromDate: '2020-01-01', toDate: '2099-12-31' })).rejects.toThrow();
-    expect((await manager.checkInOut.history({ userId: saleId, fromDate: '2020-01-01', toDate: '2099-12-31' })).some((p) => p.id === punch.id)).toBe(true);
-    await expect(otherManager.checkInOut.approveManual({ punchId: punch.id })).rejects.toThrow();
-    const approved = await manager.checkInOut.approveManual({ punchId: punch.id });
+    const managerView = await manager.checkInOut.history({ userId: saleId, fromDate: '2020-01-01', toDate: '2099-12-31' });
+    const managerViewPunch = managerView.find((p) => p.id === punch.id);
+    expect(managerViewPunch).toBeTruthy();
+    expect(managerViewPunch!.ipAddress).toBe('203.0.113.44'); // manager view keeps IP for audit
+
+    // Self-view: the employee's own history never includes ipAddress (privacy — M2).
+    const selfView = await employee.checkInOut.history({ fromDate: '2020-01-01', toDate: '2099-12-31' });
+    const selfViewPunch = selfView.find((p) => p.id === punch.id);
+    expect(selfViewPunch).toBeTruthy();
+    expect(selfViewPunch).not.toHaveProperty('ipAddress');
+
+    // Self-approve / cross-manager approve both forbidden.
+    await expect(employee.checkInOut.approveManual({ ticketId: ticket!.id })).rejects.toThrow();
+    await expect(otherManager.checkInOut.approveManual({ ticketId: ticket!.id })).rejects.toThrow();
+
+    const approved = await manager.checkInOut.approveManual({ ticketId: ticket!.id });
+    expect(approved.status).toBe('approved');
     expect(approved.approvedById).toBe(managerId);
-    expect(approved.approvedAt).toBeTruthy();
+
+    const punchesAfter = await withRls(SUPER, (tx) =>
+      tx.timePunch.findMany({ where: { id: { in: [punch.id, secondPunch.id] } } }),
+    );
+    expect(punchesAfter.every((p) => p.approvedAt !== null)).toBe(true);
+
+    // A punch created AFTER approval auto-inherits the approval (no separate re-approval).
+    await withRls(SUPER, (tx) => tx.timePunch.update({ where: { id: secondPunch.id }, data: { timestamp: new Date(Date.now() - 60_000) } }));
+    const thirdPunch = await employee.checkInOut.punch();
+    expect(thirdPunch.approvedAt).toBeTruthy();
+
+    // Re-approving / rejecting an already-approved ticket a second time via approve is a no-op guard.
+    await expect(manager.checkInOut.approveManual({ ticketId: ticket!.id })).rejects.toThrow();
+
+    // Rejecting an ALREADY-APPROVED ticket un-stamps every one of its manual punches —
+    // they must fall back out of payroll (approvedAt/approvedById cleared).
+    const rejectedAfterApproval = await manager.checkInOut.rejectManual({ ticketId: ticket!.id });
+    expect(rejectedAfterApproval.status).toBe('rejected');
+    const punchesAfterReject = await withRls(SUPER, (tx) =>
+      tx.timePunch.findMany({ where: { id: { in: [punch.id, secondPunch.id, thirdPunch.id] } } }),
+    );
+    expect(punchesAfterReject.every((p) => p.approvedAt === null && p.approvedById === null)).toBe(true);
+  });
+
+  it('rejects a ticket, un-stamps prior approval, and allows resubmission with a new reason', async () => {
+    const employee = await caller({ userId: rejectTestId, roles: [Role.sale], primaryRole: Role.sale, isSuperAdmin: false, facilityIds: [FACILITY_ID] }, '203.0.113.55');
+    const manager = await caller({ userId: managerId, roles: [Role.giam_doc_kinh_doanh], primaryRole: Role.giam_doc_kinh_doanh, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
+
+    const punch = await employee.checkInOut.punch({ reason: 'Đi công tác đối tác' });
+    const pendingBefore = await manager.checkInOut.pendingManual({ facilityId: FACILITY_ID });
+    const ticket = pendingBefore.find((t) => t.userId === rejectTestId)!;
+
+    const rejected = await manager.checkInOut.rejectManual({ ticketId: ticket.id, note: 'Không hợp lệ' });
+    expect(rejected.status).toBe('rejected');
+    const punchAfterReject = await withRls(SUPER, (tx) => tx.timePunch.findUniqueOrThrow({ where: { id: punch.id } }));
+    expect(punchAfterReject.approvedAt).toBeNull();
+
+    // Same-day re-punch without a reason signals resubmit is required (backdate past debounce first).
+    await withRls(SUPER, (tx) => tx.timePunch.update({ where: { id: punch.id }, data: { timestamp: new Date(Date.now() - 60_000) } }));
+    const requiresResubmit = await employee.checkInOut.punch();
+    expect(requiresResubmit).toEqual({ requiresReason: true, resubmit: true });
+
+    const resubmitted = await employee.checkInOut.punch({ reason: 'Lý do mới: khách hàng khẩn cấp tại chi nhánh' });
+    expect(resubmitted.method).toBe('manual');
+    const pendingAfterResubmit = await manager.checkInOut.pendingManual({ facilityId: FACILITY_ID });
+    expect(pendingAfterResubmit.some((t) => t.id === ticket.id)).toBe(true);
+
+    await expect(manager.checkInOut.rejectManual({ ticketId: ticket.id })).resolves.toBeTruthy();
   });
 
   it('allows center manager to configure facility WiFi IP ranges through API', async () => {
@@ -264,16 +356,72 @@ describe('work shift registration + punch attendance hardening', () => {
     const employee = await caller({ userId: debounceTestId, roles: [Role.sale], primaryRole: Role.sale, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
     const first = await employee.checkInOut.punch();
 
-    // Called back-to-back — real elapsed time is far under the 30s debounce window —
+    // Called back-to-back — real elapsed time is far under the 5s debounce window —
     // must reject, not silently create a second row (the C2 double-punch race this guards).
     await expect(employee.checkInOut.punch()).rejects.toThrow();
 
     // Backdate the punch beyond the debounce window instead of sleeping the suite for
-    // 30+ real seconds; timestamp is DB-server `now()` so faking the JS clock can't move it.
+    // 5+ real seconds; timestamp is DB-server `now()` so faking the JS clock can't move it.
     await withRls(SUPER, (tx) =>
       tx.timePunch.update({ where: { id: first.id }, data: { timestamp: new Date(Date.now() - 60_000) } }),
     );
     const second = await employee.checkInOut.punch();
     expect(second.id).not.toBe(first.id);
+  });
+
+  it('debounce is 5s, not 30s: a punch backdated by 6s (would still be blocked under the old 30s window) succeeds', async () => {
+    const employee = await caller({ userId: allDayTestId, roles: [Role.sale], primaryRole: Role.sale, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
+    const first = await employee.checkInOut.punch();
+    await withRls(SUPER, (tx) =>
+      tx.timePunch.update({ where: { id: first.id }, data: { timestamp: new Date(Date.now() - 6_000) } }),
+    );
+    const second = await employee.checkInOut.punch();
+    expect(second.id).not.toBe(first.id);
+  });
+
+  it('allows punching more than twice a day; todayStatus always tracks (first, last) — no lock after checkout', async () => {
+    const employee = await caller({ userId: allDayTest2Id, roles: [Role.sale], primaryRole: Role.sale, isSuperAdmin: false, facilityIds: [FACILITY_ID] });
+    const backdate = (id: string, ms: number) =>
+      withRls(SUPER, (tx) => tx.timePunch.update({ where: { id }, data: { timestamp: new Date(Date.now() - ms) } }));
+
+    const first = await employee.checkInOut.punch();
+    await backdate(first.id, 60_000);
+    const second = await employee.checkInOut.punch(); // check-out
+    await backdate(second.id, 60_000);
+    const third = await employee.checkInOut.punch(); // 3rd punch same day — must succeed, no completed-lock
+    await backdate(third.id, 60_000);
+    const fourth = await employee.checkInOut.punch(); // 4th punch — still allowed
+
+    const status = await employee.checkInOut.todayStatus();
+    expect(status.status).toBe('completed');
+    expect(status.checkIn?.id).toBe(first.id); // unchanged: first punch of the day
+    expect(status.checkOut?.id).toBe(fourth.id); // updates to the latest punch each time
+  });
+
+  it('resets across the ICT day boundary: yesterday\'s punch/ticket never leak into today', async () => {
+    const employee = await caller({ userId: dayResetTestId, roles: [Role.sale], primaryRole: Role.sale, isSuperAdmin: false, facilityIds: [FACILITY_ID] }, '203.0.113.77');
+    const yesterdayTimestamp = new Date(Date.now() - 26 * 60 * 60 * 1000); // 26h ago — safely the prior ICT day
+    const yesterdayDateKey = ictDateKey(yesterdayTimestamp);
+
+    // Yesterday's leftovers: an old manual punch AND its (approved) daily ticket.
+    await withRls(SUPER, (tx) =>
+      tx.manualAttendanceTicket.create({
+        data: { facilityId: FACILITY_ID, userId: dayResetTestId, dateKey: yesterdayDateKey, reason: 'yesterday-leftover', status: 'approved', approvedAt: yesterdayTimestamp },
+      }),
+    );
+    await withRls(SUPER, (tx) =>
+      tx.timePunch.create({
+        data: { facilityId: FACILITY_ID, userId: dayResetTestId, ipAddress: '203.0.113.77', method: 'manual', timestamp: yesterdayTimestamp, approvedAt: yesterdayTimestamp },
+      }),
+    );
+
+    // Today: todayStatus must not see yesterday's punch at all.
+    const status = await employee.checkInOut.todayStatus();
+    expect(status.status).toBe('not_punched');
+
+    // Today: punching outside WiFi still requires a FRESH reason — yesterday's (approved)
+    // ticket must not silently cover today (tickets are per ICT day, not per user).
+    const result = await employee.checkInOut.punch();
+    expect(result).toEqual({ requiresReason: true });
   });
 });
