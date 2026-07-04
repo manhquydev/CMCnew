@@ -101,10 +101,14 @@ export interface TemplatePayloads {
   account_security_alert: { name?: string; action: string; at: string };
   parent_meeting: { title: string; scheduledAt: string; location?: string | null };
   otp_login: { code: string; expiresMinutes: number };
-  /** Sent to parent when a StudentAccount is provisioned at receipt.approve. */
+  /** Sent to parent when a StudentAccount is provisioned at receipt.approve. Family login
+   *  (parent phone + fixed default password) is the primary path; loginCode is the break-glass
+   *  fallback for when the family has no usable phone. */
   lms_account_ready: {
     parentName?: string;
     studentName: string;
+    /** Bare 84xxx family-login phone — omitted when the parent's phone didn't normalize. */
+    familyPhone?: string;
     loginCode: string;
     /** Plaintext temp password — rendered here, never stored. */
     tempPassword: string;
@@ -188,19 +192,29 @@ const renderers: { [K in EmailTemplateKind]: Renderer<K> } = {
     subject: `Tài khoản LMS của ${esc(d.studentName)} đã sẵn sàng`,
     html: layout({
       title: 'Tài khoản LMS học sinh đã được tạo',
-      preheader: `Mã đăng nhập: ${d.loginCode}`,
+      preheader: d.familyPhone ? `Đăng nhập bằng SĐT ${d.familyPhone}` : `Mã đăng nhập: ${d.loginCode}`,
       bodyHtml:
         p(`Kính gửi ${esc(d.parentName ?? 'Quý phụ huynh')},`) +
         p(`Tài khoản LMS của con bạn <strong>${esc(d.studentName)}</strong> đã được tạo thành công.`) +
-        p('Thông tin đăng nhập:') +
-        `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border:1px solid #e6e8eb;border-radius:8px;overflow:hidden">
-<tr><td style="padding:12px 16px;background:#f8f9fb;font-size:13px;color:#555;font-weight:600;width:140px">Mã học sinh (ID)</td>
-<td style="padding:12px 16px;font-size:15px;font-weight:700;color:#0b5cad;letter-spacing:1px">${esc(d.loginCode)}</td></tr>
-<tr style="border-top:1px solid #e6e8eb"><td style="padding:12px 16px;background:#f8f9fb;font-size:13px;color:#555;font-weight:600">Mật khẩu tạm</td>
+        (d.familyPhone
+          ? p('Cách đăng nhập chính: dùng số điện thoại phụ huynh và mật khẩu chuẩn.') +
+            `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border:1px solid #e6e8eb;border-radius:8px;overflow:hidden">
+<tr><td style="padding:12px 16px;background:#f8f9fb;font-size:13px;color:#555;font-weight:600;width:140px">Số điện thoại</td>
+<td style="padding:12px 16px;font-size:15px;font-weight:700;color:#0b5cad;letter-spacing:1px">${esc(d.familyPhone)}</td></tr>
+<tr style="border-top:1px solid #e6e8eb"><td style="padding:12px 16px;background:#f8f9fb;font-size:13px;color:#555;font-weight:600">Mật khẩu</td>
 <td style="padding:12px 16px;font-size:15px;font-weight:700;color:#333;letter-spacing:1px">${esc(d.tempPassword)}</td></tr>
 </table>` +
+            p(`Nếu nhiều con cùng dùng SĐT này, sau khi đăng nhập bạn sẽ chọn đúng hồ sơ con để vào.`) +
+            p(`Dự phòng (khi không dùng được SĐT): mã học sinh <strong>${esc(d.loginCode)}</strong> + mật khẩu trên.`)
+          : p('Thông tin đăng nhập:') +
+            `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border:1px solid #e6e8eb;border-radius:8px;overflow:hidden">
+<tr><td style="padding:12px 16px;background:#f8f9fb;font-size:13px;color:#555;font-weight:600;width:140px">Mã học sinh (ID)</td>
+<td style="padding:12px 16px;font-size:15px;font-weight:700;color:#0b5cad;letter-spacing:1px">${esc(d.loginCode)}</td></tr>
+<tr style="border-top:1px solid #e6e8eb"><td style="padding:12px 16px;background:#f8f9fb;font-size:13px;color:#555;font-weight:600">Mật khẩu</td>
+<td style="padding:12px 16px;font-size:15px;font-weight:700;color:#333;letter-spacing:1px">${esc(d.tempPassword)}</td></tr>
+</table>`) +
         button('Đăng nhập LMS', BRAND.lmsUrl) +
-        p('Con bạn có thể đổi mật khẩu sau khi đăng nhập lần đầu. Vui lòng bảo quản thông tin đăng nhập này.') +
+        p('Vui lòng bảo quản thông tin đăng nhập này.') +
         p('Nếu bạn có câu hỏi, hãy liên hệ với nhà trường để được hỗ trợ.'),
     }),
   }),

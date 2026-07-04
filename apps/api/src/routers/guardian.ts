@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls, hashPassword, GuardianRelation, Prisma, type RlsContext } from '@cmc/db';
-import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
+import { rlsContextOf, lmsRlsContextOf, DEFAULT_STUDENT_PASSWORD } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, requirePermission, parentProcedure } from '../trpc.js';
 import { throttle } from '../rate-limit.js';
@@ -215,6 +215,65 @@ export const guardianRouter = router({
       }),
     ),
   ),
+
+  // ── Family login credential (decision 0033) ──────────────────────────────────────────────
+
+  // Parent self-service: no old password required — the caller IS the family credential
+  // (authenticated parent session). Own account only (id from session, never client input).
+  // Bumps tokenVersion → revokes any live family/parent (email-OTP) session immediately.
+  changeFamilyPassword: parentProcedure
+    .input(z.object({ newPassword: z.string().min(6) }))
+    .mutation(async ({ ctx, input }) => {
+      throttle(`familypwchange:${ctx.lms.accountId}`, LINK_REQUEST_LIMIT);
+      const passwordHash = await hashPassword(input.newPassword);
+      await withRls(lmsRlsContextOf(ctx.lms), async (tx) => {
+        await tx.parentAccount.update({
+          where: { id: ctx.lms.accountId },
+          data: { passwordHash, tokenVersion: { increment: 1 } },
+        });
+        await logEvent(tx, {
+          facilityId: null,
+          entityType: 'parent_account',
+          entityId: ctx.lms.accountId,
+          type: 'updated',
+          body: 'Đổi mật khẩu đăng nhập gia đình (tự phục vụ)',
+          actorId: ctx.lms.accountId,
+        });
+      });
+      return { ok: true as const };
+    }),
+
+  // ERP staff reset: force back to the fixed default, confirm-only (mirrors
+  // student.resetLmsPassword's gate — both directors). No cascade to child StudentAccount
+  // sessions (decision 0033 D6 — accepted, student session security is de-scoped); bumping
+  // tokenVersion here DOES evict any live family/parent (email-OTP) session immediately.
+  resetFamilyPassword: requirePermission('guardian', 'resetFamilyPassword')
+    .input(z.object({ parentAccountId: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const acc = await tx.parentAccount.findUnique({
+          where: { id: input.parentAccountId },
+          select: { id: true },
+        });
+        if (!acc) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy tài khoản phụ huynh' });
+        }
+        const passwordHash = await hashPassword(DEFAULT_STUDENT_PASSWORD);
+        await tx.parentAccount.update({
+          where: { id: input.parentAccountId },
+          data: { passwordHash, tokenVersion: { increment: 1 } },
+        });
+        await logEvent(tx, {
+          facilityId: null,
+          entityType: 'parent_account',
+          entityId: input.parentAccountId,
+          type: 'updated',
+          body: 'Đặt lại mật khẩu đăng nhập gia đình về mặc định',
+          actorId: ctx.session.userId,
+        });
+        return { ok: true as const };
+      }),
+    ),
 
   // ── Staff review queue ────────────────────────────────────────────────────────────────────
 
