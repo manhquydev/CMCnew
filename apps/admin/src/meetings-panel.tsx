@@ -11,9 +11,8 @@ import {
   Stack,
   Text,
   Textarea,
-  TextInput,
 } from '@mantine/core';
-import { DateInput } from '@mantine/dates';
+import { DateInput, TimeInput } from '@mantine/dates';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type ParentMeeting = Awaited<ReturnType<typeof trpc.parentMeeting.list.query>>[number];
@@ -78,7 +77,7 @@ function SetScheduleModal({
       <Stack>
         <Group grow align="flex-end">
           <DateInput label="Ngày" value={date} onChange={setDate} valueFormat="DD/MM/YYYY" />
-          <TextInput label="Giờ (HH:mm)" value={time} onChange={(e) => setTime(e.currentTarget.value)} />
+          <TimeInput label="Giờ" value={time} onChange={(e) => setTime(e.currentTarget.value)} />
         </Group>
         {err && <Text c="red" size="sm">{err}</Text>}
         <Group justify="flex-end">

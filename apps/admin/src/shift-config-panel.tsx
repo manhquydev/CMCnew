@@ -5,6 +5,7 @@ import { useDisclosure } from '@mantine/hooks';
 import {
   ActionIcon, Badge, Button, Card, Group, Loader, Modal, Select, Stack, Table, Text, TextInput, NumberInput,
 } from '@mantine/core';
+import { TimeInput } from '@mantine/dates';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
@@ -187,8 +188,8 @@ export function ShiftConfigPanel() {
               <TextInput label="Tên" placeholder="Ca sáng" withAsterisk {...tmplForm.getInputProps('name')} />
             </Group>
             <Group grow>
-              <TextInput label="Bắt đầu" placeholder="08:00" withAsterisk {...tmplForm.getInputProps('start')} />
-              <TextInput label="Kết thúc" placeholder="12:00" withAsterisk {...tmplForm.getInputProps('end')} />
+              <TimeInput label="Bắt đầu" withAsterisk {...tmplForm.getInputProps('start')} />
+              <TimeInput label="Kết thúc" withAsterisk {...tmplForm.getInputProps('end')} />
               <NumberInput label="Giờ" placeholder="4" withAsterisk {...tmplForm.getInputProps('hours')} />
             </Group>
             <Group justify="flex-end" mt="xs">
