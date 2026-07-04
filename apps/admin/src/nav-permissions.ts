@@ -95,7 +95,7 @@ export const NAV_GATES: Record<SectionKey, NavGate> = {
   //   All CRM-role staff can at minimum read opportunities.
   crm:          { kind: 'permission', module: 'crm', action: 'opportunityList' },
 
-  // cskh: afterSale.list = [cskh, giam_doc_kinh_doanh]
+  // cskh: afterSale.list = [sale, cskh, giam_doc_kinh_doanh]
   cskh:         { kind: 'permission', module: 'afterSale', action: 'list' },
 
   // rewards: rewards.giftCreate = [giam_doc_kinh_doanh] only.

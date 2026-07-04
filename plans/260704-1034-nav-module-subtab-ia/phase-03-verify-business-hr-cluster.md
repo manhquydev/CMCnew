@@ -1,6 +1,38 @@
 # Phase 3 — Verify business/HR cluster (CRM & KD, Tài chính, Nhân sự)
 
-Status: pending
+Status: verified (2 verification-matrix predictions above corrected against actual registry
+grants — see outcome below; both are pre-existing plan-doc inaccuracies, not Plan D defects)
+
+## Verification outcome (2026-07-04)
+
+No `nav-modules.ts` changes needed — same as Phase 2, the mechanism is fully derived. Deterministic
+`buildNavGroups()` checks for `ke_toan`, `sale`, `ctv_mkt`, `cskh`, `giam_doc_kinh_doanh`,
+`giao_vien`, `hr` found 2 discrepancies against this phase file's own predicted matrix (both are
+stale-documentation issues in the codebase/plan, NOT bugs in Plan D's nav mechanism, which
+correctly reflects whatever NAV_GATES + PERMISSIONS actually grant):
+
+1. **`sale` also sees `cskh`, not just `crm`.** `afterSale.list = ['sale', 'cskh',
+   'giam_doc_kinh_doanh']` (`packages/auth/src/permissions.ts:43`) — `sale` IS granted. The stale
+   culprit was `nav-permissions.ts`'s own comment ("cskh: afterSale.list = [cskh,
+   giam_doc_kinh_doanh]", missing `sale`), which this phase's matrix inherited. Fixed the comment
+   (doc-only, zero behavior change) in the same commit as this verification.
+2. **`giam_doc_kinh_doanh`-only sees 3 of 4 `crm-kinh-doanh` subtabs, not all 4** — `badges` is
+   NOT visible (`badge.list = ['giao_vien', 'giam_doc_dao_tao']`,
+   `packages/auth/src/permissions.ts:63`, does not include `giam_doc_kinh_doanh`). The matrix's
+   "all four" claim was wrong; corrected here for the record.
+
+Everything else matched exactly: `ke_toan`→`tai-chinh`=[finance, revenue-report,
+reconcile-worklist] (email-outbox correctly GĐKD-only), `nhan-su`=[my-payslips]; `ctv_mkt`→
+`crm-kinh-doanh`=[crm] only; `giao_vien`-only→`crm-kinh-doanh`=[badges] only,
+`nhan-su`=[payroll-checkin] only (both single-subtab, bar correctly suppressed); `hr`→
+`nhan-su`=[my-payslips] only — confirming the pre-existing `hr`-role landing quirk (design §4) is
+currently **unreachable** in practice: since `nhan-su` always resolves to exactly 1 visible
+subtab for the `hr` role, `SubTabBar`'s `subtabs.length <= 1` suppression fires before the
+unmatched-`activeSection` case could ever render (same conclusion the Phase 1 code review
+reached independently for this exact scenario).
+
+`/crm/opportunities/:oppId` deep-link re-confirmed live (already verified in Phase 1's smoke) —
+activates `crm-kinh-doanh` module + `crm` subtab with the record rendered.
 Blocked by: Phase 1 (independent of Phase 2).
 Owns (files): `nav-modules.ts` (subtab refinement for these 3 modules), relevant nav-test
 assertions. No panel/business-logic changes.
