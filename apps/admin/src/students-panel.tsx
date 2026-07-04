@@ -9,6 +9,8 @@ import {
   InitialsAvatar,
   EmptyState,
   FacilityPicker,
+  toApiDate,
+  parseApiDate,
   type DataTableColumn,
   type StatusDef,
 } from '@cmc/ui';
@@ -21,6 +23,7 @@ import {
   Text,
   TextInput,
 } from '@mantine/core';
+import { DateInput } from '@mantine/dates';
 import { useForm } from '@mantine/form';
 import { IconRefresh, IconExternalLink, IconSchool } from '@tabler/icons-react';
 import { StudentDetailPanel } from './student-detail.js';
@@ -256,10 +259,14 @@ export function StudentsPanel({
         <form onSubmit={editForm.onSubmit(onEdit)}>
           <Stack>
             <TextInput label="Họ tên" {...editForm.getInputProps('fullName')} />
-            <TextInput
+            <DateInput
               label="Ngày sinh"
-              placeholder="YYYY-MM-DD hoặc để trống để xóa"
-              {...editForm.getInputProps('dateOfBirth')}
+              valueFormat="DD/MM/YYYY"
+              clearable
+              placeholder="Để trống để xóa"
+              value={parseApiDate(editForm.values.dateOfBirth)}
+              onChange={(d) => editForm.setFieldValue('dateOfBirth', toApiDate(d) ?? '')}
+              error={editForm.errors.dateOfBirth}
             />
             <Text size="xs" c="dimmed">
               Đổi chương trình: thực hiện qua phiếu thu. Đổi vòng đời: thực hiện qua Chăm sóc KH.
