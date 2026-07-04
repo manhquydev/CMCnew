@@ -20,7 +20,8 @@ test('sale draft-receipt from opportunity → director approve → opportunity a
   await page.getByLabel('Email').fill(EMAIL);
   await page.getByLabel('Mật khẩu').fill(PASSWORD);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
-  await expect(page.locator('nav').getByText('Tổng quan')).toBeVisible({ timeout: 10_000 });
+  // super_admin's default landing module is "Quản trị" (Plan D: module rail, not leaf nav).
+  await expect(page.locator('nav a').filter({ hasText: 'Quản trị' })).toBeVisible({ timeout: 10_000 });
 
   // ── Create the opportunity (O1) through the CRM form. ──
   await page.locator('nav a').filter({ hasText: 'CRM' }).click();

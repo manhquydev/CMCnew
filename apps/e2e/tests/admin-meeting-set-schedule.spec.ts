@@ -94,12 +94,14 @@ async function loginAdmin(page: Page) {
   await page.getByLabel('Email').fill(ADMIN_EMAIL);
   await page.getByLabel('Mật khẩu').fill(ADMIN_PASSWORD);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
-  await expect(page.locator('nav').getByText('Tổng quan')).toBeVisible({ timeout: 10_000 });
+  // super_admin's default landing module is "Quản trị" (Plan D: module rail, not leaf nav).
+  await expect(page.locator('nav a').filter({ hasText: 'Quản trị' })).toBeVisible({ timeout: 10_000 });
 }
 
 test('staff confirms meeting time via setSchedule → parent LMS myMeetings shows confirmed time', async ({ page, browser }) => {
   await loginAdmin(page);
-  await page.locator('nav a').filter({ hasText: 'Họp PH' }).click();
+  await page.locator('nav a').filter({ hasText: 'Lớp học' }).click();
+  await page.getByRole('tab', { name: 'Họp PH' }).click();
 
   const meetingRow = page.getByRole('row', { name: new RegExp(fixture.meetingTitle) });
   await expect(meetingRow).toBeVisible({ timeout: 10_000 });

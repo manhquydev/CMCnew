@@ -1,8 +1,7 @@
-import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls, Program, hashPassword } from '@cmc/db';
-import { rlsContextOf } from '@cmc/auth';
+import { rlsContextOf, DEFAULT_STUDENT_PASSWORD } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, protectedProcedure, requirePermission, superAdminProcedure } from '../trpc.js';
 
@@ -157,7 +156,9 @@ export const studentRouter = router({
           where: { studentId: input.studentId },
           select: { id: true, tokenVersion: true },
         });
-        const tempPassword = randomBytes(6).toString('hex');
+        // Fixed default (decision 0033 D2) — student LMS credential security is de-scoped; the
+        // break-glass loginCode is what actually protects account boundaries here.
+        const tempPassword = DEFAULT_STUDENT_PASSWORD;
         const passwordHash = await hashPassword(tempPassword);
         const acc = existing
           ? await tx.studentAccount.update({
@@ -165,15 +166,24 @@ export const studentRouter = router({
               data: { passwordHash, tokenVersion: existing.tokenVersion + 1 },
               select: { loginCode: true },
             })
-          : await tx.studentAccount.create({
-              data: {
-                studentId: input.studentId,
-                loginCode: student.studentCode,
-                passwordHash,
-                isActive: true,
-              },
-              select: { loginCode: true },
-            });
+          : await (async () => {
+              // login_code is GLOBALLY unique — align to the same facility-prefixed scheme
+              // finance.ts's provisioning uses (decision 0033 M1), so two facilities never
+              // collide on a bare studentCode.
+              const facility = await tx.facility.findUniqueOrThrow({
+                where: { id: student.facilityId },
+                select: { code: true },
+              });
+              return tx.studentAccount.create({
+                data: {
+                  studentId: input.studentId,
+                  loginCode: `${facility.code}-${student.studentCode}`,
+                  passwordHash,
+                  isActive: true,
+                },
+                select: { loginCode: true },
+              });
+            })();
         await logEvent(tx, {
           facilityId: student.facilityId,
           entityType: 'student',

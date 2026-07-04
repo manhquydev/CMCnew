@@ -95,7 +95,7 @@ export const NAV_GATES: Record<SectionKey, NavGate> = {
   //   All CRM-role staff can at minimum read opportunities.
   crm:          { kind: 'permission', module: 'crm', action: 'opportunityList' },
 
-  // cskh: afterSale.list = [cskh, giam_doc_kinh_doanh]
+  // cskh: afterSale.list = [sale, cskh, giam_doc_kinh_doanh]
   cskh:         { kind: 'permission', module: 'afterSale', action: 'list' },
 
   // rewards: rewards.giftCreate = [giam_doc_kinh_doanh] only.
@@ -134,4 +134,9 @@ export const NAV_GATES: Record<SectionKey, NavGate> = {
   // Same placeholder pattern as biz-director-cockpit above — real visibility lives in
   // buildNavGroups() (shell.tsx, isEduDirectorOnly), not here.
   'edu-director-cockpit': { kind: 'open' },
+
+  // ── Profile/settings ─────────────────────────────────────────────────────
+  // Reachable via the avatar dropdown menu (shell.tsx), not the sidebar — every authenticated
+  // staff member views/manages their own account, so this is unconditionally open.
+  profile: { kind: 'open' },
 };

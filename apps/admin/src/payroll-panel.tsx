@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { notifyError, notifySuccess, useSession } from '@cmc/ui';
+import { notifyError, notifySuccess, useSession, StatusBadge, InitialsAvatar, toApiMonth, parseApiMonth, type StatusDef } from '@cmc/ui';
+import { can } from '@cmc/auth/permissions';
 import {
   Alert,
   Badge,
@@ -16,6 +17,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
+import { MonthPickerInput } from '@mantine/dates';
 import { payrollApi } from './shallow-trpc';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -57,10 +59,10 @@ const TH_STYLE: React.CSSProperties = {
   fontWeight: 600,
 };
 
-const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  draft: { label: 'Nháp', color: 'gray' },
-  finalized: { label: 'Đã chốt', color: 'blue' },
-  paid: { label: 'Đã trả', color: 'green' },
+const STATUS_LABEL: Record<string, StatusDef> = {
+  draft: { label: 'Nháp', tone: 'draft' },
+  finalized: { label: 'Đã chốt', tone: 'info' },
+  paid: { label: 'Đã trả', tone: 'active' },
 };
 
 const vnd = (n: number | null) =>
@@ -101,11 +103,12 @@ function PeriodSummaryCard({ facilityId }: { facilityId: number }) {
         Tóm tắt kỳ lương
       </Title>
       <Group align="flex-end" mb="sm">
-        <TextInput
+        <MonthPickerInput
           label="Kỳ (YYYY-MM)"
-          placeholder="2026-06"
-          value={periodKey}
-          onChange={(e) => setPeriodKey(e.currentTarget.value)}
+          valueFormat="YYYY-MM"
+          clearable={false}
+          value={parseApiMonth(periodKey)}
+          onChange={(d) => setPeriodKey(toApiMonth(d) ?? '')}
           w={160}
           error={error && !periodKey.match(/^\d{4}-\d{2}$/) ? error : undefined}
         />
@@ -236,11 +239,12 @@ function ComputeForm({
       {err && <Alert color="red" mb="sm">{err}</Alert>}
       <Stack gap="sm">
         <Group grow align="flex-end">
-          <TextInput
+          <MonthPickerInput
             label="Kỳ (YYYY-MM)"
-            placeholder="2026-06"
-            value={periodKey}
-            onChange={(e) => setPeriodKey(e.currentTarget.value)}
+            valueFormat="YYYY-MM"
+            clearable={false}
+            value={parseApiMonth(periodKey)}
+            onChange={(d) => setPeriodKey(toApiMonth(d) ?? '')}
           />
           <NumberInput
             label="Ngày chuẩn"
@@ -674,7 +678,6 @@ function StaffDetailDrawer({
               </Table.Thead>
               <Table.Tbody>
                 {payslips.map((p) => {
-                  const st = STATUS_LABEL[p.status] ?? { label: p.status, color: 'gray' };
                   const isBusy = actionBusy === p.id;
                   return (
                     <Table.Tr key={p.id}>
@@ -700,9 +703,7 @@ function StaffDetailDrawer({
                         {vnd(p.attendanceDeductionOverride ?? p.attendanceDeduction ?? 0)}
                       </Table.Td>
                       <Table.Td>
-                        <Badge size="sm" variant="light" radius="xl" color={st.color}>
-                          {st.label}
-                        </Badge>
+                        <StatusBadge status={p.status} map={STATUS_LABEL} pill />
                       </Table.Td>
                       <Table.Td>
                         <Group gap={4}>
@@ -881,7 +882,12 @@ function StaffTable({
                 style={{ cursor: 'pointer' }}
                 onClick={() => onSelect(u.id, u.displayName)}
               >
-                <Table.Td>{u.displayName}</Table.Td>
+                <Table.Td>
+                  <Group gap={8} wrap="nowrap">
+                    <InitialsAvatar name={u.displayName} size={22} />
+                    <Text size="sm">{u.displayName}</Text>
+                  </Group>
+                </Table.Td>
                 <Table.Td>
                   {u.primaryRole && (
                     <Badge size="xs" variant="light" radius="xl">{u.primaryRole}</Badge>
@@ -911,8 +917,11 @@ export function PayrollPanel({ facilityId }: { facilityId?: number }) {
   const { me } = useSession();
   const [selectedStaff, setSelectedStaff] = useState<{ id: string; name: string } | null>(null);
 
-  if (!me.isSuperAdmin && !me.roles.includes('hr') && !me.roles.includes('ke_toan')) {
-    return <Text c="dimmed">Chỉ HR và Kế toán mới được truy cập mục này.</Text>;
+  // Gate must match the nav's NAV_GATES.hr entry (shell.tsx) — payroll.roster — so the "Nhân sự &
+  // Lương" nav item is never visible-but-denied. Was a hardcoded ['hr', 'ke_toan'] check that
+  // predated giam_doc_kinh_doanh/giam_doc_dao_tao being granted payroll.roster in the registry.
+  if (!can(me.roles, me.isSuperAdmin, 'payroll', 'roster')) {
+    return <Text c="dimmed">Bạn không có quyền truy cập mục này.</Text>;
   }
 
   const activeFacilityId = facilityId ?? me.facilityIds[0];

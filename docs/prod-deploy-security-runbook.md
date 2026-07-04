@@ -3,6 +3,11 @@
 Mục đích: checklist đầy đủ để đưa CMCnew lên production an toàn, **không sót việc**. Chạy theo thứ tự.
 Stack: docker-compose (postgres, redis, api, admin, lms, nginx) with resource limits + origin TLS cert. Single public origin qua nginx.
 
+> **Môi trường dev đồng cư:** cùng VPS này còn chạy stack `cmcnew-dev` (`deverp.cmcvn.edu.vn` +
+> `devlms.cmcvn.edu.vn`) sau prod nginx qua network `cmcnew-edge`. DB/Redis dev cô lập hoàn toàn,
+> dữ liệu synthetic. Vận hành dev + chính sách deploy theo nhánh (PR chỉ validate, `develop`→dev,
+> `main`→prod): xem [`docs/dev-prod-cicd-runbook.md`](dev-prod-cicd-runbook.md) và decision 0032.
+
 > Trạng thái code security: các finding HIGH + security medium từ audit đã đóng (xem
 > `plans/260627-2229-prod-security-readiness/plan.md`). Runbook này lo phần **hạ tầng + cấu hình + vận hành**.
 
@@ -66,7 +71,7 @@ docker compose -f docker/docker-compose.prod.yml --env-file .env.production up -
 
 ## 3. TLS / HTTPS (BẮT BUỘC trước khi mở cho người dùng)
 Hai lựa chọn:
-- **A. Reverse proxy ngoài (khuyến nghị):** Cloudflare Tunnel (hoặc Caddy/Traefik) terminate TLS, forward về nginx:80. Đơn giản, auto-renew cert. **Origin TLS:** chạy `scripts/ensure-origin-cert.sh` (idempotent helper, tạo self-signed cert nếu chưa có, được gọi tự động từ `Jenkinsfile` deploy stage). Cert được mount vào nginx/api nếu cần.
+- **A. Reverse proxy ngoài (khuyến nghị):** Cloudflare Tunnel (hoặc Caddy/Traefik) terminate TLS, forward về nginx:80. Đơn giản, auto-renew cert. **Origin TLS:** chạy `scripts/ensure-origin-cert.sh` (idempotent helper, tạo self-signed cert nếu chưa có, được gọi tự động từ `Jenkinsfile` deploy stage). Cert self-signed nay có SAN phủ **cả 4 host app**: `erp`, `hoc`, `deverp`, `devlms` (dev domain dùng chung cert này qua cùng nginx; `ci.cmcvn.edu.vn` không nằm trong SAN nhưng vẫn chạy được dưới Cloudflare "Full" vì Full không validate origin SAN). Cert được mount vào nginx/api nếu cần.
 - **B. nginx tự terminate:** thêm block `listen 443 ssl` + cert (Let's Encrypt certbot via `scripts/prod-tls-bootstrap.sh`) vào `docker/nginx.conf`, mount cert, map cổng 443. Khi đó **bật HSTS** (hiện comment ở `nginx.conf:23`). Certbot service trong `docker-compose.prod.tls.yml` gated behind `--profile le` (dormant by default).
 
 Sau khi có TLS: đảm bảo `COOKIE_SECURE=true` (mục 1) — nếu không, browser drop cookie Secure / hoặc cookie không-Secure trên HTTPS bị cảnh báo.

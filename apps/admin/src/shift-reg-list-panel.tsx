@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
-import { trpc, useSession, notifyError, notifySuccess } from '@cmc/ui';
-import { Badge, Button, Card, Group, Stack, Table, Text } from '@mantine/core';
+import { trpc, useSession, notifyError, notifySuccess, StatusBadge, type StatusDef } from '@cmc/ui';
+import { Button, Card, Group, Stack, Table, Text } from '@mantine/core';
 import { IconPlus } from '@tabler/icons-react';
 
 const TH_STYLE: React.CSSProperties = {
@@ -9,27 +9,16 @@ const TH_STYLE: React.CSSProperties = {
   color: 'var(--cmc-text-muted)', fontWeight: 600,
 };
 
+const CLICK_CELL: React.CSSProperties = { cursor: 'pointer' };
+
 type ShiftReg = Awaited<ReturnType<typeof trpc.shiftRegistration.list.query>>[number];
 
-function statusColor(s: string): string {
-  switch (s) {
-    case 'draft': return 'gray';
-    case 'submitted': return 'blue';
-    case 'approved': return 'green';
-    case 'cancelled': return 'orange';
-    default: return 'gray';
-  }
-}
-
-function statusLabel(s: string): string {
-  switch (s) {
-    case 'draft': return 'Nháp';
-    case 'submitted': return 'Chờ duyệt';
-    case 'approved': return 'Đã duyệt';
-    case 'cancelled': return 'Đã hủy';
-    default: return s;
-  }
-}
+const STATUS_MAP: Record<string, StatusDef> = {
+  draft: { label: 'Nháp', tone: 'draft' },
+  submitted: { label: 'Chờ duyệt', tone: 'pending' },
+  approved: { label: 'Đã duyệt', tone: 'active' },
+  cancelled: { label: 'Đã hủy', tone: 'inactive' },
+};
 
 export function ShiftRegListPanel({ onSelect }: { onSelect: (id: string) => void }) {
   const { me } = useSession();
@@ -99,23 +88,21 @@ export function ShiftRegListPanel({ onSelect }: { onSelect: (id: string) => void
             </Table.Thead>
             <Table.Tbody>
               {regs.map((r) => (
-                <Table.Tr key={r.id} style={{ cursor: 'pointer' }}>
-                  <Table.Td onClick={() => onSelect(r.id)}>
+                <Table.Tr key={r.id}>
+                  <Table.Td onClick={() => onSelect(r.id)} style={CLICK_CELL}>
                     <Text size="sm" fw={500}>{r.code ?? 'Nháp'}</Text>
                   </Table.Td>
-                  <Table.Td onClick={() => onSelect(r.id)}>
+                  <Table.Td onClick={() => onSelect(r.id)} style={CLICK_CELL}>
                     {dayjs(r.fromDate).format('DD/MM/YY')}
                   </Table.Td>
-                  <Table.Td onClick={() => onSelect(r.id)}>
+                  <Table.Td onClick={() => onSelect(r.id)} style={CLICK_CELL}>
                     {dayjs(r.toDate).format('DD/MM/YY')}
                   </Table.Td>
-                  <Table.Td onClick={() => onSelect(r.id)}>
+                  <Table.Td onClick={() => onSelect(r.id)} style={CLICK_CELL}>
                     {(r).shiftGroup?.name ?? '—'}
                   </Table.Td>
-                  <Table.Td onClick={() => onSelect(r.id)}>
-                    <Badge size="sm" color={statusColor(r.status)} variant="light" radius="xl">
-                      {statusLabel(r.status)}
-                    </Badge>
+                  <Table.Td onClick={() => onSelect(r.id)} style={CLICK_CELL}>
+                    <StatusBadge status={r.status} map={STATUS_MAP} pill />
                   </Table.Td>
                   <Table.Td>
                     <Group gap="xs">

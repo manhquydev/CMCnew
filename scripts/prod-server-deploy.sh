@@ -23,6 +23,11 @@ DB_APP_PASSWORD="$(val DB_APP_PASSWORD)"
 # docs/decisions/0029-canonical-origin-tls-self-signed-behind-cloudflare.md.
 bash scripts/ensure-origin-cert.sh
 
+# The prod nginx joins the shared cmcnew-edge network (to reach the cmcnew-dev app tier).
+# It is declared `external` in the compose file, so it must exist before `up` or compose aborts.
+# Idempotent + `|| true` because this script runs under `set -e` and re-runs on every deploy.
+docker network create cmcnew-edge 2>/dev/null || true
+
 echo "=== [1/5] postgres + redis ==="
 $COMPOSE up -d postgres redis
 # wait for postgres healthy

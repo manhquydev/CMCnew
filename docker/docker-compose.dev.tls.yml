@@ -1,0 +1,228 @@
+# CMCnew — DEV SERVER compose (deverp.cmcvn.edu.vn + devlms.cmcvn.edu.vn).
+# Pre-production stack that shares the box and the one edge nginx with cmcnew-prod,
+# but keeps its own database, Redis, secrets, cookies, and SSO redirect URI.
+# See docs/decisions/0032-dev-prod-cicd-environment-split.md.
+#
+# Topology:
+#   cmcnew-dev_default  — dev-postgres, dev-redis (NEVER on the edge, NEVER public-ported)
+#   cmcnew-edge         — dev-api, dev-admin, dev-lms  (reachable by the shared prod nginx)
+# The prod nginx (docker-compose.prod.tls.yml) is also attached to cmcnew-edge and routes:
+#   deverp.cmcvn.edu.vn  → cmcnew-dev-admin:80  (+ /api → cmcnew-dev-api:4000)
+#   devlms.cmcvn.edu.vn  → cmcnew-dev-lms:80    (+ /api → cmcnew-dev-api:4000)
+#
+# cmcnew-edge is an EXTERNAL network — create it once before first `up`:
+#   docker network create cmcnew-edge
+#
+# Deploy (from /root/cmcnew on the server, secrets in /root/cmcnew/.env.dev, chmod 600):
+#   docker network create cmcnew-edge   # first time only, idempotent-ish (errors if exists — ok)
+#   docker compose -f docker/docker-compose.dev.tls.yml --env-file .env.dev up -d dev-postgres dev-redis
+#   docker compose -f docker/docker-compose.dev.tls.yml --env-file .env.dev --profile migrate run --rm dev-api-migrate
+#   # align the cmc_app RLS role password on the FRESH dev DB (see scripts/prod-server-deploy.sh):
+#   docker compose -f docker/docker-compose.dev.tls.yml --env-file .env.dev exec -T dev-postgres \
+#     psql -U "$DB_USER" -d "$DB_NAME" -c "ALTER ROLE cmc_app PASSWORD '<DB_APP_PASSWORD>';"
+#   docker compose -f docker/docker-compose.dev.tls.yml --env-file .env.dev --profile seed run --rm dev-api-seed
+#   docker compose -f docker/docker-compose.dev.tls.yml --env-file .env.dev up -d
+
+name: cmcnew-dev
+
+services:
+
+  dev-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER:     ${DB_USER:-cmc}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB:       ${DB_NAME:-cmc}
+    volumes:
+      - devpgdata:/var/lib/postgresql/data
+    # No published ports — dev DB is reachable only inside cmcnew-dev_default.
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER:-cmc} -d ${DB_NAME:-cmc}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1g
+        reservations:
+          memory: 256m
+    restart: unless-stopped
+
+  dev-redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--maxmemory', '200mb', '--maxmemory-policy', 'allkeys-lru']
+    volumes:
+      - devredisdata:/data
+    # No published ports — dev Redis is reachable only inside cmcnew-dev_default.
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256m
+    restart: unless-stopped
+
+  dev-api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV:         production
+      API_PORT:         4000
+      # Deploy markers surfaced at GET /health so a dev deploy is externally verifiable
+      # and provably distinct from prod's commit marker.
+      APP_COMMIT:       ${APP_COMMIT:-unknown}
+      APP_BUILT_AT:     ${APP_BUILT_AT:-unknown}
+      DATABASE_URL:     postgresql://cmc_app:${DB_APP_PASSWORD:?DB_APP_PASSWORD is required}@dev-postgres:5432/${DB_NAME:-cmc}?schema=public
+      DIRECT_URL:       postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@dev-postgres:5432/${DB_NAME:-cmc}?schema=public
+      REDIS_URL:        redis://dev-redis:6379
+      JWT_SECRET:       ${JWT_SECRET:?JWT_SECRET is required}
+      # Dev-scoped cookies — never collide with prod's cmc.session / cmc.lms.
+      AUTH_COOKIE_NAME: cmc.dev.session
+      LMS_COOKIE_NAME:  cmc.dev.lms
+      COOKIE_SECURE:    ${COOKIE_SECURE:-true}
+      CORS_ORIGINS:     ${CORS_ORIGINS:?CORS_ORIGINS is required (https://deverp...,https://devlms...)}
+      ADMIN_APP_ORIGIN: ${ADMIN_APP_ORIGIN:?ADMIN_APP_ORIGIN is required (https://deverp.cmcvn.edu.vn)}
+      CRM_LEAD_TOKEN:   ${CRM_LEAD_TOKEN:-}
+      DISABLE_CRON:     ${DISABLE_CRON:-1}
+      ENTRA_TENANT_ID:      ${ENTRA_TENANT_ID:-}
+      ENTRA_CLIENT_ID:      ${ENTRA_CLIENT_ID:-}
+      ENTRA_CLIENT_SECRET:  ${ENTRA_CLIENT_SECRET:-}
+      ERP_SSO_REDIRECT_URI: ${ERP_SSO_REDIRECT_URI:-}
+      STAFF_EMAIL_DOMAIN:   ${STAFF_EMAIL_DOMAIN:-}
+      SSO_ENABLED:          ${SSO_ENABLED:-}
+      # Dev runs password login alongside SSO (decision 0031 + 0032) for test/debug convenience.
+      STAFF_PASSWORD_LOGIN: ${STAFF_PASSWORD_LOGIN:-true}
+      GRAPH_SENDER_NOTIFY:  ${GRAPH_SENDER_NOTIFY:-}
+      GRAPH_SENDER_PAYROLL: ${GRAPH_SENDER_PAYROLL:-}
+      GRAPH_SENDER_HR:      ${GRAPH_SENDER_HR:-}
+      GRAPH_CLIENT_SECRET:  ${GRAPH_CLIENT_SECRET:-}
+      BREVO_API_KEY:        ${BREVO_API_KEY:-}
+      BREVO_SENDER_EMAIL:   ${BREVO_SENDER_EMAIL:-}
+      BREVO_SENDER_NAME:    ${BREVO_SENDER_NAME:-}
+      CALLIO_API_BASE:      ${CALLIO_API_BASE:-}
+      CALLIO_API_TOKEN:     ${CALLIO_API_TOKEN:-}
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:4000/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      dev-postgres:
+        condition: service_healthy
+      dev-redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 1g
+        reservations:
+          memory: 384m
+    restart: unless-stopped
+    networks:
+      default: {}
+      cmcnew-edge:
+        aliases: [cmcnew-dev-api]
+
+  dev-api-migrate:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV:     production
+      DATABASE_URL: postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@dev-postgres:5432/${DB_NAME:-cmc}?schema=public
+      DIRECT_URL:   postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@dev-postgres:5432/${DB_NAME:-cmc}?schema=public
+    depends_on:
+      dev-postgres:
+        condition: service_healthy
+    command: ['pnpm', '--filter', '@cmc/db', 'migrate']
+    profiles: ['migrate']
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 768m
+    restart: 'no'
+
+  # Dev seed: SEED_MODE is intentionally UNSET → defaults to 'full' (packages/db/src/seed.ts:304),
+  # giving every seeded persona a real password. This is a deliberate DIVERGENCE from prod, whose
+  # api-seed hardcodes SEED_MODE: bootstrap. Justified: dev holds synthetic data only and needs
+  # password-based test automation. DO NOT add SEED_MODE: bootstrap here.
+  dev-api-seed:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV:                 production
+      DATABASE_URL:             postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@dev-postgres:5432/${DB_NAME:-cmc}?schema=public
+      DIRECT_URL:               postgresql://${DB_USER:-cmc}:${DB_PASSWORD}@dev-postgres:5432/${DB_NAME:-cmc}?schema=public
+      SEED_SUPERADMIN_EMAIL:    ${SEED_SUPERADMIN_EMAIL:?SEED_SUPERADMIN_EMAIL is required}
+      SEED_SUPERADMIN_PASSWORD: ${SEED_SUPERADMIN_PASSWORD:?SEED_SUPERADMIN_PASSWORD is required}
+    depends_on:
+      dev-postgres:
+        condition: service_healthy
+    command: ['pnpm', '--filter', '@cmc/db', 'seed']
+    profiles: ['seed']
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 768m
+    restart: 'no'
+
+  # Dev admin SPA — served at the root of deverp.cmcvn.edu.vn.
+  dev-admin:
+    build:
+      context: ..
+      dockerfile: apps/admin/Dockerfile
+      args:
+        VITE_API_URL: /api
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256m
+    restart: unless-stopped
+    networks:
+      default: {}
+      cmcnew-edge:
+        aliases: [cmcnew-dev-admin]
+
+  # Dev LMS SPA — served at the ROOT of devlms.cmcvn.edu.vn.
+  dev-lms:
+    build:
+      context: ..
+      dockerfile: apps/lms/Dockerfile
+      args:
+        VITE_API_URL:  /api
+        VITE_BASE_URL: /
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256m
+    restart: unless-stopped
+    networks:
+      default: {}
+      cmcnew-edge:
+        aliases: [cmcnew-dev-lms]
+
+volumes:
+  devpgdata:
+  devredisdata:
+
+networks:
+  # Project-local network for the whole dev stack (DB/Redis stay here only).
+  default:
+  # Shared edge network the prod nginx also joins, so it can reach the dev app tier
+  # WITHOUT reaching dev-postgres / dev-redis. Created out-of-band: docker network create cmcnew-edge.
+  cmcnew-edge:
+    external: true

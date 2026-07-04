@@ -22,8 +22,9 @@ const cmc: MantineColorsTuple = [
 /* ─── Status colors (single-stop tuples for Mantine badge colors) ─────────  */
 const cmcGreen: MantineColorsTuple = [
   '#F0FBF3','#D8F4E0','#AEEABD','#7FDE97','#58D275',
-  '#34C759', // 5
-  '#28A046','#1A7A34','#105523','#083314',
+  '#06C167', // 5 — Vietnamese Enterprise Core success (was Apple iOS #34C759)
+  '#05A358', // 6 — hover/pressed, adjusted to stay coherent with new 5
+  '#1A7A34','#105523','#083314',
 ];
 
 const cmcAmber: MantineColorsTuple = [
@@ -51,7 +52,7 @@ export const theme: MantineThemeOverride = createTheme({
 
   /* ─── Typography ─────────────────────────────────────────────────────── */
   fontFamily:
-    "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, 'Helvetica Neue', Arial, sans-serif",
+    "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, 'Helvetica Neue', Arial, sans-serif",
   fontFamilyMonospace:
     "'SF Mono', 'Cascadia Code', 'Fira Code', 'Courier New', monospace",
 
@@ -74,7 +75,7 @@ export const theme: MantineThemeOverride = createTheme({
 
   headings: {
     fontFamily:
-      "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+      "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
     fontWeight: '600',
     sizes: {
       h1: { fontSize: '28px', lineHeight: '1.25', fontWeight: '700' },
@@ -105,7 +106,8 @@ export const theme: MantineThemeOverride = createTheme({
     xl:  '24px',
   },
 
-  /* ─── Shadows — flat Apple aesthetic, depth only for modals ──────────── */
+  /* ─── Shadows — Zero Elevation: decorative surfaces (Card/Paper/Notification) flat,
+     functional floating layers (Modal/Menu/Select/Drawer, sm minimum) keep depth-cue ── */
   shadows: {
     xs: '0 1px 2px rgba(29,29,31,0.06)',
     sm: '0 1px 4px rgba(29,29,31,0.08), 0 2px 8px rgba(29,29,31,0.04)',
@@ -117,9 +119,9 @@ export const theme: MantineThemeOverride = createTheme({
   /* ─── Component Overrides ────────────────────────────────────────────── */
   components: {
 
-    /* Button — pill primary, text secondary (Apple-style) */
+    /* Button — square 4px radius, DESIGN.md literal spec (was pill) */
     Button: {
-      defaultProps: { radius: 'xl' },
+      defaultProps: { radius: 'xs' },
       styles: {
         root: {
           fontWeight: 500,
@@ -132,9 +134,9 @@ export const theme: MantineThemeOverride = createTheme({
       },
     },
 
-    /* Card — flat surface, no heavy shadow, Apple radius */
+    /* Card — flat surface (Zero Elevation: decorative, no shadow), radius ≤8px */
     Card: {
-      defaultProps: { radius: 'lg', shadow: 'sm', withBorder: true },
+      defaultProps: { radius: 'sm', shadow: 'none', withBorder: true },
       styles: {
         root: {
           backgroundColor: 'var(--cmc-surface)',
@@ -143,9 +145,9 @@ export const theme: MantineThemeOverride = createTheme({
       },
     },
 
-    /* Paper — same flat treatment */
+    /* Paper — same flat treatment (Zero Elevation: decorative, no shadow) */
     Paper: {
-      defaultProps: { radius: 'lg', shadow: 'xs', withBorder: true },
+      defaultProps: { radius: 'sm', shadow: 'none', withBorder: true },
       styles: {
         root: {
           backgroundColor: 'var(--cmc-surface)',
@@ -195,7 +197,7 @@ export const theme: MantineThemeOverride = createTheme({
         dropdown: {
           border: '1px solid var(--cmc-border)',
           borderRadius: '10px',
-          boxShadow: '0 8px 32px rgba(29,29,31,0.12)',
+          boxShadow: 'var(--cmc-shadow-sm)',
         },
         option: {
           fontSize: '15px',
@@ -275,13 +277,13 @@ export const theme: MantineThemeOverride = createTheme({
       },
     },
 
-    /* Modal — floating Apple style with deep shadow */
+    /* Modal — floating layer, Zero Elevation minimum depth-cue */
     Modal: {
       defaultProps: { radius: 'xl', centered: true },
       styles: {
         content: {
           backgroundColor: 'var(--cmc-surface)',
-          boxShadow: '0 20px 60px rgba(29,29,31,0.18), 0 4px 16px rgba(29,29,31,0.08)',
+          boxShadow: 'var(--cmc-shadow-sm)',
           border: '1px solid var(--cmc-border)',
         },
         header: {
@@ -303,13 +305,13 @@ export const theme: MantineThemeOverride = createTheme({
       },
     },
 
-    /* Drawer — sidebar-style panels */
+    /* Drawer — sidebar-style panels, Zero Elevation minimum depth-cue */
     Drawer: {
       defaultProps: { radius: 0 },
       styles: {
         content: {
           backgroundColor: 'var(--cmc-surface)',
-          boxShadow: '0 0 40px rgba(29,29,31,0.15)',
+          boxShadow: 'var(--cmc-shadow-sm)',
         },
         header: {
           backgroundColor: 'var(--cmc-surface)',
@@ -352,13 +354,13 @@ export const theme: MantineThemeOverride = createTheme({
       },
     },
 
-    /* Notification — bottom-right toast */
+    /* Notification — bottom-right toast (Zero Elevation: decorative, no shadow) */
     Notification: {
       defaultProps: { radius: 'lg' },
       styles: {
         root: {
           border: '1px solid var(--cmc-border)',
-          boxShadow: '0 8px 32px rgba(29,29,31,0.12)',
+          boxShadow: 'none',
           backgroundColor: 'var(--cmc-surface)',
         },
         title: {
@@ -373,13 +375,13 @@ export const theme: MantineThemeOverride = createTheme({
       },
     },
 
-    /* Menu dropdown */
+    /* Menu dropdown — floating layer, Zero Elevation minimum depth-cue */
     Menu: {
       styles: {
         dropdown: {
           border: '1px solid var(--cmc-border)',
           borderRadius: '12px',
-          boxShadow: '0 8px 32px rgba(29,29,31,0.12)',
+          boxShadow: 'var(--cmc-shadow-sm)',
           backgroundColor: 'var(--cmc-surface)',
           padding: '4px',
         },

@@ -29,9 +29,12 @@ export interface StatusBadgeProps {
   label?: ReactNode;
   /** Override tone directly (skips map lookup). */
   tone?: StatusTone;
-  /** Show the leading status dot. Default true. */
+  /** Show the leading status dot. Default true. Ignored when `pill` is true. */
   withDot?: boolean;
   size?: 'xs' | 'sm' | 'md' | 'lg';
+  /** Uppercase tinted pill (dotless), matching the cockpit wireframe's "VƯỢT KPI"/"CẢNH BÁO"
+   *  chips. Default false = current dot + light badge, fully backward compatible. */
+  pill?: boolean;
 }
 
 export function StatusBadge({
@@ -41,11 +44,26 @@ export function StatusBadge({
   tone,
   withDot = true,
   size = 'sm',
+  pill = false,
 }: StatusBadgeProps) {
   const def = map?.[status];
   const resolvedTone: StatusTone = tone ?? def?.tone ?? 'inactive';
   const resolvedLabel: ReactNode = label ?? def?.label ?? status;
   const style = TONE[resolvedTone];
+
+  if (pill) {
+    return (
+      <Badge
+        color={style.color}
+        variant="light"
+        radius="xl"
+        size={size}
+        styles={{ label: { textTransform: 'uppercase' } }}
+      >
+        {resolvedLabel}
+      </Badge>
+    );
+  }
 
   return (
     <Group gap={6} wrap="nowrap" style={{ display: 'inline-flex', alignItems: 'center' }}>

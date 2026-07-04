@@ -1,7 +1,15 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { setCookie, deleteCookie } from 'hono/cookie';
-import { loginStudent, mintParentSession, type LmsSession } from '@cmc/auth';
+import {
+  loginStudent,
+  mintParentSession,
+  loginFamilyByPhone,
+  verifyChildSelectionTicket,
+  mintStudentSessionForStudent,
+  normalizeLoginPhone,
+  type LmsSession,
+} from '@cmc/auth';
 import { router, publicProcedure, lmsProcedure } from '../trpc.js';
 import { LMS_COOKIE_NAME } from '../context.js';
 import { checkLoginLimit, clearLoginLimit, recordLoginFailure, throttle } from '../rate-limit.js';
@@ -43,6 +51,56 @@ export const lmsAuthRouter = router({
         throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sai mã hoặc mật khẩu' });
       }
       clearLoginLimit(ctx.ip, input.loginCode);
+      setLmsCookie(ctx.c, result.token);
+      return { principal: publicLms(result.session) };
+    }),
+
+  // ── Family login (student login = parent phone + Netflix profile picker) ────────────────────
+  // SECURITY (decision 0033 D4): never sets the LMS cookie / never mints a kind:'parent' session
+  // here. Returns a short-lived child-selection ticket the client holds client-side only; the
+  // FIRST cookie on this path is set by enterChildProfile, and it is always kind:'student'.
+  loginFamilyByPhone: publicProcedure
+    .input(z.object({ phone: z.string().min(1), password: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      // Rate-limit on the NORMALIZED phone — `input.phone` may arrive in any of several
+      // equivalent formats (0xxx/+84xxx/84xxx/0084xxx) that all resolve to the same account;
+      // limiting on the raw string would let an attacker multiply the per-account throttle by
+      // trying format variants. Falls back to the raw value only when it doesn't normalize
+      // (the underlying loginFamilyByPhone will reject it anyway).
+      const limiterKey = normalizeLoginPhone(input.phone) ?? input.phone;
+      checkLoginLimit(ctx.ip, limiterKey);
+      const result = await loginFamilyByPhone(input.phone, input.password);
+      if (!result) {
+        recordLoginFailure(ctx.ip, limiterKey);
+        throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sai số điện thoại hoặc mật khẩu' });
+      }
+      clearLoginLimit(ctx.ip, limiterKey);
+      return { ticket: result.ticket, children: result.children };
+    }),
+
+  // publicProcedure: must run BEFORE any parent/student session exists — the ticket (not a
+  // cookie) is the only credential in play. Re-resolves ownership server-side; never trusts the
+  // client's child list.
+  enterChildProfile: publicProcedure
+    .input(z.object({ ticket: z.string().min(1), studentId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const verified = await verifyChildSelectionTicket(input.ticket);
+      if (!verified) {
+        throw new TRPCError({
+          code: 'UNAUTHORIZED',
+          message: 'Phiên chọn hồ sơ đã hết hạn, vui lòng đăng nhập lại',
+        });
+      }
+      const result = await mintStudentSessionForStudent(input.studentId, verified.parentAccountId);
+      if (!result.ok) {
+        if (result.reason === 'not_found') {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Con chưa có tài khoản LMS — nhờ trung tâm cấp',
+          });
+        }
+        throw new TRPCError({ code: 'FORBIDDEN' });
+      }
       setLmsCookie(ctx.c, result.token);
       return { principal: publicLms(result.session) };
     }),

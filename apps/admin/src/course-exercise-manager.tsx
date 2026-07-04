@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { can } from '@cmc/auth/permissions';
-import { uploadExercisePdf, trpc, useSession, notifyError, notifySuccess } from '@cmc/ui';
+import { uploadExercisePdf, trpc, useSession, notifyError, notifySuccess, StatusBadge, type StatusDef } from '@cmc/ui';
 import {
-  Badge,
   Button,
   Card,
   FileInput,
@@ -36,13 +35,16 @@ const STATUS_LABEL: Record<ExerciseStatus, string> = {
   closed: 'Đã đóng',
 };
 
+// Preserves original 2-tone grouping: published→green(active), draft/closed→gray(draft/inactive).
+const EXERCISE_STATUS_MAP: Record<string, StatusDef> = {
+  draft: { label: STATUS_LABEL.draft, tone: 'draft' },
+  published: { label: STATUS_LABEL.published, tone: 'active' },
+  closed: { label: STATUS_LABEL.closed, tone: 'inactive' },
+};
+
 function ExerciseBadge({ exercise }: { exercise?: Exercise }) {
-  if (!exercise) return <Badge color="gray" variant="light">Chưa upload</Badge>;
-  return (
-    <Badge color={exercise.status === 'published' ? 'green' : 'gray'} variant="light">
-      {STATUS_LABEL[exercise.status as ExerciseStatus] ?? exercise.status}
-    </Badge>
-  );
+  if (!exercise) return <StatusBadge status="none" label="Chưa upload" tone="inactive" pill />;
+  return <StatusBadge status={exercise.status} map={EXERCISE_STATUS_MAP} pill />;
 }
 
 export function CourseExerciseManager({ course }: { course: Course }) {

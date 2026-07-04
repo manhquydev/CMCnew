@@ -101,6 +101,11 @@ Run `pnpm lint` (Turbo fans out to each workspace's `eslint src`).
 - Design tokens live in `packages/ui/src/tokens.css`; consume tokens rather than
   hard-coding colors/spacing. See [design-system.md](design-system.md).
 - Icons from `@tabler/icons-react`. Dates via `dayjs`.
+- Date/time/period fields use Mantine `DateInput`/`MonthPickerInput`/`TimeInput`
+  (`@mantine/dates`), not raw text inputs. Convert Date↔string at the component
+  boundary with `@cmc/ui`'s `toApiDate`/`toApiMonth`/`parseApiDate`/`parseApiMonth`
+  (`packages/ui/src/date-format.ts`) — local-time only, never `toISOString()` or
+  `new Date(str)` (both parse as UTC and shift a day in non-UTC timezones).
 - The admin app is **one role-filtered shell** — gate panels by permission so
   non-entitled roles never hit a `FORBIDDEN`.
 

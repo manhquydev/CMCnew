@@ -9,8 +9,13 @@ export {
   resolveLmsSession,
   lmsRlsContextOf,
   BLOCKED_LMS_LIFECYCLE,
+  loginFamilyByPhone,
+  verifyChildSelectionTicket,
+  mintStudentSessionForStudent,
   type LmsSession,
+  type EnterChildProfileResult,
 } from './lms.js';
+export { normalizeLoginPhone, DEFAULT_STUDENT_PASSWORD } from './login-phone.js';
 export { Role } from '@cmc/db';
 export {
   PERMISSIONS,

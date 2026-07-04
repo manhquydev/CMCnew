@@ -5,10 +5,11 @@ import {
   notifySuccess,
   trpc,
   uploadSessionPhoto,
+  StatusBadge,
+  InitialsAvatar,
 } from '@cmc/ui';
 import {
   ActionIcon,
-  Badge,
   Button,
   Card,
   FileInput,
@@ -208,9 +209,14 @@ export function SessionEvidencePanel({
               Lưu ảnh thật, nhận xét theo template chính thức, rồi publish cho PH/HS.
             </Text>
           </div>
-          <Badge color={status === 'published' ? 'teal' : 'gray'} variant="light" radius="xl">
-            {status === 'published' ? 'Đã publish' : 'Nháp'}
-          </Badge>
+          <StatusBadge
+            status={status}
+            map={{
+              published: { label: 'Đã publish', tone: 'active' },
+              draft: { label: 'Nháp', tone: 'draft' },
+            }}
+            pill
+          />
         </Group>
 
         {!enabled && (
@@ -294,8 +300,13 @@ export function SessionEvidencePanel({
                 return (
                   <Table.Tr key={student.id} data-testid={`session-comment-row-${student.studentCode}`}>
                     <Table.Td>
-                      <Text size="sm" fw={600}>{student.fullName}</Text>
-                      <Text size="xs" c="dimmed">{student.studentCode}</Text>
+                      <Group gap={8} wrap="nowrap">
+                        <InitialsAvatar name={student.fullName} size={22} />
+                        <div>
+                          <Text size="sm" fw={600}>{student.fullName}</Text>
+                          <Text size="xs" c="dimmed">{student.studentCode}</Text>
+                        </div>
+                      </Group>
                     </Table.Td>
                     <Table.Td>
                       <Select

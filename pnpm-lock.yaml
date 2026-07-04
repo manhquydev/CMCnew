@@ -53,6 +53,9 @@ importers:
       '@cmc/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@fontsource/inter':
+        specifier: ^5.1.0
+        version: 5.2.8
       '@mantine/core':
         specifier: ^7.15.2
         version: 7.17.8(@mantine/hooks@7.17.8(react@19.2.7))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -257,6 +260,9 @@ importers:
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
+      vitest:
+        specifier: ^2.1.9
+        version: 2.1.9(@types/node@22.20.0)
 
   packages/db:
     dependencies:
@@ -334,6 +340,9 @@ importers:
       '@cmc/api':
         specifier: workspace:*
         version: link:../../apps/api
+      '@fontsource/inter':
+        specifier: ^5.1.0
+        version: 5.2.8
       '@mantine/core':
         specifier: ^7.15.2
         version: 7.17.8(@mantine/hooks@7.17.8(react@19.2.7))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -352,6 +361,9 @@ importers:
       '@trpc/client':
         specifier: ^11.0.0
         version: 11.18.0(@trpc/server@11.18.0(typescript@5.9.3))(typescript@5.9.3)
+      dayjs:
+        specifier: ^1.11.13
+        version: 1.11.21
       pdfjs-dist:
         specifier: ^6.0.227
         version: 6.0.227
@@ -1102,6 +1114,9 @@ packages:
 
   '@fontsource-variable/quicksand@5.2.10':
     resolution: {integrity: sha512-1uzkzGDwWgtFnxquAXuD7fZV9wHkALb49UPzRXxGTVeeLsNrGnIU0O/pcz6m1U7RDtpHz2qx77JhCpKaq7FrUg==}
+
+  '@fontsource/inter@5.2.8':
+    resolution: {integrity: sha512-P6r5WnJoKiNVV+zvW2xM13gNdFhAEpQ9dQJHt3naLvfg+LkF2ldgSLiF4T41lf1SQCM9QmkqPTn4TH568IRagg==}
 
   '@hono/node-server@1.19.14':
     resolution: {integrity: sha512-GwtvgtXxnWsucXvbQXkRgqksiH2Qed37H9xHZocE5sA3N8O8O8/8FA3uclQXxXVzc9XBZuEOMK7+r02FmSpHtw==}
@@ -3911,6 +3926,8 @@ snapshots:
   '@fontsource-variable/fredoka@5.2.10': {}
 
   '@fontsource-variable/quicksand@5.2.10': {}
+
+  '@fontsource/inter@5.2.8': {}
 
   '@hono/node-server@1.19.14(hono@4.12.27)':
     dependencies:

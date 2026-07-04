@@ -32,10 +32,12 @@ function keysOf(roles: string[]): string[] {
 // Sections whose visibility is governed by a flag OTHER than the plain permission/open gate:
 // the two director cockpits and teacher-nav-consolidation aggregate screens are gated on
 // isBizDirectorOnly/isEduDirectorOnly/isTeacherOnly, and 'certificate' is hardcoded visible:false
-// regardless of its gate. Excluded from the generic "matches registry" comparison below.
+// regardless of its gate. 'profile' is 'open' in NAV_GATES but is never a sidebar item — it is
+// reachable only via the avatar dropdown menu (shell.tsx), so it never appears in buildNavGroups()
+// output for any role. Excluded from the generic "matches registry" comparison below.
 const SPECIAL_SECTIONS = new Set<SectionKey>([
   'overview', 'biz-director-cockpit', 'edu-director-cockpit',
-  'student-mgmt', 'payroll-checkin', 'certificate',
+  'student-mgmt', 'payroll-checkin', 'certificate', 'profile',
 ]);
 
 const OTHER_SECTIONS = (Object.keys(NAV_GATES) as SectionKey[]).filter(

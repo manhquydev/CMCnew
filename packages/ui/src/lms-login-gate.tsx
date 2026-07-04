@@ -45,10 +45,17 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
   const [devHint, setDevHint] = useState(''); // mã hiển thị trong dev
   const [otpError, setOtpError] = useState('');
 
-  // ── Học sinh ───────────────────────────────────────────────────────────────
-  const [idField, setIdField] = useState('');
+  // ── Học sinh: family phone login (parent phone + Cmc2026@) + profile picker ─
+  // Netflix-style: loginFamilyByPhone returns a short-lived ticket (held here in local state
+  // ONLY — it is not a cookie, not a session, see decision 0033 B1) + the family's non-blocked
+  // children. 1 child → auto-enter (skip the picker). 2+ → render tiles; picking one calls
+  // enterChildProfile, which mints the FIRST (and only) cookie on this path — always kind:'student'.
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [studentError, setStudentError] = useState('');
+  const [ticket, setTicket] = useState<string | null>(null);
+  const [familyChildren, setFamilyChildren] = useState<{ id: string; fullName: string }[] | null>(null);
+  const [enteringId, setEnteringId] = useState<string | null>(null);
 
   const [busy, setBusy] = useState(false);
 
@@ -64,8 +71,11 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
     setOtpCode('');
     setDevHint('');
     setOtpError('');
-    setIdField('');
+    setPhone('');
+    setPassword('');
     setStudentError('');
+    setTicket(null);
+    setFamilyChildren(null);
   }
 
   // Bước 1: gửi OTP về email phụ huynh
@@ -104,23 +114,62 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
     }
   }
 
-  // Đăng nhập học sinh (giữ nguyên)
-  async function onStudentSubmit(e: FormEvent) {
+  // Bước 1: đăng nhập bằng SĐT phụ huynh + mật khẩu → ticket + danh sách con
+  async function onFamilyLogin(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setStudentError('');
     try {
-      await trpc.lmsAuth.loginStudent.mutate({ loginCode: idField, password });
-      setPrincipal(await trpc.lmsAuth.me.query());
+      const result = await trpc.lmsAuth.loginFamilyByPhone.mutate({ phone, password });
+      const onlyChild = result.children.length === 1 ? result.children[0] : undefined;
+      if (onlyChild) {
+        // 1 con → vào thẳng, không hiện picker.
+        await enterChild(result.ticket, onlyChild.id);
+      } else {
+        setTicket(result.ticket);
+        setFamilyChildren(result.children);
+      }
     } catch {
-      setStudentError('Đăng nhập thất bại — kiểm tra lại thông tin.');
+      setStudentError('Sai số điện thoại hoặc mật khẩu.');
     } finally {
       setBusy(false);
     }
   }
 
+  // Bước 2 (hoặc trực tiếp nếu 1 con): chọn hồ sơ con → phiên đăng nhập học sinh thật.
+  async function enterChild(t: string, studentId: string) {
+    setEnteringId(studentId);
+    setStudentError('');
+    try {
+      await trpc.lmsAuth.enterChildProfile.mutate({ ticket: t, studentId });
+      setPrincipal(await trpc.lmsAuth.me.query());
+    } catch {
+      setStudentError('Phiên chọn hồ sơ đã hết hạn, vui lòng đăng nhập lại.');
+      setTicket(null);
+      setFamilyChildren(null);
+    } finally {
+      setEnteringId(null);
+    }
+  }
+
+  // "Đăng nhập lại" từ picker — chưa có cookie nào được set ở bước này (chỉ có ticket cục bộ),
+  // nên chỉ cần xóa state, không cần gọi logout().
+  function backToFamilyLogin() {
+    setTicket(null);
+    setFamilyChildren(null);
+    setPassword('');
+    setStudentError('');
+  }
+
   async function logout() {
-    await trpc.lmsAuth.logout.mutate();
+    try {
+      await trpc.lmsAuth.logout.mutate();
+    } catch {
+      // The server round-trip can legitimately fail here — e.g. a family/staff password
+      // change just bumped tokenVersion, so the current cookie is already stale and
+      // lmsAuth.logout (lmsProcedure) rejects it with UNAUTHORIZED. The session is dead
+      // either way; always clear the client-side principal so the UI actually logs out.
+    }
     setPrincipal(null);
   }
 
@@ -279,7 +328,7 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
             <Text size="xs" c="dimmed" ta="center" mb="lg">
               {mode === 'parent'
                 ? 'Phụ huynh đăng nhập bằng email để theo dõi việc học của con.'
-                : 'Học sinh dùng mã đăng nhập và mật khẩu thầy cô đã cấp.'}
+                : 'Đăng nhập bằng SĐT phụ huynh — nếu nhà có nhiều con, bạn sẽ chọn hồ sơ sau khi đăng nhập.'}
             </Text>
 
             {/* ── Phụ huynh: OTP hai bước ── */}
@@ -387,16 +436,16 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
               </form>
             )}
 
-            {/* ── Học sinh: mã + mật khẩu ── */}
-            {mode === 'student' && (
-              <form onSubmit={onStudentSubmit}>
+            {/* ── Học sinh: SĐT phụ huynh + mật khẩu ── */}
+            {mode === 'student' && !familyChildren && (
+              <form onSubmit={onFamilyLogin}>
                 <Stack gap="md">
                   <TextInput
-                    label="Mã đăng nhập"
-                    value={idField}
-                    onChange={(e) => setIdField(e.currentTarget.value)}
+                    label="Số điện thoại phụ huynh"
+                    value={phone}
+                    onChange={(e) => setPhone(e.currentTarget.value)}
                     required
-                    placeholder="Mã số học sinh (ví dụ: TEST-001)"
+                    placeholder="0912345678"
                     leftSection={<IconUserCircle size={18} stroke={1.5} color="var(--cmc-text-muted)" />}
                     styles={{
                       input: { height: '44px', borderRadius: '8px' },
@@ -408,7 +457,7 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
                     value={password}
                     onChange={(e) => setPassword(e.currentTarget.value)}
                     required
-                    placeholder="Nhập mật khẩu"
+                    placeholder="Cmc2026@"
                     leftSection={<IconLock size={18} stroke={1.5} color="var(--cmc-text-muted)" />}
                     styles={{
                       input: { height: '44px', borderRadius: '8px' },
@@ -438,6 +487,46 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
                   </Button>
                 </Stack>
               </form>
+            )}
+
+            {/* ── Học sinh: picker chọn hồ sơ (2+ con cùng SĐT) ── */}
+            {mode === 'student' && familyChildren && (
+              <Stack gap="md">
+                <Text size="sm" c="dimmed" ta="center">
+                  Chọn hồ sơ của con để tiếp tục
+                </Text>
+                <Stack gap="xs">
+                  {familyChildren.map((child) => (
+                    <Button
+                      key={child.id}
+                      variant="light"
+                      fullWidth
+                      loading={enteringId === child.id}
+                      disabled={enteringId !== null && enteringId !== child.id}
+                      onClick={() => ticket && enterChild(ticket, child.id)}
+                      leftSection={<IconUserCircle size={20} stroke={1.5} />}
+                      style={{ height: '52px', borderRadius: '10px', justifyContent: 'flex-start', fontSize: '14px', fontWeight: 600 }}
+                    >
+                      {child.fullName}
+                    </Button>
+                  ))}
+                </Stack>
+                {studentError && (
+                  <Text c="red" size="sm" ta="center">
+                    {studentError}
+                  </Text>
+                )}
+                <Anchor
+                  component="button"
+                  type="button"
+                  size="xs"
+                  ta="center"
+                  onClick={backToFamilyLogin}
+                  style={{ display: 'inline-block', padding: '8px 16px', marginTop: '4px' }}
+                >
+                  Đăng nhập lại
+                </Anchor>
+              </Stack>
             )}
           </Paper>
 

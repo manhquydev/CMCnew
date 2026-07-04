@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { trpc, notifyError, notifySuccess } from '@cmc/ui';
+import { trpc, notifyError, notifySuccess, StatusBadge, type StatusDef } from '@cmc/ui';
 import {
   Alert,
   Badge,
@@ -23,6 +23,12 @@ type TermRow = {
   endDate: Date | string;
   program?: string | null;
   isLocked: boolean;
+};
+
+// Preserves original color semantics: red→rejected (locked), green→active (open).
+const TERM_LOCK_STATUS_MAP: Record<string, StatusDef> = {
+  locked: { label: 'Đã khóa', tone: 'rejected' },
+  open: { label: 'Mở', tone: 'active' },
 };
 
 const fmt = (d: Date | string) =>
@@ -303,11 +309,7 @@ export function TermsPanel({ facilityId }: { facilityId: number }) {
                 <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(t.startDate)}</Table.Td>
                 <Table.Td style={{ fontVariantNumeric: 'tabular-nums' }}>{fmt(t.endDate)}</Table.Td>
                 <Table.Td>
-                  {t.isLocked ? (
-                    <Badge size="xs" color="red" variant="dot">Đã khóa</Badge>
-                  ) : (
-                    <Badge size="xs" color="green" variant="dot">Mở</Badge>
-                  )}
+                  <StatusBadge status={t.isLocked ? 'locked' : 'open'} map={TERM_LOCK_STATUS_MAP} size="xs" pill />
                 </Table.Td>
                 <Table.Td>
                   <Group gap={4} wrap="nowrap">

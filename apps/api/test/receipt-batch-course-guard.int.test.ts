@@ -1,13 +1,17 @@
 /**
- * Invariant: receiptApprove must reject enrollment when the specified classBatch
- * belongs to a different course than the receipt's courseId.
+ * Invariant (current, per finance.ts receiptApprove + commit b1ec5a4):
+ * receiptApprove enforces a FACILITY-match guard on the chosen classBatch, and does
+ * NOT enforce a courseId-match guard.
  *
- * Bug: no courseId check existed → approving a receipt with classBatchId enrolled
- * the student into an unrelated batch (e.g., Course-P receipt → Course-S4 batch),
- * corrupting attendance attribution and commission KPIs.
+ * Rationale (documented in finance.ts): ClassBatch.courseId references the
+ * curriculum-content course (LMS homework mapping), while Receipt.courseId references
+ * the priced sales course (what was billed) — two structurally separate catalogs, not
+ * the same entity. Staff picks the class explicitly in the UI and that choice is trusted,
+ * so a courseId mismatch is allowed. The real defect guarded against is enrolling a
+ * receipt's student into a batch that physically belongs to a different FACILITY.
  *
- * Fix: receiptApprove now fetches batch.courseId and throws BAD_REQUEST when
- * batch.courseId ≠ receipt.courseId, before any enrollment is created.
+ * (Historical note: an earlier version rejected on courseId mismatch; that guard was
+ * intentionally replaced by the facility guard above. These tests assert the current behavior.)
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { staffCaller, withRls, SUPER, uniq, superAdminUserId } from './helpers.js';
@@ -114,36 +118,41 @@ describe('receiptApprove — batch/course mismatch guard', () => {
     });
   });
 
-  it('rejects approval when batch.courseId ≠ receipt.courseId', async () => {
+  it('ALLOWS a batch whose course differs from the receipt (separate catalogs, same facility)', async () => {
     if (!dbReachable) return;
 
     const caller = await staffCaller();
 
-    // Receipt is for courseA, but the batch belongs to courseB — cross-course mismatch.
-    // receiptCreate returns the receipt directly (the .then() in the handler unwraps pushNotifs).
+    // Receipt is for courseA, batch belongs to courseB — a cross-course pairing that is
+    // intentionally permitted (curriculum course vs billed course are separate catalogs).
+    // Both live at the same facility (FAC), so the facility guard does not fire.
     const receipt = await caller.finance.receiptCreate({
       facilityId: FAC,
       courseId: courseA.id,
       yearsPrepaid: 1,
-      classBatchId: batchB.id, // mismatch: batch is for courseB
+      classBatchId: batchB.id, // different course, same facility → allowed
       parentPhone: uniq('090'),
       studentName: uniq('Student'),
     });
     cleanup.receiptIds.push(receipt.id);
 
-    await expect(
-      caller.finance.receiptApprove({ id: receipt.id }),
-    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    const approved = await caller.finance.receiptApprove({ id: receipt.id });
+    expect(approved.status).toBe('approved');
+    if (approved.studentId) cleanup.studentIds.push(approved.studentId);
 
-    // Confirm receipt is still draft (approve was rolled back).
-    const still = await withRls(SUPER, (tx) => tx.receipt.findUniqueOrThrow({ where: { id: receipt.id } }));
-    expect(still.status).toBe('draft');
-
-    // Confirm no enrollment was created (the guard fires before enrollment logic).
+    // Enrollment IS created into the staff-chosen batch (the trusted class pick).
     const enr = await withRls(SUPER, (tx) =>
-      tx.enrollment.findFirst({ where: { createdByReceiptId: receipt.id } }),
+      tx.enrollment.findFirst({
+        where: { createdByReceiptId: receipt.id },
+        select: { classBatchId: true },
+      }),
     );
-    expect(enr).toBeNull();
+    expect(enr).not.toBeNull();
+    expect(enr!.classBatchId).toBe(batchB.id);
+    const pa = await withRls(SUPER, (tx) =>
+      tx.guardian.findFirst({ where: { studentId: approved.studentId ?? '' }, select: { parentAccountId: true } }),
+    );
+    if (pa) cleanup.parentAccountIds.push(pa.parentAccountId);
   });
 
   it('approves successfully when batch.courseId matches receipt.courseId', async () => {
