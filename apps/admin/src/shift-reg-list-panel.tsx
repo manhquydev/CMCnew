@@ -9,6 +9,8 @@ const TH_STYLE: React.CSSProperties = {
   color: 'var(--cmc-text-muted)', fontWeight: 600,
 };
 
+const CLICK_CELL: React.CSSProperties = { cursor: 'pointer' };
+
 type ShiftReg = Awaited<ReturnType<typeof trpc.shiftRegistration.list.query>>[number];
 
 const STATUS_MAP: Record<string, StatusDef> = {
@@ -86,20 +88,20 @@ export function ShiftRegListPanel({ onSelect }: { onSelect: (id: string) => void
             </Table.Thead>
             <Table.Tbody>
               {regs.map((r) => (
-                <Table.Tr key={r.id} style={{ cursor: 'pointer' }}>
-                  <Table.Td onClick={() => onSelect(r.id)}>
+                <Table.Tr key={r.id}>
+                  <Table.Td onClick={() => onSelect(r.id)} style={CLICK_CELL}>
                     <Text size="sm" fw={500}>{r.code ?? 'Nháp'}</Text>
                   </Table.Td>
-                  <Table.Td onClick={() => onSelect(r.id)}>
+                  <Table.Td onClick={() => onSelect(r.id)} style={CLICK_CELL}>
                     {dayjs(r.fromDate).format('DD/MM/YY')}
                   </Table.Td>
-                  <Table.Td onClick={() => onSelect(r.id)}>
+                  <Table.Td onClick={() => onSelect(r.id)} style={CLICK_CELL}>
                     {dayjs(r.toDate).format('DD/MM/YY')}
                   </Table.Td>
-                  <Table.Td onClick={() => onSelect(r.id)}>
+                  <Table.Td onClick={() => onSelect(r.id)} style={CLICK_CELL}>
                     {(r).shiftGroup?.name ?? '—'}
                   </Table.Td>
-                  <Table.Td onClick={() => onSelect(r.id)}>
+                  <Table.Td onClick={() => onSelect(r.id)} style={CLICK_CELL}>
                     <StatusBadge status={r.status} map={STATUS_MAP} pill />
                   </Table.Td>
                   <Table.Td>
