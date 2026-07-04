@@ -59,6 +59,20 @@ resolvable name.
 
 ## Implementation Steps
 
+0. **(2026-07-04 red-team, added — gap Phase 3/4 already had, Phase 2 didn't)** Before editing:
+   `cp docker-compose.prod.tls.yml docker-compose.prod.tls.yml.bak.$(date +%Y%m%d%H%M%S)` and same
+   for `docker-compose.jenkins.yml`. Attaching the new `cmcnew-edge` network to prod nginx forces a
+   container recreate (not just a config reload), so rollback here means restoring the backup file
+   AND re-running `docker compose up -d` to recreate the affected containers — document this
+   explicitly, a file restore alone does not undo a network-attach change already applied to a
+   running container.
+0b. Non-interactive Entra client-secret pre-check (2026-07-04 red-team, added — catches a wrong/
+    missing secret before Phase 5's live login attempt, the most disruptive place to discover it):
+    `curl -s -X POST "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token" -d
+    "client_id={id}&client_secret={secret}&grant_type=client_credentials&scope=https://graph.microsoft.com/.default"`
+    — a valid `access_token` response confirms tenant/client ID/secret are all correct together,
+    with no interactive/MFA login required. Run this once the dev `.env` secrets are in place,
+    before Phase 5.
 1. Create an external Docker network plan named `cmcnew-edge`.
 2. Attach prod nginx to `cmcnew-edge` without changing existing prod service names.
 3. Add `docker/docker-compose.dev.tls.yml` with service names distinct from prod:
@@ -82,11 +96,18 @@ resolvable name.
    - `STAFF_PASSWORD_LOGIN=true` (2026-07-04 addition, brainstorm session — inherits decision 0031,
      already permanent on prod; SSO stays the primary onboarding path, password login is an
      additional always-available lane for operator debug/test convenience).
-   - Leave `SEED_MODE` unset (defaults to `full` in `packages/db/src/seed.ts:304`) so every seeded
-     staff persona (`giao_vien`, `ke_toan`, `hr`, `sale`, `cskh`, `ctv_mkt`, directors) gets a real
-     `passwordHash` from `SEED_SUPERADMIN_PASSWORD` at seed time — no manual `user.setPassword` call
-     needed per test account. This is the exact mechanism prod already runs on today (confirmed live:
-     prod's `.env.production` has no `SEED_MODE` override either). Zero new code required.
+   - **CORRECTED 2026-07-04 (red-team caught a factual error in the original addition):** dev's
+     `dev-api-seed` service must explicitly NOT set `SEED_MODE` (or must set it to something other
+     than `bootstrap`) so it defaults to `full` (`packages/db/src/seed.ts:304`), which gives every
+     seeded staff persona a real `passwordHash` at seed time. **This does NOT mirror prod** — prod's
+     `docker-compose.prod.tls.yml:157` hardcodes `SEED_MODE: bootstrap` on its `api-seed` service
+     (only super_admin + 2 named directors get a real password there; everyone else gets an
+     intentionally-unusable random hash, per `seed.ts`'s own comment). Dev is a deliberate,
+     documented DIVERGENCE from prod's seeding mechanism — justified because dev only holds
+     synthetic data (already-accepted "Data posture" decision) and dev's whole purpose includes
+     automatable testing without requiring real Entra SSO for every persona. **Do not copy prod's
+     `api-seed` block as a template without changing this one field** — Phase 2's own "mirror prod
+     topology" framing elsewhere in this phase makes that an easy, silent mistake.
 8. Mount `/root/cmcnew/.env.dev` into Jenkins as a read-only secret path, matching the existing production pattern.
 9. Ensure dev migrations run automatically during deploy. Keep seed as explicit first-install/profile behavior unless the seed command is idempotent.
 10. After the first dev migration on a fresh DB, align `cmc_app` password with `DB_APP_PASSWORD`, mirroring `scripts/prod-server-deploy.sh`.

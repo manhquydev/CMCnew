@@ -236,9 +236,65 @@ Unverified items remain as operator confirmations, not plan contradictions:
 
 ## Unresolved Questions
 
-- Confirm whether the ERP dev domain is definitely `deverp.cmcvn.edu.vn`. Research found `deverp.edu.vn` unresolved and `deverp.cmcvn.edu.vn` working. **(Agent-resolvable via DNS lookup — not a human-only blocker.)**
-- Confirm who will add the Entra redirect URI: `https://deverp.cmcvn.edu.vn/api/auth/sso/callback`. **(Human-only — Azure AD admin portal access required.)**
-- ~~Confirm Cloudflare SSL mode before implementation: Full can use the current self-signed style; Full Strict needs a Cloudflare Origin Certificate or public cert covering all live hostnames.~~ **RESOLVED 2026-07-03:** mode is "Full" per `260703-0022-devops-tier1-hardening`'s locked decision (`docs/decisions/0029-*`), which this plan is `blockedBy` and now matches (Phase 1/3 updated). Still needs a human to confirm the LIVE zone actually shows "Full" (dashboard/API check, no `CF_API_TOKEN` in repo) — that's 0022's own Phase 4 pre-flight responsibility, not re-decided here.
+- ~~Confirm whether the ERP dev domain is definitely `deverp.cmcvn.edu.vn`.~~ **RESOLVED
+  2026-07-04:** live DNS lookup confirms `deverp.cmcvn.edu.vn` and `devlms.cmcvn.edu.vn` resolve
+  through Cloudflare to the same edge as `erp.cmcvn.edu.vn`.
+- ~~Confirm who will add the Entra redirect URI.~~ **RESOLVED 2026-07-04:** user registered
+  `https://deverp.cmcvn.edu.vn/api/auth/sso/callback` in the Entra app.
+- ~~Confirm Cloudflare SSL mode before implementation.~~ **RESOLVED 2026-07-04, verified directly
+  (not inferred from an artifact):** `openssl s_client` against the live nginx shows
+  `issuer=CN=erp.cmcvn.edu.vn` == `subject` — genuinely self-signed, confirming "Full" mode
+  (decision 0029) is really what's live, not a drift to "Full Strict." The user's separately-
+  prepared Origin Certificate + Private Key (PEM) is **not needed** by this plan's actual mechanism
+  (`scripts/ensure-origin-cert.sh` self-generates what Phase 3 needs) — noted so it isn't
+  mistakenly forced into the pipeline, which would diverge from the automated, git-tracked
+  approach for no benefit.
+- ~~Entra client secret for the dev app registration.~~ **RESOLVED 2026-07-04:** present in project
+  env per user. Verify with the non-interactive `client_credentials` pre-check added to Phase 2
+  (step 0b) before relying on it in Phase 5's live login.
+
+## Red-Team Session 2 (2026-07-04) — findings and resolutions
+
+Ran an adversarial review (code-reviewer subagent) against this session's own additions (soak
+clearance, dev-auth policy, Phase 5 criterion, backup steps) — deliberately not re-litigating the
+2026-07-03 session's already-fixed findings. Verdict: `DONE_WITH_CONCERNS`, all applied below.
+
+| # | Finding | Resolution |
+|---|---|---|
+| 1 | Soak cleared ~10h early on point-in-time `docker stats`/`free`/`df` snapshots (only the OOM-event check was genuinely cumulative over the elapsed window) — weaker evidence than "confirmed clean across the full 48h" | Accepted trade-off, not fixed further: user explicitly chose to proceed now (brainstorm session). Mitigation: continue watching `docker stats`/OOM during Phase 1-2's own execution as a substitute for the unobserved tail, since that's exactly the window this plan adds new memory pressure (the dev stack) anyway. |
+| 2(b) | Possible mismatch between the user's prepared Cloudflare Origin Cert PEM and this plan's actual self-signed-cert mechanism | **Resolved by direct verification** (see Unresolved Questions above) — live cert confirmed self-signed, "Full" mode confirmed live, no drift. |
+| 3 | **Factual error**: phase-02 claimed leaving `SEED_MODE` unset "mirrors the exact mechanism prod already runs" — false. `docker-compose.prod.tls.yml:157` hardcodes `SEED_MODE: bootstrap` on prod's `api-seed` service; prod deliberately gives only super_admin + 2 directors a real password, everyone else an intentionally-unusable random hash. | **Fixed**: phase-02 step 7 corrected — dev's choice to default to `full` mode is a deliberate DIVERGENCE from prod (justified by dev's synthetic-data-only posture + test-automation goal), not a mirror of prod. Added an explicit warning not to silently copy prod's `api-seed` block (which would carry `SEED_MODE: bootstrap` into dev and defeat the whole point). |
+| 4 | Phase 5's "SSO exercised independent of password lane" criterion was unenforceable — nothing blocked satisfying it via password-login alone | **Fixed**: phase-05 step 4 now temporarily sets `STAFF_PASSWORD_LOGIN=false` for the duration of that one test, forcing the real Entra path, then restores `true` before continuing. |
+| 5 | Phase 2's compose-file edits (`docker-compose.prod.tls.yml`, `docker-compose.jenkins.yml` — network-attach requires a container recreate, not just reload) had no backup step, unlike Phase 3/4 | **Fixed**: phase-02 step 0 added (timestamped `cp` backup of both files before editing, with recreate-based rollback documented since a file restore alone doesn't undo an already-applied network attach). |
+| — | (Bonus, not a finding — a missing pre-check the reviewer suggested) | **Added**: phase-02 step 0b, non-interactive Entra client-secret `client_credentials` grant check, catching a wrong tenant/client/secret before Phase 5's live login rather than during it. |
+
+## Validation Summary — Session 2 (2026-07-04)
+
+**Validated:** 2026-07-04, after live SSH verification of the VPS (see
+`plans/reports/brainstorm-260704-1656-dev-prod-cicd-live-verification-and-dev-auth-report.md`).
+**Questions asked:** 3.
+
+### Confirmed Decisions
+
+- **Execution timing**: proceed live now, not a scheduled low-traffic window — every Phase 1-4
+  change is additive (new dev stack, new nginx server blocks for `deverp`/`devlms`) or a
+  test-then-reload (`nginx -t` before reload), not a modification of the existing
+  `erp`/`hoc`/`ci` routes.
+- **Phase 5 scope**: add an explicit success criterion — dev SSO login via real Entra must be
+  exercised at least once even though dev also allows password login, so Phase 5 still proves the
+  plan's original SSO-parity goal rather than settling for the password lane alone. (Added to
+  `phase-05-sso-parity-smoke-and-rollback-runbook.md`'s Success Criteria.)
+- **Rollback backup**: mandatory pre-change backup before every live step — copy the current
+  `nginx-prod.conf` to a timestamped backup file before editing; record the current prod
+  commit/health response before touching `Jenkinsfile`.
+
+### Action Items
+
+- [ ] Phase 3: before editing `nginx-prod.conf` on the VPS, `cp` it to a timestamped backup path.
+- [ ] Phase 4: before editing `Jenkinsfile`, record current `main` branch's last successful deploy
+  commit + `/api/health` response as the rollback reference point.
+- [ ] Phase 5: success criteria gains "real Entra SSO login exercised on `deverp.cmcvn.edu.vn` at
+  least once, independent of password-login availability."
 
 ## Pre-Handoff Soundness Review — 2026-07-03
 
