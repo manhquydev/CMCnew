@@ -11,6 +11,7 @@ export {
   BLOCKED_LMS_LIFECYCLE,
   type LmsSession,
 } from './lms.js';
+export { normalizeLoginPhone, DEFAULT_STUDENT_PASSWORD } from './login-phone.js';
 export { Role } from '@cmc/db';
 export {
   PERMISSIONS,
