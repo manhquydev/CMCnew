@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { trpc, useSession, notifyError, notifySuccess, required } from '@cmc/ui';
+import { trpc, useSession, notifyError, notifySuccess, required, StatusBadge, type StatusDef } from '@cmc/ui';
 import { useForm } from '@mantine/form';
 import { useDisclosure } from '@mantine/hooks';
-import { ActionIcon, Badge, Button, Card, Group, Loader, Modal, Stack, Table, Text, TextInput } from '@mantine/core';
+import { ActionIcon, Button, Card, Group, Loader, Modal, Stack, Table, Text, TextInput } from '@mantine/core';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
@@ -11,6 +11,11 @@ type Network = Awaited<ReturnType<typeof trpc.facilityNetwork.list.query>>[numbe
 const TH_STYLE: React.CSSProperties = {
   fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em',
   color: 'var(--cmc-text-muted)', fontWeight: 600,
+};
+
+const NETWORK_STATUS_MAP: Record<string, StatusDef> = {
+  active: { label: 'Hoạt động', tone: 'active' },
+  inactive: { label: 'Đã tắt', tone: 'inactive' },
 };
 
 export function FacilityNetworkPanel() {
@@ -111,9 +116,12 @@ export function FacilityNetworkPanel() {
                   <Table.Td style={{ fontFamily: 'monospace' }}>{n.ipAddress}</Table.Td>
                   <Table.Td>{n.label ?? '—'}</Table.Td>
                   <Table.Td>
-                    <Badge size="xs" color={n.isActive ? 'green' : 'gray'} variant="light" radius="xl">
-                      {n.isActive ? 'Hoạt động' : 'Đã tắt'}
-                    </Badge>
+                    <StatusBadge
+                      status={n.isActive ? 'active' : 'inactive'}
+                      map={NETWORK_STATUS_MAP}
+                      size="xs"
+                      pill
+                    />
                   </Table.Td>
                   <Table.Td>
                     <ActionIcon color="red" variant="light" size="sm" onClick={() => deleteIP(n.id)}>

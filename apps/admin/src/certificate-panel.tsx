@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { trpc, API_URL, notifyError, notifySuccess, required, FacilityPicker } from '@cmc/ui';
+import { trpc, API_URL, notifyError, notifySuccess, required, FacilityPicker, InitialsAvatar } from '@cmc/ui';
 import { useForm } from '@mantine/form';
 import { useDisclosure } from '@mantine/hooks';
 import { Button, Card, Group, Modal, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
@@ -120,9 +120,16 @@ export function CertificatePanel() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {certs.map((c) => (
+              {certs.map((c) => {
+                const name = studentName(c.studentId);
+                return (
                 <Table.Tr key={c.id}>
-                  <Table.Td>{studentName(c.studentId)}</Table.Td>
+                  <Table.Td>
+                    <Group gap={8} wrap="nowrap">
+                      <InitialsAvatar name={name} size={22} />
+                      <Text size="sm">{name}</Text>
+                    </Group>
+                  </Table.Td>
                   <Table.Td>{c.title}</Table.Td>
                   <Table.Td>{c.level ?? '—'}</Table.Td>
                   <Table.Td>{new Date(c.issuedAt).toLocaleDateString('vi-VN')}</Table.Td>
@@ -136,7 +143,8 @@ export function CertificatePanel() {
                     </Button>
                   </Table.Td>
                 </Table.Tr>
-              ))}
+                );
+              })}
             </Table.Tbody>
           </Table>
         )}

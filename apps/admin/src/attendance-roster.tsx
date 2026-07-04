@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
-import { trpc, useSession, notifyError, notifySuccess } from '@cmc/ui';
+import { trpc, useSession, notifyError, notifySuccess, InitialsAvatar } from '@cmc/ui';
 import { Alert, Button, Checkbox, Group, Loader, SegmentedControl, Stack, Table, Text } from '@mantine/core';
 import { IconAlertTriangle } from '@tabler/icons-react';
 
@@ -171,7 +171,12 @@ export function AttendanceRoster({ classSessionId, batchId, facilityId }: Attend
             const cur = marks[e.id];
             return (
               <Table.Tr key={e.id}>
-                <Table.Td>{e.student.fullName}</Table.Td>
+                <Table.Td>
+                  <Group gap={8} wrap="nowrap">
+                    <InitialsAvatar name={e.student.fullName} size={22} />
+                    <Text size="sm">{e.student.fullName}</Text>
+                  </Group>
+                </Table.Td>
                 <Table.Td>
                   <SegmentedControl
                     size="xs"
