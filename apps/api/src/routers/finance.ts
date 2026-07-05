@@ -813,11 +813,14 @@ export const financeRouter = router({
 
           // Propagate parentEmail to the ParentAccount when provided (idempotent: ignore if already set to same value).
           // This enables OTP login even when the account was originally created phone-only.
-          if (receipt.parentEmail && parentAcc.email !== receipt.parentEmail) {
+          // Resolves input.parentEmail (supplied at approve time) OR receipt.parentEmail (captured at
+          // intake) — same fallback as the new-ParentAccount insert above and the notify-email check below.
+          const propagatedEmail = input.parentEmail ?? receipt.parentEmail;
+          if (propagatedEmail && parentAcc.email !== propagatedEmail) {
             try {
               await tx.parentAccount.update({
                 where: { id: parentAcc.id },
-                data: { email: receipt.parentEmail },
+                data: { email: propagatedEmail },
               });
             } catch {
               // Unique violation: another account already owns that email — log and continue.
@@ -826,7 +829,7 @@ export const financeRouter = router({
                 entityType: 'parent_account',
                 entityId: parentAcc.id,
                 type: 'note',
-                body: `parentEmail ${receipt.parentEmail} dari phiếu ${code} đã thuộc tài khoản khác — bỏ qua`,
+                body: `parentEmail ${propagatedEmail} dari phiếu ${code} đã thuộc tài khoản khác — bỏ qua`,
                 actorId: ctx.session.userId,
               });
             }
@@ -980,14 +983,17 @@ export const financeRouter = router({
             actorId: ctx.session.userId,
           });
 
-          // Notify parent via email when parentEmail is available.
-          // enqueueEmail is atomic with this txn (no-op if Graph absent).
-          if (receipt.parentEmail && lmsAccount) {
+          // Notify parent via email when parentEmail is available. Falls back to receipt.parentEmail
+          // for the case where it was captured at intake (receiptCreate); input.parentEmail covers the
+          // "supplied at approve time" dialog path (director/ke_toan filling it in for a new-student
+          // receipt that had none) — same resolution as the ParentAccount creation above (line ~732).
+          const notifyEmail = input.parentEmail ?? receipt.parentEmail;
+          if (notifyEmail && lmsAccount) {
             const parentName = receipt.parentName ?? undefined;
             await enqueueEmail(tx, {
               facilityId: receipt.facilityId,
               dedupKey: `lms_account_ready:${resolvedStudentId}`,
-              to: receipt.parentEmail,
+              to: notifyEmail,
               mailbox: 'notify',
               kind: 'lms_account_ready',
               data: {
