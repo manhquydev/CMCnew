@@ -1,7 +1,7 @@
 import { PrismaClient, Program, UnitType } from '@prisma/client';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import nodePath from 'node:path';
 
 /**
  * Seeds the hard-coded curriculum framework from curriculum_units_seed.csv.
@@ -11,8 +11,8 @@ import { dirname, resolve } from 'node:path';
 
 /** Default CSV location, resolved relative to this source file (src → ../prisma/seed-data). */
 export function defaultCsvPath(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  return resolve(here, '../prisma/seed-data/curriculum_units_seed.csv');
+  const here = nodePath.dirname(fileURLToPath(import.meta.url));
+  return nodePath.resolve(here, '../prisma/seed-data/curriculum_units_seed.csv');
 }
 
 /**
@@ -222,7 +222,7 @@ export async function seedCurriculum(
 
 // ── CLI entrypoint ───────────────────────────────────────────────────────────
 // Runs only when executed directly (tsx src/seed-curriculum.ts), never on import.
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === nodePath.resolve(process.argv[1]);
 if (isMain) {
   const prisma = new PrismaClient({
     datasources: { db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL } },
