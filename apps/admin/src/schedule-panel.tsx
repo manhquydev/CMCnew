@@ -158,7 +158,7 @@ export function SchedulePanel({ goToClass, onOpenSession }: SchedulePanelProps) 
               onClick={() => goToClass(batch.id, 'sessions')}
               title="Mở lớp học"
             >
-              {batch.code} — {batch.name}
+              {batch.code}
             </Title>
             <Table highlightOnHover>
               <Table.Thead>

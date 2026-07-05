@@ -1408,7 +1408,7 @@ function ReceiptCreateCard({
               placeholder="Chọn lớp"
               searchable
               clearable
-              data={filteredBatches.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }))}
+              data={filteredBatches.map((b) => ({ value: b.id, label: b.code }))}
               value={classBatchId}
               onChange={setClassBatchId}
             />

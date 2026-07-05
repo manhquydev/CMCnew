@@ -571,7 +571,7 @@ export function GradingPanel({
           }
           data={visibleBatches.map((b) => ({
             value: b.id,
-            label: `${b.code} — ${b.name} (${b.course.code})`,
+            label: `${b.code} (${b.course.code})`,
           }))}
           value={batchId}
           onChange={setBatchId}

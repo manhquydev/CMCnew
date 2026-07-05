@@ -274,7 +274,6 @@ function EnrollmentsTab({ s }: { s: DetailT }) {
             <Table.Tr key={e.id}>
               <Table.Td>
                 <Text size="sm" fw={500}>{e.batch.code}</Text>
-                <Text size="xs" c="dimmed">{e.batch.name}</Text>
               </Table.Td>
               <Table.Td>
                 <Text size="sm">{e.batch.course.name}</Text>

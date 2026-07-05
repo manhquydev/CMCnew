@@ -179,7 +179,8 @@ export const classBatchRouter = router({
     .input(
       z.object({
         id: z.string().uuid(),
-        name: z.string().min(1).optional(),
+        // No name input: name always tracks the auto-generated code, never independently
+        // editable (see class-creation form fix, plans/reports/audit-260705-0105-...).
         startDate: z.string().date().optional(),
         endDate: z.string().date().optional(),
         capacity: z.number().int().positive().optional(),
@@ -191,7 +192,6 @@ export const classBatchRouter = router({
         const batch = await tx.classBatch.update({
           where: { id: input.id },
           data: {
-            ...(input.name !== undefined ? { name: input.name } : {}),
             ...(input.startDate !== undefined ? { startDate: new Date(input.startDate) } : {}),
             ...(input.endDate !== undefined ? { endDate: new Date(input.endDate) } : {}),
             ...(input.capacity !== undefined ? { capacity: input.capacity } : {}),

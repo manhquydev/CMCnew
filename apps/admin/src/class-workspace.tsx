@@ -193,7 +193,7 @@ function CreateClassModal({
     setBusy(true);
     setErr('');
     try {
-      await trpc.classBatch.create.mutate({
+      const created = await trpc.classBatch.create.mutate({
         facilityId,
         courseId,
         startDate: toApiDate(startDate),
@@ -207,6 +207,7 @@ function CreateClassModal({
           teacherId: s.teacherId ?? undefined,
         })),
       });
+      notifySuccess(`Đã tạo lớp ${created.code}`);
       close();
       reset();
       onCreated();
@@ -239,6 +240,10 @@ function CreateClassModal({
             value={courseId}
             onChange={setCourseId}
           />
+          <Text size="xs" c="dimmed">
+            Mã lớp tự sinh theo định dạng [Cơ sở]-[Chương trình]-[Năm]-[STT] (vd HQ-UCR-26-0001)
+            — hiển thị ngay sau khi tạo, không cần nhập tay.
+          </Text>
           {preview && preview.unitCount > 0 && (
             <Card withBorder bg="var(--mantine-color-gray-0)">
               <Text fw={600} size="sm" mb={4}>
@@ -1063,7 +1068,6 @@ function EditClassModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [name, setName] = useState(batch.name);
   const [startDate, setStartDate] = useState<Date | null>(batch.startDate ? new Date(batch.startDate) : null);
   const [endDate, setEndDate] = useState<Date | null>(batch.endDate ? new Date(batch.endDate) : null);
   const [capacity, setCapacity] = useState<number | string>(batch.capacity ?? '');
@@ -1072,7 +1076,6 @@ function EditClassModal({
 
   useEffect(() => {
     if (!opened) return;
-    setName(batch.name);
     setStartDate(batch.startDate ? new Date(batch.startDate) : null);
     setEndDate(batch.endDate ? new Date(batch.endDate) : null);
     setCapacity(batch.capacity ?? '');
@@ -1080,10 +1083,6 @@ function EditClassModal({
   }, [batch, opened]);
 
   async function save() {
-    if (!name.trim()) {
-      setErr('Nhập tên lớp');
-      return;
-    }
     const start = toApiDate(startDate);
     const end = toApiDate(endDate);
     if (start && end && start > end) {
@@ -1095,7 +1094,6 @@ function EditClassModal({
     try {
       await trpc.classBatch.update.mutate({
         id: batch.id,
-        name: name.trim(),
         startDate: start,
         endDate: end,
         capacity: typeof capacity === 'number' ? capacity : undefined,
@@ -1113,7 +1111,7 @@ function EditClassModal({
   return (
     <Modal opened={opened} onClose={onClose} title="Sửa lớp học" size="md">
       <Stack>
-        <TextInput label="Tên lớp" value={name} onChange={(e) => setName(e.currentTarget.value)} />
+        <Text size="sm" c="dimmed">Mã lớp: <b>{batch.code}</b> (tự sinh, không sửa được)</Text>
         <Group grow align="flex-start">
           <DateInput label="Ngày khai giảng" value={startDate} onChange={setStartDate} valueFormat="DD/MM/YYYY" clearable />
           <DateInput label="Ngày kết thúc" value={endDate} onChange={setEndDate} valueFormat="DD/MM/YYYY" clearable />
@@ -1192,7 +1190,7 @@ function TransferEnrollmentModal({
           label="Lớp đích"
           searchable
           placeholder={targetBatches.length ? 'Chọn lớp' : 'Không có lớp khác trong cơ sở'}
-          data={targetBatches.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }))}
+          data={targetBatches.map((b) => ({ value: b.id, label: b.code }))}
           value={targetClassBatchId}
           onChange={setTargetClassBatchId}
         />
@@ -1269,7 +1267,7 @@ function ClassDetail({
             <Title order={5}>{batch.code}</Title>
             <StatusBadge status={batch.status} map={BATCH_STATUS_MAP} pill />
           </Group>
-          <Text c="dimmed" size="sm">{batch.name} · {batch.course.code}</Text>
+          <Text c="dimmed" size="sm">{batch.course.code} — {batch.course.name}</Text>
         </div>
         {canSetStatus && (
           <Group gap="xs">
@@ -1637,8 +1635,8 @@ export function Workspace({ navAction }: { navAction: NavAction | null }) {
                     onClick={() => handleSelectBatch(b)}
                   >
                     <Table.Td>
+                      {/* name now always equals code (see class-creation form fix) — one line, not two */}
                       <Text fw={600}>{b.code}</Text>
-                      <Text size="xs" c="dimmed">{b.name}</Text>
                     </Table.Td>
                     <Table.Td>
                       <StatusBadge status={b.status} map={BATCH_STATUS_MAP} size="xs" pill />

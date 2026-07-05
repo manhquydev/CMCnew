@@ -359,7 +359,7 @@ export function ScheduleDetailPanel({
         <Stack gap="xs">
           <Group justify="space-between" wrap="nowrap">
             <div>
-              <Text fw={600}><HeadingAccent />{session.batch.code} — {session.batch.name}</Text>
+              <Text fw={600}><HeadingAccent />{session.batch.code}</Text>
               <Text size="xs" c="dimmed">Lớp học của buổi này</Text>
             </div>
             <Button

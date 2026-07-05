@@ -37,14 +37,16 @@ describe('classBatch.update — diff log + courseId immutable', () => {
     return batch;
   }
 
-  it('updates name + capacity and logs a diff with old→new for each changed field', async () => {
+  it('updates startDate + capacity and logs a diff with old→new for each changed field', async () => {
     const batch = await makeBatch();
     const caller = await staffCaller();
 
-    await caller.classBatch.update({ id: batch.id, name: 'Renamed class', capacity: 25 });
+    // name is no longer part of the update input — it always tracks the auto-generated code
+    // (see class-creation form fix). Exercise the same diff-log behavior via startDate instead.
+    await caller.classBatch.update({ id: batch.id, startDate: '2026-08-01', capacity: 25 });
 
     const updated = await withRls(SUPER, (tx) => tx.classBatch.findUniqueOrThrow({ where: { id: batch.id } }));
-    expect(updated.name).toBe('Renamed class');
+    expect(updated.startDate?.toISOString().slice(0, 10)).toBe('2026-08-01');
     expect(updated.capacity).toBe(25);
 
     const events = await withRls(SUPER, (tx) =>
@@ -53,7 +55,7 @@ describe('classBatch.update — diff log + courseId immutable', () => {
     expect(events.length).toBeGreaterThan(0);
     const changes = events[0]!.changes as { field: string; old: unknown; new: unknown }[];
     const byField = new Map(changes.map((c) => [c.field, c]));
-    expect(byField.get('name')).toMatchObject({ old: 'Original name', new: 'Renamed class' });
+    expect(byField.get('startDate')).toMatchObject({ old: null, new: '2026-08-01' });
     expect(byField.get('capacity')).toMatchObject({ old: 20, new: 25 });
   });
 
@@ -64,7 +66,7 @@ describe('classBatch.update — diff log + courseId immutable', () => {
     // courseId isn't part of the update schema — zod strips it, no throw expected.
     await caller.classBatch.update({
       id: batch.id,
-      name: 'Still same course',
+      capacity: 22,
       // @ts-expect-error courseId is intentionally not part of the update input
       courseId: otherCourseId,
     });
@@ -81,7 +83,7 @@ describe('classBatch.update — diff log + courseId immutable', () => {
       isSuperAdmin: false,
       facilityIds: [FAC],
     });
-    await expect(teacher.classBatch.update({ id: batch.id, name: 'Should not apply' })).rejects.toThrow();
+    await expect(teacher.classBatch.update({ id: batch.id, capacity: 30 })).rejects.toThrow();
 
     const sale = await staffCaller({
       primaryRole: Role.sale,
@@ -89,9 +91,9 @@ describe('classBatch.update — diff log + courseId immutable', () => {
       isSuperAdmin: false,
       facilityIds: [FAC],
     });
-    await expect(sale.classBatch.update({ id: batch.id, name: 'Should not apply' })).rejects.toThrow();
+    await expect(sale.classBatch.update({ id: batch.id, capacity: 30 })).rejects.toThrow();
 
     const unchanged = await withRls(SUPER, (tx) => tx.classBatch.findUniqueOrThrow({ where: { id: batch.id } }));
-    expect(unchanged.name).toBe('Original name');
+    expect(unchanged.capacity).toBe(20);
   });
 });
