@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDebouncedValue } from '@mantine/hooks';
-import { normalizeContactPhone } from '@cmc/auth';
+import { normalizeContactPhone } from '@cmc/auth/phone';
 import {
   trpc,
   API_URL,
