@@ -56,6 +56,10 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
   const [ticket, setTicket] = useState<string | null>(null);
   const [familyChildren, setFamilyChildren] = useState<{ id: string; fullName: string }[] | null>(null);
   const [enteringId, setEnteringId] = useState<string | null>(null);
+  // Break-glass: loginCode + password (decision 0033 D5 — fallback when parent phone is invalid)
+  const [studentSubMode, setStudentSubMode] = useState<'phone' | 'code'>('phone');
+  const [loginCode, setLoginCode] = useState('');
+  const [codePassword, setCodePassword] = useState('');
 
   const [busy, setBusy] = useState(false);
 
@@ -76,6 +80,24 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
     setStudentError('');
     setTicket(null);
     setFamilyChildren(null);
+    setStudentSubMode('phone');
+    setLoginCode('');
+    setCodePassword('');
+  }
+
+  // Break-glass: đăng nhập bằng mã học sinh + mật khẩu (decision 0033 D5)
+  async function onLoginCode(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setStudentError('');
+    try {
+      await trpc.lmsAuth.loginStudent.mutate({ loginCode: loginCode.trim(), password: codePassword });
+      setPrincipal(await trpc.lmsAuth.me.query());
+    } catch {
+      setStudentError('Sai mã học sinh hoặc mật khẩu.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   // Bước 1: gửi OTP về email phụ huynh
@@ -328,7 +350,9 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
             <Text size="xs" c="dimmed" ta="center" mb="lg">
               {mode === 'parent'
                 ? 'Phụ huynh đăng nhập bằng email để theo dõi việc học của con.'
-                : 'Đăng nhập bằng SĐT phụ huynh — nếu nhà có nhiều con, bạn sẽ chọn hồ sơ sau khi đăng nhập.'}
+                : studentSubMode === 'phone'
+                  ? 'Đăng nhập bằng SĐT phụ huynh — nếu nhà có nhiều con, bạn sẽ chọn hồ sơ sau khi đăng nhập.'
+                  : 'Nhập mã học sinh (VD: LD-HS-2026-0001) ghi trong email xác nhận từ trung tâm.'}
             </Text>
 
             {/* ── Phụ huynh: OTP hai bước ── */}
@@ -437,7 +461,7 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
             )}
 
             {/* ── Học sinh: SĐT phụ huynh + mật khẩu ── */}
-            {mode === 'student' && !familyChildren && (
+            {mode === 'student' && !familyChildren && studentSubMode === 'phone' && (
               <form onSubmit={onFamilyLogin}>
                 <Stack gap="md">
                   <TextInput
@@ -476,8 +500,8 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
                     style={{
                       height: '44px',
                       borderRadius: '8px',
-                      backgroundColor: '#fc9d41', // Warm orange for student
-                      color: 'var(--cmc-text)', // Fix contrast from 2.1:1 to 8.3:1
+                      backgroundColor: '#fc9d41',
+                      color: 'var(--cmc-text)',
                       fontWeight: 600,
                       fontSize: '14px',
                       boxShadow: '0 4px 12px rgba(252, 157, 65, 0.2)'
@@ -485,6 +509,79 @@ export function LmsLoginGate({ children }: { children: ReactNode }) {
                   >
                     Đăng nhập
                   </Button>
+                  <Anchor
+                    component="button"
+                    type="button"
+                    size="xs"
+                    ta="center"
+                    onClick={() => { setStudentSubMode('code'); setStudentError(''); }}
+                    style={{ display: 'inline-block', padding: '4px 16px' }}
+                  >
+                    Đăng nhập bằng mã học sinh (dự phòng)
+                  </Anchor>
+                </Stack>
+              </form>
+            )}
+
+            {/* ── Học sinh: break-glass loginCode + mật khẩu (decision 0033 D5) ── */}
+            {mode === 'student' && !familyChildren && studentSubMode === 'code' && (
+              <form onSubmit={onLoginCode}>
+                <Stack gap="md">
+                  <TextInput
+                    label="Mã học sinh"
+                    value={loginCode}
+                    onChange={(e) => setLoginCode(e.currentTarget.value)}
+                    required
+                    placeholder="LD-HS-2026-0001"
+                    leftSection={<IconKey size={18} stroke={1.5} color="var(--cmc-text-muted)" />}
+                    styles={{
+                      input: { height: '44px', borderRadius: '8px' },
+                      label: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' }
+                    }}
+                  />
+                  <PasswordInput
+                    label="Mật khẩu"
+                    value={codePassword}
+                    onChange={(e) => setCodePassword(e.currentTarget.value)}
+                    required
+                    placeholder="Cmc2026@"
+                    leftSection={<IconLock size={18} stroke={1.5} color="var(--cmc-text-muted)" />}
+                    styles={{
+                      input: { height: '44px', borderRadius: '8px' },
+                      label: { fontWeight: 600, fontSize: '13px', marginBottom: '4px' }
+                    }}
+                  />
+                  {studentError && (
+                    <Text c="red" size="sm">
+                      {studentError}
+                    </Text>
+                  )}
+                  <Button
+                    type="submit"
+                    loading={busy}
+                    fullWidth
+                    style={{
+                      height: '44px',
+                      borderRadius: '8px',
+                      backgroundColor: '#fc9d41',
+                      color: 'var(--cmc-text)',
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      boxShadow: '0 4px 12px rgba(252, 157, 65, 0.2)'
+                    }}
+                  >
+                    Đăng nhập
+                  </Button>
+                  <Anchor
+                    component="button"
+                    type="button"
+                    size="xs"
+                    ta="center"
+                    onClick={() => { setStudentSubMode('phone'); setStudentError(''); }}
+                    style={{ display: 'inline-block', padding: '4px 16px' }}
+                  >
+                    ← Quay lại đăng nhập bằng SĐT
+                  </Anchor>
                 </Stack>
               </form>
             )}

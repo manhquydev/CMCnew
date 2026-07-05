@@ -198,7 +198,24 @@ function InfoTab({ s }: { s: DetailT }) {
         <Card withBorder radius="sm" p="lg" mt="md">
           <SectionHeading>Tài khoản LMS</SectionHeading>
           <Stack gap="sm">
-            <Field label="Mã đăng nhập"><Text size="sm" ff="monospace">{s.account.loginCode}</Text></Field>
+            {/* Primary login: parent phone — show first phone found among linked guardians */}
+            {s.guardians.length > 0 && (
+              <Field label="SĐT đăng nhập (chính)">
+                <Stack gap={2}>
+                  {s.guardians.map((g) => (
+                    g.parent.phone ? (
+                      <Text key={g.id} size="sm" ff="monospace">
+                        {g.parent.phone.replace(/^84/, '0')} ({g.parent.displayName})
+                      </Text>
+                    ) : null
+                  ))}
+                  {s.guardians.every((g) => !g.parent.phone) && (
+                    <Text size="sm" c="orange">Chưa có SĐT hợp lệ — chỉ dùng mã dự phòng</Text>
+                  )}
+                </Stack>
+              </Field>
+            )}
+            <Field label="Mã HS (break-glass)"><Text size="sm" ff="monospace">{s.account.loginCode}</Text></Field>
             <Field label="Trạng thái">
               <Badge size="sm" variant="dot" color={s.account.isActive ? 'teal' : 'red'}>
                 {s.account.isActive ? 'Hoạt động' : 'Bị khoá'}
