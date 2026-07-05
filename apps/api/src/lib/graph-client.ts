@@ -9,6 +9,9 @@
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
 const GRAPH_SCOPE = 'https://graph.microsoft.com/.default';
+// Neither MSAL's getToken nor a bare fetch() has a default timeout — an unresponsive Entra/Graph
+// endpoint would otherwise hang the outbox worker (and its `workerRunning` lock) forever.
+const GRAPH_TIMEOUT_MS = 10_000;
 
 /** Sender mailbox keys → addresses. Filled from env; keys are the only values business code uses. */
 export type MailboxKey = 'notify' | 'payroll' | 'hr';
@@ -97,7 +100,9 @@ const defaultGetToken: GetToken = async (cfg) => {
         certificatePath: cfg.certPath!,
         ...(cfg.certPassword ? { certificatePassword: cfg.certPassword } : {}),
       });
-  const token = await credential.getToken(GRAPH_SCOPE);
+  const token = await credential.getToken(GRAPH_SCOPE, {
+    abortSignal: AbortSignal.timeout(GRAPH_TIMEOUT_MS),
+  });
   if (!token?.token) throw new Error('Graph token acquisition returned no token');
   return token.token;
 };
@@ -142,6 +147,7 @@ export async function sendViaGraph(
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(GRAPH_TIMEOUT_MS),
   });
 
   if (res.status === 429) {

@@ -6,6 +6,9 @@
 import { RateLimitError, type OutgoingEmail, type SendDeps } from './graph-client.js';
 
 const BREVO_ENDPOINT = 'https://api.brevo.com/v3/smtp/email';
+// A bare fetch() has no default timeout — an unresponsive Brevo endpoint would otherwise hang the
+// outbox worker (and its `workerRunning` lock) forever. Mirrors graph-client.ts's guard.
+const BREVO_TIMEOUT_MS = 10_000;
 
 export interface BrevoMailerConfig {
   apiKey: string;
@@ -43,6 +46,7 @@ export async function sendViaBrevo(
       subject: msg.subject,
       htmlContent: msg.html,
     }),
+    signal: AbortSignal.timeout(BREVO_TIMEOUT_MS),
   });
   if (res.status === 429) {
     const retryAfter = Number(res.headers.get('Retry-After') ?? '60');
