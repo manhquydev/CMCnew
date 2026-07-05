@@ -3,19 +3,22 @@ import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
 import { nextBatchCode } from '../src/services/batch-code.js';
 
 /**
- * Concurrency & atomicity test for batch code generation (B-YYYY-NNNN).
+ * Concurrency & atomicity test for batch code generation
+ * ([FacilityCode]-[ProgramAbbrev]-[YY]-[NNNN]).
  *
- * Invariant: concurrent batch creations in the same (facility, year) MUST:
+ * Invariant: concurrent batch creations in the same (facility, program, year) MUST:
  * - produce UNIQUE codes (no duplicates)
- * - follow the format B-YYYY-NNNN
+ * - follow the format [FacilityCode]-[ProgramAbbrev]-[YY]-[NNNN]
  * - be contiguous/sequential (no gaps in sequence number)
  *
- * The service uses pg_advisory_xact_lock(facilityId, year) to serialize access.
- * Without the lock, this test would fail with duplicates — removing the lock
- * would make concurrent calls race and produce collisions.
+ * The service uses pg_advisory_xact_lock(facilityId, year*10+programIndex) to
+ * serialize access. Without the lock, this test would fail with duplicates —
+ * removing the lock would make concurrent calls race and produce collisions.
  */
 describe('batch code atomicity (concurrent generation)', () => {
   const FACILITY = 1; // HQ (seeded)
+  const FACILITY_CODE = 'HQ';
+  const PROGRAM = 'UCREA';
   const CONCURRENT_COUNT = 15; // Race 15 concurrent generates
   const DIRECT_TX_YEAR = 3000; // Year for direct tx test
   const TRPC_YEAR = 3001; // Year for tRPC test
@@ -41,13 +44,13 @@ describe('batch code atomicity (concurrent generation)', () => {
       await tx.classBatch.deleteMany({ where: { id: { in: created.batchIds } } });
       // Reset counters for all years used in tests
       await tx.batchCodeCounter.delete({
-        where: { facilityId_year: { facilityId: FACILITY, year: DIRECT_TX_YEAR } },
+        where: { facilityId_program_year: { facilityId: FACILITY, program: PROGRAM, year: DIRECT_TX_YEAR } },
       }).catch(() => {});
       await tx.batchCodeCounter.delete({
-        where: { facilityId_year: { facilityId: FACILITY, year: TRPC_YEAR } },
+        where: { facilityId_program_year: { facilityId: FACILITY, program: PROGRAM, year: TRPC_YEAR } },
       }).catch(() => {});
       await tx.batchCodeCounter.delete({
-        where: { facilityId_year: { facilityId: FACILITY, year: SEQUENTIAL_YEAR } },
+        where: { facilityId_program_year: { facilityId: FACILITY, program: PROGRAM, year: SEQUENTIAL_YEAR } },
       }).catch(() => {});
       await tx.course.deleteMany({ where: { id: { in: created.courseIds } } });
     });
@@ -62,7 +65,7 @@ describe('batch code atomicity (concurrent generation)', () => {
     const promises = Array.from({ length: CONCURRENT_COUNT }, (_, i) =>
       withRls(SUPER, async (tx) => {
         try {
-          const code = await nextBatchCode(tx, FACILITY, DIRECT_TX_YEAR);
+          const code = await nextBatchCode(tx, FACILITY, FACILITY_CODE, PROGRAM, DIRECT_TX_YEAR);
           return { code, index: i };
         } catch (err) {
           console.log(`nextBatchCode ${i} failed:`, (err as Error).message);
@@ -87,18 +90,20 @@ describe('batch code atomicity (concurrent generation)', () => {
     const uniqueCodes = new Set(codes);
     expect(uniqueCodes.size).toBe(CONCURRENT_COUNT);
 
-    // 2. All codes must follow the B-YYYY-NNNN format.
-    const formatRegex = /^B-\d{4}-\d{4}$/;
+    // 2. All codes must follow the [FacilityCode]-[ProgramAbbrev]-[YY]-[NNNN] format.
+    const formatRegex = /^HQ-UCR-\d{2}-\d{4}$/;
+    const expectedYY = String(DIRECT_TX_YEAR).slice(-2).padStart(2, '0');
     codes.forEach((code) => {
       expect(code).toMatch(formatRegex);
       const parts = code.split('-');
-      expect(parts[0]).toBe('B');
-      expect(parseInt(parts[1])).toBe(DIRECT_TX_YEAR);
+      expect(parts[0]).toBe('HQ');
+      expect(parts[1]).toBe('UCR');
+      expect(parts[2]).toBe(expectedYY);
     });
 
     // 3. Sequence numbers must be contiguous (1 through CONCURRENT_COUNT).
     const sequences = codes.map((code) => {
-      const match = code.match(/B-\d{4}-(\d{4})/);
+      const match = code.match(/-(\d{4})$/);
       return parseInt(match![1]);
     }).sort((a, b) => a - b);
 
@@ -111,7 +116,7 @@ describe('batch code atomicity (concurrent generation)', () => {
     // 4. Verify the counter.
     const counter = await withRls(SUPER, (tx) =>
       tx.batchCodeCounter.findUnique({
-        where: { facilityId_year: { facilityId: FACILITY, year: DIRECT_TX_YEAR } },
+        where: { facilityId_program_year: { facilityId: FACILITY, program: PROGRAM, year: DIRECT_TX_YEAR } },
       }),
     );
     expect(counter).toBeDefined();
@@ -157,18 +162,20 @@ describe('batch code atomicity (concurrent generation)', () => {
     const uniqueCodes = new Set(codes);
     expect(uniqueCodes.size).toBe(CONCURRENT_COUNT);
 
-    // 2. All codes must follow the B-YYYY-NNNN format.
-    const formatRegex = /^B-\d{4}-\d{4}$/;
+    // 2. All codes must follow the [FacilityCode]-[ProgramAbbrev]-[YY]-[NNNN] format.
+    const formatRegex = /^HQ-UCR-\d{2}-\d{4}$/;
+    const expectedYY = String(TRPC_YEAR).slice(-2).padStart(2, '0');
     codes.forEach((code) => {
       expect(code).toMatch(formatRegex);
       const parts = code.split('-');
-      expect(parts[0]).toBe('B');
-      expect(parseInt(parts[1])).toBe(TRPC_YEAR);
+      expect(parts[0]).toBe('HQ');
+      expect(parts[1]).toBe('UCR');
+      expect(parts[2]).toBe(expectedYY);
     });
 
     // 3. Sequence numbers must be contiguous.
     const sequences = codes.map((code) => {
-      const match = code.match(/B-\d{4}-(\d{4})/);
+      const match = code.match(/-(\d{4})$/);
       return parseInt(match![1]);
     }).sort((a, b) => a - b);
 
@@ -181,7 +188,7 @@ describe('batch code atomicity (concurrent generation)', () => {
     // 4. Verify the counter.
     const counter = await withRls(SUPER, (tx) =>
       tx.batchCodeCounter.findUnique({
-        where: { facilityId_year: { facilityId: FACILITY, year: TRPC_YEAR } },
+        where: { facilityId_program_year: { facilityId: FACILITY, program: PROGRAM, year: TRPC_YEAR } },
       }),
     );
     expect(counter).toBeDefined();
@@ -208,13 +215,14 @@ describe('batch code atomicity (concurrent generation)', () => {
       created.batchIds.push(batch.id);
     }
 
-    // Sequential codes should be B-YYYY-0001, B-YYYY-0002, ..., B-YYYY-0005.
+    // Sequential codes should be HQ-UCR-YY-0001, HQ-UCR-YY-0002, ..., HQ-UCR-YY-0005.
+    const yy = String(SEQUENTIAL_YEAR).slice(-2).padStart(2, '0');
     expect(codes).toEqual([
-      `B-${SEQUENTIAL_YEAR}-0001`,
-      `B-${SEQUENTIAL_YEAR}-0002`,
-      `B-${SEQUENTIAL_YEAR}-0003`,
-      `B-${SEQUENTIAL_YEAR}-0004`,
-      `B-${SEQUENTIAL_YEAR}-0005`,
+      `HQ-UCR-${yy}-0001`,
+      `HQ-UCR-${yy}-0002`,
+      `HQ-UCR-${yy}-0003`,
+      `HQ-UCR-${yy}-0004`,
+      `HQ-UCR-${yy}-0005`,
     ]);
   });
 });

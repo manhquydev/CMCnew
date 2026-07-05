@@ -1,17 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { formatBatchCode } from './code.js';
 import { rangesOverlap } from './time.js';
 import { enumerateSessions, detectConflicts } from './schedule.js';
-
-describe('formatBatchCode', () => {
-  it('pads to 4 digits', () => {
-    expect(formatBatchCode(2026, 1)).toBe('B-2026-0001');
-    expect(formatBatchCode(2026, 42)).toBe('B-2026-0042');
-  });
-  it('throws on overflow', () => {
-    expect(() => formatBatchCode(2026, 10000)).toThrow(/overflow/);
-  });
-});
 
 describe('rangesOverlap', () => {
   it('detects overlap', () => {
