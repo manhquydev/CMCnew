@@ -1017,7 +1017,7 @@ export const financeRouter = router({
         // or dedupe-matched student without an LMS account is provisioned on demand by staff via
         // student.resetLmsPassword (create-or-reset), keeping this money path minimal.
         // The tempPassword is returned plaintext exactly once (not stored); staff relay it to the parent.
-        let lmsAccount: { loginCode: string; tempPassword: string } | null = null;
+        let lmsAccount: { loginCode: string; tempPassword: string; familyPhone?: string } | null = null;
 
         const existingLmsAcc = await tx.studentAccount.findUnique({
           where: { studentId: resolvedStudentId },
@@ -1047,7 +1047,7 @@ export const financeRouter = router({
               isActive: true,
             },
           });
-          lmsAccount = { loginCode: lmsRec.loginCode, tempPassword };
+          lmsAccount = { loginCode: lmsRec.loginCode, tempPassword, familyPhone: normalizedFamilyPhone ?? undefined };
           await logEvent(tx, {
             facilityId: receipt.facilityId,
             entityType: 'student',

@@ -675,7 +675,7 @@ function ReceiptsCard({
   const [detailTarget, setDetailTarget] = useState<Receipt | null>(null);
   // LMS credential surfaced once when approving a NEW-student receipt, so staff can relay it to the
   // parent (backend returns it plaintext exactly once; it is also emailed). Shown in a dismissible modal.
-  const [cred, setCred] = useState<{ loginCode: string; tempPassword: string } | null>(null);
+  const [cred, setCred] = useState<{ loginCode: string; tempPassword: string; familyPhone?: string } | null>(null);
   // Standalone "Ghi hoàn tiền" on an already-cancelled row (also reached right after a cancel that
   // included a refund amount fails to record — cancel already committed, refund is addable here).
   const [refundTarget, setRefundTarget] = useState<Receipt | null>(null);
@@ -861,12 +861,32 @@ function ReceiptsCard({
             <Text size="sm">
               Đã tạo tài khoản LMS cho học sinh. Gửi thông tin này cho phụ huynh:
             </Text>
-            <Text>
-              Mã đăng nhập: <b data-testid="lms-login-code">{cred.loginCode}</b>
-            </Text>
-            <Text>
-              Mật khẩu tạm: <b>{cred.tempPassword}</b>
-            </Text>
+            {cred.familyPhone ? (
+              <>
+                <Text>
+                  SĐT đăng nhập (chính): <b>{cred.familyPhone.replace(/^84/, '0')}</b>
+                </Text>
+                <Text>
+                  Mật khẩu: <b>{cred.tempPassword}</b>
+                </Text>
+                <Text size="xs" c="dimmed">
+                  Mã học sinh dự phòng: <span data-testid="lms-login-code">{cred.loginCode}</span>
+                  {' '}(dùng khi không đăng nhập được bằng SĐT)
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text size="xs" c="orange">
+                  SĐT phụ huynh không hợp lệ — học sinh chỉ có thể dùng mã dự phòng.
+                </Text>
+                <Text>
+                  Mã học sinh (dự phòng): <b data-testid="lms-login-code">{cred.loginCode}</b>
+                </Text>
+                <Text>
+                  Mật khẩu: <b>{cred.tempPassword}</b>
+                </Text>
+              </>
+            )}
             <Text size="xs" c="dimmed">
               Mật khẩu chỉ hiển thị một lần; phụ huynh đổi sau khi đăng nhập.
             </Text>
