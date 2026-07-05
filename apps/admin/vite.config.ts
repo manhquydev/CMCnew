@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
@@ -43,14 +43,19 @@ function adminRouteMetadataPlugin(): Plugin {
   return {
     name: 'admin-route-metadata',
     apply: 'build',
-    closeBundle() {
-      const distDirectory = join(adminRoot, 'dist');
+    // writeBundle fires after Rollup writes all files to disk — avoids the race where
+    // closeBundle (hookParallel) runs concurrently with Vite's own HTML-write plugin and
+    // reads dist/index.html before it exists (ENOENT on low-resource builds).
+    writeBundle(options) {
+      const distDirectory = options.dir ?? join(adminRoot, 'dist');
       const indexHtmlPath = join(distDirectory, 'index.html');
+      // Non-client environments (e.g. SSR) don't produce index.html — skip silently.
+      if (!existsSync(indexHtmlPath)) return;
       const defaultHtml = renderHtmlForMetadata(readFileSync(indexHtmlPath, 'utf8'), ADMIN_DEFAULT_METADATA);
       writeFileSync(indexHtmlPath, defaultHtml);
 
       for (const route of ADMIN_ROUTE_METADATA) {
-        const routeDirectory = join(distDirectory, route.path);
+        const routeDirectory = join(distDirectory, route.path);  // route.path = '/login', '/app', etc.
         mkdirSync(routeDirectory, { recursive: true });
         writeFileSync(join(routeDirectory, 'index.html'), renderHtmlForMetadata(defaultHtml, route.metadata));
       }
