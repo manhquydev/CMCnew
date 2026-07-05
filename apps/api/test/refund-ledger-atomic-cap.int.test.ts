@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TRPCError } from '@trpc/server';
-import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq, assertSuccess } from './helpers.js';
 
 // Invariant (plans/260702-1109-finance-ops/phase-01-refund-ledger.md, decision 0028): the refund
 // ledger is append-only money-out. Sum of refund amounts for a receipt must never exceed
@@ -18,7 +18,7 @@ describe('refund ledger — atomic sum-cap + approved-before-cancel guard', () =
     receiptIds: [] as string[],
   };
 
-  async function createApprovedCancelledReceipt(facilityId: number, netHint = 10_000_000) {
+  async function createApprovedCancelledReceipt(facilityId: number, _netHint = 10_000_000) {
     const caller = await staffCaller();
     const student = await withRls(SUPER, (tx) =>
       tx.student.create({
@@ -26,12 +26,12 @@ describe('refund ledger — atomic sum-cap + approved-before-cancel guard', () =
       }),
     );
     created.studentIds.push(student.id);
-    const r = await caller.finance.receiptCreate({
+    const r = assertSuccess(await caller.finance.receiptCreate({
       facilityId,
       studentId: student.id,
       courseId,
       yearsPrepaid: 1,
-    });
+    }));
     created.receiptIds.push(r.id);
     await caller.finance.receiptApprove({ id: r.id });
     await caller.finance.receiptCancel({ id: r.id, reason: 'refund test cancel' });
@@ -104,12 +104,12 @@ describe('refund ledger — atomic sum-cap + approved-before-cancel guard', () =
       }),
     );
     created.studentIds.push(student.id);
-    const r = await caller.finance.receiptCreate({
+    const r = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY_A,
       studentId: student.id,
       courseId,
       yearsPrepaid: 1,
-    });
+    }));
     created.receiptIds.push(r.id);
     // Cancel while still draft — never approved, so no money ever came in.
     await caller.finance.receiptCancel({ id: r.id, reason: 'never approved' });
@@ -130,12 +130,12 @@ describe('refund ledger — atomic sum-cap + approved-before-cancel guard', () =
       }),
     );
     created.studentIds.push(student.id);
-    const r = await caller.finance.receiptCreate({
+    const r = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY_A,
       studentId: student.id,
       courseId,
       yearsPrepaid: 1,
-    });
+    }));
     created.receiptIds.push(r.id);
     await caller.finance.receiptApprove({ id: r.id });
 

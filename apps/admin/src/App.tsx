@@ -14,6 +14,7 @@ import {
   parseApiDate,
 } from '@cmc/ui';
 import { assignableRoles, can, ROLE_LABEL } from '@cmc/auth/permissions';
+import { NAV_GATES } from './nav-permissions.js';
 import { useForm } from '@mantine/form';
 import {
   Badge,
@@ -609,7 +610,18 @@ function Dashboard() {
   const oppId = params.oppId ?? null;
   const rawSection = oppId ? 'crm' : params.section;
   // Single "is this a real section?" check, reused by the active-section pick and the redirect.
-  const knownSection = !!(rawSection && ALL_SECTION_KEYS.has(rawSection));
+  // MUST also re-check the section's own NAV_GATES permission (bug #7): the sidebar already hides
+  // links a role can't use, but a direct URL/bookmark/back-forward bypasses that — without this
+  // check, e.g. a giao_vien typing /overview would still reach a panel whose only query 403s,
+  // reproducing the "Không tải được tổng quan" error the nav hiding was meant to prevent entirely.
+  const isReachableSection = (key: string): key is SectionKey => {
+    if (!ALL_SECTION_KEYS.has(key)) return false;
+    const gate = NAV_GATES[key as SectionKey];
+    if (gate.kind === 'open') return true;
+    if (gate.kind === 'superAdmin') return me.isSuperAdmin;
+    return can(me.roles, me.isSuperAdmin, gate.module, gate.action);
+  };
+  const knownSection = !!(rawSection && isReachableSection(rawSection));
   const activeSection: SectionKey = knownSection ? (rawSection as SectionKey) : defaultSection(me);
   const activeModuleKey = moduleOf(activeSection);
 

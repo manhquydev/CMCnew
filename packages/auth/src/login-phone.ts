@@ -18,3 +18,16 @@ export function normalizeLoginPhone(raw: string | null | undefined): string | nu
 
 /** Fixed default password for the student/family LMS login (security de-scoped by decision 0032). */
 export const DEFAULT_STUDENT_PASSWORD = 'Cmc2026@';
+
+/**
+ * Normalize a raw phone string to the CRM contact-dedupe format `+84xxxxxxxxx`. Distinct from
+ * `normalizeLoginPhone` above (bare `84…`, no `+`) — the two formats are NOT interchangeable.
+ * Canonical source per decision 0037; used to match `Contact.phone`/`Receipt.parentPhone`.
+ */
+export function normalizeContactPhone(raw: string): string {
+  const digits = raw.replace(/[^\d+]/g, '');
+  if (digits.startsWith('+84')) return digits;
+  if (digits.startsWith('84')) return '+' + digits;
+  if (digits.startsWith('0')) return '+84' + digits.slice(1);
+  return digits;
+}

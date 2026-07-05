@@ -110,6 +110,10 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     contactCreate: ['sale', 'cskh', 'giam_doc_kinh_doanh'],
     opportunityList: ['sale', 'cskh', 'ctv_mkt', 'giam_doc_kinh_doanh'],
     opportunityGet: ['sale', 'cskh', 'ctv_mkt', 'giam_doc_kinh_doanh'],
+    // Narrow existence-check for finance-panel's new-student form (decision 0037). Mirrors
+    // finance.receiptCreate's role set, NOT opportunityList's — ke_toan gets this lookup without
+    // gaining the full CRM nav tab (nav-permissions.ts gates on opportunityList, not this key).
+    opportunityLookup: ['ke_toan', 'giam_doc_kinh_doanh', 'sale'],
     // Owner picker / name resolution: anyone who can view the pipeline can read the staff list.
     assignableOwners: ['sale', 'cskh', 'ctv_mkt', 'giam_doc_kinh_doanh'],
     opportunityCreate: ['sale', 'cskh', 'ctv_mkt', 'giam_doc_kinh_doanh'],

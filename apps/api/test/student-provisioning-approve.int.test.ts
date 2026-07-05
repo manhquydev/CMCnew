@@ -15,7 +15,7 @@
  *   8. Multi-enrollment scope: only THIS receipt's enrollment is withdrawn on cancel
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { staffCaller, withRls, SUPER, uniq, superAdminUserId } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq, superAdminUserId, assertSuccess } from './helpers.js';
 
 const FACILITY = 1;
 
@@ -111,7 +111,7 @@ describe('student-provisioning: approve + rollback', () => {
     cleanup.batchIds.push(batch.id);
 
     const phone = `+84${uniq('9')}`.slice(0, 12);
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY,
       courseId: course.id,
       yearsPrepaid: 1,
@@ -119,7 +119,7 @@ describe('student-provisioning: approve + rollback', () => {
       parentName: 'Nguyễn Văn A',
       studentName: 'Nguyễn Thị B',
       classBatchId: batch.id,
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     const approved = await caller.finance.receiptApprove({ id: receipt.id });
@@ -169,22 +169,22 @@ describe('student-provisioning: approve + rollback', () => {
     const phone = `+84${uniq('8')}`.slice(0, 12);
 
     // First receipt → creates student
-    const r1 = await caller.finance.receiptCreate({
+    const r1 = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY, courseId: course.id, yearsPrepaid: 1,
       parentPhone: phone, parentName: 'PH Test', studentName: 'HS Dedupe',
       classBatchId: batch1.id,
-    });
+    }));
     cleanup.receiptIds.push(r1.id);
     const a1 = await caller.finance.receiptApprove({ id: r1.id });
     const studentId1 = a1.studentId!;
     cleanup.studentIds.push(studentId1);
 
     // Second receipt for same phone → must reuse student
-    const r2 = await caller.finance.receiptCreate({
+    const r2 = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY, courseId: course.id, yearsPrepaid: 1,
       parentPhone: phone, studentName: 'HS Dedupe',
       classBatchId: batch2.id,
-    });
+    }));
     cleanup.receiptIds.push(r2.id);
     const a2 = await caller.finance.receiptApprove({ id: r2.id });
 
@@ -219,11 +219,11 @@ describe('student-provisioning: approve + rollback', () => {
     cleanup.batchIds.push(batch.id);
 
     const phone = `+84${uniq('7')}`.slice(0, 12);
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY, courseId: course.id, yearsPrepaid: 1,
       parentPhone: phone, studentName: 'HS VoidTest',
       classBatchId: batch.id,
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     const approved = await caller.finance.receiptApprove({ id: receipt.id });
@@ -256,11 +256,11 @@ describe('student-provisioning: approve + rollback', () => {
     cleanup.batchIds.push(batch.id);
 
     const phone = `+84${uniq('6')}`.slice(0, 12);
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY, courseId: course.id, yearsPrepaid: 1,
       parentPhone: phone, studentName: 'HS RefundTest',
       classBatchId: batch.id,
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     const approved = await caller.finance.receiptApprove({ id: receipt.id });
@@ -317,11 +317,11 @@ describe('student-provisioning: approve + rollback', () => {
     );
     cleanup.studentIds.push(existing.id);
 
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY, courseId: course.id, yearsPrepaid: 1,
       studentId: existing.id, // explicit link — pre-existing student
       classBatchId: batch.id,
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
     await caller.finance.receiptApprove({ id: receipt.id });
 
@@ -340,10 +340,10 @@ describe('student-provisioning: approve + rollback', () => {
     cleanup.courseIds.push(course.id);
 
     const phone = `+84${uniq('5')}`.slice(0, 12);
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY, courseId: course.id, yearsPrepaid: 1,
       parentPhone: phone, studentName: 'HS DraftCancel',
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     // Cancel the draft WITHOUT approving

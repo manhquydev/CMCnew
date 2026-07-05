@@ -2,7 +2,8 @@ import { randomUUID, createHash } from 'node:crypto';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls, hashPassword, type Program, type Prisma } from '@cmc/db';
-import { rlsContextOf, normalizeLoginPhone, DEFAULT_STUDENT_PASSWORD } from '@cmc/auth';
+import { rlsContextOf, normalizeLoginPhone, normalizeContactPhone, DEFAULT_STUDENT_PASSWORD } from '@cmc/auth';
+import { OPEN_OPPORTUNITY_WHERE } from './crm.js';
 import { logEvent } from '@cmc/audit';
 import {
   resolvePrice,
@@ -489,6 +490,10 @@ export const financeRouter = router({
           studentName: z.string().min(1).optional(),
           studentDob: z.string().date().optional(),
           classBatchId: z.string().uuid().optional(),
+          // Decision 0037: bypass flag for the soft duplicate-opportunity warning below. Two
+          // siblings sharing one parent phone is legitimate, so this never hard-blocks — it just
+          // requires staff to consciously re-submit once shown the match.
+          confirmDuplicate: z.boolean().optional(),
         })
         .refine((d) => d.studentId || (d.parentPhone && d.studentName), {
           message:
@@ -497,6 +502,30 @@ export const financeRouter = router({
     )
     .mutation(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
+        // Soft duplicate-opportunity warning (decision 0037): new-student path only, and only when
+        // the caller didn't already link an opportunity. Uses the same OPEN_OPPORTUNITY_WHERE as
+        // crm.opportunityLookupByPhone so the two features can never define "open" differently.
+        if (!input.studentId && input.parentPhone && !input.opportunityId && !input.confirmDuplicate) {
+          const dup = await tx.opportunity.findFirst({
+            where: {
+              facilityId: input.facilityId,
+              archivedAt: null,
+              ...OPEN_OPPORTUNITY_WHERE,
+              contact: { phone: normalizeContactPhone(input.parentPhone) },
+            },
+            select: { id: true, studentName: true, contact: { select: { fullName: true } } },
+          });
+          if (dup) {
+            return {
+              status: 'warning' as const,
+              duplicateWarning: {
+                opportunityId: dup.id,
+                parentName: dup.contact.fullName,
+                studentName: dup.studentName,
+              },
+            };
+          }
+        }
         const prices = await tx.coursePrice.findMany({
           where: { courseId: input.courseId, archivedAt: null },
           select: { effectiveFrom: true, amount: true },
@@ -593,10 +622,11 @@ export const financeRouter = router({
           data: { receiptId: receipt.id, netAmount: receipt.netAmount },
           facilityId: input.facilityId,
         });
-        return { receipt, pushNotifs };
-      }).then(({ pushNotifs, receipt }) => {
-        pushNotifs();
-        return receipt;
+        return { status: 'success' as const, receipt, pushNotifs };
+      }).then((result) => {
+        if (result.status === 'warning') return result;
+        result.pushNotifs();
+        return { status: 'success' as const, receipt: result.receipt };
       }),
     ),
 
@@ -727,14 +757,49 @@ export const financeRouter = router({
           // abort this money transaction. `INSERT ... ON CONFLICT DO NOTHING` never raises — the
           // loser's insert silently no-ops and both siblings converge on the winner's refetched row.
           let parentAcc = await tx.parentAccount.findFirst({ where: { phone: loginPhone } });
+          // Set when the new-ParentAccount insert below hits an email collision, so the
+          // propagatedEmail check further down skips its own attempt instead of logging a second
+          // redundant "note" event for the exact same email conflict.
+          let emailCollisionHandled = false;
           if (!parentAcc) {
             const newId = randomUUID();
             const email = input.parentEmail ?? receipt.parentEmail ?? null;
             const displayName = receipt.parentName ?? loginPhone;
-            const inserted = await tx.$executeRaw`
-              INSERT INTO "parent_account" ("id", "phone", "display_name", "email", "is_active")
-              VALUES (${newId}::uuid, ${loginPhone}, ${displayName}, ${email}, true)
-              ON CONFLICT ("phone") DO NOTHING`;
+            let inserted: number;
+            // A savepoint is REQUIRED here, not optional: Postgres aborts the entire surrounding
+            // transaction after any statement error (code 25P02, "current transaction is aborted"),
+            // so a plain try/catch retry would fail a second time on the very next statement — a
+            // bare try/catch here silently does NOT recover, it just relabels the error. Verified
+            // empirically against the dev DB during code review.
+            await tx.$executeRawUnsafe('SAVEPOINT sp_parent_email');
+            try {
+              inserted = await tx.$executeRaw`
+                INSERT INTO "parent_account" ("id", "phone", "display_name", "email", "is_active")
+                VALUES (${newId}::uuid, ${loginPhone}, ${displayName}, ${email}, true)
+                ON CONFLICT ("phone") DO NOTHING`;
+            } catch {
+              // Unique violation on email (a DIFFERENT parent already owns that email) — roll back
+              // to the savepoint (clears the aborted-transaction state) then retry without the
+              // email, so the phone-keyed row still gets created rather than surfacing a raw
+              // Postgres error to the ke_toan approving this receipt. ON CONFLICT ("phone") only
+              // guards the phone column, so an email collision on a genuinely new phone still
+              // throws — mirrors the propagatedEmail catch a few lines below (same non-blocking
+              // philosophy, same savepoint requirement).
+              await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT sp_parent_email');
+              inserted = await tx.$executeRaw`
+                INSERT INTO "parent_account" ("id", "phone", "display_name", "email", "is_active")
+                VALUES (${newId}::uuid, ${loginPhone}, ${displayName}, NULL, true)
+                ON CONFLICT ("phone") DO NOTHING`;
+              emailCollisionHandled = true;
+              await logEvent(tx, {
+                facilityId: receipt.facilityId,
+                entityType: 'parent_account',
+                entityId: newId,
+                type: 'note',
+                body: `Email ${email} khi duyệt phiếu ${code} đã thuộc tài khoản khác — tạo tài khoản phụ huynh mới không kèm email`,
+                actorId: ctx.session.userId,
+              });
+            }
             parentAcc = await tx.parentAccount.findFirstOrThrow({ where: { phone: loginPhone } });
             if (inserted > 0) {
               await logEvent(tx, {
@@ -813,20 +878,32 @@ export const financeRouter = router({
 
           // Propagate parentEmail to the ParentAccount when provided (idempotent: ignore if already set to same value).
           // This enables OTP login even when the account was originally created phone-only.
-          if (receipt.parentEmail && parentAcc.email !== receipt.parentEmail) {
+          // Resolves input.parentEmail (supplied at approve time) OR receipt.parentEmail (captured at
+          // intake) — same fallback as the new-ParentAccount insert above and the notify-email check below.
+          // Skip entirely if the new-ParentAccount insert above already hit this exact email
+          // collision (emailCollisionHandled) — avoids logging the same conflict twice.
+          const propagatedEmail = input.parentEmail ?? receipt.parentEmail;
+          if (!emailCollisionHandled && propagatedEmail && parentAcc.email !== propagatedEmail) {
+            // Savepoint required — see the identical note on the new-ParentAccount insert above:
+            // Postgres aborts the whole transaction on a unique-violation, so a bare try/catch here
+            // does not actually recover; every statement after an uncaught abort (guardian.upsert
+            // below, and everything through the end of receiptApprove) would fail with 25P02.
+            await tx.$executeRawUnsafe('SAVEPOINT sp_propagated_email');
             try {
               await tx.parentAccount.update({
                 where: { id: parentAcc.id },
-                data: { email: receipt.parentEmail },
+                data: { email: propagatedEmail },
               });
             } catch {
-              // Unique violation: another account already owns that email — log and continue.
+              // Unique violation: another account already owns that email — roll back to the
+              // savepoint (clears the aborted-transaction state), log, and continue.
+              await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT sp_propagated_email');
               await logEvent(tx, {
                 facilityId: receipt.facilityId,
                 entityType: 'parent_account',
                 entityId: parentAcc.id,
                 type: 'note',
-                body: `parentEmail ${receipt.parentEmail} dari phiếu ${code} đã thuộc tài khoản khác — bỏ qua`,
+                body: `parentEmail ${propagatedEmail} dari phiếu ${code} đã thuộc tài khoản khác — bỏ qua`,
                 actorId: ctx.session.userId,
               });
             }
@@ -980,14 +1057,17 @@ export const financeRouter = router({
             actorId: ctx.session.userId,
           });
 
-          // Notify parent via email when parentEmail is available.
-          // enqueueEmail is atomic with this txn (no-op if Graph absent).
-          if (receipt.parentEmail && lmsAccount) {
+          // Notify parent via email when parentEmail is available. Falls back to receipt.parentEmail
+          // for the case where it was captured at intake (receiptCreate); input.parentEmail covers the
+          // "supplied at approve time" dialog path (director/ke_toan filling it in for a new-student
+          // receipt that had none) — same resolution as the ParentAccount creation above (line ~732).
+          const notifyEmail = input.parentEmail ?? receipt.parentEmail;
+          if (notifyEmail && lmsAccount) {
             const parentName = receipt.parentName ?? undefined;
             await enqueueEmail(tx, {
               facilityId: receipt.facilityId,
               dedupKey: `lms_account_ready:${resolvedStudentId}`,
-              to: receipt.parentEmail,
+              to: notifyEmail,
               mailbox: 'notify',
               kind: 'lms_account_ready',
               data: {

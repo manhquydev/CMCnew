@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { staffCaller, withRls, SUPER, uniq, superAdminUserId } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq, superAdminUserId, assertSuccess } from './helpers.js';
 import { commissionAmount, cvtvNewCustomerRate } from '@cmc/domain-payroll';
 import { DEFAULT_PARAMS } from '@cmc/domain-payroll';
 
@@ -35,7 +35,7 @@ describe('commission-for-sale: E2E attribution & computation', () => {
   const created = { courseIds: [] as string[], studentIds: [] as string[], opportunityIds: [] as string[], userIds: [] as string[] };
 
   beforeAll(async () => {
-    const superId = await superAdminUserId();
+    const _superId = await superAdminUserId();
     const caller = await staffCaller();
 
     // ─── Create seller (CVTV staff) ───
@@ -137,14 +137,14 @@ describe('commission-for-sale: E2E attribution & computation', () => {
     // ─── Create + approve receipt ───
     // Receipt draft: 100M/year, 1 year → gross 100M, 15% tier → net 85M.
     // 85M new revenue → commission tier [80–100M] → 2% → 1.7M.
-    const draftReceipt = await caller.finance.receiptCreate({
+    const draftReceipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY,
       studentId: student.id,
       courseId: course.id,
       yearsPrepaid: 1,
       opportunityId: opportunity.id,
       // No voucher, so effective discount = tier only
-    });
+    }));
 
     // Approve the receipt → soldById & kind frozen
     const approvedReceipt = await caller.finance.receiptApprove({ id: draftReceipt.id });

@@ -18,7 +18,7 @@ import {
   type LmsSession,
 } from '@cmc/auth';
 import { hashPassword } from '@cmc/db';
-import { staffCaller, lmsCaller, withRls, SUPER, uniq, superAdminUserId } from './helpers.js';
+import { staffCaller, lmsCaller, withRls, SUPER, uniq, superAdminUserId, assertSuccess } from './helpers.js';
 import type { ApiContext } from '../src/context.js';
 import { appRouter } from '../src/routers/index.js';
 
@@ -106,14 +106,14 @@ describe('Family login (phone + Cmc2026@ + profile picker)', () => {
     const caller = await staffCaller();
     const course = await createCourseWithPrice();
     cleanup.courseIds.push(course.id);
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY,
       courseId: course.id,
       yearsPrepaid: 1,
       parentPhone: phone,
       parentName: opts?.parentName,
       studentName,
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
     const approved = await caller.finance.receiptApprove({ id: receipt.id });
     if (approved.studentId) cleanup.studentIds.push(approved.studentId);
@@ -415,11 +415,11 @@ describe('Family login (phone + Cmc2026@ + profile picker)', () => {
       caller1.finance.receiptCreate({
         facilityId: FACILITY, courseId: course.id, yearsPrepaid: 1,
         parentPhone: phone, studentName: 'HS Concurrent Sibling One',
-      }),
+      }).then(assertSuccess),
       caller2.finance.receiptCreate({
         facilityId: FACILITY, courseId: course.id, yearsPrepaid: 1,
         parentPhone: phone, studentName: 'HS Concurrent Sibling Two',
-      }),
+      }).then(assertSuccess),
     ]);
     cleanup.receiptIds.push(r1.id, r2.id);
 

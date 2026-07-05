@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq, assertSuccess } from './helpers.js';
 
 // Invariant (backlog T4 / F11): a voucher outside its validity window is rejected at receiptCreate
 // (fail-early), not deferred to approve. receiptApprove still re-checks the window atomically, but a
@@ -64,7 +64,7 @@ describe('receiptCreate — voucher validity window enforced early (T4)', () => 
 
   it('accepts an in-window voucher and stores the discount on the draft', async () => {
     const code = await seedVoucher(dayOffset(-1), dayOffset(30));
-    const receipt = await create(code);
+    const receipt = assertSuccess(await create(code));
     expect(receipt.voucherId).not.toBeNull();
     expect(receipt.voucherPercent).toBe(10);
   });

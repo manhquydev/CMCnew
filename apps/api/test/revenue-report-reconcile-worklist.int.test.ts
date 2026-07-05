@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Role } from '@cmc/db';
-import { staffCaller, withRls, SUPER, uniq, superAdminUserId } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq, superAdminUserId, assertSuccess } from './helpers.js';
 
 // Plan: plans/260702-1109-finance-ops/phase-03-revenue-reconcile.md
 //
@@ -36,12 +36,12 @@ describe('revenueReport / revenueReportCsv / reconcileWorklist', () => {
     approvedAt: string; // ISO date
   }) {
     const caller = await staffCaller();
-    const draft = await caller.finance.receiptCreate({
+    const draft = assertSuccess(await caller.finance.receiptCreate({
       facilityId: opts.facilityId,
       studentId: opts.studentId,
       courseId: opts.courseId,
       yearsPrepaid: 1,
-    });
+    }));
     const approved = await caller.finance.receiptApprove({ id: draft.id });
     created.receiptIds.push(approved.id);
     await withRls(SUPER, (tx) =>

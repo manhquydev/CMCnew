@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { withRls, Program, OpportunityStage, LostReason, TestType, type RlsContext } from '@cmc/db';
-import { rlsContextOf } from '@cmc/auth';
+import { rlsContextOf, normalizeContactPhone } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, publicProcedure, requirePermission, Role } from '../trpc.js';
 import { throttle } from '../rate-limit.js';
@@ -58,14 +58,16 @@ function advanceTo(current: OpportunityStage, target: OpportunityStage): Opportu
   return STAGE_ORDER.indexOf(target) > STAGE_ORDER.indexOf(current) ? target : current;
 }
 
-/** Normalise a VN phone to +84 so dedup (1 opportunity = 1 SĐT) is format-agnostic. */
-function normalizePhone(raw: string): string {
-  const digits = raw.replace(/[^\d+]/g, '');
-  if (digits.startsWith('+84')) return digits;
-  if (digits.startsWith('84')) return '+' + digits;
-  if (digits.startsWith('0')) return '+84' + digits.slice(1);
-  return digits;
-}
+/**
+ * Canonical "open opportunity" predicate — shared with `finance.ts`'s duplicate-phone check
+ * (decision 0037) so the two features can never define "open" differently. `closedAt` alone is
+ * NOT equivalent to `stage != O5_ENROLLED` (see `opportunityReopen` below, which can clear
+ * `closedAt` on a won opp without resetting `stage`), so this fragment is the single source.
+ */
+export const OPEN_OPPORTUNITY_WHERE = {
+  stage: { not: OpportunityStage.O5_ENROLLED },
+  lostReason: null,
+} as const;
 
 /** Find-or-create a contact by (facility, normalised phone) inside the given tx. */
 async function upsertContact(
@@ -81,7 +83,7 @@ async function upsertContact(
     note?: string;
   },
 ) {
-  const phone = normalizePhone(input.phone);
+  const phone = normalizeContactPhone(input.phone);
   const existing = await tx.contact.findFirst({ where: { facilityId: input.facilityId, phone } });
   // Quy nguồn (source/medium/campaign) thuộc về lần chạm ĐẦU — không ghi đè khi liên hệ đã tồn tại.
   if (existing) return existing;
@@ -207,6 +209,28 @@ export const crmRouter = router({
           orderBy: { createdAt: 'desc' },
           take: 200,
           include: { contact: { select: { fullName: true, phone: true } } },
+        }),
+      ),
+    ),
+
+  // Narrow existence-check for the finance-panel new-student form (decision 0037): does an OPEN
+  // opportunity already exist for this phone? Deliberately minimal fields + a distinct permission
+  // (`crm.opportunityLookup`, NOT `crm.opportunityList`) so granting it to ke_toan does not expose
+  // the CRM nav tab/kanban board — see `nav-permissions.ts` which gates on `opportunityList`.
+  opportunityLookupByPhone: requirePermission('crm', 'opportunityLookup')
+    .input(z.object({ facilityId: z.number().int().positive(), phone: z.string().min(1) }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.opportunity.findMany({
+          where: {
+            facilityId: input.facilityId,
+            archivedAt: null,
+            ...OPEN_OPPORTUNITY_WHERE,
+            contact: { phone: normalizeContactPhone(input.phone) },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+          select: { id: true, studentName: true, stage: true, contact: { select: { fullName: true } } },
         }),
       ),
     ),

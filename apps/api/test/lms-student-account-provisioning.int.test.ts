@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { loginStudent, resolveLmsSession, DEFAULT_STUDENT_PASSWORD } from '@cmc/auth';
-import { staffCaller, withRls, SUPER, uniq, superAdminUserId } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq, superAdminUserId, assertSuccess } from './helpers.js';
 
 const FACILITY = 1;
 
@@ -85,14 +85,14 @@ describe('LMS StudentAccount provisioning', () => {
     cleanup.courseIds.push(course.id);
 
     const phone = `+84${uniq('9')}`.slice(0, 12);
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY,
       courseId: course.id,
       yearsPrepaid: 1,
       parentPhone: phone,
       parentName: 'PH Test',
       studentName: 'HS LMS Test',
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     const approved = await caller.finance.receiptApprove({ id: receipt.id });
@@ -132,10 +132,10 @@ describe('LMS StudentAccount provisioning', () => {
     cleanup.courseIds.push(course.id);
 
     const phone = `+84${uniq('8')}`.slice(0, 12);
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY, courseId: course.id, yearsPrepaid: 1,
       parentPhone: phone, studentName: 'HS Idempotent',
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     const approved = await caller.finance.receiptApprove({ id: receipt.id });
@@ -164,10 +164,10 @@ describe('LMS StudentAccount provisioning', () => {
     const phone = `+84${uniq('7')}`.slice(0, 12);
 
     // First receipt → creates student + StudentAccount
-    const r1 = await caller.finance.receiptCreate({
+    const r1 = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY, courseId: course.id, yearsPrepaid: 1,
       parentPhone: phone, studentName: 'HS Dedupe LMS',
-    });
+    }));
     cleanup.receiptIds.push(r1.id);
     const a1 = await caller.finance.receiptApprove({ id: r1.id });
     const studentId = a1.studentId!;
@@ -175,10 +175,10 @@ describe('LMS StudentAccount provisioning', () => {
     expect(a1.lmsAccount).not.toBeNull(); // account created on first receipt
 
     // Second receipt for same phone → dedupe hit, no new account
-    const r2 = await caller.finance.receiptCreate({
+    const r2 = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY, courseId: course.id, yearsPrepaid: 1,
       parentPhone: phone, studentName: 'HS Dedupe LMS',
-    });
+    }));
     cleanup.receiptIds.push(r2.id);
     const a2 = await caller.finance.receiptApprove({ id: r2.id });
     expect(a2.studentId).toBe(studentId);
@@ -206,12 +206,12 @@ describe('LMS StudentAccount provisioning', () => {
     const phone = `+84${uniq('6')}`.slice(0, 12);
     const email = `ph_${uniq('e')}@example.com`;
 
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY, courseId: course.id, yearsPrepaid: 1,
       parentPhone: phone, parentName: 'PH Email Test',
       parentEmail: email,
       studentName: 'HS Email Test',
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     const approved = await caller.finance.receiptApprove({ id: receipt.id });
@@ -234,11 +234,11 @@ describe('LMS StudentAccount provisioning', () => {
     const phone = `+84${uniq('5')}`.slice(0, 12);
     const email = `notify_${uniq('e')}@example.com`;
 
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY, courseId: course.id, yearsPrepaid: 1,
       parentPhone: phone, parentEmail: email,
       studentName: 'HS Notify Test',
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     await caller.finance.receiptApprove({ id: receipt.id });
@@ -269,10 +269,10 @@ describe('LMS StudentAccount provisioning', () => {
     cleanup.courseIds.push(course.id);
 
     const phone = `+84${uniq('4')}`.slice(0, 12);
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY, courseId: course.id, yearsPrepaid: 1,
       parentPhone: phone, studentName: 'HS Reset PW',
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     const approved = await caller.finance.receiptApprove({ id: receipt.id });

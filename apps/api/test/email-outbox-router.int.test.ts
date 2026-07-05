@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Role } from '@cmc/auth';
-import { staffCaller, withRls, SUPER, uniq, superAdminUserId } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq, superAdminUserId, assertSuccess } from './helpers.js';
 
 const FACILITY = 1;
 
@@ -288,12 +288,12 @@ describe('email router + finance.sendReceiptEmail + notif widening', () => {
       );
       createdStudentIds.push(student.id);
 
-      const receipt = await (await keToanCaller(kt.id)).finance.receiptCreate({
+      const receipt = assertSuccess(await (await keToanCaller(kt.id)).finance.receiptCreate({
         facilityId: FACILITY,
         studentId: student.id,
         courseId,
         yearsPrepaid: 1,
-      });
+      }));
       createdReceiptIds.push(receipt.id);
 
       const [ktNotifs, kdNotifs] = await Promise.all([
@@ -335,12 +335,12 @@ describe('email router + finance.sendReceiptEmail + notif widening', () => {
       );
       createdStudentIds.push(student.id);
 
-      const receipt = await (await keToanCaller(both.id)).finance.receiptCreate({
+      const receipt = assertSuccess(await (await keToanCaller(both.id)).finance.receiptCreate({
         facilityId: FACILITY,
         studentId: student.id,
         courseId,
         yearsPrepaid: 1,
-      });
+      }));
       createdReceiptIds.push(receipt.id);
 
       const notifs = await withRls(SUPER, (tx) =>
@@ -362,14 +362,14 @@ describe('email router + finance.sendReceiptEmail + notif widening', () => {
       const kt = await staff(Role.ke_toan);
 
       const parentPhone = uniqPhone('090SEND');
-      const draft = await (await keToanCaller(kt.id)).finance.receiptCreate({
+      const draft = assertSuccess(await (await keToanCaller(kt.id)).finance.receiptCreate({
         facilityId: FACILITY,
         courseId,
         yearsPrepaid: 1,
         parentPhone,
         parentEmail: 'payer@email-router-test.com',
         studentName: 'Send Receipt Test Student',
-      });
+      }));
       const approved = await (await keToanCaller(kt.id)).finance.receiptApprove({ id: draft.id });
       createdReceiptIds.push(approved.id);
       if (approved.studentId) createdStudentIds.push(approved.studentId);
@@ -389,13 +389,13 @@ describe('email router + finance.sendReceiptEmail + notif widening', () => {
       const kt = await staff(Role.ke_toan);
 
       const parentPhone = uniqPhone('090RESEND');
-      const draft = await (await keToanCaller(kt.id)).finance.receiptCreate({
+      const draft = assertSuccess(await (await keToanCaller(kt.id)).finance.receiptCreate({
         facilityId: FACILITY,
         courseId,
         yearsPrepaid: 1,
         parentPhone,
         studentName: 'Resend Test Student',
-      });
+      }));
       const approved = await (await keToanCaller(kt.id)).finance.receiptApprove({ id: draft.id });
       createdReceiptIds.push(approved.id);
       if (approved.studentId) createdStudentIds.push(approved.studentId);
@@ -431,13 +431,13 @@ describe('email router + finance.sendReceiptEmail + notif widening', () => {
       const kd = await staff(Role.giam_doc_kinh_doanh);
       const kt = await staff(Role.ke_toan);
       const parentPhone = uniqPhone('090DRAFT');
-      const draft = await (await keToanCaller(kt.id)).finance.receiptCreate({
+      const draft = assertSuccess(await (await keToanCaller(kt.id)).finance.receiptCreate({
         facilityId: FACILITY,
         courseId,
         yearsPrepaid: 1,
         parentPhone,
         studentName: 'Draft Reject Test Student',
-      });
+      }));
       createdReceiptIds.push(draft.id);
 
       await expect(

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { staffCaller, withRls, SUPER, uniq, superAdminUserId } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq, superAdminUserId, assertSuccess } from './helpers.js';
 
 /**
  * Integration test: receipt `kind` classification by history fallback.
@@ -85,23 +85,23 @@ describe('receipt-kind-classification: history fallback (no opportunityId)', () 
     created.studentIds.push(student.id);
 
     // Create and approve first receipt (builds history)
-    const prior = await caller.finance.receiptCreate({
+    const prior = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY,
       studentId: student.id,
       courseId: course.id,
       yearsPrepaid: 1,
-    });
+    }));
     const priorApproved = await caller.finance.receiptApprove({ id: prior.id });
     created.receiptIds.push(priorApproved.id);
 
     // Create second receipt (no opportunityId, student now has prior approved receipt)
-    const second = await caller.finance.receiptCreate({
+    const second = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY,
       studentId: student.id,
       courseId: course.id,
       yearsPrepaid: 1,
       // NO opportunityId
-    });
+    }));
 
     // Approve it → should fallback to history: priorCollected > 0 → 'renewal'
     const approved = await caller.finance.receiptApprove({ id: second.id });
@@ -128,13 +128,13 @@ describe('receipt-kind-classification: history fallback (no opportunityId)', () 
     created.studentIds.push(student.id);
 
     // Create receipt (no opportunityId, student has NO prior receipts)
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY,
       studentId: student.id,
       courseId: course.id,
       yearsPrepaid: 1,
       // NO opportunityId
-    });
+    }));
 
     // Approve it → should fallback to history: priorCollected = 0 → 'new'
     const approved = await caller.finance.receiptApprove({ id: receipt.id });
@@ -160,12 +160,12 @@ describe('receipt-kind-classification: history fallback (no opportunityId)', () 
     });
     created.studentIds.push(studentA.id);
 
-    const priorA = await caller.finance.receiptCreate({
+    const priorA = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY,
       studentId: studentA.id,
       courseId: course.id,
       yearsPrepaid: 1,
-    });
+    }));
     const priorAApproved = await caller.finance.receiptApprove({ id: priorA.id });
     created.receiptIds.push(priorAApproved.id);
 
@@ -184,20 +184,20 @@ describe('receipt-kind-classification: history fallback (no opportunityId)', () 
     created.studentIds.push(studentB.id);
 
     // Create receipts for both (no opportunityId)
-    const recA = await caller.finance.receiptCreate({
+    const recA = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY,
       studentId: studentA.id,
       courseId: course.id,
       yearsPrepaid: 1,
-    });
+    }));
     const approvedA = await caller.finance.receiptApprove({ id: recA.id });
 
-    const recB = await caller.finance.receiptCreate({
+    const recB = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY,
       studentId: studentB.id,
       courseId: course.id,
       yearsPrepaid: 1,
-    });
+    }));
     const approvedB = await caller.finance.receiptApprove({ id: recB.id });
 
     // Verify they differ (if history logic is removed/broken, both become 'new')

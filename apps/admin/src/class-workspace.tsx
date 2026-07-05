@@ -414,11 +414,13 @@ function ScheduleTab({
   facilityId,
   rooms,
   teachers,
+  onSessionsGenerated,
 }: {
   batch: Batch;
   facilityId: number;
   rooms: Room[];
   teachers: Teacher[];
+  onSessionsGenerated?: () => void;
 }) {
   const { me } = useSession();
   const canAddSlot = can(me.roles, me.isSuperAdmin, 'schedule', 'addSlot');
@@ -478,6 +480,7 @@ function ScheduleTab({
         endDate: toApiDate(range.to)!,
       });
       setMsg(`Đã tạo ${r.created} buổi (bỏ qua ${r.skipped}).`);
+      onSessionsGenerated?.();
     } catch (e) {
       setMsg('Lỗi: ' + (e instanceof Error ? e.message : ''));
     }
@@ -1229,6 +1232,11 @@ function ClassDetail({
   const [cancelOpen, cancel] = useDisclosure(false);
   const [editOpen, edit] = useDisclosure(false);
   const [reason, setReason] = useState('');
+  // Bug fix (bug-log #8): generateSessions succeeds but the sibling "Buổi học" tab (SessionsTab)
+  // has its own React Query-less local state, so it never re-fetches. Bumping this key remounts
+  // SessionsTab, forcing its `useEffect(load, [load])` to refire — mirrors the `key={reloadKey}`
+  // pattern already used for ReceiptsCard in finance-panel.tsx.
+  const [sessionsReloadKey, setSessionsReloadKey] = useState(0);
 
   async function doCancel() {
     try {
@@ -1299,10 +1307,16 @@ function ClassDetail({
           <Tabs.Tab value="log">Nhật ký</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="schedule" pt="md">
-          <ScheduleTab batch={batch} facilityId={facilityId} rooms={rooms} teachers={teachers} />
+          <ScheduleTab
+            batch={batch}
+            facilityId={facilityId}
+            rooms={rooms}
+            teachers={teachers}
+            onSessionsGenerated={() => setSessionsReloadKey((k) => k + 1)}
+          />
         </Tabs.Panel>
         <Tabs.Panel value="sessions" pt="md">
-          <SessionsTab batchId={batch.id} rooms={rooms} teachers={teachers} />
+          <SessionsTab key={sessionsReloadKey} batchId={batch.id} rooms={rooms} teachers={teachers} />
         </Tabs.Panel>
         <Tabs.Panel value="enroll" pt="md">
           <EnrollTab batch={batch} facilityId={facilityId} />

@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useDebouncedValue } from '@mantine/hooks';
+import { normalizeContactPhone } from '@cmc/auth';
 import {
   trpc,
   API_URL,
@@ -20,6 +22,7 @@ import {
   Modal,
   NumberInput,
   Pagination,
+  Radio,
   Select,
   Stack,
   Table,
@@ -1223,6 +1226,20 @@ function ReceiptCreateCard({
   const [studentDob, setStudentDob] = useState('');
   const [classBatchId, setClassBatchId] = useState<string | null>(null);
 
+  // Opportunity phone-lookup (decision 0037): find + link an existing CRM opportunity instead of
+  // retyping parent/student name by hand. Stashed values ride along silently in the receiptCreate
+  // payload; never autofilled without staff confirming the match first.
+  const [opportunityMatches, setOpportunityMatches] = useState<
+    { id: string; studentName: string | null; stage: string; contact: { fullName: string } }[]
+  >([]);
+  const [pickedOpportunityId, setPickedOpportunityId] = useState<string | null>(null);
+  const [pickedParentName, setPickedParentName] = useState<string | null>(null);
+  const [debouncedPhone] = useDebouncedValue(parentPhone, 300);
+  const singleOpportunityMatch = useMemo(
+    () => (opportunityMatches.length === 1 ? opportunityMatches[0] : null),
+    [opportunityMatches],
+  );
+
   // Shared
   const [years, setYears] = useState('1');
   const [voucherCode, setVoucherCode] = useState('');
@@ -1245,21 +1262,87 @@ function ReceiptCreateCard({
     setStudentName(opportunityContext.studentName ?? '');
   }, [opportunityContext]);
 
+  // Fire the lookup once the debounced phone normalizes to a full local number (9-10 digits) and a
+  // facility is chosen. Resets on every phone/facility change so a stale opportunityId can never
+  // ride along after the staff edits the phone.
+  useEffect(() => {
+    setPickedOpportunityId(null);
+    setPickedParentName(null);
+    setOpportunityMatches([]);
+    if (mode !== 'new' || !newFacilityId) return;
+    const digits = normalizeContactPhone(debouncedPhone).replace(/\D/g, '');
+    if (digits.length < 10) return; // +84 + 9-10 local digits
+    trpc.crm.opportunityLookupByPhone
+      .query({ facilityId: Number(newFacilityId), phone: debouncedPhone })
+      .then(setOpportunityMatches)
+      .catch(() => setOpportunityMatches([])); // no permission / no match → silent, manual flow unaffected
+  }, [debouncedPhone, newFacilityId, mode]);
+
+  function confirmOpportunityMatch(opp: { id: string; studentName: string | null; contact: { fullName: string } }) {
+    setPickedOpportunityId(opp.id);
+    setPickedParentName(opp.contact.fullName);
+    if (opp.studentName) setStudentName(opp.studentName);
+    setOpportunityMatches([]);
+  }
+
   const filteredBatches = newFacilityId
     ? batches.filter((b) => String(b.facilityId) === newFacilityId)
     : batches;
 
+  // Decision 0037: receiptCreate returns a discriminated union. On a 'warning' result we stash the
+  // exact payload that produced it, so "Vẫn lập phiếu" can retry with confirmDuplicate:true without
+  // re-deriving the request. Cleared on close/cancel and on a successful create.
+  const [duplicateWarning, setDuplicateWarning] = useState<{
+    parentName: string;
+    studentName: string | null;
+    payload: Parameters<typeof trpc.finance.receiptCreate.mutate>[0];
+  } | null>(null);
+
+  function resetForm() {
+    setStudentId(null);
+    setCourseId(null);
+    setNewFacilityId(null);
+    setNewCourseId(null);
+    setParentPhone('');
+    setStudentName('');
+    setStudentDob('');
+    setClassBatchId(null);
+    setYears('1');
+    setVoucherCode('');
+    setPeriod('');
+    setPickedOpportunityId(null);
+    setPickedParentName(null);
+    setOpportunityMatches([]);
+  }
+
+  async function submitReceipt(payload: Parameters<typeof trpc.finance.receiptCreate.mutate>[0]) {
+    const r = await trpc.finance.receiptCreate.mutate(payload);
+    if (r.status === 'warning') {
+      setDuplicateWarning({
+        parentName: r.duplicateWarning.parentName,
+        studentName: r.duplicateWarning.studentName,
+        payload,
+      });
+      return;
+    }
+    notifySuccess(
+      `Đã tạo phiếu nháp: gốc ${vnd(r.receipt.grossAmount)} → giảm ${r.receipt.effectiveDiscountPercent}% → còn ${vnd(r.receipt.netAmount)}`,
+      'Tạo phiếu thu thành công',
+    );
+    resetForm();
+    onCreated();
+  }
+
   async function createDraft() {
     setBusy(true);
     try {
-      let r;
       if (mode === 'existing') {
         const student = students.find((s) => s.id === studentId);
         if (!student || !courseId) {
           notifyError('Vui lòng chọn học sinh và khóa học.', 'Thiếu thông tin');
           return;
         }
-        r = await trpc.finance.receiptCreate.mutate({
+        await submitReceipt({
           facilityId: student.facilityId,
           studentId: student.id,
           courseId,
@@ -1276,35 +1359,33 @@ function ReceiptCreateCard({
           );
           return;
         }
-        r = await trpc.finance.receiptCreate.mutate({
+        await submitReceipt({
           facilityId: Number(newFacilityId),
           courseId: newCourseId,
           yearsPrepaid: Number(years),
           period: period.trim() || undefined,
           voucherCode: voucherCode.trim() || undefined,
           parentPhone: parentPhone.trim(),
+          parentName: pickedParentName ?? undefined,
           studentName: studentName.trim(),
           studentDob: studentDob.trim() || undefined,
           classBatchId: classBatchId ?? undefined,
-          opportunityId: opportunityContext?.opportunityId,
+          opportunityId: opportunityContext?.opportunityId ?? pickedOpportunityId ?? undefined,
         });
       }
-      notifySuccess(
-        `Đã tạo phiếu nháp: gốc ${vnd(r.grossAmount)} → giảm ${r.effectiveDiscountPercent}% → còn ${vnd(r.netAmount)}`,
-        'Tạo phiếu thu thành công',
-      );
-      setStudentId(null);
-      setCourseId(null);
-      setNewFacilityId(null);
-      setNewCourseId(null);
-      setParentPhone('');
-      setStudentName('');
-      setStudentDob('');
-      setClassBatchId(null);
-      setYears('1');
-      setVoucherCode('');
-      setPeriod('');
-      onCreated();
+    } catch (e) {
+      notifyError(e, 'Tạo phiếu thu thất bại');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmCreateDespiteDuplicate() {
+    if (!duplicateWarning) return;
+    setBusy(true);
+    try {
+      await submitReceipt({ ...duplicateWarning.payload, confirmDuplicate: true });
+      setDuplicateWarning(null);
     } catch (e) {
       notifyError(e, 'Tạo phiếu thu thất bại');
     } finally {
@@ -1395,6 +1476,49 @@ function ReceiptCreateCard({
               onChange={(e) => setStudentName(e.currentTarget.value)}
             />
           </Group>
+          {pickedOpportunityId ? (
+            <Alert color="green" variant="light">
+              Đã liên kết cơ hội CRM ({pickedParentName}) — tên học sinh đã điền theo cơ hội, có thể sửa lại nếu cần.
+            </Alert>
+          ) : opportunityMatches.length === 1 && singleOpportunityMatch ? (
+            <Alert color="blue" variant="light">
+              <Stack gap="xs">
+                <Text size="sm">
+                  Tìm thấy cơ hội CRM trùng SĐT: <strong>{singleOpportunityMatch.contact.fullName}</strong>
+                  {singleOpportunityMatch.studentName ? ` — ${singleOpportunityMatch.studentName}` : ''} (
+                  {singleOpportunityMatch.stage})
+                </Text>
+                <Group>
+                  <Button size="xs" onClick={() => confirmOpportunityMatch(singleOpportunityMatch)}>
+                    Dùng thông tin này
+                  </Button>
+                  <Button size="xs" variant="subtle" onClick={() => setOpportunityMatches([])}>
+                    Bỏ qua
+                  </Button>
+                </Group>
+              </Stack>
+            </Alert>
+          ) : opportunityMatches.length > 1 ? (
+            <Alert color="blue" variant="light">
+              <Stack gap="xs">
+                <Text size="sm">Có {opportunityMatches.length} cơ hội CRM trùng SĐT (có thể là anh chị em) — chọn đúng học sinh:</Text>
+                <Radio.Group onChange={(id) => {
+                  const opp = opportunityMatches.find((o) => o.id === id);
+                  if (opp) confirmOpportunityMatch(opp);
+                }}>
+                  <Stack gap={4}>
+                    {opportunityMatches.map((opp) => (
+                      <Radio
+                        key={opp.id}
+                        value={opp.id}
+                        label={`${opp.contact.fullName}${opp.studentName ? ` — ${opp.studentName}` : ''} (${opp.stage})`}
+                      />
+                    ))}
+                  </Stack>
+                </Radio.Group>
+              </Stack>
+            </Alert>
+          ) : null}
           <Group grow align="flex-end">
             <DateInput
               label="Ngày sinh (tùy chọn)"
@@ -1446,6 +1570,27 @@ function ReceiptCreateCard({
           Tạo phiếu nháp
         </Button>
       </Group>
+      <Modal
+        opened={!!duplicateWarning}
+        onClose={() => setDuplicateWarning(null)}
+        title="Có cơ hội CRM trùng SĐT"
+      >
+        <Stack>
+          <Text size="sm">
+            SĐT phụ huynh này trùng với 1 cơ hội CRM đang mở: <strong>{duplicateWarning?.parentName}</strong>
+            {duplicateWarning?.studentName ? ` — ${duplicateWarning.studentName}` : ''}. Nếu đây là 2 con
+            khác nhau dùng chung SĐT, cứ lập phiếu bình thường.
+          </Text>
+          <Group>
+            <Button onClick={confirmCreateDespiteDuplicate} loading={busy}>
+              Vẫn lập phiếu
+            </Button>
+            <Button variant="subtle" onClick={() => setDuplicateWarning(null)}>
+              Hủy
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Card>
   );
 }
