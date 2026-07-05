@@ -1,5 +1,10 @@
 export { timeToMinutes, rangesOverlap } from './time.js';
-export { formatBatchCode } from './code.js';
+export {
+  formatBatchCode,
+  PROGRAM_CODE_ABBREV,
+  PROGRAM_ORDER_INDEX,
+  type ClassProgram,
+} from './code.js';
 export {
   parentMeetingSchedule,
   PARENT_MEETING_CADENCE_MONTHS,
