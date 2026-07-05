@@ -299,10 +299,15 @@ function UserCreateModal({
   const [facilityIds, setFacilityIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const form = useForm({
-    initialValues: { email: '', displayName: '', phone: '', nationalId: '', startedAt: '', position: '' },
+    initialValues: {
+      email: '', displayName: '', phone: '', personalEmail: '',
+      nationalId: '', startedAt: '', position: '',
+    },
     validate: {
       email: email('Email không hợp lệ'),
       displayName: required('Nhập tên hiển thị'),
+      phone: required('Nhập số điện thoại'),
+      personalEmail: combine(required('Nhập email cá nhân'), email('Email cá nhân không hợp lệ')),
       nationalId: required('Nhập số CCCD/CMND'),
       startedAt: required('Chọn ngày vào làm'),
       position: required('Nhập vị trí công việc'),
@@ -316,13 +321,23 @@ function UserCreateModal({
       notifyError(new Error('Chọn ít nhất một vai trò'), 'Tạo người dùng thất bại');
       return;
     }
+    if (!primaryRole) {
+      notifyError(new Error('Chọn vai trò chính'), 'Tạo người dùng thất bại');
+      return;
+    }
+    if (facilityIds.length === 0) {
+      notifyError(new Error('Chọn ít nhất một cơ sở được truy cập'), 'Tạo người dùng thất bại');
+      return;
+    }
     setBusy(true);
     try {
       await trpc.user.create.mutate({
         email: values.email,
         displayName: values.displayName,
+        phone: values.phone,
+        personalEmail: values.personalEmail,
         roles: roles as User['roles'],
-        primaryRole: (primaryRole ?? roles[0]) as User['primaryRole'],
+        primaryRole: primaryRole as User['primaryRole'],
         facilityIds: facilityIds.map(Number),
         nationalId: values.nationalId,
         startedAt: values.startedAt,
@@ -348,15 +363,21 @@ function UserCreateModal({
         <Stack>
           <Text size="xs" c="dimmed">
             Nhân sự đăng nhập bằng tài khoản CMC EDU (SSO Microsoft) — không cần đặt mật khẩu.
-            Hệ thống gửi thư mời tới email bên dưới sau khi tạo.
+            Hệ thống gửi thông tin tài khoản tới email cá nhân bên dưới (nhân sự mới có thể chưa
+            truy cập được hộp thư công ty ngay).
           </Text>
           <TextInput
             label="Email" withAsterisk
-            description="Email công ty (CMC EDU) — dùng để đăng nhập SSO và nhận thư mời tài khoản"
+            description="Email công ty (CMC EDU) — dùng để đăng nhập SSO"
             {...form.getInputProps('email')}
           />
           <TextInput label="Tên hiển thị" withAsterisk {...form.getInputProps('displayName')} />
-          <TextInput label="Số điện thoại" {...form.getInputProps('phone')} />
+          <TextInput label="Số điện thoại" withAsterisk {...form.getInputProps('phone')} />
+          <TextInput
+            label="Email cá nhân" withAsterisk
+            description="Nơi nhận thông tin tài khoản khi tạo mới — không phải email CMC EDU"
+            {...form.getInputProps('personalEmail')}
+          />
           <Text size="xs" c="dimmed" mt="xs">
             Hồ sơ nhân sự tối thiểu — bắt buộc, không thể bỏ qua (điền thêm chi tiết khác sau ở
             trang Hồ sơ nhân sự).
@@ -371,15 +392,18 @@ function UserCreateModal({
             error={form.errors.startedAt}
           />
           <MultiSelect
-            label="Vai trò" data={roleOptions}
+            label="Vai trò" withAsterisk data={roleOptions}
             value={roles}
             onChange={(v) => { setRoles(v); if (primaryRole && !v.includes(primaryRole)) setPrimaryRole(null); }}
           />
           <Select
-            label="Vai trò chính" data={roles} value={primaryRole} onChange={setPrimaryRole}
+            label="Vai trò chính" withAsterisk data={roles} value={primaryRole} onChange={setPrimaryRole}
             disabled={roles.length === 0} placeholder={roles.length ? 'Chọn' : 'Chọn vai trò trước'}
           />
-          <MultiSelect label="Cơ sở được truy cập" data={facilityData} value={facilityIds} onChange={setFacilityIds} />
+          <MultiSelect
+            label="Cơ sở được truy cập" withAsterisk
+            data={facilityData} value={facilityIds} onChange={setFacilityIds}
+          />
           <Group justify="flex-end" mt="xs">
             <Button variant="subtle" onClick={close}>Hủy</Button>
             <Button type="submit" variant="filled" radius={9999} loading={busy}>Tạo</Button>

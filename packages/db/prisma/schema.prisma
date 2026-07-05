@@ -1405,6 +1405,10 @@ model EmploymentProfile {
   /// Loose UUID reference (no FK — follows codebase pattern for AppUser refs like soldById).
   managerId   String?   @map("manager_id") @db.Uuid
   startedAt   DateTime? @map("started_at") @db.Date
+  /// Email cá nhân (không phải email CMC EDU dùng để SSO) — nơi hệ thống gửi thông tin tài
+  /// khoản khi tạo mới, vì nhân sự chưa chắc đã truy cập được hộp thư công ty lúc đó.
+  /// Required at user.create (app-layer) but nullable here for pre-existing rows.
+  personalEmail String? @map("personal_email")
   /// Địa chỉ thường trú (decision 0026 — sensitive, masked for non-privileged roles).
   address     String?   @map("address")
   /// Số CCCD/CMND (decision 0026 — sensitive, masked for non-privileged roles).

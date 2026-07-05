@@ -46,6 +46,7 @@ describe('HR onboarding — user.create phone + dup-email (P2)', () => {
       nationalId: '0010000000001',
       startedAt: '2026-01-01',
       position: 'Nhân viên',
+      personalEmail: `personal-1-${Date.now()}@example.com`,
     });
     createdUserIds.push(user.id);
     expect(user.phone).toBe('0901234567');
@@ -59,6 +60,8 @@ describe('HR onboarding — user.create phone + dup-email (P2)', () => {
       nationalId: '0010000000001',
       startedAt: '2026-01-01',
       position: 'Nhân viên',
+      phone: '0901000002',
+      personalEmail: `personal-2-${Date.now()}@example.com`,
     });
     createdUserIds.push(u1.id);
     await expect(
@@ -67,6 +70,8 @@ describe('HR onboarding — user.create phone + dup-email (P2)', () => {
         nationalId: '0010000000001',
         startedAt: '2026-01-01',
         position: 'Nhân viên',
+        phone: '0901000003',
+        personalEmail: `personal-3-${Date.now()}@example.com`,
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
