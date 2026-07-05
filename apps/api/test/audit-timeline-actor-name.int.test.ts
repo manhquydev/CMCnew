@@ -36,7 +36,9 @@ describe('audit.timeline — resolved actorName', () => {
 
   it('resolves actorId to a human display name instead of leaving it raw', async () => {
     const caller = await staffCaller({ userId: actorUserId });
-    await caller.classBatch.update({ id: batchId, name: 'Actor name batch — renamed' });
+    // name is no longer part of the update input (always tracks the auto-generated code) —
+    // capacity exercises the same actor-resolution path just as well.
+    await caller.classBatch.update({ id: batchId, capacity: 15 });
 
     const timeline = await caller.audit.timeline({ entityType: 'class_batch', entityId: batchId });
     const entry = timeline.find((e) => e.type === 'updated');

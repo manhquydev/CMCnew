@@ -111,7 +111,7 @@ export function AttendanceReportPanel({ facilityId }: { facilityId: number }) {
     } else if (scope === 'class') {
       trpc.classBatch.list
         .query()
-        .then((rows) => setBatches(rows.filter((b) => b.facilityId === facilityId).map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }))))
+        .then((rows) => setBatches(rows.filter((b) => b.facilityId === facilityId).map((b) => ({ value: b.id, label: b.code }))))
         .catch((e) => notifyError(e, 'Không tải được danh sách lớp'));
     } else if (scope === 'term') {
       trpc.assessment.termList

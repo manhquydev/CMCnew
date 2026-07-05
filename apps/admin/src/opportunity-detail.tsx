@@ -771,7 +771,7 @@ export function OpportunityDetailPanel({
               .filter((b) => b.facilityId === opp.facilityId)
               .map((b) => ({
                 value: b.id,
-                label: `${b.code} — ${b.name} · ${b.course.code}`,
+                label: `${b.code} · ${b.course.code}`,
               }))}
             value={receiptClassBatchId}
             onChange={setReceiptClassBatchId}

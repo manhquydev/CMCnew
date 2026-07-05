@@ -95,7 +95,7 @@ export function AttendancePanel() {
           }
           data={sessions.map((s) => ({
             value: s.id,
-            label: `${s.batch.code} — ${s.batch.name}  ${s.startTime}–${s.endTime}${s.roomName ? ` (${s.roomName})` : ''}`,
+            label: `${s.batch.code}  ${s.startTime}–${s.endTime}${s.roomName ? ` (${s.roomName})` : ''}`,
           }))}
           value={sessionId}
           onChange={setSessionId}
@@ -107,7 +107,7 @@ export function AttendancePanel() {
         <Card withBorder>
           <Group justify="space-between" wrap="wrap" mb="xs">
             <Text fw={600}>
-              Điểm danh: {selectedSession.batch.code} — {selectedSession.batch.name}
+              Điểm danh: {selectedSession.batch.code}
               {'  '}
               {dayjs(selectedSession.sessionDate).format('DD/MM/YYYY')} {selectedSession.startTime}
             </Text>
