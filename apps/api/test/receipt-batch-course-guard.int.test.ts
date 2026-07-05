@@ -14,7 +14,7 @@
  * intentionally replaced by the facility guard above. These tests assert the current behavior.)
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { staffCaller, withRls, SUPER, uniq, superAdminUserId } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq, superAdminUserId, assertSuccess } from './helpers.js';
 
 const FAC = 1;
 
@@ -41,7 +41,7 @@ async function createBatch(courseId: string) {
 }
 
 describe('receiptApprove — batch/course mismatch guard', () => {
-  let actorId: string;
+  let _actorId: string;
 
   // Two courses so we can create a cross-course mismatch.
   let courseA: { id: string };
@@ -61,7 +61,7 @@ describe('receiptApprove — batch/course mismatch guard', () => {
 
   beforeAll(async () => {
     try {
-      actorId = await superAdminUserId();
+      _actorId = await superAdminUserId();
       dbReachable = true;
     } catch {
       console.warn('⚠ DB not reachable — integration tests skipped');
@@ -126,14 +126,14 @@ describe('receiptApprove — batch/course mismatch guard', () => {
     // Receipt is for courseA, batch belongs to courseB — a cross-course pairing that is
     // intentionally permitted (curriculum course vs billed course are separate catalogs).
     // Both live at the same facility (FAC), so the facility guard does not fire.
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FAC,
       courseId: courseA.id,
       yearsPrepaid: 1,
       classBatchId: batchB.id, // different course, same facility → allowed
       parentPhone: uniq('090'),
       studentName: uniq('Student'),
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     const approved = await caller.finance.receiptApprove({ id: receipt.id });
@@ -161,14 +161,14 @@ describe('receiptApprove — batch/course mismatch guard', () => {
     const caller = await staffCaller();
 
     // Receipt is for courseA, batch is also for courseA — correct.
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FAC,
       courseId: courseA.id,
       yearsPrepaid: 1,
       classBatchId: batchA.id, // correct: batch for courseA
       parentPhone: uniq('091'),
       studentName: uniq('Student'),
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     const approved = await caller.finance.receiptApprove({ id: receipt.id });

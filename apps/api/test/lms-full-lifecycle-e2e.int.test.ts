@@ -18,7 +18,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { Role, loginStudent, DEFAULT_STUDENT_PASSWORD } from '@cmc/auth';
 import { seedCurriculum, defaultCsvPath, courseCode } from '@cmc/db';
-import { staffCaller, withRls, SUPER, uniq, superAdminUserId, lmsCaller, prisma } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq, superAdminUserId, lmsCaller, prisma, assertSuccess } from './helpers.js';
 
 const FACILITY = 1;
 
@@ -145,7 +145,7 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
     const parentEmail = `parent_${uniq('e')}@example.com`;
     const studentName = 'Student E2E Test';
 
-    const receipt = await staffCtx.finance.receiptCreate({
+    const receipt = assertSuccess(await staffCtx.finance.receiptCreate({
       facilityId: FACILITY,
       courseId: course.id,
       yearsPrepaid: 1,
@@ -154,7 +154,7 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
       parentEmail,
       studentName,
       classBatchId: batch.id,
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
     console.log('✓ Step 1: Receipt created', receipt.id);
 
@@ -361,7 +361,7 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
     const phone = `+84${uniq('8')}`.slice(0, 12);
     const parentEmail = `parent2_${uniq('e')}@example.com`;
 
-    const receipt = await staffCtx.finance.receiptCreate({
+    const receipt = assertSuccess(await staffCtx.finance.receiptCreate({
       facilityId: FACILITY,
       courseId: course.id,
       yearsPrepaid: 1,
@@ -370,7 +370,7 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
       parentEmail,
       studentName: 'Student Run2',
       classBatchId: batch.id,
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     const approved = await staffCtx.finance.receiptApprove({ id: receipt.id });

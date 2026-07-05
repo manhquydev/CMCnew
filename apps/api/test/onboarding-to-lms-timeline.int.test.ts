@@ -28,7 +28,7 @@ import {
 } from '@cmc/auth';
 import { PROGRAM_CODE_ABBREV } from '@cmc/domain-academic';
 import { putSessionPhoto } from '../src/services/photo-store.js';
-import { prisma, withRls, SUPER, staffCaller, lmsCaller, uniq } from './helpers.js';
+import { prisma, withRls, SUPER, staffCaller, lmsCaller, uniq, assertSuccess } from './helpers.js';
 
 const FACILITY = 1;
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -273,7 +273,7 @@ describe('onboarding → class → receipt → session evidence → LMS timeline
     heroPhone = freshPhone();
     heroParentEmail = `ph_${uniq('e')}@example.com`;
 
-    const receipt = await accountant.finance.receiptCreate({
+    const receipt = assertSuccess(await accountant.finance.receiptCreate({
       facilityId: FACILITY,
       courseId: salesCourseId,
       yearsPrepaid: 1,
@@ -282,7 +282,7 @@ describe('onboarding → class → receipt → session evidence → LMS timeline
       parentEmail: heroParentEmail,
       studentName: 'Trần Gia Bảo',
       classBatchId: batchId,
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     const approved = await accountant.finance.receiptApprove({ id: receipt.id });
@@ -321,7 +321,7 @@ describe('onboarding → class → receipt → session evidence → LMS timeline
     // Now fill the batch past its capacity of 1 with a second, unrelated receipt/student —
     // overCapacity must flip to true (soft warning, never blocks — decision preserved).
     const overflowPhone = freshPhone();
-    const overflowReceipt = await accountant.finance.receiptCreate({
+    const overflowReceipt = assertSuccess(await accountant.finance.receiptCreate({
       facilityId: FACILITY,
       courseId: salesCourseId,
       yearsPrepaid: 1,
@@ -329,7 +329,7 @@ describe('onboarding → class → receipt → session evidence → LMS timeline
       parentName: 'Lê Văn Hùng',
       studentName: 'Lê Minh Khang',
       classBatchId: batchId,
-    });
+    }));
     cleanup.receiptIds.push(overflowReceipt.id);
     const overflowApproved = await accountant.finance.receiptApprove({ id: overflowReceipt.id });
     expect(overflowApproved.overCapacity).toBe(true);
@@ -339,13 +339,13 @@ describe('onboarding → class → receipt → session evidence → LMS timeline
     if (overflowParent) cleanup.parentAccountIds.push(overflowParent.id);
 
     // A receipt with no classBatchId at all must report overCapacity: null (capacity check N/A).
-    const noBatchReceipt = await accountant.finance.receiptCreate({
+    const noBatchReceipt = assertSuccess(await accountant.finance.receiptCreate({
       facilityId: FACILITY,
       courseId: salesCourseId,
       yearsPrepaid: 1,
       parentPhone: freshPhone(),
       studentName: 'Phạm Thu Trang',
-    });
+    }));
     cleanup.receiptIds.push(noBatchReceipt.id);
     const noBatchApproved = await accountant.finance.receiptApprove({ id: noBatchReceipt.id });
     expect(noBatchApproved.overCapacity).toBeNull();

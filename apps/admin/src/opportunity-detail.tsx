@@ -408,7 +408,7 @@ export function OpportunityDetailPanel({
     if (!opp || !receiptCourseId) return;
     setReceiptBusy(true);
     try {
-      const receipt = await trpc.finance.receiptCreate.mutate({
+      const result = await trpc.finance.receiptCreate.mutate({
         facilityId: opp.facilityId,
         courseId: receiptCourseId,
         yearsPrepaid: Number(receiptYears),
@@ -419,7 +419,13 @@ export function OpportunityDetailPanel({
         studentName: (opp.studentName || opp.contact.fullName).trim(),
         classBatchId: receiptClassBatchId ?? undefined,
       });
-      notifySuccess(`Đã tạo phiếu nháp ${receipt.code ?? ''}`.trim());
+      // Always passes opportunityId above, so the duplicate-warning branch (decision 0037) never
+      // triggers here — but the union return still requires narrowing before reading `.receipt`.
+      if (result.status !== 'success') {
+        notifyError('Tạo phiếu thu thất bại (không mong đợi: cảnh báo trùng dù đã gắn cơ hội)');
+        return;
+      }
+      notifySuccess(`Đã tạo phiếu nháp ${result.receipt.code ?? ''}`.trim());
       setReceiptOpen(false);
       setReceiptCourseId(null);
       setReceiptYears('1');

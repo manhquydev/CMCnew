@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Role } from '@cmc/auth';
-import { staffCaller, withRls, SUPER, uniq, superAdminUserId } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq, superAdminUserId, assertSuccess } from './helpers.js';
 
 describe('role-flows P3: commission chain from opportunity to receipt', () => {
   const FACILITY = 1;
@@ -130,13 +130,13 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
     const student = await makeStudent('Auto Win Student');
     const opp = await makeOpportunity(student.fullName);
 
-    const draft = await sale.finance.receiptCreate({
+    const draft = assertSuccess(await sale.finance.receiptCreate({
       facilityId: FACILITY,
       studentId: student.id,
       courseId: course.id,
       yearsPrepaid: 1,
       opportunityId: opp.id,
-    });
+    }));
     made.receiptIds.push(draft.id);
 
     const ownBefore = await sale.finance.receiptListOwn({ opportunityId: opp.id });
@@ -160,17 +160,17 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
   it('win-back linked opportunity still classifies as new despite prior receipt history', async () => {
     const director = await staffCaller();
     const student = await makeStudent('Win Back Student');
-    const first = await director.finance.receiptCreate({
+    const first = assertSuccess(await director.finance.receiptCreate({
       facilityId: FACILITY,
       studentId: student.id,
       courseId: course.id,
       yearsPrepaid: 1,
-    });
+    }));
     const firstApproved = await director.finance.receiptApprove({ id: first.id });
     made.receiptIds.push(firstApproved.id);
 
     const opp = await makeOpportunity(student.fullName);
-    const draft = await (
+    const draft = assertSuccess(await (
       await saleCaller()
     ).finance.receiptCreate({
       facilityId: FACILITY,
@@ -178,7 +178,7 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
       courseId: course.id,
       yearsPrepaid: 1,
       opportunityId: opp.id,
-    });
+    }));
     made.receiptIds.push(draft.id);
 
     const approved = await director.finance.receiptApprove({ id: draft.id });
@@ -189,7 +189,7 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
   it('student-name mismatch drops attribution and does not auto-win the linked opportunity', async () => {
     const student = await makeStudent('Real Student');
     const opp = await makeOpportunity('Different Name');
-    const draft = await (
+    const draft = assertSuccess(await (
       await saleCaller()
     ).finance.receiptCreate({
       facilityId: FACILITY,
@@ -197,7 +197,7 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
       courseId: course.id,
       yearsPrepaid: 1,
       opportunityId: opp.id,
-    });
+    }));
     made.receiptIds.push(draft.id);
 
     const approved = await (await staffCaller()).finance.receiptApprove({ id: draft.id });
@@ -219,7 +219,7 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
         data: { closedAt: new Date(), lostReason: 'price', lostNote: 'too expensive' },
       }),
     );
-    const draft = await (
+    const draft = assertSuccess(await (
       await saleCaller()
     ).finance.receiptCreate({
       facilityId: FACILITY,
@@ -227,7 +227,7 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
       courseId: course.id,
       yearsPrepaid: 1,
       opportunityId: opp.id,
-    });
+    }));
     made.receiptIds.push(draft.id);
 
     const approved = await (await staffCaller()).finance.receiptApprove({ id: draft.id });
@@ -244,7 +244,7 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
   it('cancel of the only approved linked receipt reverts the auto-won opportunity to O4', async () => {
     const student = await makeStudent('Cancel Revert Student');
     const opp = await makeOpportunity(student.fullName);
-    const draft = await (
+    const draft = assertSuccess(await (
       await saleCaller()
     ).finance.receiptCreate({
       facilityId: FACILITY,
@@ -252,7 +252,7 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
       courseId: course.id,
       yearsPrepaid: 1,
       opportunityId: opp.id,
-    });
+    }));
     const approved = await (await staffCaller()).finance.receiptApprove({ id: draft.id });
     made.receiptIds.push(approved.id);
 
@@ -269,7 +269,7 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
     const student = await makeStudent('Scoped Receipt Student');
     const ownOpp = await makeOpportunity(student.fullName, seller.id);
     const otherOpp = await makeOpportunity(student.fullName, otherSeller.id);
-    const ownDraft = await (
+    const ownDraft = assertSuccess(await (
       await saleCaller(seller.id)
     ).finance.receiptCreate({
       facilityId: FACILITY,
@@ -277,8 +277,8 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
       courseId: course.id,
       yearsPrepaid: 1,
       opportunityId: ownOpp.id,
-    });
-    const otherDraft = await (
+    }));
+    const otherDraft = assertSuccess(await (
       await saleCaller(otherSeller.id)
     ).finance.receiptCreate({
       facilityId: FACILITY,
@@ -286,7 +286,7 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
       courseId: course.id,
       yearsPrepaid: 1,
       opportunityId: otherOpp.id,
-    });
+    }));
     made.receiptIds.push(ownDraft.id, otherDraft.id);
 
     const ownList = await (await saleCaller(seller.id)).finance.receiptListOwn();

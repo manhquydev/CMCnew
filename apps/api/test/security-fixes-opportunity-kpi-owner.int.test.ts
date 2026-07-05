@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq, assertSuccess } from './helpers.js';
 import type { ApiContext } from '../src/context.js';
 import { appRouter } from '../src/routers/index.js';
 
@@ -109,13 +109,13 @@ describe('Fix #1 — receiptApprove: opportunity studentName guard', () => {
     const caller = await staffCaller();
 
     // Create receipt linking Alice to Bob's opportunity (mismatched studentName)
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY,
       studentId: aliceId,
       courseId,
       yearsPrepaid: 1,
       opportunityId: mismatchedOppId,
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     // A name typo must NOT block revenue collection — approval succeeds, but the unrelated
@@ -129,13 +129,13 @@ describe('Fix #1 — receiptApprove: opportunity studentName guard', () => {
     const caller = await staffCaller();
 
     // Create receipt linking Alice to Alice's opportunity
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY,
       studentId: aliceId,
       courseId,
       yearsPrepaid: 1,
       opportunityId: matchedOppId,
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     const approved = await caller.finance.receiptApprove({ id: receipt.id });

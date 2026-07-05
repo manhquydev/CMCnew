@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { TRPCError } from '@trpc/server';
-import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq, assertSuccess } from './helpers.js';
 
 // Invariant (spec Phase 3 §2.5, fixes legacy M2): voucher consume at receipt.approve is
 // ATOMIC — two approvals racing for the last use → exactly one wins, the other CONFLICTs,
@@ -47,8 +47,8 @@ describe('voucher atomic consume (money invariant)', () => {
     await caller.finance.voucherCreate({ facilityId: FACILITY, code, percent: 10, maxUses: 1 });
 
     // Two separate draft receipts, both pointing at the same single-use voucher.
-    const r1 = await caller.finance.receiptCreate({ facilityId: FACILITY, studentId, courseId, yearsPrepaid: 1, voucherCode: code });
-    const r2 = await caller.finance.receiptCreate({ facilityId: FACILITY, studentId, courseId, yearsPrepaid: 1, voucherCode: code });
+    const r1 = assertSuccess(await caller.finance.receiptCreate({ facilityId: FACILITY, studentId, courseId, yearsPrepaid: 1, voucherCode: code }));
+    const r2 = assertSuccess(await caller.finance.receiptCreate({ facilityId: FACILITY, studentId, courseId, yearsPrepaid: 1, voucherCode: code }));
 
     const results = await Promise.allSettled([
       caller.finance.receiptApprove({ id: r1.id }),
@@ -83,7 +83,7 @@ describe('voucher atomic consume (money invariant)', () => {
     const code = uniq('V');
     created.voucherCodes.push(code);
     await caller.finance.voucherCreate({ facilityId: FACILITY, code, percent: 10, maxUses: 1 });
-    const r = await caller.finance.receiptCreate({ facilityId: FACILITY, studentId, courseId, yearsPrepaid: 1, voucherCode: code });
+    const r = assertSuccess(await caller.finance.receiptCreate({ facilityId: FACILITY, studentId, courseId, yearsPrepaid: 1, voucherCode: code }));
     await caller.finance.receiptApprove({ id: r.id });
 
     let v = await withRls(SUPER, (tx) => tx.voucher.findFirstOrThrow({ where: { code } }));
@@ -100,7 +100,7 @@ describe('voucher atomic consume (money invariant)', () => {
     created.voucherCodes.push(code);
     // tier for 3 years = 30%, voucher = 20% → 50% raw, must cap to 35%.
     await caller.finance.voucherCreate({ facilityId: FACILITY, code, percent: 20, maxUses: 5 });
-    const r = await caller.finance.receiptCreate({ facilityId: FACILITY, studentId, courseId, yearsPrepaid: 3, voucherCode: code });
+    const r = assertSuccess(await caller.finance.receiptCreate({ facilityId: FACILITY, studentId, courseId, yearsPrepaid: 3, voucherCode: code }));
     // Prove BOTH components actually stacked (not a single 35-yielding source), then capped.
     expect(r.tierPercent).toBe(30);
     expect(r.voucherPercent).toBe(20);

@@ -50,4 +50,24 @@ export function uniq(prefix: string): string {
   return `${prefix}_${process.pid}_${Math.floor(performance.now())}`;
 }
 
+/**
+ * `finance.receiptCreate` returns a discriminated union since decision 0037 (soft duplicate-
+ * opportunity warning). Existing tests all expect the old bare-`Receipt` shape — this helper
+ * narrows the 'success' branch in one line per call site instead of repeating the check everywhere.
+ * Throws loudly if a test unexpectedly hits the 'warning' branch (almost always a fixture bug —
+ * e.g. reusing a phone from an earlier test's still-open opportunity).
+ */
+export function assertSuccess<T extends { status: 'success' | 'warning' }>(
+  result: T,
+): Extract<T, { status: 'success' }>['receipt'] {
+  if (result.status !== 'success') {
+    throw new Error(
+      `Expected receiptCreate to succeed but got a duplicate-opportunity warning: ${JSON.stringify(
+        (result as { duplicateWarning?: unknown }).duplicateWarning,
+      )}`,
+    );
+  }
+  return (result as Extract<T, { status: 'success' }>).receipt;
+}
+
 export { prisma, withRls };

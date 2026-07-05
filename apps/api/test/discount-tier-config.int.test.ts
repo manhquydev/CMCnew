@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Role } from '@cmc/auth';
 import { DISCOUNT_CAP_PERCENT } from '@cmc/domain-finance';
-import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq, assertSuccess } from './helpers.js';
 
 // Discount-tier config UI (plans/260702-1109-finance-ops/phase-04-discount-tier-ui.md).
 // discountTier rows are read at pricing time (finance.ts tiersFor) but were previously
@@ -135,12 +135,12 @@ describe('finance.discountTier* — per-facility config CRUD', () => {
     );
     created.studentIds.push(student.id);
 
-    const draftOnDefault = await caller.finance.receiptCreate({
+    const draftOnDefault = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY_A,
       studentId: student.id,
       courseId,
       yearsPrepaid: 2,
-    });
+    }));
     created.receiptIds.push(draftOnDefault.id);
     expect(draftOnDefault.tierPercent).toBe(20); // DEFAULT_DISCOUNT_TIERS 2y=20
 
@@ -156,12 +156,12 @@ describe('finance.discountTier* — per-facility config CRUD', () => {
     expect(after.usingDefaults).toBe(false);
     expect(after.tiers.map((t) => t.years)).toContain(2);
 
-    const draftOnConfigured = await caller.finance.receiptCreate({
+    const draftOnConfigured = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY_A,
       studentId: student.id,
       courseId,
       yearsPrepaid: 2,
-    });
+    }));
     created.receiptIds.push(draftOnConfigured.id);
     expect(draftOnConfigured.tierPercent).toBe(12);
     expect(draftOnConfigured.effectiveDiscountPercent).toBe(12);

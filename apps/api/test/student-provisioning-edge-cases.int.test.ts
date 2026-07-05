@@ -12,7 +12,7 @@
  * Requires Postgres and seeded super_admin user.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { staffCaller, withRls, SUPER, uniq, superAdminUserId } from './helpers.js';
+import { staffCaller, withRls, SUPER, uniq, superAdminUserId, assertSuccess } from './helpers.js';
 import { TRPCError } from '@trpc/server';
 
 const FACILITY_A = 1;
@@ -103,13 +103,13 @@ describe('student-provisioning: edge cases', () => {
     cleanup.courseIds.push(course.id);
 
     const phone = `+84${uniq('3')}`.slice(0, 12);
-    const draft = await caller.finance.receiptCreate({
+    const draft = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY_A,
       courseId: course.id,
       yearsPrepaid: 1,
       parentPhone: phone,
       studentName: 'HS Concurrent',
-    });
+    }));
     cleanup.receiptIds.push(draft.id);
 
     // Fire two concurrent approve calls — exactly one must succeed
@@ -151,6 +151,68 @@ describe('student-provisioning: edge cases', () => {
     }
   });
 
+  // ── EC-EMAIL: two new-parent receipts, different phones, SAME email → approve doesn't 500 ──
+  // Regression test for the savepoint fix in receiptApprove's new-ParentAccount insert: a plain
+  // try/catch around the raw INSERT does NOT recover from a Postgres unique-violation (the whole
+  // transaction aborts, 25P02, on the very next statement) — SAVEPOINT/ROLLBACK TO SAVEPOINT is
+  // required. Without it, this test's second approve would throw an opaque 25P02 error instead of
+  // completing (the original bug: raw HTTP 500 on email collision).
+
+  it('EC-EMAIL: second new-parent receipt reusing an already-claimed email approves cleanly (no email set, no 500)', async () => {
+    if (!dbReachable) return;
+    const caller = await staffCaller();
+    const course = await createCourseWithPrice();
+    cleanup.courseIds.push(course.id);
+
+    const sharedEmail = `${uniq('shared')}@cmc.test`;
+    const phoneA = `+84${uniq('1')}`.slice(0, 12);
+    const phoneB = `+84${uniq('2')}`.slice(0, 12);
+
+    // First family: new parent, claims sharedEmail successfully.
+    const draftA = assertSuccess(await caller.finance.receiptCreate({
+      facilityId: FACILITY_A,
+      courseId: course.id,
+      yearsPrepaid: 1,
+      parentPhone: phoneA,
+      parentEmail: sharedEmail,
+      studentName: 'HS Email Collision A',
+    }));
+    cleanup.receiptIds.push(draftA.id);
+    const approvedA = await caller.finance.receiptApprove({ id: draftA.id });
+    cleanup.studentIds.push(approvedA.studentId!);
+    const parentA = await withRls(SUPER, (tx) => tx.parentAccount.findFirst({ where: { phone: phoneA } }));
+    expect(parentA?.email).toBe(sharedEmail);
+    if (parentA) cleanup.parentAccountIds.push(parentA.id);
+
+    // Second, unrelated family: DIFFERENT phone, SAME email — must not 500; must approve with the
+    // student/receipt fully provisioned, just without the email set on this second ParentAccount.
+    const draftB = assertSuccess(await caller.finance.receiptCreate({
+      facilityId: FACILITY_A,
+      courseId: course.id,
+      yearsPrepaid: 1,
+      parentPhone: phoneB,
+      parentEmail: sharedEmail,
+      studentName: 'HS Email Collision B',
+    }));
+    cleanup.receiptIds.push(draftB.id);
+    const approvedB = await caller.finance.receiptApprove({ id: draftB.id });
+    expect(approvedB.status).toBe('approved');
+    expect(approvedB.studentId).toBeTruthy();
+    cleanup.studentIds.push(approvedB.studentId!);
+
+    const parentB = await withRls(SUPER, (tx) => tx.parentAccount.findFirst({ where: { phone: phoneB } }));
+    expect(parentB).not.toBeNull();
+    expect(parentB?.email).toBeNull(); // collision → created without email, not blocked
+    if (parentB) cleanup.parentAccountIds.push(parentB.id);
+
+    // The rest of the transaction (student creation, guardian link) must have committed too —
+    // proof the savepoint actually recovered the transaction rather than leaving it aborted.
+    const guardianB = await withRls(SUPER, (tx) =>
+      tx.guardian.findFirst({ where: { parentAccountId: parentB!.id, studentId: approvedB.studentId! } }),
+    );
+    expect(guardianB).not.toBeNull();
+  });
+
   // ── EC1: Same parent phone, DIFFERENT child name → separate student ──────────
   // Fixed: removed length===1 shortcut from finance.ts dedupe (H1 fix).
 
@@ -166,7 +228,7 @@ describe('student-provisioning: edge cases', () => {
     const phone = `+84${uniq('9')}`.slice(0, 12);
 
     // First child: HS Sibling A
-    const r1 = await caller.finance.receiptCreate({
+    const r1 = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY_A,
       courseId: course.id,
       yearsPrepaid: 1,
@@ -174,21 +236,21 @@ describe('student-provisioning: edge cases', () => {
       parentName: 'Parent Name',
       studentName: 'HS Sibling A',
       classBatchId: batch1.id,
-    });
+    }));
     cleanup.receiptIds.push(r1.id);
     const a1 = await caller.finance.receiptApprove({ id: r1.id });
     const studentId1 = a1.studentId!;
     cleanup.studentIds.push(studentId1);
 
     // Second child: HS Sibling B (same parent, DIFFERENT name)
-    const r2 = await caller.finance.receiptCreate({
+    const r2 = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY_A,
       courseId: course.id,
       yearsPrepaid: 1,
       parentPhone: phone,
       studentName: 'HS Sibling B',
       classBatchId: batch2.id,
-    });
+    }));
     cleanup.receiptIds.push(r2.id);
     const a2 = await caller.finance.receiptApprove({ id: r2.id });
     const studentId2 = a2.studentId!;
@@ -231,28 +293,28 @@ describe('student-provisioning: edge cases', () => {
     const studentName = 'HS Multi Receipt';
 
     // Receipt A: creates student
-    const r1 = await caller.finance.receiptCreate({
+    const r1 = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY_A,
       courseId: course.id,
       yearsPrepaid: 1,
       parentPhone: phone,
       studentName,
       classBatchId: batch1.id,
-    });
+    }));
     cleanup.receiptIds.push(r1.id);
     const a1 = await caller.finance.receiptApprove({ id: r1.id });
     const studentId = a1.studentId!;
     cleanup.studentIds.push(studentId);
 
     // Receipt B: approves for same student (dedupe match)
-    const r2 = await caller.finance.receiptCreate({
+    const r2 = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY_A,
       courseId: course.id,
       yearsPrepaid: 1,
       parentPhone: phone,
       studentName,
       classBatchId: batch2.id,
-    });
+    }));
     cleanup.receiptIds.push(r2.id);
     const a2 = await caller.finance.receiptApprove({ id: r2.id });
     expect(a2.studentId).toBe(studentId);
@@ -299,7 +361,7 @@ describe('student-provisioning: edge cases', () => {
         studentName: 'HS Orphan',
         // parentPhone: missing!
         // studentId: missing!
-      });
+      }); // no assertSuccess: error-path test, receiptCreate itself throws before returning
     } catch (e) {
       error = e;
     }
@@ -323,14 +385,14 @@ describe('student-provisioning: edge cases', () => {
     const phone = `+84${uniq('7')}`.slice(0, 12);
 
     // Create receipt for facility A (this should succeed)
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY_A,
       courseId: course.id,
       yearsPrepaid: 1,
       parentPhone: phone,
       studentName: 'HS RLS Test',
       classBatchId: batch.id,
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     const approved = await caller.finance.receiptApprove({ id: receipt.id });
@@ -357,14 +419,14 @@ describe('student-provisioning: edge cases', () => {
     cleanup.batchIds.push(batch.id);
 
     const phone = `+84${uniq('6')}`.slice(0, 12);
-    const receipt = await caller.finance.receiptCreate({
+    const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY_A,
       courseId: course.id,
       yearsPrepaid: 1,
       parentPhone: phone,
       studentName: 'HS Idempotent',
       classBatchId: batch.id,
-    });
+    }));
     cleanup.receiptIds.push(receipt.id);
 
     // First approve
@@ -423,41 +485,41 @@ describe('student-provisioning: edge cases', () => {
     const studentName = 'HS Multi Batch';
 
     // Receipt 1: creates student + enrolls in batch1
-    const r1 = await caller.finance.receiptCreate({
+    const r1 = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY_A,
       courseId: course.id,
       yearsPrepaid: 1,
       parentPhone: phone,
       studentName,
       classBatchId: batch1.id,
-    });
+    }));
     cleanup.receiptIds.push(r1.id);
     const a1 = await caller.finance.receiptApprove({ id: r1.id });
     const studentId = a1.studentId!;
     cleanup.studentIds.push(studentId);
 
     // Receipt 2: dedupe match, enroll in batch2
-    const r2 = await caller.finance.receiptCreate({
+    const r2 = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY_A,
       courseId: course.id,
       yearsPrepaid: 1,
       parentPhone: phone,
       studentName,
       classBatchId: batch2.id,
-    });
+    }));
     cleanup.receiptIds.push(r2.id);
     const a2 = await caller.finance.receiptApprove({ id: r2.id });
     expect(a2.studentId).toBe(studentId);
 
     // Receipt 3: dedupe match again, enroll in batch3
-    const r3 = await caller.finance.receiptCreate({
+    const r3 = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY_A,
       courseId: course.id,
       yearsPrepaid: 1,
       parentPhone: phone,
       studentName,
       classBatchId: batch3.id,
-    });
+    }));
     cleanup.receiptIds.push(r3.id);
     const a3 = await caller.finance.receiptApprove({ id: r3.id });
     expect(a3.studentId).toBe(studentId);
@@ -511,28 +573,28 @@ describe('student-provisioning: edge cases', () => {
     const studentName = 'HS MultiEnroll Cancel';
 
     // Receipt A: creates student + batch1
-    const rA = await caller.finance.receiptCreate({
+    const rA = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY_A,
       courseId: course.id,
       yearsPrepaid: 1,
       parentPhone: phone,
       studentName,
       classBatchId: batch1.id,
-    });
+    }));
     cleanup.receiptIds.push(rA.id);
     const aA = await caller.finance.receiptApprove({ id: rA.id });
     const studentId = aA.studentId!;
     cleanup.studentIds.push(studentId);
 
     // Receipt B: dedupe match + batch2
-    const rB = await caller.finance.receiptCreate({
+    const rB = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY_A,
       courseId: course.id,
       yearsPrepaid: 1,
       parentPhone: phone,
       studentName,
       classBatchId: batch2.id,
-    });
+    }));
     cleanup.receiptIds.push(rB.id);
     const aB = await caller.finance.receiptApprove({ id: rB.id });
     expect(aB.studentId).toBe(studentId);
