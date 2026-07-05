@@ -76,7 +76,17 @@ pipeline {
           # image is rebuilt again below by `up -d --build`; Docker layer caching makes that second
           # build cheap once this first one has run.
           $COMPOSE --profile migrate run --rm --build api-migrate
-          $COMPOSE up -d --build
+          # Build one image at a time — COMPOSE_PARALLEL_LIMIT=1 above only throttles compose's own
+          # container-orchestration concurrency, NOT BuildKit's automatic parallel bake of multiple
+          # `--build` targets passed to a single `up`/`build` invocation. On this 2 vCPU box that
+          # let admin+lms build concurrently, and under that contention the admin build's
+          # admin-route-metadata Vite plugin (closeBundle) intermittently read dist/index.html
+          # before Vite finished writing it (ENOENT), failing the whole deploy. Splitting into
+          # separate `build` calls forces true one-at-a-time image builds.
+          $COMPOSE build api
+          $COMPOSE build admin
+          $COMPOSE build lms
+          $COMPOSE up -d
           # nginx resolves the admin/lms/api upstream hostnames once at startup. Recreated app
           # containers get new IPs, so restart nginx to re-resolve — otherwise it can proxy a
           # vhost to the wrong (stale-IP) container and the apps appear swapped.
@@ -127,7 +137,15 @@ pipeline {
           DBN="$(grep -m1 '^DB_NAME=' /secrets/.env.dev | cut -d= -f2-)"; DBN="${DBN:-cmc}"
           DBP="$(grep -m1 '^DB_APP_PASSWORD=' /secrets/.env.dev | cut -d= -f2-)"
           $DEV exec -T dev-postgres psql -U "$DBU" -d "$DBN" -c "ALTER ROLE cmc_app PASSWORD '$DBP';"
-          $DEV up -d --build dev-api dev-admin dev-lms
+          # Build one image at a time — same reasoning as the prod deploy stage: BuildKit
+          # auto-parallelizes multiple `--build` targets passed to one `up`, ignoring
+          # COMPOSE_PARALLEL_LIMIT, and dev-admin+dev-lms building concurrently on this 2 vCPU box
+          # made the admin-route-metadata Vite plugin intermittently read dist/index.html before
+          # Vite finished writing it (ENOENT), failing the deploy.
+          $DEV build dev-api
+          $DEV build dev-admin
+          $DEV build dev-lms
+          $DEV up -d dev-api dev-admin dev-lms
           # Wait for dev-api to become healthy before reloading nginx and smoking. dev-api has a
           # start_period (Node + Prisma boot); smoking the instant the container reports "Started"
           # hits "connection refused" on a still-booting app and fails an otherwise-good deploy.
