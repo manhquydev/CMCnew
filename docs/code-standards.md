@@ -73,6 +73,12 @@ Run `pnpm lint` (Turbo fans out to each workspace's `eslint src`).
   `packages/auth/src/permissions.ts` (`PERMISSIONS[router][procedure] = [...]`).
   No inheritance, no wildcards; `super_admin` bypasses upstream. Keep it
   browser-safe — **no `@cmc/db` import** in that file.
+  **Important:** Decouple narrow, purpose-built permissions from nav-gating
+  permissions they might naively reuse. Example: `crm.opportunityLookup` is a
+  read-only lookup gate for finance staff (`ke_toan`), separate from
+  `crm.opportunityList`, which gates the entire CRM nav tab. Reusing the
+  nav gate would expose unintended surface area; create a new permission
+  instead (decision 0037).
 - **Validate input with Zod** at the procedure boundary; let typed DTOs flow
   inward.
 - **Don't leak internals.** The tRPC `errorFormatter` already strips stack
