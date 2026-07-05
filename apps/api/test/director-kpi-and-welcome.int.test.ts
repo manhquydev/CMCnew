@@ -142,6 +142,7 @@ describe('director KPI authority', () => {
 describe('user.create welcome email (SSO onboarding, no password)', () => {
   it('enqueues an account_welcome email that does not contain the password', async () => {
     const su = await staffCaller();
+    const personalEmail = `personal-${uniq('welcome')}@example.com`;
     const created = await su.user.create({
       email: `${uniq('welcome-staff')}@cmc.test`,
       displayName: 'Welcome Staff',
@@ -151,20 +152,24 @@ describe('user.create welcome email (SSO onboarding, no password)', () => {
       nationalId: '0010000000001',
       startedAt: '2026-01-01',
       position: 'Nhân viên',
+      phone: '0901000001',
+      personalEmail,
     });
 
+    // Welcome email goes to the PERSONAL email, not the CMC EDU/SSO address — the new hire may
+    // not be able to check their company inbox yet (see apps/api/src/routers/user.ts emailWelcome).
     const row = await withRls(SUPER, (tx) =>
-      tx.emailOutbox.findUnique({ where: { dedupKey: `account_welcome:${created.email}` } }),
+      tx.emailOutbox.findUnique({ where: { dedupKey: `account_welcome:${personalEmail}` } }),
     );
     expect(row, 'welcome email should be enqueued').not.toBeNull();
     expect(row!.templateKind).toBe('account_welcome');
-    expect(row!.toAddress).toBe(created.email);
+    expect(row!.toAddress).toBe(personalEmail);
     expect(row!.bodyHtml).toContain('CMC EDU'); // SSO instruction
     expect(row!.bodyHtml).not.toContain('Mật khẩu'); // SSO onboarding: no password is ever emailed
 
     // cleanup
     await withRls(SUPER, async (tx) => {
-      await tx.emailOutbox.deleteMany({ where: { dedupKey: `account_welcome:${created.email}` } });
+      await tx.emailOutbox.deleteMany({ where: { dedupKey: `account_welcome:${personalEmail}` } });
       await tx.recordEvent.deleteMany({ where: { entityType: 'user', entityId: created.id } });
       await tx.appUser.delete({ where: { id: created.id } });
     });

@@ -194,6 +194,8 @@ describe('onboarding → class → receipt → session evidence → LMS timeline
       nationalId: `001${uniq('').replace(/\D/g, '').slice(-9).padStart(9, '0')}`,
       startedAt: '2026-07-01',
       position: 'Giáo viên chủ nhiệm',
+      phone: '0901234567',
+      personalEmail: `personal-teacher-${uniq('')}@example.com`,
     });
     teacherId = teacher.id;
     expect(teacher.roles).toContain(Role.giao_vien);

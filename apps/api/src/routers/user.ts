@@ -83,16 +83,19 @@ export const userRouter = router({
           // with a usable break-glass password is the bootstrap super_admin (seeded, not created here).
           email: z.string().email(),
           displayName: z.string().min(1),
-          phone: z.string().optional(),
-          roles: z.array(role).min(1),
+          phone: z.string().trim().min(1, 'Số điện thoại bắt buộc'),
+          roles: z.array(role).min(1, 'Chọn ít nhất một vai trò'),
           primaryRole: role,
-          facilityIds: z.array(z.number().int().positive()),
+          facilityIds: z.array(z.number().int().positive()).min(1, 'Phải chọn ít nhất một cơ sở'),
           // Hồ sơ nhân sự tối thiểu — bắt buộc ngay lúc tạo, không cho tạo tài khoản "mồ côi"
           // hồ sơ (xem plans/reports/audit-260705-0105-teacher-parent-student-launch-readiness-report.md).
           // Field mở rộng khác (DOB, hợp đồng, liên hệ khẩn cấp...) vẫn điền sau qua payroll.profileUpsert.
           nationalId: z.string().trim().min(1, 'CCCD/CMND bắt buộc'),
           startedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Ngày vào làm bắt buộc (YYYY-MM-DD)'),
           position: z.string().trim().min(1, 'Vị trí công việc bắt buộc'),
+          // Email cá nhân (KHÁC email CMC EDU dùng để SSO) — nhân sự mới có thể chưa truy cập
+          // được hộp thư công ty ngay, nên thư báo tài khoản gửi về đây thay vì email SSO.
+          personalEmail: z.string().trim().email('Email cá nhân không hợp lệ'),
         })
         .refine((v) => v.roles.includes(v.primaryRole), {
           message: 'primaryRole phải nằm trong roles',
@@ -180,6 +183,7 @@ export const userRouter = router({
             position: input.position,
             startedAt: new Date(input.startedAt),
             nationalId: input.nationalId,
+            personalEmail: input.personalEmail.trim().toLowerCase(),
             employeeCode,
           },
         });
@@ -195,7 +199,7 @@ export const userRouter = router({
       });
       // Welcome email (best-effort, post-commit). SSO onboarding: no password is sent — staff sign in
       // with their Microsoft (CMC EDU) account. A mail-queue failure must never undo the create.
-      await emailWelcome(user.email, user.displayName, user.primaryRole);
+      await emailWelcome(input.personalEmail.trim().toLowerCase(), user.displayName, user.primaryRole);
         return user;
       } catch (e) {
         if (e && typeof e === 'object' && 'code' in e && (e as { code: string }).code === 'P2002') {

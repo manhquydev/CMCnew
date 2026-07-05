@@ -84,6 +84,8 @@ describe('Business Director user.create', () => {
       nationalId: '0010000000001',
       startedAt: '2026-01-01',
       position: 'Nhân viên',
+      phone: '0901000001',
+      personalEmail: `personal-1-${Date.now()}@example.com`,
     });
     expect(user.roles).toContain(Role.sale);
   });
@@ -106,6 +108,8 @@ describe('Business Director user.create', () => {
         nationalId: '0010000000001',
         startedAt: '2026-01-01',
         position: 'Nhân viên',
+        phone: '0901000002',
+        personalEmail: `personal-2-${Date.now()}@example.com`,
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
@@ -128,6 +132,8 @@ describe('Business Director user.create', () => {
         nationalId: '0010000000001',
         startedAt: '2026-01-01',
         position: 'Nhân viên',
+        phone: '0901000003',
+        personalEmail: `personal-3-${Date.now()}@example.com`,
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
@@ -150,6 +156,8 @@ describe('Business Director user.create', () => {
         nationalId: '0010000000001',
         startedAt: '2026-01-01',
         position: 'Nhân viên',
+        phone: '0901000004',
+        personalEmail: `personal-4-${Date.now()}@example.com`,
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
@@ -176,6 +184,8 @@ describe('Education Director user.create', () => {
       nationalId: '0010000000001',
       startedAt: '2026-01-01',
       position: 'Nhân viên',
+      phone: '0901000005',
+      personalEmail: `personal-5-${Date.now()}@example.com`,
     });
     expect(user.roles).toContain(Role.giao_vien);
   });
@@ -198,6 +208,8 @@ describe('Education Director user.create', () => {
         nationalId: '0010000000001',
         startedAt: '2026-01-01',
         position: 'Nhân viên',
+        phone: '0901000006',
+        personalEmail: `personal-6-${Date.now()}@example.com`,
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
@@ -220,6 +232,8 @@ describe('Education Director user.create', () => {
         nationalId: '0010000000001',
         startedAt: '2026-01-01',
         position: 'Nhân viên',
+        phone: '0901000007',
+        personalEmail: `personal-7-${Date.now()}@example.com`,
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
@@ -240,6 +254,8 @@ describe('super_admin user.create', () => {
       nationalId: '0010000000001',
       startedAt: '2026-01-01',
       position: 'Nhân viên',
+      phone: '0901000008',
+      personalEmail: `personal-8-${Date.now()}@example.com`,
     });
     expect(user.roles).toContain(Role.giam_doc_kinh_doanh);
   });
@@ -256,6 +272,8 @@ describe('super_admin user.create', () => {
         nationalId: '0010000000001',
         startedAt: '2026-01-01',
         position: 'Nhân viên',
+        phone: '0901000009',
+        personalEmail: `personal-9-${Date.now()}@example.com`,
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
@@ -302,6 +320,8 @@ describe('user.setPassword', () => {
       nationalId: '0010000000001',
       startedAt: '2026-01-01',
       position: 'Nhân viên',
+      phone: '0901000010',
+      personalEmail: `personal-10-${Date.now()}@example.com`,
     });
     const before = await withRls(SUPER, (tx) => tx.appUser.findUniqueOrThrow({ where: { id: target.id }, select: { tokenVersion: true } }));
 

@@ -94,7 +94,9 @@ export const classBatchRouter = router({
       z.object({
         facilityId: z.number().int().positive(),
         courseId: z.string().uuid(),
-        name: z.string().min(1),
+        // No name input: the class's display name is always its auto-generated code
+        // (decision: "Tên lớp" is not a separate free-text field — see class creation
+        // form fix, plans/reports/audit-260705-0105-teacher-parent-student-launch-readiness-report.md).
         startDate: z.string().date().optional(),
         endDate: z.string().date().optional(),
         capacity: z.number().int().positive().optional(),
@@ -115,13 +117,17 @@ export const classBatchRouter = router({
         const year = input.startDate
           ? new Date(input.startDate).getUTCFullYear()
           : new Date().getUTCFullYear();
-        const code = await nextBatchCode(tx, input.facilityId, year);
+        const [facility, course] = await Promise.all([
+          tx.facility.findUniqueOrThrow({ where: { id: input.facilityId }, select: { code: true } }),
+          tx.course.findUniqueOrThrow({ where: { id: input.courseId }, select: { program: true } }),
+        ]);
+        const code = await nextBatchCode(tx, input.facilityId, facility.code, course.program, year);
         const batch = await tx.classBatch.create({
           data: {
             facilityId: input.facilityId,
             courseId: input.courseId,
             code,
-            name: input.name,
+            name: code,
             startDate: input.startDate ? new Date(input.startDate) : null,
             endDate: input.endDate ? new Date(input.endDate) : null,
             capacity: input.capacity ?? null,

@@ -122,9 +122,11 @@ function CreateClassModal({
 }) {
   const [opened, { open, close }] = useDisclosure(false);
   const [courseId, setCourseId] = useState<string | null>(null);
-  const [name, setName] = useState('');
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
+  // True until the staff member manually edits "Kết thúc" — while true, the auto-estimate
+  // effect below keeps overwriting it as start date / curriculum / weekly slots change.
+  const [endDateAuto, setEndDateAuto] = useState(true);
   const [capacity, setCapacity] = useState<number | string>('');
   // Multiple weekly slots (nhiều thứ/tuần). Sent as `slots[]`; server rejects duplicate (thứ,giờ).
   const [slots, setSlots] = useState<SlotRow[]>([newSlotRow(0)]);
@@ -149,6 +151,15 @@ function CreateClassModal({
     };
   }, [courseId]);
 
+  // Auto-estimate "Kết thúc": ngày khai giảng + ceil(tổng buổi khóa cứng / số buổi mỗi tuần)
+  // tuần. Chỉ là ước tính ban đầu (chưa tính nghỉ lễ/dời buổi) — nhân viên vẫn sửa tay được;
+  // một khi đã sửa tay, effect này ngừng ghi đè (endDateAuto=false).
+  useEffect(() => {
+    if (!endDateAuto || !startDate || !preview || preview.totalSessions <= 0 || slots.length === 0) return;
+    const weeks = Math.ceil(preview.totalSessions / slots.length);
+    setEndDate(dayjs(startDate).add(weeks * 7 - 1, 'day').toDate());
+  }, [endDateAuto, startDate, preview, slots.length]);
+
   function updateSlot(key: number, patch: Partial<SlotRow>) {
     setSlots((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   }
@@ -160,10 +171,10 @@ function CreateClassModal({
   }
 
   function reset() {
-    setName('');
     setCourseId(null);
     setStartDate(null);
     setEndDate(null);
+    setEndDateAuto(true);
     setCapacity('');
     setSlots([newSlotRow(0)]);
     slotKey.current = 1;
@@ -171,8 +182,8 @@ function CreateClassModal({
   }
 
   async function create() {
-    if (!courseId || !name) {
-      setErr('Chọn khung chương trình và nhập tên lớp');
+    if (!courseId) {
+      setErr('Chọn khung chương trình');
       return;
     }
     if (slots.some((s) => !s.day || !s.start || !s.end)) {
@@ -185,7 +196,6 @@ function CreateClassModal({
       await trpc.classBatch.create.mutate({
         facilityId,
         courseId,
-        name,
         startDate: toApiDate(startDate),
         endDate: toApiDate(endDate),
         capacity: typeof capacity === 'number' ? capacity : undefined,
@@ -216,12 +226,16 @@ function CreateClassModal({
         <Stack>
           <Select
             label="Khung chương trình (khóa cứng)"
-            placeholder={courses.length ? 'Chọn chương trình → level' : 'Chưa có khung (chạy seed:curriculum)'}
+            placeholder={courses.some((c) => c.unitCount > 0) ? 'Chọn chương trình → level' : 'Chưa có khung (chạy seed:curriculum)'}
             searchable
-            data={courses.map((c) => ({
-              value: c.id,
-              label: `${c.code} — ${c.name}${c.unitCount ? ` · ${c.unitCount} unit / ${c.totalSessions} buổi` : ''}`,
-            }))}
+            // Chỉ cho chọn course đã có khung khóa cứng thật (unitCount>0) — course chưa seed
+            // curriculum không phải là "khung chương trình" hợp lệ để mở lớp theo.
+            data={courses
+              .filter((c) => c.unitCount > 0)
+              .map((c) => ({
+                value: c.id,
+                label: `${c.code} — ${c.name} · ${c.unitCount} unit / ${c.totalSessions} buổi`,
+              }))}
             value={courseId}
             onChange={setCourseId}
           />
@@ -244,10 +258,15 @@ function CreateClassModal({
               </Table>
             </Card>
           )}
-          <TextInput label="Tên lớp" value={name} onChange={(e) => setName(e.currentTarget.value)} />
           <Group grow>
             <DateInput label="Khai giảng" value={startDate} onChange={setStartDate} valueFormat="DD/MM/YYYY" clearable />
-            <DateInput label="Kết thúc" value={endDate} onChange={setEndDate} valueFormat="DD/MM/YYYY" clearable />
+            <DateInput
+              label={endDateAuto ? 'Kết thúc (ước tính, có thể sửa)' : 'Kết thúc'}
+              value={endDate}
+              onChange={(d) => { setEndDate(d); setEndDateAuto(false); }}
+              valueFormat="DD/MM/YYYY"
+              clearable
+            />
           </Group>
           <NumberInput label="Sĩ số tối đa (tùy chọn)" value={capacity} onChange={setCapacity} min={1} />
           <Card withBorder>
