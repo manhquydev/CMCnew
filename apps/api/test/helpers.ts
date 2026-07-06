@@ -46,8 +46,10 @@ export function lmsCaller(lms: LmsSession) {
 }
 
 /** A unique suffix so parallel/re-run fixtures never collide. */
+let uniqCounter = 0;
 export function uniq(prefix: string): string {
-  return `${prefix}_${process.pid}_${Math.floor(performance.now())}`;
+  uniqCounter += 1;
+  return `${prefix}_${process.pid}_${Date.now()}_${Math.floor(performance.now() * 1000)}_${uniqCounter}`;
 }
 
 /**
