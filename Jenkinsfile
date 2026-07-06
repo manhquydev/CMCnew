@@ -12,7 +12,7 @@ pipeline {
     timeout(time: 30, unit: 'MINUTES')
   }
   environment {
-    COMPOSE  = 'docker compose -f docker/docker-compose.prod.tls.yml --env-file /secrets/.env.production'
+    COMPOSE  = 'env -u CORS_ORIGINS -u STAFF_APP_ORIGINS docker compose -f docker/docker-compose.prod.tls.yml --env-file /secrets/.env.production'
     NODE_IMG = 'node:22-alpine'
   }
   stages {
@@ -156,7 +156,7 @@ pipeline {
           # The dev app tier joins the shared cmcnew-edge network; create it before `up` (external).
           docker network create cmcnew-edge 2>/dev/null || true
           # Explicit branch-to-environment mapping — dev project, dev env file, dev compose. No prod vars.
-          DEV="docker compose -f docker/docker-compose.dev.tls.yml --env-file /secrets/.env.dev"
+          DEV="env -u CORS_ORIGINS -u STAFF_APP_ORIGINS docker compose -f docker/docker-compose.dev.tls.yml --env-file /secrets/.env.dev"
           echo "deploying: project=cmcnew-dev env=/secrets/.env.dev commit=$APP_COMMIT"
           $DEV up -d dev-postgres dev-redis
           for i in $(seq 1 30); do
@@ -198,7 +198,7 @@ pipeline {
       when { branch 'develop' }   // smoke-test the deploy that only develop performs
       steps {
         sh '''
-          DEV="docker compose -f docker/docker-compose.dev.tls.yml --env-file /secrets/.env.dev"
+          DEV="env -u CORS_ORIGINS -u STAFF_APP_ORIGINS docker compose -f docker/docker-compose.dev.tls.yml --env-file /secrets/.env.dev"
           assert_title_marker() {
             URL="$1"
             EXPECTED_MARKER="$2"
