@@ -113,7 +113,7 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     // Narrow existence-check for finance-panel's new-student form (decision 0037). Mirrors
     // finance.receiptCreate's role set, NOT opportunityList's — ke_toan gets this lookup without
     // gaining the full CRM nav tab (nav-permissions.ts gates on opportunityList, not this key).
-    opportunityLookup: ['ke_toan', 'giam_doc_kinh_doanh', 'sale'],
+    opportunityLookup: ['ke_toan', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'sale'],
     // Owner picker / name resolution: anyone who can view the pipeline can read the staff list.
     assignableOwners: ['sale', 'cskh', 'ctv_mkt', 'giam_doc_kinh_doanh'],
     opportunityCreate: ['sale', 'cskh', 'ctv_mkt', 'giam_doc_kinh_doanh'],
@@ -155,12 +155,12 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     discountTierUpsert: ['giam_doc_kinh_doanh'],
     discountTierArchive: ['giam_doc_kinh_doanh'],
     receiptList: ['ke_toan', 'giam_doc_kinh_doanh'],
-    // Sale creates DRAFT receipts only (attribution chain, decision 0024) — receiptApprove stays
-    // ke_toan/director-only, so this is not a money-approval grant.
-    receiptCreate: ['ke_toan', 'giam_doc_kinh_doanh', 'sale'],
-    // Narrow read: sale sees only receipts they personally created (collectedById=self, enforced
-    // server-side in finance.ts), never the full finance.receiptList/nav (decision 0024, N3).
-    receiptListOwn: ['sale', 'ke_toan', 'giam_doc_kinh_doanh'],
+    // Sale/GĐĐT create DRAFT receipts only (intake/attribution chain, decisions 0024 + 0037) —
+    // receiptApprove stays ke_toan/GĐKD-only, so this is not a money-approval grant.
+    receiptCreate: ['ke_toan', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao', 'sale'],
+    // Narrow read: intake actors see only receipts they personally created (collectedById=self,
+    // enforced server-side in finance.ts), never the full finance.receiptList/nav (decision 0024, N3).
+    receiptListOwn: ['sale', 'ke_toan', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     receiptApprove: ['ke_toan', 'giam_doc_kinh_doanh'],
     receiptMarkSent: ['ke_toan', 'giam_doc_kinh_doanh'],
     receiptReconcile: ['ke_toan', 'giam_doc_kinh_doanh'],

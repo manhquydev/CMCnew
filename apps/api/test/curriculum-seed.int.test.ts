@@ -6,7 +6,7 @@ import {
   courseCode,
   defaultCsvPath,
   type CurriculumRow,
-} from '@cmc/db';
+} from '@cmc/db/seed-curriculum';
 import { prisma } from './helpers.js';
 
 // The CSV is the single source of truth: every expectation below is derived from it,
@@ -26,6 +26,8 @@ function expectedByCourse(): Map<string, { units: number; sessions: number }> {
   }
   return m;
 }
+
+const totalExpectedLessons = rows.reduce((sum, r) => sum + Math.max(r.sessions, 1), 0);
 
 describe('curriculum seed (CSV → CurriculumUnit)', () => {
   beforeAll(async () => {
@@ -64,14 +66,31 @@ describe('curriculum seed (CSV → CurriculumUnit)', () => {
     for (const [code, exp] of expectedByCourse()) {
       const course = await prisma.course.findUnique({
         where: { code },
-        include: { units: true },
+        include: { units: { include: { lessons: true } } },
       });
       expect(course, `course ${code} should exist`).not.toBeNull();
       expect(course!.levelCode).toBeTruthy();
       expect(course!.units.length).toBe(exp.units);
       const sessionSum = course!.units.reduce((s, u) => s + u.sessions, 0);
       expect(sessionSum).toBe(exp.sessions);
+      const lessonSum = course!.units.reduce((s, u) => s + u.lessons.length, 0);
+      expect(lessonSum).toBe(exp.sessions);
     }
+  });
+
+  it('creates one CurriculumLesson per concrete session slot under each unit', async () => {
+    expect(await prisma.curriculumLesson.count()).toBeGreaterThanOrEqual(totalExpectedLessons);
+    const l101 = await prisma.curriculumUnit.findUniqueOrThrow({
+      where: { unitCode: 'UC-L1-01' },
+      include: { lessons: { orderBy: { seqInUnit: 'asc' } } },
+    });
+    expect(l101.sessions).toBe(4);
+    expect(l101.lessons.map((lesson) => lesson.lessonCode)).toEqual([
+      'UC-L1-01-S01',
+      'UC-L1-01-S02',
+      'UC-L1-01-S03',
+      'UC-L1-01-S04',
+    ]);
   });
 
   it('orders units by orderGlobal ascending within a course', async () => {
@@ -90,9 +109,11 @@ describe('curriculum seed (CSV → CurriculumUnit)', () => {
   it('is idempotent: re-running the seed does not duplicate units or courses', async () => {
     const codes = [...expectedByCourse().keys()];
     const unitsBefore = await prisma.curriculumUnit.count();
+    const lessonsBefore = await prisma.curriculumLesson.count();
     const coursesBefore = await prisma.course.count({ where: { code: { in: codes } } });
     await seedCurriculum(prisma, csvText);
     expect(await prisma.curriculumUnit.count()).toBe(unitsBefore);
+    expect(await prisma.curriculumLesson.count()).toBe(lessonsBefore);
     expect(await prisma.course.count({ where: { code: { in: codes } } })).toBe(coursesBefore);
   });
 });

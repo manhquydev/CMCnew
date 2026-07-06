@@ -17,7 +17,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { Role, loginStudent, DEFAULT_STUDENT_PASSWORD } from '@cmc/auth';
-import { seedCurriculum, defaultCsvPath, courseCode } from '@cmc/db';
+import { seedCurriculum, defaultCsvPath, courseCode } from '@cmc/db/seed-curriculum';
 import { staffCaller, withRls, SUPER, uniq, superAdminUserId, lmsCaller, prisma, assertSuccess } from './helpers.js';
 
 const FACILITY = 1;
@@ -49,6 +49,7 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
     receiptIds: [] as string[],
     studentIds: [] as string[],
     parentAccountIds: [] as string[],
+    staffUserIds: [] as string[],
     // Shared seed course (UCREA-L1) is never deleted — only its added coursePrice fixture rows are.
     coursePriceCourseIds: [] as string[],
     batchIds: [] as string[],
@@ -97,6 +98,9 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
       if (cleanup.parentAccountIds.length) {
         await tx.parentAccount.deleteMany({ where: { id: { in: cleanup.parentAccountIds } } });
       }
+      if (cleanup.staffUserIds.length) {
+        await tx.appUser.deleteMany({ where: { id: { in: cleanup.staffUserIds } } });
+      }
       if (cleanup.batchIds.length) {
         await tx.classBatch.deleteMany({ where: { id: { in: cleanup.batchIds } } });
       }
@@ -139,6 +143,27 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
 
     const batch = await createClassBatch(course.id);
     cleanup.batchIds.push(batch.id);
+    const teacher = await withRls(SUPER, (tx) =>
+      tx.appUser.create({
+        data: {
+          email: `${uniq('lms-life-teacher')}@cmc.test`,
+          displayName: 'LMS Lifecycle Teacher',
+          passwordHash: 'test',
+          primaryRole: Role.giao_vien,
+          roles: [Role.giao_vien],
+          isActive: true,
+          facilities: { create: [{ facilityId: FACILITY }] },
+        },
+      }),
+    );
+    cleanup.staffUserIds.push(teacher.id);
+    const teacherCtx = await staffCaller({
+      userId: teacher.id,
+      roles: [Role.giao_vien],
+      primaryRole: Role.giao_vien,
+      isSuperAdmin: false,
+      facilityIds: [FACILITY],
+    });
 
     // ─── Step 1: Intake (receiptCreate) ───────────────────────────────────────
     const phone = `+84${uniq('9')}`.slice(0, 12);
@@ -200,6 +225,12 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
     // ─── Step 3: Create classSession with ENDED time so exercise auto-opens ────────
     // Session ended 2 days ago (in ICT timezone) - exercise will auto-open for student
     const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    const curriculumLesson = await withRls(SUPER, (tx) =>
+      tx.curriculumLesson.findFirstOrThrow({
+        where: { curriculumUnitId: curriculumUnit.id },
+        orderBy: { seqInUnit: 'asc' },
+      }),
+    );
     const session = await withRls(SUPER, (tx) =>
       tx.classSession.create({
         data: {
@@ -210,6 +241,8 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
           endTime: '19:00',
           status: 'confirmed',
           curriculumUnitId: curriculumUnit.id,
+          curriculumLessonId: curriculumLesson.id,
+          teacherId: teacher.id,
         },
       }),
     );
@@ -218,7 +251,7 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
 
     // ─── Step 4: Director upserts exercise (published) ───────────────────────────
     const exercise = await directorCtx.exercise.upsert({
-      curriculumUnitId: curriculumUnit.id,
+      curriculumLessonId: curriculumLesson.id,
       type: 'homework',
       title: 'Exercise E2E',
       description: 'Test exercise for full lifecycle',
@@ -263,7 +296,7 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
     console.log('✓ Step 8: Submission submitted');
 
     // ─── Step 9: Teacher grades + publishes ───────────────────────────────────
-    const graded = await staffCtx.grade.grade({
+    const graded = await teacherCtx.grade.grade({
       submissionId: saved.id,
       score: 85,
       feedback: 'Great work! You understood the core concept.',
@@ -273,7 +306,7 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
     cleanup.gradeIds.push(graded.id);
     console.log('✓ Step 9a: Grade recorded', graded.score);
 
-    const gradePublished = await staffCtx.grade.publish({ submissionId: saved.id });
+    const gradePublished = await teacherCtx.grade.publish({ submissionId: saved.id });
     expect(gradePublished.grade.isPublished).toBe(true);
     expect(gradePublished.starsEarned).toBe(10); // starReward from exercise
     console.log('✓ Step 9b: Grade published, stars earned:', gradePublished.starsEarned);
@@ -357,6 +390,27 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
 
     const batch = await createClassBatch(course.id);
     cleanup.batchIds.push(batch.id);
+    const teacher = await withRls(SUPER, (tx) =>
+      tx.appUser.create({
+        data: {
+          email: `${uniq('lms-life-teacher2')}@cmc.test`,
+          displayName: 'LMS Lifecycle Teacher 2',
+          passwordHash: 'test',
+          primaryRole: Role.giao_vien,
+          roles: [Role.giao_vien],
+          isActive: true,
+          facilities: { create: [{ facilityId: FACILITY }] },
+        },
+      }),
+    );
+    cleanup.staffUserIds.push(teacher.id);
+    const teacherCtx = await staffCaller({
+      userId: teacher.id,
+      roles: [Role.giao_vien],
+      primaryRole: Role.giao_vien,
+      isSuperAdmin: false,
+      facilityIds: [FACILITY],
+    });
 
     const phone = `+84${uniq('8')}`.slice(0, 12);
     const parentEmail = `parent2_${uniq('e')}@example.com`;
@@ -383,6 +437,12 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
 
     // Create classSession with ended time so exercise auto-opens
     const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    const curriculumLesson = await withRls(SUPER, (tx) =>
+      tx.curriculumLesson.findFirstOrThrow({
+        where: { curriculumUnitId: curriculumUnit.id },
+        orderBy: { seqInUnit: 'asc' },
+      }),
+    );
     const session2 = await withRls(SUPER, (tx) =>
       tx.classSession.create({
         data: {
@@ -393,6 +453,8 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
           endTime: '19:00',
           status: 'confirmed',
           curriculumUnitId: curriculumUnit.id,
+          curriculumLessonId: curriculumLesson.id,
+          teacherId: teacher.id,
         },
       }),
     );
@@ -400,7 +462,7 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
 
     const lmsCtx = lmsCaller(session!.session);
     const exercise = await directorCtx.exercise.upsert({
-      curriculumUnitId: curriculumUnit.id,
+      curriculumLessonId: curriculumLesson.id,
       type: 'homework',
       title: 'Ex Run2',
       maxScore: 50,
@@ -417,9 +479,9 @@ describe('LMS Full Lifecycle E2E (intake → login → exercise → grade → re
     const submitted = await lmsCtx.submission.submit({ exerciseId: exercise.id });
     expect(submitted.status).toBe('submitted');
 
-    const graded = await staffCtx.grade.grade({ submissionId: saved.id, score: 45, feedback: 'OK' });
+    const graded = await teacherCtx.grade.grade({ submissionId: saved.id, score: 45, feedback: 'OK' });
     cleanup.gradeIds.push(graded.id);
-    const pub = await staffCtx.grade.publish({ submissionId: saved.id });
+    const pub = await teacherCtx.grade.publish({ submissionId: saved.id });
     expect(pub.grade.isPublished).toBe(true);
 
     const mySubmissions = await lmsCtx.submission.mine();

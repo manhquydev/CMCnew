@@ -178,6 +178,8 @@ Password: ChangeMe123!
 - Khung chương trình (UCREA L1/L2/L3, Bright I.G J/T/C/W/Q/U) là **dữ liệu khóa cứng**:
   mỗi level là một `Course` (`UCREA-L1`, `BRIGHT_IG-J`, …) gắn danh sách `CurriculumUnit`
   (chủ đề / nội dung / sách-play-kit / tư duy / assessment) theo `order_global`.
+  Mỗi `CurriculumUnit.sessions` được bung thành các `CurriculumLesson` riêng: ví dụ 12 unit x
+  48 buổi thì có 48 lesson slots để gắn bài tập lẻ theo buổi.
 - Nạp/refresh khung: `pnpm --filter @cmc/db seed:curriculum` (idempotent — chạy lại không nhân bản).
   Chạy trước `seed:demo` khi dựng dữ liệu mẫu. Prod nạp qua `DIRECT_URL` (chủ sở hữu DB).
 - Khung **không sửa qua UI** vòng này (chỉ seed + xem). Danh sách unit hiển thị read-only ở modal tạo lớp.
@@ -193,9 +195,9 @@ Password: ChangeMe123!
 
 #### Sinh Buổi Học (gán nội dung curriculum theo buổi)
 1. **Mở Lớp → Tab "Lịch"** → **Sinh Buổi Học** → chọn khoảng ngày → hệ thống sinh buổi theo khung.
-   - Mỗi buổi được **gán `curriculumUnitId`** theo thứ tự thời gian: unit #1 phủ `sessions` buổi đầu,
-     unit #2 các buổi kế, … (mỗi unit = N buổi thật).
-   - Buổi dư (vượt tổng số buổi của khung) → không gắn unit (null). Buổi thiếu → phần unit cuối chưa phủ.
+   - Mỗi buổi được **gán `curriculumUnitId` và `curriculumLessonId`** theo thứ tự thời gian:
+     unit #1 phủ `sessions` buổi đầu, lesson #1/#2/#3... là từng buổi thật trong unit đó.
+   - Buổi dư (vượt tổng số buổi của khung) → không gắn unit/lesson (null). Buổi thiếu → phần unit cuối chưa phủ.
    - **Sửa/Xóa khung lịch** ngay trong tab: nút **Sửa** (đổi thứ/giờ/phòng/GV, tùy chọn *áp dụng buổi
      tương lai*) và **Xóa** (lưu trữ khung — buổi đã sinh vẫn giữ). Mọi thay đổi ghi vào tab **Nhật ký**.
    - ⚠️ **Lưu ý vận hành:** hệ thống **tính lại toàn bộ** ánh xạ un↔buổi mỗi lần sinh/sửa khung để giữ
@@ -217,11 +219,13 @@ Password: ChangeMe123!
    - Kiểm tra từng học sinh (Có mặt / Vắng)
    - **Lưu**
    
-4. **Menu → Chấm Bài**
-   - Chọn bài tập → Chấm điểm từng học sinh
+4. **Menu → Lớp & bài tập / Chấm Bài**
+   - Giám đốc upload bài tập theo **lesson slot/buổi**, không theo unit tổng. Một unit 4 buổi có 4 slot upload.
+   - Giáo viên chọn bài tập của buổi/lớp tương ứng → chấm điểm từng học sinh.
+   - Học sinh chỉ thấy và nộp bài của lesson đã mở sau khi buổi học gắn lesson đó kết thúc.
    - **Phát Hành** bài tập để học sinh thấy kết quả
 
-> Ghi chú: Các thẻ sau buổi học trong Buổi học 360 hiện là mock cho phase tiếp theo: phát bài tập LMS, nhận xét theo form, upload ảnh lớp, publish cho phụ huynh. Dữ liệu ảnh/nhận xét thật chưa được lưu và chưa hiển thị ở LMS trong slice này.
+> Ghi chú: nhận xét theo form, upload ảnh lớp, publish cho phụ huynh thuộc luồng session evidence riêng; bài tập LMS đã gắn theo `curriculumLessonId`.
 
 #### Học Bạ & Đánh Giá
 1. **Giáo Viên → Menu → Học Bạ** (Assessment)

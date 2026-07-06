@@ -219,16 +219,41 @@ function ApprovalInboxCard({ onNavigateToKpi }: { onNavigateToKpi: () => void })
   );
 }
 
+function IntakeShortcutCard({ onNavigateToFinanceIntake }: { onNavigateToFinanceIntake: () => void }) {
+  return (
+    <Card radius="lg" p="lg" withBorder style={{ borderColor: 'var(--cmc-border)' }}>
+      <Group justify="space-between" align="center">
+        <Group gap={8}>
+          <IconReceipt size={18} stroke={1.5} color="var(--cmc-brand)" />
+          <Text fw={600} style={{ fontSize: 'var(--cmc-text-lg)', color: 'var(--cmc-text)' }}>
+            Tiếp nhận phụ huynh + học sinh
+          </Text>
+        </Group>
+        <Button size="xs" variant="light" onClick={onNavigateToFinanceIntake}>
+          Tạo phiếu nháp
+        </Button>
+      </Group>
+    </Card>
+  );
+}
+
 /** Executive Cockpit for giam_doc_dao_tao-only accounts (Phase 4,
  *  plans/260701-2344-nav-restructuring-operator-executive). Replaces the standalone 'overview'
  *  nav item — composes the existing dashboard.summary widget (via OverviewPanel, unmodified,
  *  same reusable piece Phase 3 used) with a new approval-inbox widget built on
  *  dashboard.myApprovals (Phase 1). No new mutations: every action button in the inbox calls an
  *  existing router procedure directly. */
-export function EduDirectorCockpitPanel({ onNavigateToKpi }: { onNavigateToKpi: () => void }) {
+export function EduDirectorCockpitPanel({
+  onNavigateToKpi,
+  onNavigateToFinanceIntake,
+}: {
+  onNavigateToKpi: () => void;
+  onNavigateToFinanceIntake: () => void;
+}) {
   return (
     <Stack>
       <OverviewPanel />
+      <IntakeShortcutCard onNavigateToFinanceIntake={onNavigateToFinanceIntake} />
       <ApprovalInboxCard onNavigateToKpi={onNavigateToKpi} />
     </Stack>
   );

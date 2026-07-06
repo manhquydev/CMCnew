@@ -30,7 +30,7 @@ high-risk and requires a durable decision record for.
 Run **two Docker Compose stacks on the one VPS behind one shared edge nginx**:
 
 - `cmcnew-prod` (unchanged) serves `erp` / `hoc`; `cmcnew-dev` serves
-  `deverp` / `devlms`.
+  `deverp` / `devteacher` / `devlms`.
 - **Branch-to-environment mapping**: a pull request runs lint + typecheck +
   integration and deploys nothing; `develop` runs the same checks then deploys
   `cmcnew-dev`; `main` runs the same checks then deploys `cmcnew-prod`. Dev
@@ -42,8 +42,9 @@ Run **two Docker Compose stacks on the one VPS behind one shared edge nginx**:
   stay off that network and off public ports — the dev database and cache are
   never reachable from the edge or from prod.
 - **SSO parity**: dev uses the real Entra ID SSO, but with its own redirect URI
-  (`https://deverp.cmcvn.edu.vn/api/auth/sso/callback`), its own client secret,
-  and dev-scoped cookie names/app origins separate from prod.
+  (`https://deverp.cmcvn.edu.vn/api/auth/sso/callback` and
+  `https://devteacher.cmcvn.edu.vn/api/auth/sso/callback`), its own client
+  secret, and dev-scoped cookie names/app origins separate from prod.
 - **Data posture**: dev business data is synthetic/demo only. No raw prod DB
   clone unless anonymized and separately approved later.
 - **Dev auth convenience**: dev leaves `SEED_MODE` unset (defaults to `full`, so
@@ -56,7 +57,7 @@ Run **two Docker Compose stacks on the one VPS behind one shared edge nginx**:
   password-parallel-to-SSO policy this inherits).
 - **TLS**: unchanged strategy — Cloudflare "Full" with a self-signed origin SAN
   cert (decision 0029). The `scripts/ensure-origin-cert.sh` SAN list is extended
-  to cover the two dev hostnames; the zone is NOT moved to "Full (strict)".
+  to cover the dev hostnames; the zone is NOT moved to "Full (strict)".
 
 ## Alternatives Considered
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { Role } from '@cmc/auth';
-import { seedCurriculum, courseCode, defaultCsvPath } from '@cmc/db';
+import { seedCurriculum, courseCode, defaultCsvPath } from '@cmc/db/seed-curriculum';
 import { staffCaller, withRls, SUPER, uniq, prisma } from './helpers.js';
 
 /** A Tuesday safely in the past — used to prove editSlot(applyToFuture) never touches it. */

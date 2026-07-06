@@ -141,32 +141,32 @@ function WorkflowCard({
 }
 
 function SessionExerciseIndicator({ session }: { session: MySession }) {
-  const [rows, setRows] = useState<Awaited<ReturnType<typeof trpc.exercise.listByUnit.query>>>([]);
+  const [rows, setRows] = useState<Awaited<ReturnType<typeof trpc.exercise.listByLesson.query>>>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!session.curriculumUnitId) {
+    if (!session.curriculumLessonId) {
       setRows([]);
       return;
     }
     setLoading(true);
-    trpc.exercise.listByUnit
-      .query({ curriculumUnitId: session.curriculumUnitId })
+    trpc.exercise.listByLesson
+      .query({ curriculumLessonId: session.curriculumLessonId })
       .then(setRows)
       .catch((e) => notifyError(e, 'Không tải được trạng thái bài tập'))
       .finally(() => setLoading(false));
-  }, [session.curriculumUnitId]);
+  }, [session.curriculumLessonId]);
 
-  if (!session.curriculumUnitId) {
-    return <Text size="xs" c="dimmed">Buổi này chưa gắn curriculum unit nên không có bài tập tự mở.</Text>;
+  if (!session.curriculumLessonId) {
+    return <Text size="xs" c="dimmed">Buổi này chưa gắn curriculum lesson nên không có bài tập tự mở.</Text>;
   }
 
   const published = rows.filter((row) => row.status === 'published');
-  const unitLabel = session.curriculumUnit?.unitCode ?? 'unit hiện tại';
+  const lessonLabel = session.curriculumLesson?.lessonCode ?? session.curriculumUnit?.unitCode ?? 'buổi hiện tại';
   return (
     <Stack gap={4}>
       <Text size="xs" c="dimmed">
-        Bài tập buổi này ({unitLabel}): {loading ? 'đang kiểm tra...' : published.length > 0 ? 'đã có' : 'chưa upload'} · tự mở sau khi buổi kết thúc.
+        Bài tập buổi này ({lessonLabel}): {loading ? 'đang kiểm tra...' : published.length > 0 ? 'đã có' : 'chưa upload'} · tự mở sau khi buổi kết thúc.
       </Text>
       {published.map((exercise) => (
         <Badge key={exercise.id} size="sm" color="green" variant="light">

@@ -65,9 +65,14 @@
 
 ## 2. Thực thể & vòng đời
 
-### 2.1 Exercise (Bài tập) — facility-scoped (qua lớp)
-- Thuộc `ClassBatch` (hoặc `Course` cho ngân hàng đề dùng lại — Phase 2 gắn theo lớp). Trường: tiêu đề, mô tả, **đề gốc PDF** (1 file, content-addressed), hạn nộp, loại (homework/test entrance/test periodic), điểm tối đa (mặc định 10), trạng thái (draft/published/closed).
-- GV tạo/giao; published → HS thấy.
+### 2.1 Exercise (Bài tập) — global lesson asset, mở theo buổi học
+- Thuộc `CurriculumLesson` (session slot trong khung chương trình), không thuộc trực tiếp `ClassBatch`.
+  Một unit 4 buổi có 4 lesson slots và có thể có 4 bài homework riêng.
+- Trường chính: tiêu đề, mô tả, **đề gốc PDF** (1 file, content-addressed), loại
+  (homework/test entrance/test periodic), điểm tối đa (mặc định 10), trạng thái draft/published/closed.
+- Giám đốc upload/quản lý bài tập theo lesson slot. Học sinh chỉ thấy/nộp khi lớp của mình đã có
+  `ClassSession.curriculumLessonId` tương ứng và buổi đó đã kết thúc. Giáo viên chấm bài trong ngữ cảnh
+  lớp/buổi mình được phân công.
 
 ### 2.2 Submission (Bài nộp) — facility-scoped
 - (exerciseId, studentId) — mỗi HS một bài/đề (cho phép nộp lại trước hạn → ghi version).

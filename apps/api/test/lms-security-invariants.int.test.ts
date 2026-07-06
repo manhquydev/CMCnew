@@ -11,7 +11,7 @@
  *    - reject submissions when the student is not enrolled in any class teaching the exercise unit.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { type LmsSession } from '@cmc/auth';
+import { Role, type LmsSession } from '@cmc/auth';
 import { staffCaller, lmsCaller, withRls, SUPER, uniq, superAdminUserId } from './helpers.js';
 
 const FACILITY = 1;
@@ -25,6 +25,8 @@ let otherBatchId: string;
 let enrollmentId: string;
 let otherEnrollmentId: string;
 let classSessionId: string;
+let teacherAId: string;
+let teacherBId: string;
 let unpublishedExerciseId: string;
 
 // Track every submission/exercise created across tests so afterAll can clean up
@@ -86,6 +88,49 @@ async function mkSubmittedSubmission(exerciseId: string) {
   });
 }
 
+async function mkTeacherOwnedSubmission(maxScore = 10) {
+  return withRls(SUPER, async (tx) => {
+    const unit = await tx.curriculumUnit.create({
+      data: {
+        courseId,
+        unitCode: uniq('CU_OWN'),
+        seqInLevel: 2,
+        orderGlobal: 2,
+        unitType: 'LESSON',
+        theme: 'Teacher ownership',
+        sessions: 1,
+      },
+    });
+    const ex = await tx.exercise.create({
+      data: {
+        curriculumUnitId: unit.id,
+        title: uniq('EX_OWN'),
+        type: 'homework',
+        maxScore,
+        status: 'published',
+      },
+    });
+    cleanupExercises.push(ex.id);
+    await tx.classSession.create({
+      data: {
+        facilityId: FACILITY,
+        classBatchId,
+        sessionDate: new Date(Date.UTC(2099, 10, 15)),
+        startTime: '13:00',
+        endTime: '14:00',
+        status: 'confirmed',
+        teacherId: teacherAId,
+        curriculumUnitId: unit.id,
+      },
+    });
+    const sub = await tx.submission.create({
+      data: { facilityId: FACILITY, studentId, exerciseId: ex.id, status: 'submitted', submittedAt: new Date() },
+    });
+    cleanupSubmissions.push(sub.id);
+    return sub;
+  });
+}
+
 beforeAll(async () => {
   try {
     await superAdminUserId();
@@ -124,6 +169,31 @@ beforeAll(async () => {
         data: { facilityId: FACILITY, classBatchId: otherBatchId, studentId, status: 'active' },
       });
       otherEnrollmentId = otherEnroll.id;
+
+      const teacherA = await tx.appUser.create({
+        data: {
+          email: uniq('hsec-teacher-a@cmc.test'),
+          displayName: 'Security Teacher A',
+          passwordHash: 'test',
+          primaryRole: Role.giao_vien,
+          roles: [Role.giao_vien],
+          isActive: true,
+          facilities: { create: [{ facilityId: FACILITY }] },
+        },
+      });
+      teacherAId = teacherA.id;
+      const teacherB = await tx.appUser.create({
+        data: {
+          email: uniq('hsec-teacher-b@cmc.test'),
+          displayName: 'Security Teacher B',
+          passwordHash: 'test',
+          primaryRole: Role.giao_vien,
+          roles: [Role.giao_vien],
+          isActive: true,
+          facilities: { create: [{ facilityId: FACILITY }] },
+        },
+      });
+      teacherBId = teacherB.id;
 
       // Class session for batch A
       const session = await tx.classSession.create({
@@ -189,6 +259,7 @@ afterAll(async () => {
     await tx.coursePrice.deleteMany({ where: { courseId } });
     await tx.course.deleteMany({ where: { id: courseId } });
     await tx.student.deleteMany({ where: { id: studentId } });
+    await tx.appUser.deleteMany({ where: { id: { in: [teacherAId, teacherBId].filter(Boolean) } } });
   });
 });
 
@@ -312,6 +383,21 @@ describe('Invariant 3: grade.grade rejects score above maxScore', () => {
     await expect(
       staff.grade.grade({ submissionId: sub.id, score: 11 }), // maxScore = 10
     ).rejects.toThrow();
+  });
+
+  it('rejects grade and publish from a teacher who is not assigned to the student/session unit', async () => {
+    if (!dbReachable) return;
+
+    const sub = await mkTeacherOwnedSubmission(10);
+    const teacherA = await staffCaller({ userId: teacherAId, roles: [Role.giao_vien], primaryRole: Role.giao_vien, isSuperAdmin: false, facilityIds: [FACILITY] });
+    const teacherB = await staffCaller({ userId: teacherBId, roles: [Role.giao_vien], primaryRole: Role.giao_vien, isSuperAdmin: false, facilityIds: [FACILITY] });
+
+    await expect(teacherB.grade.grade({ submissionId: sub.id, score: 8 })).rejects.toThrow(/Giáo viên/);
+    const grade = await teacherA.grade.grade({ submissionId: sub.id, score: 8, feedback: 'Owned teacher' });
+    expect(grade.score).toBe(8);
+    await expect(teacherB.grade.publish({ submissionId: sub.id })).rejects.toThrow(/Giáo viên/);
+    const published = await teacherA.grade.publish({ submissionId: sub.id });
+    expect(published.grade.isPublished).toBe(true);
   });
 });
 

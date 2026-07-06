@@ -48,11 +48,11 @@ Two workspace roots (`pnpm-workspace.yaml`): `apps/*` and `packages/*`.
 
 | Package | Responsibility |
 | --- | --- |
-| `@cmc/db` | Prisma schema (**64 models**, ~55 migrations), client, seeds (incl. `seed-curriculum`), RLS verify scripts. |
+| `@cmc/db` | Prisma schema (**68 models**, 75 migrations), client, seeds (incl. `seed-curriculum`), RLS verify scripts. |
 | `@cmc/auth` | JWT sessions, `Role` enum (9 roles after consolidation: `super_admin`, `giao_vien`, `ke_toan`, `hr`, `sale`, `cskh`, `ctv_mkt`, `giam_doc_kinh_doanh`, `giam_doc_dao_tao`), and the central **PERMISSIONS registry** (`./permissions` subpath, browser-safe). |
 | `@cmc/audit` | Audit-log write helpers (product records, distinct from app logs). |
 | `@cmc/ui` | Shared React components, tRPC client, design tokens (`tokens.css`), notify/validators conventions. |
-| `@cmc/domain-academic` | Courses, classes, terms, attendance, scheduling, curriculum-unit → session mapping (`assign-units`). |
+| `@cmc/domain-academic` | Courses, classes, terms, attendance, scheduling, curriculum unit/lesson → session mapping (`assign-units`). |
 | `@cmc/domain-finance` | Receipts, revenue, commission. |
 | `@cmc/domain-grading` | Final-grade computation (per term). |
 | `@cmc/domain-payroll` | Salary, compensation policy, KPI/quota (heaviest domain). |
@@ -80,9 +80,13 @@ routes. This is the anti-"chắp vá" (anti-patchwork) rule from the charter.
   `CurriculumUnit`) in one transaction; slots can be edited/removed later in the
   class schedule tab, with cascade + activity-log.
 - `curriculum.ts` — read-only for the hard-coded curriculum framework
-  (`CurriculumUnit`, a **global, no-RLS** table; see decision 0021). Seeded via
+  (`CurriculumUnit` plus per-session `CurriculumLesson`, both global/no-RLS
+  academic reference data; see decisions 0021 and 0038). Seeded via
   `packages/db/src/seed-curriculum.ts`; any future write path must be app-layer
   permission-gated (no DB backstop).
+- `exercise.ts` — director-gated upload/list contracts for global lesson-level
+  exercises. `Exercise.curriculumLessonId` is the canonical assignment key;
+  legacy `curriculumUnitId` is retained only for backfill/compatibility.
 - `services/` — cross-router workflows: `email-outbox`, `email-templates`,
   `login-otp`, `student-provisioning`, `parent-meeting-cadence/-reminder`,
   `receipt-html`/`certificate-html`, `pdf-store`, code generators.

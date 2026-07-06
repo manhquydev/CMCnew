@@ -85,6 +85,7 @@ services:
       # button). Set to the real domain in prod, e.g. https://erp.cmcvn.edu.vn. Without this the API
       # falls back to a localhost dev URL, so a production welcome email would link to localhost.
       ADMIN_APP_ORIGIN: ${ADMIN_APP_ORIGIN:-http://localhost}
+      STAFF_APP_ORIGINS: ${STAFF_APP_ORIGINS:-}
       CRM_LEAD_TOKEN:   ${CRM_LEAD_TOKEN:-}
       DISABLE_CRON:     ${DISABLE_CRON:-0}
       # ── Staff SSO (Microsoft Entra, OIDC) ──────────────────────────────────────
@@ -107,9 +108,15 @@ services:
       STAFF_PASSWORD_LOGIN: ${STAFF_PASSWORD_LOGIN:-}
       # ── Microsoft Graph outbound email (welcome / OTP / payslip) ───────────────
       # No-op until ENTRA_* (reused as Graph creds) + all three sender mailboxes are set.
+      GRAPH_CLIENT_SECRET:  ${GRAPH_CLIENT_SECRET:-}
       GRAPH_SENDER_NOTIFY:  ${GRAPH_SENDER_NOTIFY:-}
       GRAPH_SENDER_PAYROLL: ${GRAPH_SENDER_PAYROLL:-}
       GRAPH_SENDER_HR:      ${GRAPH_SENDER_HR:-}
+      # ── Brevo outbound email (external parent/student recipients) ─────────────
+      # External mail is fail-closed until Brevo API key + verified sender are set.
+      BREVO_API_KEY:        ${BREVO_API_KEY:-}
+      BREVO_SENDER_EMAIL:   ${BREVO_SENDER_EMAIL:-}
+      BREVO_SENDER_NAME:    ${BREVO_SENDER_NAME:-}
       # ── Callio call-metrics sync (optional; no-op if unset) ────────────────────
       CALLIO_API_BASE:      ${CALLIO_API_BASE:-}
       CALLIO_API_TOKEN:     ${CALLIO_API_TOKEN:-}

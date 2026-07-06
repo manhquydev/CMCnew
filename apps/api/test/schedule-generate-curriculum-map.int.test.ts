@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { seedCurriculum, courseCode, defaultCsvPath } from '@cmc/db';
+import { seedCurriculum, courseCode, defaultCsvPath } from '@cmc/db/seed-curriculum';
 import { staffCaller, withRls, SUPER, uniq, prisma } from './helpers.js';
 
 /**
@@ -14,6 +14,8 @@ describe('schedule.generateSessions — curriculum unit mapping', () => {
   let courseId: string;
   let unit1Id: string;
   let unit2Id: string;
+  let unit1LessonIds: string[];
+  let unit2LessonIds: string[];
 
   const batchIds: string[] = [];
 
@@ -24,10 +26,16 @@ describe('schedule.generateSessions — curriculum unit mapping', () => {
     );
     courseId = course.id;
     const units = await withRls(SUPER, (tx) =>
-      tx.curriculumUnit.findMany({ where: { courseId }, orderBy: { orderGlobal: 'asc' } }),
+      tx.curriculumUnit.findMany({
+        where: { courseId },
+        orderBy: { orderGlobal: 'asc' },
+        include: { lessons: { orderBy: { seqInUnit: 'asc' } } },
+      }),
     );
     unit1Id = units[0]!.id; // UC-L1-01, sessions=4
     unit2Id = units[1]!.id; // UC-L1-02, sessions=4
+    unit1LessonIds = units[0]!.lessons.map((lesson) => lesson.id);
+    unit2LessonIds = units[1]!.lessons.map((lesson) => lesson.id);
   });
 
   afterAll(async () => {
@@ -71,7 +79,10 @@ describe('schedule.generateSessions — curriculum unit mapping', () => {
     expect(sessions).toHaveLength(48);
     expect(sessions.slice(0, 4).every((s) => s.curriculumUnitId === unit1Id)).toBe(true);
     expect(sessions.slice(4, 8).every((s) => s.curriculumUnitId === unit2Id)).toBe(true);
+    expect(sessions.slice(0, 4).map((s) => s.curriculumLessonId)).toEqual(unit1LessonIds);
+    expect(sessions.slice(4, 8).map((s) => s.curriculumLessonId)).toEqual(unit2LessonIds);
     expect(sessions.every((s) => s.curriculumUnitId !== null)).toBe(true);
+    expect(sessions.every((s) => s.curriculumLessonId !== null)).toBe(true);
   });
 
   it('overflow: 50 sessions against the 48-slot curriculum leaves the last 2 sessions null', async () => {
@@ -97,8 +108,11 @@ describe('schedule.generateSessions — curriculum unit mapping', () => {
     );
     expect(sessions).toHaveLength(50);
     expect(sessions.slice(0, 48).every((s) => s.curriculumUnitId !== null)).toBe(true);
+    expect(sessions.slice(0, 48).every((s) => s.curriculumLessonId !== null)).toBe(true);
     expect(sessions[48]!.curriculumUnitId).toBeNull();
     expect(sessions[49]!.curriculumUnitId).toBeNull();
+    expect(sessions[48]!.curriculumLessonId).toBeNull();
+    expect(sessions[49]!.curriculumLessonId).toBeNull();
   });
 
   it('shortage: 40 sessions covers only the first 10 units, leaving 2 units uncovered', async () => {
@@ -123,8 +137,11 @@ describe('schedule.generateSessions — curriculum unit mapping', () => {
       }),
     );
     const mappedUnitIds = new Set(sessions.map((s) => s.curriculumUnitId).filter(Boolean));
+    const mappedLessonIds = new Set(sessions.map((s) => s.curriculumLessonId).filter(Boolean));
     expect(mappedUnitIds.size).toBe(10); // 40 / 4 sessions-per-unit
+    expect(mappedLessonIds.size).toBe(40);
     expect(sessions.every((s) => s.curriculumUnitId !== null)).toBe(true); // no overflow at 40 < 48
+    expect(sessions.every((s) => s.curriculumLessonId !== null)).toBe(true);
   });
 
   it('ordering hazard: adding an earlier-weekday slot and regenerating reassigns old sessions too', async () => {
@@ -174,6 +191,8 @@ describe('schedule.generateSessions — curriculum unit mapping', () => {
     // First 4 (Fri1,Tue1,Fri2,Tue2) → unit1; next 4 (Fri3,Tue3,Fri4,Tue4) → unit2.
     expect(allAfter.slice(0, 4).every((s) => s.curriculumUnitId === unit1Id)).toBe(true);
     expect(allAfter.slice(4, 8).every((s) => s.curriculumUnitId === unit2Id)).toBe(true);
+    expect(allAfter.slice(0, 4).map((s) => s.curriculumLessonId)).toEqual(unit1LessonIds);
+    expect(allAfter.slice(4, 8).map((s) => s.curriculumLessonId)).toEqual(unit2LessonIds);
     // The two Friday sessions that used to be unit1 alone (Fri3, Fri4 in the old 4-session
     // order) have moved to unit2 now that Tuesdays are interleaved — proves recompute
     // touches OLD sessions, not just newly-inserted ones.
@@ -183,6 +202,12 @@ describe('schedule.generateSessions — curriculum unit mapping', () => {
     expect(fridaysAfter[1]!.curriculumUnitId).toBe(unit1Id);
     expect(fridaysAfter[2]!.curriculumUnitId).toBe(unit2Id);
     expect(fridaysAfter[3]!.curriculumUnitId).toBe(unit2Id);
+    expect(fridaysAfter.map((s) => s.curriculumLessonId)).toEqual([
+      unit1LessonIds[0],
+      unit1LessonIds[2],
+      unit2LessonIds[0],
+      unit2LessonIds[2],
+    ]);
   });
 
   it('cancelled sessions are excluded from the position count (do not consume a curriculum slot)', async () => {
@@ -223,5 +248,6 @@ describe('schedule.generateSessions — curriculum unit mapping', () => {
     // Excluding it correctly keeps all 4 non-cancelled sessions inside unit1's 4-slot capacity.
     expect(nonCancelled).toHaveLength(4);
     expect(nonCancelled.every((s) => s.curriculumUnitId === unit1Id)).toBe(true);
+    expect(nonCancelled.map((s) => s.curriculumLessonId)).toEqual(unit1LessonIds);
   });
 });

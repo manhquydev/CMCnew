@@ -111,12 +111,14 @@ describe('student-provisioning: approve + rollback', () => {
     cleanup.batchIds.push(batch.id);
 
     const phone = `+84${uniq('9')}`.slice(0, 12);
+    const parentEmail = `${uniq('new-parent')}@cmc.test`;
     const receipt = assertSuccess(await caller.finance.receiptCreate({
       facilityId: FACILITY,
       courseId: course.id,
       yearsPrepaid: 1,
       parentPhone: phone,
       parentName: 'Nguyễn Văn A',
+      parentEmail,
       studentName: 'Nguyễn Thị B',
       classBatchId: batch.id,
     }));
@@ -139,6 +141,7 @@ describe('student-provisioning: approve + rollback', () => {
     // Guardian link created
     const parent = await withRls(SUPER, (tx) => tx.parentAccount.findFirst({ where: { phone } }));
     expect(parent).toBeTruthy();
+    expect(parent!.email).toBe(parentEmail);
     cleanup.parentAccountIds.push(parent!.id);
     const guardian = await withRls(SUPER, (tx) =>
       tx.guardian.findFirst({ where: { parentAccountId: parent!.id, studentId: student.id } }),

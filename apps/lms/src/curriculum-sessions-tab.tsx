@@ -57,6 +57,7 @@ export function CurriculumSessionsTab({
     <Stack gap="lg">
       {items.map((s) => {
         const unit = s.curriculumUnit;
+        const lesson = s.curriculumLesson;
         return (
           <Card key={s.id} className="cmc-clay-card" p="lg">
             <Stack gap="sm">
@@ -65,6 +66,7 @@ export function CurriculumSessionsTab({
                   <Title order={5}>{unit ? unit.theme : 'Buổi học'}</Title>
                   <Text size="sm" c="dimmed">
                     {fmtDate(s.sessionDate)} · {s.startTime}-{s.endTime} · {s.batch.name}
+                    {lesson ? ` · ${lesson.lessonCode}` : ''}
                   </Text>
                 </div>
                 {unit && (

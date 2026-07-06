@@ -37,7 +37,7 @@ in code with no prior written decision, closing that exact gap. See
 | `apps/api/src/routers/finance.ts` (receiptCreate), `apps/api/src/routers/crm.ts` (opportunityLookupByPhone), `permissions.ts` (crm.opportunityLookup) | CRM↔finance phone lookup + duplicate-warning; receiptCreate response is a discriminated union | `docs/decisions/0037-crm-finance-receipt-linkage.md` | Accepted |
 | `schema.prisma` (RefundLedger) | Refund ledger is append-only money-out; over-refund is a documented DBA/ops SQL path, not a v1 feature | `docs/decisions/0028-refund-ledger.md` | Accepted |
 | `schema.prisma` (CurriculumUnit) | Curriculum unit is a global table without RLS | `docs/decisions/0021-curriculum-unit-global-no-rls.md` | Accepted |
-| `apps/api/src/routers/exercise.ts`, `schema.prisma` | Exercise/curriculum asset is a global table without RLS | `docs/decisions/0022-exercise-global-curriculum-asset-no-rls.md` | Accepted |
+| `apps/api/src/routers/exercise.ts`, `schema.prisma` | Exercise is a global lesson/session-template asset; access opens by ended class session | `docs/decisions/0038-session-level-exercises.md` | Accepted |
 | `apps/api/src/routers/level-progress.ts` | LMS is a homework platform; certificates are manual-only, not auto on level-up | `docs/decisions/0008-lms-homework-platform-certificate-manual-only.md` | Accepted |
 | `apps/admin/src/App.tsx`, `main.tsx` | Path-based SPA routing for the admin app | `docs/decisions/0016-path-based-spa-routing.md` | Accepted |
 | `record-detail.tsx`, `staff-profile.tsx` | Extend `record-detail.tsx` primitive with `data`/`onStateChange`/`onFieldChange` | `docs/decisions/0032-record-detail-primitive-reactive-extension.md` | Accepted |

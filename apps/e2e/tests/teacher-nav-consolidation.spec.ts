@@ -8,6 +8,8 @@ import { test, expect } from '@playwright/test';
 // it lands directly on the sole consolidated aggregate screen (itself internally tabbed).
 
 const EMAIL = process.env.TEST_TEACHER_EMAIL ?? 'giaovien@cmc.local';
+const EDU_DIRECTOR_EMAIL = process.env.TEST_EDU_DIRECTOR_EMAIL ?? 'giamdocdt@cmc.local';
+const BIZ_DIRECTOR_EMAIL = process.env.TEST_BIZ_DIRECTOR_EMAIL ?? 'giamdockd@cmc.local';
 const PASSWORD = process.env.TEST_ADMIN_PASSWORD ?? 'ChangeMe!123';
 
 test.use({ baseURL: 'http://localhost:5173' });
@@ -19,6 +21,19 @@ async function login(page: import('@playwright/test').Page) {
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
   // giao_vien-only's default landing module is "Giảng dạy" (section 'schedule').
   await expect(page.locator('nav a').filter({ hasText: 'Giảng dạy' })).toBeVisible({ timeout: 10_000 });
+}
+
+async function loginTeacherSurface(page: import('@playwright/test').Page, email: string) {
+  await page.goto('/?surface=teacher');
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Mật khẩu').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
+  await expect(page.locator('header').getByText(/Teacher Console/)).toBeVisible({ timeout: 10_000 });
+}
+
+function exactNav(page: import('@playwright/test').Page, label: string) {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return page.locator('nav a').filter({ hasText: new RegExp(`^${escaped}$`) });
 }
 
 test.describe('teacher nav consolidation', () => {
@@ -56,5 +71,54 @@ test.describe('teacher nav consolidation', () => {
 
     await expect(page.getByRole('tab', { name: 'Phiếu lương' })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('tab', { name: 'Chấm công' })).toBeVisible();
+  });
+});
+
+test.describe('teacher.cmcvn surface scope', () => {
+  test.beforeEach(async ({ context }) => {
+    await context.clearCookies();
+  });
+
+  test('giao_vien sees only teaching/LMS operations, not ERP finance or work-shift groups', async ({ page }) => {
+    await loginTeacherSurface(page, EMAIL);
+
+    await expect(exactNav(page, 'Lịch & buổi học')).toBeVisible();
+    await expect(exactNav(page, 'Lớp & bài tập')).toBeVisible();
+
+    for (const hiddenModule of ['Tài chính', 'CRM & Kinh doanh', 'Nhân sự', 'Công ca', 'Tiếp nhận học viên']) {
+      await expect(exactNav(page, hiddenModule)).toHaveCount(0);
+    }
+    await expect(page.getByText('CMC Teacher')).toBeVisible();
+  });
+
+  test('giam_doc_dao_tao sees training coordination and intake, not full finance', async ({ page }) => {
+    await loginTeacherSurface(page, EDU_DIRECTOR_EMAIL);
+
+    await expect(exactNav(page, 'Điều phối đào tạo')).toBeVisible();
+    await expect(exactNav(page, 'Tiếp nhận học viên')).toBeVisible();
+    await exactNav(page, 'Tiếp nhận học viên').click();
+    await expect(page.getByText('Tiếp nhận phụ huynh + học sinh', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Thông tin phụ huynh + học sinh', { exact: true })).toBeVisible();
+    await expect(page.getByText('Hồ sơ tiếp nhận gần đây', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Tạo hồ sơ nháp' })).toBeVisible();
+    await expect(page.getByText('Lập phiếu thu', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Mã voucher', { exact: false })).toHaveCount(0);
+
+    for (const hiddenModule of ['Tài chính', 'CRM & Kinh doanh', 'Nhân sự', 'Công ca']) {
+      await expect(exactNav(page, hiddenModule)).toHaveCount(0);
+    }
+  });
+
+  test('giam_doc_kinh_doanh lands on intake surface and direct /finance is rejected on teacher surface', async ({ page }) => {
+    await page.goto('/finance?surface=teacher');
+    await page.getByLabel('Email').fill(BIZ_DIRECTOR_EMAIL);
+    await page.getByLabel('Mật khẩu').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
+
+    await expect(page.locator('header').getByText(/Teacher Console/)).toBeVisible({ timeout: 10_000 });
+    await expect(exactNav(page, 'Tiếp nhận học viên')).toBeVisible();
+    await expect(page.getByText('Tiếp nhận phụ huynh + học sinh', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Tài chính', { exact: true })).toHaveCount(0);
+    await expect(exactNav(page, 'Tài chính')).toHaveCount(0);
   });
 });

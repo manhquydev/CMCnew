@@ -206,16 +206,42 @@ describe('Education Director (giam_doc_dao_tao) permissions', () => {
     expect(PERMISSIONS['user']!['listTeachers']).toContain(GD);
   });
 
-  it('does not appear in KD/finance/CRM modules, except crm.testGrade (teaching oversight)', () => {
+  it('can create draft parent/student intake without finance approval or CRM board access', () => {
+    expect(PERMISSIONS['finance']!['receiptCreate']).toContain(GD);
+    expect(PERMISSIONS['finance']!['receiptListOwn']).toContain(GD);
+    expect(PERMISSIONS['crm']!['opportunityLookup']).toContain(GD);
+
+    const deniedFinanceActions = [
+      'receiptList',
+      'receiptApprove',
+      'receiptMarkSent',
+      'receiptReconcile',
+      'receiptCancel',
+      'revenueReport',
+      'reconcileWorklist',
+    ];
+    for (const action of deniedFinanceActions) {
+      expect(PERMISSIONS['finance']![action], `finance.${action} must not include ${GD}`).not.toContain(GD);
+    }
+
+    const deniedCrmActions = ['opportunityList', 'opportunityGet', 'opportunityCreate', 'opportunityTransition'];
+    for (const action of deniedCrmActions) {
+      expect(PERMISSIONS['crm']![action], `crm.${action} must not include ${GD}`).not.toContain(GD);
+    }
+  });
+
+  it('does not appear in KD/finance/CRM modules, except academic oversight and draft intake handoff', () => {
     const bizModules = ['crm', 'afterSale', 'rewards'];
     for (const mod of bizModules) {
       for (const [action, roles] of Object.entries(PERMISSIONS[mod] ?? {})) {
         if (mod === 'crm' && action === 'testGrade') continue; // GD retains teaching-oversight grading
+        if (mod === 'crm' && action === 'opportunityLookup') continue; // GD can lookup for intake only
         expect(roles as string[], `${mod}.${action} must not include ${GD}`).not.toContain(GD);
       }
     }
-    // Finance write actions must not include GD (read not needed either)
+    // Finance stays closed except the non-money draft-intake creation/read-own gates.
     for (const [action, roles] of Object.entries(PERMISSIONS['finance'] ?? {})) {
+      if (action === 'receiptCreate' || action === 'receiptListOwn') continue;
       expect(roles as string[], `finance.${action} must not include ${GD}`).not.toContain(GD);
     }
   });

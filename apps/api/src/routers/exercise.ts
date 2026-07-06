@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { withRls, ExerciseStatus, ExerciseType } from '@cmc/db';
 import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { openedUnitIdsFor } from '../lib/exercise-open.js';
+import { openedLessonIdsFor, openedUnitIdsFor } from '../lib/exercise-open.js';
 import { notifyForExercise } from '../services/exercise-open-notify.js';
 import { router, protectedProcedure, lmsProcedure, requirePermission } from '../trpc.js';
 
@@ -11,6 +11,7 @@ const ENTITY = 'exercise';
 const exerciseSelect = {
   id: true,
   curriculumUnitId: true,
+  curriculumLessonId: true,
   title: true,
   description: true,
   basePdfRef: true,
@@ -29,18 +30,45 @@ const exerciseSelect = {
       course: { select: { program: true, name: true } },
     },
   },
+  curriculumLesson: {
+    select: {
+      lessonCode: true,
+      seqInUnit: true,
+      orderGlobal: true,
+      curriculumUnit: {
+        select: {
+          id: true,
+          unitCode: true,
+          unitType: true,
+          orderGlobal: true,
+          course: { select: { program: true, name: true } },
+        },
+      },
+    },
+  },
 } as const;
 
-function flattenExercise<T extends { curriculumUnit: { unitCode: string; unitType: string; course: { program: string; name: string } } }>(
-  exercise: T,
-) {
-  const { curriculumUnit, ...rest } = exercise;
+type ExerciseWithCurriculum = {
+  curriculumUnit: { unitCode: string; unitType: string; course: { program: string; name: string } } | null;
+  curriculumLesson: {
+    lessonCode: string;
+    seqInUnit: number;
+    orderGlobal: number;
+    curriculumUnit: { id: string; unitCode: string; unitType: string; course: { program: string; name: string } };
+  } | null;
+};
+
+function flattenExercise<T extends ExerciseWithCurriculum>(exercise: T) {
+  const { curriculumUnit, curriculumLesson, ...rest } = exercise;
+  const unit = curriculumLesson?.curriculumUnit ?? curriculumUnit;
   return {
     ...rest,
-    unitCode: curriculumUnit.unitCode,
-    unitType: curriculumUnit.unitType,
-    program: curriculumUnit.course.program,
-    courseName: curriculumUnit.course.name,
+    unitCode: unit?.unitCode ?? null,
+    unitType: unit?.unitType ?? null,
+    program: unit?.course.program ?? null,
+    courseName: unit?.course.name ?? null,
+    lessonCode: curriculumLesson?.lessonCode ?? null,
+    lessonSeqInUnit: curriculumLesson?.seqInUnit ?? null,
   };
 }
 
@@ -51,19 +79,35 @@ export const exerciseRouter = router({
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const sessions = await tx.classSession.findMany({
-          where: {
-            classBatchId: input.classBatchId,
-            curriculumUnitId: { not: null },
-            archivedAt: null,
-          },
-          select: { curriculumUnitId: true },
+          where: { classBatchId: input.classBatchId, archivedAt: null },
+          select: { curriculumLessonId: true, curriculumUnitId: true },
         });
+        const lessonIds = [...new Set(sessions.map((s) => s.curriculumLessonId).filter(Boolean))] as string[];
         const unitIds = [...new Set(sessions.map((s) => s.curriculumUnitId).filter(Boolean))] as string[];
-        if (unitIds.length === 0) return [];
+        if (lessonIds.length === 0 && unitIds.length === 0) return [];
         const rows = await tx.exercise.findMany({
-          where: { curriculumUnitId: { in: unitIds }, archivedAt: null },
+          where: {
+            archivedAt: null,
+            OR: [
+              { curriculumLessonId: { in: lessonIds } },
+              { curriculumLessonId: null, curriculumUnitId: { in: unitIds } },
+            ],
+          },
           select: exerciseSelect,
-          orderBy: [{ curriculumUnit: { orderGlobal: 'asc' } }, { type: 'asc' }],
+          orderBy: [{ curriculumLesson: { orderGlobal: 'asc' } }, { curriculumUnit: { orderGlobal: 'asc' } }, { type: 'asc' }],
+        });
+        return rows.map(flattenExercise);
+      }),
+    ),
+
+  listByLesson: protectedProcedure
+    .input(z.object({ curriculumLessonId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const rows = await tx.exercise.findMany({
+          where: { curriculumLessonId: input.curriculumLessonId, archivedAt: null },
+          select: exerciseSelect,
+          orderBy: { type: 'asc' },
         });
         return rows.map(flattenExercise);
       }),
@@ -74,24 +118,38 @@ export const exerciseRouter = router({
     .query(({ ctx, input }) =>
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const rows = await tx.exercise.findMany({
-          where: { curriculumUnitId: input.curriculumUnitId, archivedAt: null },
+          where: {
+            archivedAt: null,
+            OR: [
+              { curriculumUnitId: input.curriculumUnitId },
+              { curriculumLesson: { curriculumUnitId: input.curriculumUnitId } },
+            ],
+          },
           select: exerciseSelect,
-          orderBy: { type: 'asc' },
+          orderBy: [{ curriculumLesson: { seqInUnit: 'asc' } }, { type: 'asc' }],
         });
         return rows.map(flattenExercise);
       }),
     ),
 
   // LMS: published exercises open only after one owned student's non-cancelled session
-  // for that curriculum unit has ended in ICT.
+  // for that curriculum lesson has ended in ICT. Unit lookup remains as legacy fallback.
   listForPrincipal: lmsProcedure.query(({ ctx }) =>
     withRls(lmsRlsContextOf(ctx.lms), async (tx) => {
+      const openedLessonIds = await openedLessonIdsFor(tx, ctx.lms.studentIds);
       const openedUnitIds = await openedUnitIdsFor(tx, ctx.lms.studentIds);
-      if (openedUnitIds.length === 0) return [];
+      if (openedLessonIds.length === 0 && openedUnitIds.length === 0) return [];
       const rows = await tx.exercise.findMany({
-        where: { status: 'published', archivedAt: null, curriculumUnitId: { in: openedUnitIds } },
+        where: {
+          status: 'published',
+          archivedAt: null,
+          OR: [
+            { curriculumLessonId: { in: openedLessonIds } },
+            { curriculumLessonId: null, curriculumUnitId: { in: openedUnitIds } },
+          ],
+        },
         select: exerciseSelect,
-        orderBy: [{ curriculumUnit: { orderGlobal: 'asc' } }, { type: 'asc' }],
+        orderBy: [{ curriculumLesson: { orderGlobal: 'asc' } }, { curriculumUnit: { orderGlobal: 'asc' } }, { type: 'asc' }],
       });
       return rows.map(flattenExercise);
     }),
@@ -100,7 +158,8 @@ export const exerciseRouter = router({
   upsert: requirePermission('exercise', 'upsert')
     .input(
       z.object({
-        curriculumUnitId: z.string().uuid(),
+        curriculumLessonId: z.string().uuid().optional(),
+        curriculumUnitId: z.string().uuid().optional(),
         type: z.nativeEnum(ExerciseType).default('homework'),
         title: z.string().min(1),
         description: z.string().optional(),
@@ -108,16 +167,30 @@ export const exerciseRouter = router({
         maxScore: z.number().positive().optional(),
         starReward: z.number().int().min(0).optional(),
         status: z.nativeEnum(ExerciseStatus).optional(),
+      }).refine((v) => v.curriculumLessonId || v.curriculumUnitId, {
+        message: 'Cần chọn buổi học hoặc unit',
+        path: ['curriculumLessonId'],
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const exercise = await withRls(rlsContextOf(ctx.session), async (tx) => {
+        const lesson = input.curriculumLessonId
+          ? await tx.curriculumLesson.findUniqueOrThrow({
+              where: { id: input.curriculumLessonId },
+              select: { id: true, curriculumUnitId: true },
+            })
+          : await tx.curriculumLesson.findFirstOrThrow({
+              where: { curriculumUnitId: input.curriculumUnitId },
+              orderBy: { seqInUnit: 'asc' },
+              select: { id: true, curriculumUnitId: true },
+            });
         const before = await tx.exercise.findUnique({
-          where: { curriculumUnitId_type: { curriculumUnitId: input.curriculumUnitId, type: input.type } },
+          where: { curriculumLessonId_type: { curriculumLessonId: lesson.id, type: input.type } },
         });
         const exercise = await tx.exercise.upsert({
-          where: { curriculumUnitId_type: { curriculumUnitId: input.curriculumUnitId, type: input.type } },
+          where: { curriculumLessonId_type: { curriculumLessonId: lesson.id, type: input.type } },
           update: {
+            curriculumUnitId: lesson.curriculumUnitId,
             title: input.title,
             description: input.description ?? null,
             basePdfRef: input.basePdfRef ?? null,
@@ -126,7 +199,8 @@ export const exerciseRouter = router({
             status: input.status ?? 'draft',
           },
           create: {
-            curriculumUnitId: input.curriculumUnitId,
+            curriculumUnitId: lesson.curriculumUnitId,
+            curriculumLessonId: lesson.id,
             type: input.type,
             title: input.title,
             description: input.description,

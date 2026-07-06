@@ -5,6 +5,7 @@ import { lmsRlsContextOf, rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { lmsProcedure, requirePermission, router } from '../trpc.js';
 import { sessionPhotoExists } from '../services/photo-store.js';
+import { assertTeachingSessionMutationAllowed } from '../lib/teaching-authz.js';
 
 const ENTITY = 'session_evidence';
 
@@ -131,6 +132,7 @@ export const sessionEvidenceRouter = router({
           },
         });
         if (!session) throw new TRPCError({ code: 'NOT_FOUND' });
+        assertTeachingSessionMutationAllowed(ctx.session, session);
         const enrolled = new Set(session.batch.enrollments.map((e) => e.studentId));
         for (const c of input.comments) {
           if (!enrolled.has(c.studentId)) {
@@ -215,9 +217,10 @@ export const sessionEvidenceRouter = router({
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const evidence = await tx.sessionEvidence.findUnique({
           where: { classSessionId: input.classSessionId },
-          include: { photos: true, comments: true },
+          include: { photos: true, comments: true, classSession: { select: { teacherId: true } } },
         });
         if (!evidence) throw new TRPCError({ code: 'NOT_FOUND', message: 'Chưa có nháp buổi học' });
+        assertTeachingSessionMutationAllowed(ctx.session, evidence.classSession);
         if (!evidence.summary?.trim()) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cần có tóm tắt buổi học trước khi publish' });
         }

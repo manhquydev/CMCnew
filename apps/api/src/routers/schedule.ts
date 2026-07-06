@@ -120,6 +120,7 @@ export const scheduleRouter = router({
           include: {
             batch: { select: { id: true, code: true, name: true } },
             curriculumUnit: { select: { unitCode: true, theme: true } },
+            curriculumLesson: { select: { lessonCode: true, seqInUnit: true, orderGlobal: true } },
           },
           orderBy: [{ sessionDate: 'asc' }, { startTime: 'asc' }],
         });
@@ -266,6 +267,7 @@ export const scheduleRouter = router({
         roomId: z.string().uuid().optional(),
         teacherId: z.string().uuid().optional(),
         curriculumUnitId: z.string().uuid().optional(),
+        curriculumLessonId: z.string().uuid().optional(),
       }).refine((v) => v.startTime < v.endTime, {
         message: 'Giờ bắt đầu phải trước giờ kết thúc',
         path: ['endTime'],
@@ -323,6 +325,23 @@ export const scheduleRouter = router({
           });
         }
 
+        let curriculumUnitId = input.curriculumUnitId ?? null;
+        let curriculumLessonId = input.curriculumLessonId ?? null;
+        if (input.curriculumLessonId) {
+          const lesson = await tx.curriculumLesson.findUniqueOrThrow({
+            where: { id: input.curriculumLessonId },
+            select: { curriculumUnitId: true },
+          });
+          curriculumUnitId = lesson.curriculumUnitId;
+        } else if (input.curriculumUnitId) {
+          const lesson = await tx.curriculumLesson.findFirst({
+            where: { curriculumUnitId: input.curriculumUnitId },
+            orderBy: { seqInUnit: 'asc' },
+            select: { id: true },
+          });
+          curriculumLessonId = lesson?.id ?? null;
+        }
+
         let created;
         try {
           created = await tx.classSession.create({
@@ -334,7 +353,8 @@ export const scheduleRouter = router({
               endTime: input.endTime,
               roomId: input.roomId ?? null,
               teacherId: input.teacherId ?? null,
-              curriculumUnitId: input.curriculumUnitId ?? null,
+              curriculumUnitId,
+              curriculumLessonId,
               status: 'planned',
               isMakeup: true,
             },
@@ -569,6 +589,13 @@ export const scheduleRouter = router({
                 content: true,
                 thinkingGoal: true,
                 assessment: true,
+              },
+            },
+            curriculumLesson: {
+              select: {
+                lessonCode: true,
+                seqInUnit: true,
+                orderGlobal: true,
               },
             },
           },

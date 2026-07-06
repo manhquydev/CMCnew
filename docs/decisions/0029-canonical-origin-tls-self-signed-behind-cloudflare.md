@@ -26,8 +26,9 @@ strict mode).
 ## Decision
 
 Canonical origin-TLS strategy is a **self-signed origin SAN cert
-(erp.cmcvn.edu.vn + hoc.cmcvn.edu.vn, RSA-2048, 10y) behind Cloudflare "Full"
-mode**, self-provisioned and verified on every deploy by the new
+(erp.cmcvn.edu.vn + teacher.cmcvn.edu.vn + hoc.cmcvn.edu.vn + dev staff/LMS
+hosts, RSA-2048, 10y) behind Cloudflare "Full" mode**, self-provisioned and
+verified on every deploy by the new
 `scripts/ensure-origin-cert.sh` helper (idempotent: verify-first, generate
 only if absent, fail loud on corrupt/invalid).
 

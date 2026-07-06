@@ -412,11 +412,93 @@ const SSO_TX_COOKIE = 'cmc.sso_tx';
 const erpOrigin = () => process.env.ADMIN_APP_ORIGIN ?? 'http://localhost:5173';
 const cookieSecure = () => process.env.COOKIE_SECURE !== 'false';
 
+type StaffSsoTx = {
+  state: string;
+  verifier: string;
+  returnOrigin?: string;
+  returnPath?: string;
+  redirectUri?: string;
+};
+
+function splitOrigins(raw: string | undefined): string[] {
+  return (raw ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function normalizeOrigin(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
+}
+
+function allowedStaffOrigins(): Set<string> {
+  const origins = [erpOrigin(), ...splitOrigins(process.env.STAFF_APP_ORIGINS)]
+    .map((origin) => normalizeOrigin(origin))
+    .filter((origin): origin is string => !!origin);
+  return new Set(origins);
+}
+
+function staffReturnOrigin(requested: string | undefined | null): string {
+  const fallback = normalizeOrigin(erpOrigin()) ?? 'http://localhost:5173';
+  const candidate = normalizeOrigin(requested) ?? fallback;
+  return allowedStaffOrigins().has(candidate) ? candidate : fallback;
+}
+
+function originFromHeader(raw: string | undefined): string | null {
+  return normalizeOrigin(raw);
+}
+
+function firstForwardedValue(raw: string | undefined): string | null {
+  const value = raw?.split(',')[0]?.trim();
+  return value || null;
+}
+
+function originFromForwardedHost(protoRaw: string | undefined, hostRaw: string | undefined): string | null {
+  const host = firstForwardedValue(hostRaw);
+  if (!host || host.includes('/') || host.includes('\\')) return null;
+  const proto = firstForwardedValue(protoRaw) ?? 'https';
+  if (proto !== 'http' && proto !== 'https') return null;
+  return normalizeOrigin(`${proto}://${host}`);
+}
+
+function staffReturnPath(raw: string | undefined | null): string {
+  if (!raw) return '/';
+  const value = raw.trim();
+  if (!value.startsWith('/') || value.startsWith('//')) return '/';
+  try {
+    const parsed = new URL(value, 'https://cmc.local');
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return '/';
+  }
+}
+
+function redirectUriForStaffOrigin(cfg: { redirectUri: string }, origin: string): string {
+  const canonical = normalizeOrigin(erpOrigin());
+  if (canonical && origin === canonical) return cfg.redirectUri;
+  const base = new URL(cfg.redirectUri);
+  return `${origin}${base.pathname}${base.search}`;
+}
+
 app.get('/auth/sso/login', async (c) => {
   const cfg = ssoConfigFromEnv();
   if (!cfg) return c.text('SSO chưa được cấu hình', 503);
-  const { url, tx } = await buildAuthUrl(cfg);
-  setCookie(c, SSO_TX_COOKIE, JSON.stringify(tx), {
+  const returnOrigin = staffReturnOrigin(
+    c.req.query('returnOrigin') ??
+      originFromHeader(c.req.header('origin')) ??
+      originFromHeader(c.req.header('referer')) ??
+      originFromForwardedHost(c.req.header('x-forwarded-proto'), c.req.header('x-forwarded-host') ?? c.req.header('host')),
+  );
+  const returnPath = staffReturnPath(c.req.query('returnPath'));
+  const redirectUri = redirectUriForStaffOrigin(cfg, returnOrigin);
+  const { url, tx } = await buildAuthUrl({ ...cfg, redirectUri });
+  const cookieTx: StaffSsoTx = { ...tx, returnOrigin, returnPath, redirectUri };
+  setCookie(c, SSO_TX_COOKIE, JSON.stringify(cookieTx), {
     httpOnly: true,
     sameSite: 'Lax',
     // Path '/' (not '/auth/sso') so the cookie comes back on the callback even when the app is
@@ -433,24 +515,27 @@ app.get('/auth/sso/login', async (c) => {
 app.get('/auth/sso/callback', async (c) => {
   const cfg = ssoConfigFromEnv();
   if (!cfg) return c.text('SSO chưa được cấu hình', 503);
-  const fail = (reason: string) => c.redirect(`${erpOrigin()}/login?sso_error=${reason}`);
-
-  if (c.req.query('error')) return fail('denied');
   const code = c.req.query('code');
   const state = c.req.query('state');
   const raw = getCookie(c, SSO_TX_COOKIE);
   deleteCookie(c, SSO_TX_COOKIE, { path: '/' });
-  if (!code || !state || !raw) return fail('state');
 
-  let tx: { state: string; verifier: string };
-  try {
-    tx = JSON.parse(raw);
-  } catch {
-    return fail('state');
+  let tx: StaffSsoTx | null = null;
+  if (raw) {
+    try {
+      tx = JSON.parse(raw);
+    } catch {
+      tx = null;
+    }
   }
+  const returnOrigin = staffReturnOrigin(tx?.returnOrigin);
+  const fail = (reason: string) => c.redirect(`${returnOrigin}/login?sso_error=${encodeURIComponent(reason)}`);
+
+  if (c.req.query('error')) return fail('denied');
+  if (!code || !state || !tx) return fail('state');
   if (tx.state !== state) return fail('state'); // CSRF guard
 
-  const email = await redeemCode(cfg, code, tx.verifier).catch(() => null);
+  const email = await redeemCode({ ...cfg, redirectUri: tx.redirectUri ?? cfg.redirectUri }, code, tx.verifier).catch(() => null);
   if (!email) return fail('domain'); // wrong tenant / non-org email / token invalid
 
   const result = await mintStaffSession(email);
@@ -463,7 +548,7 @@ app.get('/auth/sso/callback', async (c) => {
     maxAge: 60 * 60 * 12,
     secure: cookieSecure(),
   });
-  return c.redirect(erpOrigin());
+  return c.redirect(`${returnOrigin}${staffReturnPath(tx.returnPath)}`);
 });
 
 app.use(

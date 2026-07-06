@@ -791,11 +791,15 @@ function ChildDashboard({
               <Table.Tbody>
                 {submissions.map((s) => {
                   const published = s.grade && s.grade.isPublished;
-                  const hasDrawnWork = exercisesById.get(s.exerciseId)?.basePdfRef;
+                  const exerciseMeta = exercisesById.get(s.exerciseId);
+                  const hasDrawnWork = exerciseMeta?.basePdfRef;
                   return (
                     <Table.Tr key={s.id}>
                       <Table.Td>
                         <Text size="sm">{s.exercise.title}</Text>
+                        {exerciseMeta && (
+                          <Text size="xs" c="dimmed">{exerciseMeta.lessonCode ?? exerciseMeta.unitCode}</Text>
+                        )}
                       </Table.Td>
                       <Table.Td>
                         <Group gap={4}>

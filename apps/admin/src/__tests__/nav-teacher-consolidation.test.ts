@@ -31,6 +31,10 @@ function keysOf(roles: string[]): string[] {
   return groups.flatMap((g) => g.items.filter((i) => i.visible).map((i) => i.key));
 }
 
+function teacherSurfaceGroups(roles: string[]) {
+  return buildNavGroups({ roles, isSuperAdmin: false, surface: 'teacher' });
+}
+
 // The 8 standalone sections the teacher consolidation collapses for giao_vien-only accounts.
 const COLLAPSED_SECTIONS = [
   'attendance', 'grading', 'assessment', 'classes', 'courses', 'meetings', 'my-payslips', 'checkin',
@@ -84,5 +88,35 @@ describe('teacher nav consolidation', () => {
       expect(keys.includes(section), `${section} visibility for ${role} should match the registry grant`)
         .toBe(grantedByRegistry(section, [role]));
     }
+  });
+
+  it('teacher surface uses a focused teaching console nav instead of ERP module labels', () => {
+    const groups = teacherSurfaceGroups(['giao_vien']);
+    const groupLabels = groups.map((g) => g.groupLabel);
+    const visibleItems = groups.flatMap((g) => g.items.filter((i) => i.visible));
+    const keys = visibleItems.map((i) => i.key);
+
+    expect(groupLabels).toContain('Lịch & buổi học');
+    expect(groupLabels).toContain('Lớp & bài tập');
+    expect(groupLabels).not.toContain('CRM & Kinh doanh');
+    expect(groupLabels).not.toContain('Tài chính');
+    expect(groupLabels).not.toContain('Công ca');
+    expect(groupLabels).not.toContain('Cá nhân');
+    expect(keys).toContain('schedule');
+    expect(keys).toContain('student-mgmt');
+    expect(keys).not.toContain('crm');
+    expect(keys).not.toContain('finance');
+    expect(keys).not.toContain('hr');
+    expect(keys).not.toContain('payroll-checkin');
+    expect(keys).not.toContain('shift-registration');
+  });
+
+  it('teacher surface exposes intake as a teacher workflow, not the finance module', () => {
+    const visibleItems = teacherSurfaceGroups(['giam_doc_kinh_doanh'])
+      .flatMap((g) => g.items.filter((i) => i.visible));
+
+    expect(visibleItems.map((i) => i.key)).toContain('family-intake');
+    expect(visibleItems.map((i) => i.key)).not.toContain('finance');
+    expect(visibleItems.find((i) => i.key === 'family-intake')?.label).toBe('Tiếp nhận phụ huynh + học sinh');
   });
 });

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDebouncedValue } from '@mantine/hooks';
+import { can } from '@cmc/auth/permissions';
 import { normalizeContactPhone } from '@cmc/auth/phone';
 import {
   trpc,
   API_URL,
   Chatter,
+  useSession,
   notifyError,
   notifySuccess,
   FacilityPicker,
@@ -60,6 +62,9 @@ const STATUS: Record<string, StatusDef> = {
 };
 
 const RECEIPT_PAGE_SIZE = 20;
+
+const receiptRef = (receipt: Pick<Receipt, 'code' | 'id'>) =>
+  receipt.code ?? `HSO-${receipt.id.slice(0, 8)}`;
 
 // ─── Course Price Card ────────────────────────────────────────────────────────
 
@@ -1219,11 +1224,13 @@ function ReceiptCreateCard({
   facilities,
   onCreated,
   opportunityContext,
+  variant = 'finance',
 }: {
   students: StudentT[];
   courses: CourseT[];
   facilities: Facility[];
-  onCreated: () => void;
+  onCreated: (receipt: Receipt) => void;
+  variant?: 'finance' | 'family-intake';
   opportunityContext?: {
     opportunityId: string;
     studentName?: string | null;
@@ -1231,7 +1238,8 @@ function ReceiptCreateCard({
     facilityId?: number | null;
   };
 }) {
-  const [mode, setMode] = useState<'existing' | 'new'>('existing');
+  const isFamilyIntake = variant === 'family-intake';
+  const [mode, setMode] = useState<'existing' | 'new'>(isFamilyIntake ? 'new' : 'existing');
   const [batches, setBatches] = useState<BatchT[]>([]);
 
   // Existing-student fields
@@ -1242,6 +1250,8 @@ function ReceiptCreateCard({
   const [newFacilityId, setNewFacilityId] = useState<string | null>(null);
   const [newCourseId, setNewCourseId] = useState<string | null>(null);
   const [parentPhone, setParentPhone] = useState('');
+  const [parentName, setParentName] = useState('');
+  const [parentEmail, setParentEmail] = useState('');
   const [studentName, setStudentName] = useState('');
   const [studentDob, setStudentDob] = useState('');
   const [classBatchId, setClassBatchId] = useState<string | null>(null);
@@ -1275,12 +1285,12 @@ function ReceiptCreateCard({
 
   useEffect(() => {
     if (!opportunityContext) return;
-    setMode(opportunityContext.courseId ? 'existing' : 'new');
+    setMode(isFamilyIntake ? 'new' : opportunityContext.courseId ? 'existing' : 'new');
     setNewFacilityId(opportunityContext.facilityId ? String(opportunityContext.facilityId) : null);
     setNewCourseId(opportunityContext.courseId ?? null);
     setCourseId(opportunityContext.courseId ?? null);
     setStudentName(opportunityContext.studentName ?? '');
-  }, [opportunityContext]);
+  }, [isFamilyIntake, opportunityContext]);
 
   // Fire the lookup once the debounced phone normalizes to a full local number (9-10 digits) and a
   // facility is chosen. Resets on every phone/facility change so a stale opportunityId can never
@@ -1301,6 +1311,7 @@ function ReceiptCreateCard({
   function confirmOpportunityMatch(opp: { id: string; studentName: string | null; contact: { fullName: string } }) {
     setPickedOpportunityId(opp.id);
     setPickedParentName(opp.contact.fullName);
+    setParentName(opp.contact.fullName);
     if (opp.studentName) setStudentName(opp.studentName);
     setOpportunityMatches([]);
   }
@@ -1324,6 +1335,8 @@ function ReceiptCreateCard({
     setNewFacilityId(null);
     setNewCourseId(null);
     setParentPhone('');
+    setParentName('');
+    setParentEmail('');
     setStudentName('');
     setStudentDob('');
     setClassBatchId(null);
@@ -1346,11 +1359,13 @@ function ReceiptCreateCard({
       return;
     }
     notifySuccess(
-      `Đã tạo phiếu nháp: gốc ${vnd(r.receipt.grossAmount)} → giảm ${r.receipt.effectiveDiscountPercent}% → còn ${vnd(r.receipt.netAmount)}`,
-      'Tạo phiếu thu thành công',
+      isFamilyIntake
+        ? `Đã ghi hồ sơ ${receiptRef(r.receipt)}. Hồ sơ đã nằm trong danh sách tiếp nhận bên dưới.`
+        : `Đã tạo phiếu nháp: gốc ${vnd(r.receipt.grossAmount)} → giảm ${r.receipt.effectiveDiscountPercent}% → còn ${vnd(r.receipt.netAmount)}`,
+      isFamilyIntake ? 'Tạo hồ sơ nháp thành công' : 'Tạo phiếu thu thành công',
     );
     resetForm();
-    onCreated();
+    onCreated(r.receipt);
   }
 
   async function createDraft() {
@@ -1372,11 +1387,22 @@ function ReceiptCreateCard({
           opportunityId: opportunityContext?.opportunityId,
         });
       } else {
-        if (!newFacilityId || !newCourseId || !parentPhone.trim() || !studentName.trim()) {
+        if (
+          !newFacilityId ||
+          !newCourseId ||
+          !parentPhone.trim() ||
+          !parentName.trim() ||
+          !parentEmail.trim() ||
+          !studentName.trim()
+        ) {
           notifyError(
-            'Vui lòng điền: cơ sở, khóa học, SĐT phụ huynh và tên học sinh.',
+            'Vui lòng điền: cơ sở, khóa học, SĐT phụ huynh, tên phụ huynh, email phụ huynh và tên học sinh.',
             'Thiếu thông tin',
           );
+          return;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail.trim())) {
+          notifyError('Email phụ huynh không hợp lệ.', 'Thiếu thông tin');
           return;
         }
         await submitReceipt({
@@ -1386,7 +1412,8 @@ function ReceiptCreateCard({
           period: period.trim() || undefined,
           voucherCode: voucherCode.trim() || undefined,
           parentPhone: parentPhone.trim(),
-          parentName: pickedParentName ?? undefined,
+          parentName: parentName.trim(),
+          parentEmail: parentEmail.trim(),
           studentName: studentName.trim(),
           studentDob: studentDob.trim() || undefined,
           classBatchId: classBatchId ?? undefined,
@@ -1416,26 +1443,28 @@ function ReceiptCreateCard({
   return (
     <Card withBorder>
       <Title order={5} mb="sm">
-        Lập phiếu thu
+        {isFamilyIntake ? 'Thông tin phụ huynh + học sinh' : 'Lập phiếu thu'}
       </Title>
 
       {/* Mode toggle: existing student vs. new student */}
-      <Group mb="sm">
-        <Button
-          size="xs"
-          variant={mode === 'existing' ? 'filled' : 'subtle'}
-          onClick={() => setMode('existing')}
-        >
-          Học sinh hiện có
-        </Button>
-        <Button
-          size="xs"
-          variant={mode === 'new' ? 'filled' : 'subtle'}
-          onClick={() => setMode('new')}
-        >
-          Học sinh mới
-        </Button>
-      </Group>
+      {!isFamilyIntake ? (
+        <Group mb="sm">
+          <Button
+            size="xs"
+            variant={mode === 'existing' ? 'filled' : 'subtle'}
+            onClick={() => setMode('existing')}
+          >
+            Học sinh hiện có
+          </Button>
+          <Button
+            size="xs"
+            variant={mode === 'new' ? 'filled' : 'subtle'}
+            onClick={() => setMode('new')}
+          >
+            Học sinh mới
+          </Button>
+        </Group>
+      ) : null}
 
       {mode === 'existing' ? (
         <Group grow align="flex-end">
@@ -1487,6 +1516,23 @@ function ReceiptCreateCard({
               placeholder="vd 0901234567"
               value={parentPhone}
               onChange={(e) => setParentPhone(e.currentTarget.value)}
+            />
+            <TextInput
+              label="Tên phụ huynh"
+              withAsterisk
+              placeholder="Họ và tên phụ huynh"
+              value={parentName}
+              onChange={(e) => setParentName(e.currentTarget.value)}
+            />
+          </Group>
+          <Group grow align="flex-end">
+            <TextInput
+              label="Email phụ huynh"
+              withAsterisk
+              type="email"
+              placeholder="phuhuynh@example.com"
+              value={parentEmail}
+              onChange={(e) => setParentEmail(e.currentTarget.value)}
             />
             <TextInput
               label="Tên học sinh"
@@ -1560,34 +1606,53 @@ function ReceiptCreateCard({
         </Stack>
       )}
 
-      <Group grow align="flex-end" mt="sm">
-        <Select
-          label="Đóng trước"
-          data={YEARS}
-          value={years}
-          onChange={(v) => v && setYears(v)}
-          allowDeselect={false}
-        />
-        <TextInput
-          label="Mã voucher (tùy chọn)"
-          placeholder="vd SAVE20"
-          value={voucherCode}
-          onChange={(e) => setVoucherCode(e.currentTarget.value)}
-        />
-        <TextInput
-          label="Kỳ (tùy chọn)"
-          placeholder="vd 2026-HK1"
-          value={period}
-          onChange={(e) => setPeriod(e.currentTarget.value)}
-        />
-      </Group>
-      <Text size="xs" c="dimmed" mt={6}>
-        Giảm theo số năm cộng voucher, tổng tối đa 35%. Giá lấy theo bảng giá hiệu lực ngày lập
-        phiếu.
-      </Text>
+      {isFamilyIntake ? (
+        <>
+          <Group grow align="flex-end" mt="sm">
+            <TextInput
+              label="Kỳ nhập học (tùy chọn)"
+              placeholder="vd 2026-HK1"
+              value={period}
+              onChange={(e) => setPeriod(e.currentTarget.value)}
+            />
+          </Group>
+          <Text size="xs" c="dimmed" mt={6}>
+            Hồ sơ nháp giữ đủ thông tin phụ huynh, học sinh, khóa học và lớp dự kiến; các bước
+            phê duyệt/kích hoạt LMS tiếp tục theo quy trình hiện tại.
+          </Text>
+        </>
+      ) : (
+        <>
+          <Group grow align="flex-end" mt="sm">
+            <Select
+              label="Đóng trước"
+              data={YEARS}
+              value={years}
+              onChange={(v) => v && setYears(v)}
+              allowDeselect={false}
+            />
+            <TextInput
+              label="Mã voucher (tùy chọn)"
+              placeholder="vd SAVE20"
+              value={voucherCode}
+              onChange={(e) => setVoucherCode(e.currentTarget.value)}
+            />
+            <TextInput
+              label="Kỳ (tùy chọn)"
+              placeholder="vd 2026-HK1"
+              value={period}
+              onChange={(e) => setPeriod(e.currentTarget.value)}
+            />
+          </Group>
+          <Text size="xs" c="dimmed" mt={6}>
+            Giảm theo số năm cộng voucher, tổng tối đa 35%. Giá lấy theo bảng giá hiệu lực ngày lập
+            phiếu.
+          </Text>
+        </>
+      )}
       <Group mt="md">
         <Button onClick={createDraft} loading={busy}>
-          Tạo phiếu nháp
+          {isFamilyIntake ? 'Tạo hồ sơ nháp' : 'Tạo phiếu nháp'}
         </Button>
       </Group>
       <Modal
@@ -1617,12 +1682,199 @@ function ReceiptCreateCard({
 
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
+function FamilyIntakeQueueCard({
+  receipts,
+  courses,
+  facilities,
+  canApprove,
+  onReload,
+  onStudentsChanged,
+}: {
+  receipts: Receipt[];
+  courses: CourseT[];
+  facilities: Facility[];
+  canApprove: boolean;
+  onReload: () => void;
+  onStudentsChanged: () => void;
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const intakeReceipts = receipts.filter((r) => r.parentPhone || r.parentName || r.parentEmail || r.studentName);
+  const courseLabel = (id: string) => courses.find((c) => c.id === id)?.code ?? id.slice(0, 8);
+  const facilityLabel = (id: number) => facilities.find((f) => f.id === id)?.name ?? `Cơ sở ${id}`;
+
+  async function approveIntake(receipt: Receipt) {
+    setBusyId(receipt.id);
+    try {
+      const approved = await trpc.finance.receiptApprove.mutate({ id: receipt.id });
+      notifySuccess(
+        `Đã kích hoạt học viên từ hồ sơ ${receiptRef(approved)}.`,
+        'Hồ sơ tiếp nhận đã duyệt',
+      );
+      onReload();
+      onStudentsChanged();
+    } catch (e) {
+      notifyError(e, 'Không duyệt được hồ sơ tiếp nhận');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <Card withBorder>
+      <Group justify="space-between" mb="sm">
+        <Title order={5}>Hồ sơ tiếp nhận gần đây</Title>
+        <Button size="xs" variant="subtle" leftSection={<IconRefresh size={14} />} onClick={onReload}>
+          Tải lại
+        </Button>
+      </Group>
+
+      {intakeReceipts.length === 0 ? (
+        <Text c="dimmed" size="sm">
+          Chưa có hồ sơ tiếp nhận nào do tài khoản này tạo.
+        </Text>
+      ) : (
+        <Table striped highlightOnHover withTableBorder>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Mã hồ sơ</Table.Th>
+              <Table.Th>Học sinh</Table.Th>
+              <Table.Th>Phụ huynh</Table.Th>
+              <Table.Th>Khóa/lớp</Table.Th>
+              <Table.Th>Trạng thái</Table.Th>
+              <Table.Th />
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {intakeReceipts.map((r) => (
+              <Table.Tr key={r.id}>
+                <Table.Td>{receiptRef(r)}</Table.Td>
+                <Table.Td>{r.studentName ?? '—'}</Table.Td>
+                <Table.Td>
+                  <Stack gap={2}>
+                    <Text size="sm">{r.parentName ?? '—'}</Text>
+                    <Text size="xs" c="dimmed">
+                      {r.parentEmail ?? r.parentPhone ?? '—'}
+                    </Text>
+                  </Stack>
+                </Table.Td>
+                <Table.Td>
+                  <Stack gap={2}>
+                    <Text size="sm">{courseLabel(r.courseId)}</Text>
+                    <Text size="xs" c="dimmed">
+                      {facilityLabel(r.facilityId)}
+                    </Text>
+                  </Stack>
+                </Table.Td>
+                <Table.Td>
+                  <StatusBadge status={r.status} map={STATUS} pill />
+                </Table.Td>
+                <Table.Td>
+                  {canApprove && r.status === 'draft' ? (
+                    <Button size="xs" loading={busyId === r.id} onClick={() => approveIntake(r)}>
+                      Duyệt & kích hoạt
+                    </Button>
+                  ) : r.status === 'draft' ? (
+                    <Text size="xs" c="dimmed">
+                      Chờ duyệt
+                    </Text>
+                  ) : null}
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      )}
+    </Card>
+  );
+}
+
+export function FamilyIntakePanel() {
+  const { me } = useSession();
+  const [students, setStudents] = useState<StudentT[]>([]);
+  const [courses, setCourses] = useState<CourseT[]>([]);
+  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const canReceiptCreate = can(me.roles, me.isSuperAdmin, 'finance', 'receiptCreate');
+  const canReceiptListOwn = can(me.roles, me.isSuperAdmin, 'finance', 'receiptListOwn');
+  const canReceiptApprove = can(me.roles, me.isSuperAdmin, 'finance', 'receiptApprove');
+
+  const loadStudents = useCallback(() => {
+    trpc.student.list
+      .query()
+      .then(setStudents)
+      .catch((e) => notifyError(e, 'Không tải được danh sách học sinh'));
+  }, []);
+
+  const loadReceipts = useCallback(() => {
+    if (!canReceiptListOwn) {
+      setReceipts([]);
+      return;
+    }
+    trpc.finance.receiptListOwn
+      .query()
+      .then(setReceipts)
+      .catch((e) => notifyError(e, 'Không tải được hồ sơ tiếp nhận'));
+  }, [canReceiptListOwn]);
+
+  useEffect(() => {
+    loadStudents();
+    loadReceipts();
+    trpc.course.list
+      .query()
+      .then(setCourses)
+      .catch((e) => notifyError(e, 'Không tải được danh sách khóa học'));
+    trpc.facility.list
+      .query()
+      .then(setFacilities)
+      .catch((e) => notifyError(e, 'Không tải được danh sách cơ sở'));
+  }, [loadStudents, loadReceipts, reloadKey]);
+
+  if (!canReceiptCreate) {
+    return (
+      <Card radius="lg" p="lg" withBorder style={{ borderColor: 'var(--cmc-border)' }}>
+        <Text c="dimmed" size="sm">
+          Tài khoản này chưa có quyền tiếp nhận phụ huynh và học sinh.
+        </Text>
+      </Card>
+    );
+  }
+
+  return (
+    <Stack>
+      <ReceiptCreateCard
+        students={students}
+        courses={courses}
+        facilities={facilities}
+        onCreated={() => setReloadKey((k) => k + 1)}
+        variant="family-intake"
+      />
+      {canReceiptListOwn ? (
+        <FamilyIntakeQueueCard
+          receipts={receipts}
+          courses={courses}
+          facilities={facilities}
+          canApprove={canReceiptApprove}
+          onReload={loadReceipts}
+          onStudentsChanged={loadStudents}
+        />
+      ) : null}
+    </Stack>
+  );
+}
+
 export function FinancePanel() {
+  const { me } = useSession();
   const [students, setStudents] = useState<StudentT[]>([]);
   const [courses, setCourses] = useState<CourseT[]>([]);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   // receipts are managed inside ReceiptsCard via a ref reload callback
   const [reloadKey, setReloadKey] = useState(0);
+  const canPriceList = can(me.roles, me.isSuperAdmin, 'finance', 'priceList');
+  const canVoucherList = can(me.roles, me.isSuperAdmin, 'finance', 'voucherList');
+  const canDiscountTierList = can(me.roles, me.isSuperAdmin, 'finance', 'discountTierList');
+  const canReceiptCreate = can(me.roles, me.isSuperAdmin, 'finance', 'receiptCreate');
+  const canReceiptList = can(me.roles, me.isSuperAdmin, 'finance', 'receiptList');
 
   const loadStudents = useCallback(() => {
     trpc.student.list
@@ -1645,23 +1897,27 @@ export function FinancePanel() {
 
   return (
     <Stack>
-      <CoursePriceCard courses={courses} facilities={facilities} />
-      <VoucherCard facilities={facilities} />
-      <DiscountTierCard facilities={facilities} />
-      <ReceiptCreateCard
-        students={students}
-        courses={courses}
-        facilities={facilities}
-        onCreated={() => setReloadKey((k) => k + 1)}
-      />
+      {canPriceList && <CoursePriceCard courses={courses} facilities={facilities} />}
+      {canVoucherList && <VoucherCard facilities={facilities} />}
+      {canDiscountTierList && <DiscountTierCard facilities={facilities} />}
+      {canReceiptCreate && (
+        <ReceiptCreateCard
+          students={students}
+          courses={courses}
+          facilities={facilities}
+          onCreated={() => setReloadKey((k) => k + 1)}
+        />
+      )}
       {/* key forces ReceiptsCard to re-mount and reload after a new receipt is created */}
-      <ReceiptsCard
-        key={reloadKey}
-        students={students}
-        courses={courses}
-        facilities={facilities}
-        onStudentsChanged={loadStudents}
-      />
+      {canReceiptList && (
+        <ReceiptsCard
+          key={reloadKey}
+          students={students}
+          courses={courses}
+          facilities={facilities}
+          onStudentsChanged={loadStudents}
+        />
+      )}
     </Stack>
   );
 }

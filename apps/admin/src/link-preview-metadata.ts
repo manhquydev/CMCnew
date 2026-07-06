@@ -1,4 +1,5 @@
 import type { SectionKey } from './shell';
+import type { AppSurface } from './app-surface';
 
 export type LinkPreviewMetadata = {
   title: string;
@@ -14,6 +15,12 @@ export const ADMIN_DEFAULT_METADATA: LinkPreviewMetadata = {
 export const ADMIN_CRM_OPPORTUNITY_METADATA: LinkPreviewMetadata = {
   title: 'Cơ hội CRM | CMC ERP',
   description: 'Mở hồ sơ cơ hội CRM để theo dõi tư vấn, chủ sở hữu, trạng thái và chăm sóc tuyển sinh tại CMC.',
+};
+
+export const TEACHER_DEFAULT_METADATA: LinkPreviewMetadata = {
+  title: 'CMC Teacher | Lịch dạy & LMS',
+  description:
+    'Không gian làm việc cho giáo viên và đào tạo: lịch dạy, lớp học, điểm danh, nhận xét LMS và chấm bài.',
 };
 
 export const ADMIN_SECTION_METADATA = {
@@ -36,6 +43,10 @@ export const ADMIN_SECTION_METADATA = {
   guardians: {
     title: 'Phụ huynh | CMC ERP',
     description: 'Tra cứu phụ huynh, liên kết học sinh và thông tin liên hệ phục vụ chăm sóc gia đình học viên.',
+  },
+  'family-intake': {
+    title: 'Tiếp nhận phụ huynh + học sinh | CMC Teacher',
+    description: 'Tạo phiếu nháp từ một form phụ huynh và học sinh để chuyển sang luồng provisioning đã chốt.',
   },
   finance: {
     title: 'Tài chính | CMC ERP',
@@ -105,6 +116,7 @@ export const ADMIN_ROUTE_METADATA = [
   { path: 'students', metadata: ADMIN_SECTION_METADATA.students },
   { path: 'org', metadata: ADMIN_SECTION_METADATA.org },
   { path: 'guardians', metadata: ADMIN_SECTION_METADATA.guardians },
+  { path: 'family-intake', metadata: ADMIN_SECTION_METADATA['family-intake'] },
   { path: 'finance', metadata: ADMIN_SECTION_METADATA.finance },
   { path: 'crm', metadata: ADMIN_SECTION_METADATA.crm },
   { path: 'crm/opportunities', metadata: ADMIN_CRM_OPPORTUNITY_METADATA },
@@ -125,7 +137,41 @@ export const ADMIN_ROUTE_METADATA = [
 
 const ADMIN_SECTION_METADATA_BY_KEY: Partial<Record<SectionKey, LinkPreviewMetadata>> = ADMIN_SECTION_METADATA;
 
-export function getAdminMetadata(section: SectionKey, isCrmOpportunity: boolean): LinkPreviewMetadata {
+const TEACHER_SECTION_TITLES: Partial<Record<SectionKey, string>> = {
+  schedule: 'Lịch dạy',
+  attendance: 'Điểm danh',
+  'attendance-report': 'Báo cáo điểm danh',
+  grading: 'Chấm bài',
+  assessment: 'Học bạ',
+  classes: 'Lớp học',
+  courses: 'Học liệu',
+  'student-mgmt': 'Học viên',
+  meetings: 'Họp phụ huynh',
+  levelup: 'Duyệt cấp độ',
+  students: 'Học viên',
+  guardians: 'Phụ huynh',
+  'family-intake': 'Tiếp nhận phụ huynh + học sinh',
+  'edu-director-cockpit': 'Điều phối đào tạo',
+  'biz-director-cockpit': 'Bàn giao tuyển sinh',
+  'payroll-checkin': 'Chấm công & lương',
+  'shift-registration': 'Đăng ký ca',
+  checkin: 'Chấm công',
+  profile: 'Hồ sơ',
+};
+
+export function getAdminMetadata(
+  section: SectionKey,
+  isCrmOpportunity: boolean,
+  surface: AppSurface = 'erp',
+): LinkPreviewMetadata {
+  if (surface === 'teacher') {
+    const title = TEACHER_SECTION_TITLES[section];
+    if (!title) return TEACHER_DEFAULT_METADATA;
+    return {
+      title: `${title} | CMC Teacher`,
+      description: TEACHER_DEFAULT_METADATA.description,
+    };
+  }
   if (isCrmOpportunity) return ADMIN_CRM_OPPORTUNITY_METADATA;
   return ADMIN_SECTION_METADATA_BY_KEY[section] ?? ADMIN_DEFAULT_METADATA;
 }

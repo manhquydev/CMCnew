@@ -233,6 +233,18 @@ describe('attendance.markAll', () => {
     // Transferred enrollment must never receive a row from markAll.
     expect(byEnrollment.has(enrollmentE3Id)).toBe(false);
   });
+
+  it('rejects a teacher who is not assigned to the session', async () => {
+    if (!dbReachable) return;
+    const teacherB = await staffCaller({ userId: teacherBId, roles: [Role.giao_vien], primaryRole: Role.giao_vien, isSuperAdmin: false, facilityIds: [FACILITY] });
+
+    await expect(
+      teacherB.attendance.mark({ classSessionId: sessionMainId, enrollmentId: enrollmentE1Id, status: 'present' }),
+    ).rejects.toThrow(/Giáo viên/);
+    await expect(
+      teacherB.attendance.markAll({ classSessionId: sessionMainId, defaultStatus: 'present' }),
+    ).rejects.toThrow(/Giáo viên/);
+  });
 });
 
 describe('attendance.report', () => {

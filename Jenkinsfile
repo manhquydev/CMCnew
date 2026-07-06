@@ -103,14 +103,42 @@ pipeline {
           $COMPOSE exec -T api wget -qO- http://localhost:4000/health
           # public end-to-end reachability (Jenkins runs in its own container, so hit the
           # real domains via egress→Cloudflare→origin rather than 127.0.0.1, which is not nginx here)
+          assert_title_marker() {
+            URL="$1"
+            EXPECTED_MARKER="$2"
+            HTML="$(curl -fsS "$URL")"
+            if ! printf '%s' "$HTML" | grep -Fq "$EXPECTED_MARKER"; then
+              FOUND_TITLE="$(printf '%s' "$HTML" | sed -n 's/.*<title>\([^<]*\)<\/title>.*/\1/p' | head -n 1)"
+              echo "SPA identity mismatch for $URL: title='${FOUND_TITLE:-<missing>}' expected marker='$EXPECTED_MARKER'" >&2
+              exit 1
+            fi
+          }
+          assert_bundle_marker() {
+            URL="$1"
+            EXPECTED_MARKER="$2"
+            HTML="$(curl -fsS "$URL")"
+            ASSET="$(printf '%s' "$HTML" | sed -n 's/.*src="\(\/assets\/index-[^"]*\.js\)".*/\1/p' | head -n 1)"
+            if [ -z "$ASSET" ]; then
+              echo "SPA bundle marker check failed for $URL: missing Vite index asset" >&2
+              exit 1
+            fi
+            ORIGIN="${URL%/}"
+            if ! curl -fsS "${ORIGIN}${ASSET}" | grep -Fq "$EXPECTED_MARKER"; then
+              echo "SPA bundle marker mismatch for $URL: expected marker='$EXPECTED_MARKER' in $ASSET" >&2
+              exit 1
+            fi
+          }
           RESP="$(curl -fsS https://erp.cmcvn.edu.vn/api/health)"; echo "$RESP" | grep -q '"ok":true'
-          curl -fsS -o /dev/null https://hoc.cmcvn.edu.vn/
-          echo "branch=main url=https://erp.cmcvn.edu.vn commit=${GIT_COMMIT} health=$RESP smoke OK"
+          assert_title_marker https://erp.cmcvn.edu.vn/ 'CMC ERP'
+          assert_bundle_marker https://teacher.cmcvn.edu.vn/ 'CMC Teacher'
+          curl -fsS https://teacher.cmcvn.edu.vn/api/health | grep -q '"ok":true'
+          assert_title_marker https://hoc.cmcvn.edu.vn/ 'CMC EDU'
+          echo "branch=main url=https://erp.cmcvn.edu.vn teacher=https://teacher.cmcvn.edu.vn commit=${GIT_COMMIT} health=$RESP smoke OK"
         '''
       }
     }
 
-    // ── DEV branch: deploy the cmcnew-dev stack (deverp/devlms), never touch prod ──
+    // ── DEV branch: deploy the cmcnew-dev stack (deverp/devteacher/devlms), never touch prod ──
     stage('Build + Deploy (dev)') {
       when { branch 'develop' }   // deploy the dev stack only from develop
       steps {
@@ -119,6 +147,8 @@ pipeline {
           export APP_COMMIT="${GIT_COMMIT:-unknown}"
           export APP_BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           export COMPOSE_PARALLEL_LIMIT=1   # 2 vCPU box: serialize image builds so dev+prod+jenkins don't OOM
+          # Keep the shared origin cert SAN set current for all prod+dev vhosts, including devteacher.
+          bash scripts/ensure-origin-cert.sh
           # The dev app tier joins the shared cmcnew-edge network; create it before `up` (external).
           docker network create cmcnew-edge 2>/dev/null || true
           # Explicit branch-to-environment mapping — dev project, dev env file, dev compose. No prod vars.
@@ -165,10 +195,67 @@ pipeline {
       steps {
         sh '''
           DEV="docker compose -f docker/docker-compose.dev.tls.yml --env-file /secrets/.env.dev"
+          assert_title_marker() {
+            URL="$1"
+            EXPECTED_MARKER="$2"
+            HTML="$(curl -fsS "$URL")"
+            if ! printf '%s' "$HTML" | grep -Fq "$EXPECTED_MARKER"; then
+              FOUND_TITLE="$(printf '%s' "$HTML" | sed -n 's/.*<title>\([^<]*\)<\/title>.*/\1/p' | head -n 1)"
+              echo "SPA identity mismatch for $URL: title='${FOUND_TITLE:-<missing>}' expected marker='$EXPECTED_MARKER'" >&2
+              exit 1
+            fi
+          }
+          assert_bundle_marker() {
+            URL="$1"
+            EXPECTED_MARKER="$2"
+            HTML="$(curl -fsS "$URL")"
+            ASSET="$(printf '%s' "$HTML" | sed -n 's/.*src="\(\/assets\/index-[^"]*\.js\)".*/\1/p' | head -n 1)"
+            if [ -z "$ASSET" ]; then
+              echo "SPA bundle marker check failed for $URL: missing Vite index asset" >&2
+              exit 1
+            fi
+            ORIGIN="${URL%/}"
+            if ! curl -fsS "${ORIGIN}${ASSET}" | grep -Fq "$EXPECTED_MARKER"; then
+              echo "SPA bundle marker mismatch for $URL: expected marker='$EXPECTED_MARKER' in $ASSET" >&2
+              exit 1
+            fi
+          }
+          assert_cors_origin() {
+            ORIGIN="$1"
+            ALLOW="$(curl -fsSI -X OPTIONS https://deverp.cmcvn.edu.vn/api/health -H "Origin: $ORIGIN" -H 'Access-Control-Request-Method: GET' | tr -d '\r' | awk 'BEGIN{IGNORECASE=1}/^access-control-allow-origin:/{print $2; exit}')"
+            if [ "$ALLOW" != "$ORIGIN" ]; then
+              echo "CORS origin mismatch for $ORIGIN: allow='${ALLOW:-<missing>}'" >&2
+              exit 1
+            fi
+          }
+          assert_sso_redirect() {
+            ORIGIN="$1"
+            CALLBACK="$2"
+            LOCATION="$(curl -fsSI "$ORIGIN/api/auth/sso/login" | tr -d '\r' | awk 'BEGIN{IGNORECASE=1}/^location:/{print substr($0, index($0,$2)); exit}')"
+            if ! printf '%s' "$LOCATION" | grep -Fq 'login.microsoftonline.com'; then
+              echo "SSO start did not redirect to Microsoft for $ORIGIN: $LOCATION" >&2
+              exit 1
+            fi
+            ENCODED_CALLBACK="$(printf '%s' "$CALLBACK" | sed 's/:/%3A/g; s#/#%2F#g')"
+            if ! printf '%s' "$LOCATION" | grep -Fq "redirect_uri=${ENCODED_CALLBACK}"; then
+              echo "SSO redirect_uri mismatch for $ORIGIN: $LOCATION" >&2
+              exit 1
+            fi
+          }
           $DEV exec -T dev-api wget -qO- http://localhost:4000/health
           RESP="$(curl -fsS https://deverp.cmcvn.edu.vn/api/health)"; echo "$RESP" | grep -q '"ok":true'
-          curl -fsS -o /dev/null https://devlms.cmcvn.edu.vn/
-          echo "branch=develop url=https://deverp.cmcvn.edu.vn commit=${GIT_COMMIT} health=$RESP smoke OK"
+          echo "$RESP" | grep -Fq "\"commit\":\"${GIT_COMMIT:-unknown}\""
+          TEACHER_RESP="$(curl -fsS https://devteacher.cmcvn.edu.vn/api/health)"; echo "$TEACHER_RESP" | grep -q '"ok":true'
+          echo "$TEACHER_RESP" | grep -Fq "\"commit\":\"${GIT_COMMIT:-unknown}\""
+          LMS_RESP="$(curl -fsS https://devlms.cmcvn.edu.vn/api/health)"; echo "$LMS_RESP" | grep -q '"ok":true'
+          echo "$LMS_RESP" | grep -Fq "\"commit\":\"${GIT_COMMIT:-unknown}\""
+          assert_title_marker https://deverp.cmcvn.edu.vn/ 'CMC ERP'
+          assert_bundle_marker https://devteacher.cmcvn.edu.vn/ 'CMC Teacher'
+          assert_bundle_marker https://devteacher.cmcvn.edu.vn/ 'family-intake'
+          assert_title_marker https://devlms.cmcvn.edu.vn/ 'CMC EDU'
+          assert_cors_origin https://devteacher.cmcvn.edu.vn
+          assert_sso_redirect https://devteacher.cmcvn.edu.vn https://devteacher.cmcvn.edu.vn/api/auth/sso/callback
+          echo "branch=develop url=https://deverp.cmcvn.edu.vn teacher=https://devteacher.cmcvn.edu.vn commit=${GIT_COMMIT} health=$RESP smoke OK"
         '''
       }
     }

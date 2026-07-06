@@ -24,6 +24,15 @@ export const curriculumRouter = router({
             content: true,
             thinkingGoal: true,
             sessions: true,
+            lessons: {
+              orderBy: { seqInUnit: 'asc' },
+              select: {
+                id: true,
+                lessonCode: true,
+                seqInUnit: true,
+                orderGlobal: true,
+              },
+            },
           },
         });
         const totalSessions = units.reduce((sum, u) => sum + u.sessions, 0);

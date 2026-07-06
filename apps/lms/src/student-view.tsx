@@ -401,7 +401,7 @@ export function ExerciseModal({
             </Badge>
           </Group>
           <Text size="sm" c="dimmed">
-            Điểm tối đa: {exercise.maxScore} · Tự mở sau buổi học của unit {exercise.unitCode}
+            Điểm tối đa: {exercise.maxScore} · Tự mở sau buổi học {exercise.lessonCode ?? exercise.unitCode}
           </Text>
         </Group>
 
@@ -589,7 +589,9 @@ function ExercisesTab({ refreshKey, gradedOnly }: { refreshKey: number; gradedOn
                 <Table.Tr key={ex.id}>
                   <Table.Td>
                     <Text fw={600} size="sm">{ex.title}</Text>
-                    <Text c="dimmed" size="xs">Unit {ex.unitCode} · {ex.courseName}</Text>
+                    <Text c="dimmed" size="xs">
+                      {ex.lessonCode ?? ex.unitCode} · {ex.courseName}
+                    </Text>
                   </Table.Td>
                   <Table.Td>
                     <Group gap={4}>
