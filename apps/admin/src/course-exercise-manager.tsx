@@ -175,7 +175,7 @@ export function CourseExerciseManager({ course }: { course: Course }) {
 }
 
 function ExerciseEditor({
-  unit,
+  unit: _unit,
   lesson,
   type,
   current,
