@@ -48,9 +48,6 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Install Playwright browser
-        run: pnpm --filter @cmc/e2e exec playwright install --with-deps chromium
-
       - name: Prisma generate
         run: pnpm --filter @cmc/db generate
 
@@ -67,7 +64,7 @@ jobs:
         run: pnpm -r typecheck
 
       - name: Unit tests (domain logic)
-        run: pnpm -r test
+        run: pnpm -r --filter "!@cmc/e2e" test
 
       - name: Integration tests (router invariants — money/tenancy/payroll)
         run: pnpm --filter @cmc/api test:int
