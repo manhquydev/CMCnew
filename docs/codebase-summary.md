@@ -6,7 +6,7 @@
 > For roadmap/status, read [roadmap.md](roadmap.md). This file describes *what
 > exists today* and *where to find it*.
 
-Last reviewed: 2026-07-04 (branch `develop`).
+Last reviewed: 2026-07-06 (branch `develop`).
 
 ## What this is
 
@@ -29,7 +29,7 @@ sync layer. The LMS is a **homework/practice platform**, not online classes.
 | Email | Dual-transport: Microsoft Graph (M365, staff notifications), Brevo REST API (external/parent mail) via outbox pattern |
 | Jobs | `node-cron` embedded in the API process |
 | Tests | Vitest (unit + integration), Playwright (e2e) |
-| CI/CD | Jenkins (`Jenkinsfile`, publishes `CMCnew CI` check via github-checks plugin); GitHub Actions blocked on billing |
+| CI/CD | GitHub Actions reference check/build gate; Jenkins (`Jenkinsfile`, publishes `CMCnew CI` check via github-checks plugin) deploys dev/prod |
 
 ## Workspace layout
 

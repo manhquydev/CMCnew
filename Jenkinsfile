@@ -108,7 +108,7 @@ pipeline {
             EXPECTED_MARKER="$2"
             HTML="$(curl -fsS "$URL")"
             if ! printf '%s' "$HTML" | grep -Fq "$EXPECTED_MARKER"; then
-              FOUND_TITLE="$(printf '%s' "$HTML" | sed -n 's/.*<title>\([^<]*\)<\/title>.*/\1/p' | head -n 1)"
+              FOUND_TITLE="$(printf '%s' "$HTML" | grep -o '<title>[^<]*</title>' | head -n 1 | cut -d '>' -f 2 | cut -d '<' -f 1)"
               echo "SPA identity mismatch for $URL: title='${FOUND_TITLE:-<missing>}' expected marker='$EXPECTED_MARKER'" >&2
               exit 1
             fi
@@ -117,7 +117,7 @@ pipeline {
             URL="$1"
             EXPECTED_MARKER="$2"
             HTML="$(curl -fsS "$URL")"
-            ASSET="$(printf '%s' "$HTML" | sed -n 's/.*src="\(\/assets\/index-[^"]*\.js\)".*/\1/p' | head -n 1)"
+            ASSET="$(printf '%s' "$HTML" | grep -o 'src="/assets/index-[^"]*.js"' | head -n 1 | cut -d '"' -f 2)"
             if [ -z "$ASSET" ]; then
               echo "SPA bundle marker check failed for $URL: missing Vite index asset" >&2
               exit 1
@@ -200,7 +200,7 @@ pipeline {
             EXPECTED_MARKER="$2"
             HTML="$(curl -fsS "$URL")"
             if ! printf '%s' "$HTML" | grep -Fq "$EXPECTED_MARKER"; then
-              FOUND_TITLE="$(printf '%s' "$HTML" | sed -n 's/.*<title>\([^<]*\)<\/title>.*/\1/p' | head -n 1)"
+              FOUND_TITLE="$(printf '%s' "$HTML" | grep -o '<title>[^<]*</title>' | head -n 1 | cut -d '>' -f 2 | cut -d '<' -f 1)"
               echo "SPA identity mismatch for $URL: title='${FOUND_TITLE:-<missing>}' expected marker='$EXPECTED_MARKER'" >&2
               exit 1
             fi
@@ -209,7 +209,7 @@ pipeline {
             URL="$1"
             EXPECTED_MARKER="$2"
             HTML="$(curl -fsS "$URL")"
-            ASSET="$(printf '%s' "$HTML" | sed -n 's/.*src="\(\/assets\/index-[^"]*\.js\)".*/\1/p' | head -n 1)"
+            ASSET="$(printf '%s' "$HTML" | grep -o 'src="/assets/index-[^"]*.js"' | head -n 1 | cut -d '"' -f 2)"
             if [ -z "$ASSET" ]; then
               echo "SPA bundle marker check failed for $URL: missing Vite index asset" >&2
               exit 1
