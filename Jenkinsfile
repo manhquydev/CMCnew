@@ -129,10 +129,14 @@ pipeline {
             fi
           }
           RESP="$(curl -fsS https://erp.cmcvn.edu.vn/api/health)"; echo "$RESP" | grep -q '"ok":true'
+          echo "$RESP" | grep -Fq "${GIT_COMMIT:-unknown}"
           assert_title_marker https://erp.cmcvn.edu.vn/ 'CMC ERP'
           assert_bundle_marker https://teacher.cmcvn.edu.vn/ 'CMC Teacher'
-          curl -fsS https://teacher.cmcvn.edu.vn/api/health | grep -q '"ok":true'
+          TEACHER_RESP="$(curl -fsS https://teacher.cmcvn.edu.vn/api/health)"; echo "$TEACHER_RESP" | grep -q '"ok":true'
+          echo "$TEACHER_RESP" | grep -Fq "${GIT_COMMIT:-unknown}"
           assert_title_marker https://hoc.cmcvn.edu.vn/ 'CMC EDU'
+          LMS_RESP="$(curl -fsS https://hoc.cmcvn.edu.vn/api/health)"; echo "$LMS_RESP" | grep -q '"ok":true'
+          echo "$LMS_RESP" | grep -Fq "${GIT_COMMIT:-unknown}"
           echo "branch=main url=https://erp.cmcvn.edu.vn teacher=https://teacher.cmcvn.edu.vn commit=${GIT_COMMIT} health=$RESP smoke OK"
         '''
       }
@@ -244,11 +248,11 @@ pipeline {
           }
           $DEV exec -T dev-api wget -qO- http://localhost:4000/health
           RESP="$(curl -fsS https://deverp.cmcvn.edu.vn/api/health)"; echo "$RESP" | grep -q '"ok":true'
-          echo "$RESP" | grep -Fq "\"commit\":\"${GIT_COMMIT:-unknown}\""
+          echo "$RESP" | grep -Fq "${GIT_COMMIT:-unknown}"
           TEACHER_RESP="$(curl -fsS https://devteacher.cmcvn.edu.vn/api/health)"; echo "$TEACHER_RESP" | grep -q '"ok":true'
-          echo "$TEACHER_RESP" | grep -Fq "\"commit\":\"${GIT_COMMIT:-unknown}\""
+          echo "$TEACHER_RESP" | grep -Fq "${GIT_COMMIT:-unknown}"
           LMS_RESP="$(curl -fsS https://devlms.cmcvn.edu.vn/api/health)"; echo "$LMS_RESP" | grep -q '"ok":true'
-          echo "$LMS_RESP" | grep -Fq "\"commit\":\"${GIT_COMMIT:-unknown}\""
+          echo "$LMS_RESP" | grep -Fq "${GIT_COMMIT:-unknown}"
           assert_title_marker https://deverp.cmcvn.edu.vn/ 'CMC ERP'
           assert_bundle_marker https://devteacher.cmcvn.edu.vn/ 'CMC Teacher'
           assert_bundle_marker https://devteacher.cmcvn.edu.vn/ 'family-intake'
