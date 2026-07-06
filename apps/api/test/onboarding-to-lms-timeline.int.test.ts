@@ -365,6 +365,7 @@ describe('onboarding → class → receipt → session evidence → LMS timeline
           startTime: '18:00',
           endTime: '19:30',
           status: 'confirmed',
+          teacherId,
         },
       }),
     );

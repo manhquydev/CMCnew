@@ -43,6 +43,16 @@ describe('curriculum read API', () => {
     expect(res.totalSessions).toBe(exp.sessions);
     const orders = res.units.map((u) => u.orderGlobal);
     expect([...orders].sort((a, b) => a - b)).toEqual(orders);
+    const lessonCount = res.units.reduce((sum, unit) => sum + unit.lessons.length, 0);
+    expect(lessonCount).toBe(exp.sessions);
+    const first = res.units[0]!;
+    expect(first.lessons.map((lesson) => lesson.seqInUnit)).toEqual([1, 2, 3, 4]);
+    expect(first.lessons.map((lesson) => lesson.lessonCode)).toEqual([
+      `${first.unitCode}-S01`,
+      `${first.unitCode}-S02`,
+      `${first.unitCode}-S03`,
+      `${first.unitCode}-S04`,
+    ]);
   });
 
   it('places the Bright review unit last for level J', async () => {

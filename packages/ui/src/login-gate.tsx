@@ -20,19 +20,43 @@ type Session = NonNullable<Me>;
 
 const SessionCtx = createContext<{ me: Session; logout: () => Promise<void> } | null>(null);
 
+function staffSsoLoginUrl(): string {
+  const params = new URLSearchParams({
+    returnOrigin: window.location.origin,
+    returnPath: `${window.location.pathname}${window.location.search}`,
+  });
+  return `${API_URL}/auth/sso/login?${params.toString()}`;
+}
+
 export function useSession() {
   const ctx = useContext(SessionCtx);
   if (!ctx) throw new Error('useSession must be used inside <LoginGate>');
   return ctx;
 }
 
-export function LoginGate({ appTitle, children }: { appTitle: string; children: ReactNode }) {
+export function LoginGate({
+  appTitle,
+  brandWord = 'ERP',
+  loginDescription = 'Đăng nhập để truy cập hệ thống quản lý & vận hành.',
+  heroDescription = 'Hệ thống quản lý tích hợp ERP dành cho ban giám đốc, giảng viên và nhân sự vận hành.',
+  children,
+}: {
+  appTitle: string;
+  brandWord?: string;
+  loginDescription?: string;
+  heroDescription?: string;
+  children: ReactNode;
+}) {
   const [me, setMe] = useState<Me | undefined>(undefined);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [ssoError, setSsoError] = useState('');
+
+  useEffect(() => {
+    document.title = `${appTitle} Portal`;
+  }, [appTitle]);
 
   useEffect(() => {
     trpc.auth.me.query().then(setMe).catch(() => setMe(null));
@@ -113,7 +137,7 @@ export function LoginGate({ appTitle, children }: { appTitle: string; children: 
               style={{ height: 38, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }} 
             />
             <Text fw={800} size="xl" style={{ letterSpacing: '-0.02em', color: '#fff' }}>
-              CMC <span style={{ color: 'var(--cmc-brand)' }}>ERP</span>
+              CMC <span style={{ color: 'var(--cmc-brand)' }}>{brandWord}</span>
             </Text>
           </Group>
 
@@ -126,7 +150,7 @@ export function LoginGate({ appTitle, children }: { appTitle: string; children: 
             </Text>
             <Text size="md" style={{ color: 'rgba(255, 255, 255, 0.75)', marginTop: '16px', lineHeight: 1.6 }}>
               Học viện phát triển Tư duy & Năng lực số CMC.<br />
-              Hệ thống quản lý tích hợp ERP dành cho ban giám đốc, giảng viên và nhân sự vận hành.
+              {heroDescription}
             </Text>
           </Stack>
 
@@ -157,7 +181,7 @@ export function LoginGate({ appTitle, children }: { appTitle: string; children: 
                 alt="CMC Logo" 
                 style={{ height: 32, borderRadius: 6 }} 
               />
-              <Text fw={800} size="md" style={{ color: 'var(--cmc-text)' }}>CMC ERP</Text>
+              <Text fw={800} size="md" style={{ color: 'var(--cmc-text)' }}>CMC {brandWord}</Text>
             </Group>
             <style dangerouslySetInnerHTML={{ __html: `
               @media (max-width: 900px) {
@@ -190,7 +214,7 @@ export function LoginGate({ appTitle, children }: { appTitle: string; children: 
                 {appTitle} Portal
               </Title>
               <Text size="sm" c="dimmed">
-                Đăng nhập để truy cập hệ thống quản lý & vận hành.
+                {loginDescription}
               </Text>
             </Stack>
 
@@ -247,7 +271,7 @@ export function LoginGate({ appTitle, children }: { appTitle: string; children: 
                 variant="default"
                 fullWidth
                 onClick={() => {
-                  window.location.href = `${API_URL}/auth/sso/login`;
+                  window.location.href = staffSsoLoginUrl();
                 }}
                 style={{
                   height: '44px',

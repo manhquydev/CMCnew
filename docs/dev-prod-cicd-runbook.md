@@ -1,8 +1,8 @@
 # Dev/Prod CI/CD Runbook — CMCnew
 
 Two live environments share one VPS and one edge nginx: **prod** (`cmcnew-prod`) serves
-`erp.cmcvn.edu.vn` + `hoc.cmcvn.edu.vn`; **dev** (`cmcnew-dev`) serves
-`deverp.cmcvn.edu.vn` + `devlms.cmcvn.edu.vn`. Decision:
+`erp.cmcvn.edu.vn` + `teacher.cmcvn.edu.vn` + `hoc.cmcvn.edu.vn`; **dev** (`cmcnew-dev`) serves
+`deverp.cmcvn.edu.vn` + `devteacher.cmcvn.edu.vn` + `devlms.cmcvn.edu.vn`. Decision:
 [`docs/decisions/0032-dev-prod-cicd-environment-split.md`](decisions/0032-dev-prod-cicd-environment-split.md).
 
 ## Environment map
@@ -13,17 +13,18 @@ Two live environments share one VPS and one edge nginx: **prod** (`cmcnew-prod`)
 | Compose file | `docker/docker-compose.prod.tls.yml` | `docker/docker-compose.dev.tls.yml` |
 | Env file (VPS, chmod 600) | `/root/cmcnew/.env.production` | `/root/cmcnew/.env.dev` |
 | ERP host | `erp.cmcvn.edu.vn` | `deverp.cmcvn.edu.vn` |
+| Teacher host | `teacher.cmcvn.edu.vn` | `devteacher.cmcvn.edu.vn` |
 | LMS host | `hoc.cmcvn.edu.vn` | `devlms.cmcvn.edu.vn` |
 | Deploy branch | `main` | `develop` |
 | DB / Redis | `cmcnew-prod_default` (isolated) | `cmcnew-dev_default` (isolated) |
 | Staff session cookie | `cmc.session` | `cmc.dev.session` |
 | LMS session cookie | `cmc.lms` | `cmc.dev.lms` |
-| SSO redirect URI | `https://erp.cmcvn.edu.vn/api/auth/sso/callback` | `https://deverp.cmcvn.edu.vn/api/auth/sso/callback` |
+| SSO redirect URI | `https://erp.cmcvn.edu.vn/api/auth/sso/callback`, `https://teacher.cmcvn.edu.vn/api/auth/sso/callback` | `https://deverp.cmcvn.edu.vn/api/auth/sso/callback`, `https://devteacher.cmcvn.edu.vn/api/auth/sso/callback` |
 | Seed mode | `bootstrap` (super_admin + 2 directors) | `full` (all personas get a password) |
 | Data | real | synthetic/demo only |
 
 Both app tiers join the shared external network **`cmcnew-edge`**; the one prod nginx routes
-`deverp`/`devlms` to the dev app tier (aliases `cmcnew-dev-api/-admin/-lms`) over it. Dev
+`deverp`/`devteacher`/`devlms` to the dev app tier (aliases `cmcnew-dev-api/-admin/-lms`) over it. Dev
 `dev-postgres`/`dev-redis` are **not** on `cmcnew-edge` and publish no host ports, so the dev
 database is unreachable from the edge, from prod, and from the public internet. `ci.cmcvn.edu.vn`
 (Jenkins) stays on `cmcnew-prod_default`; the prod nginx is attached to both networks.
@@ -31,7 +32,7 @@ database is unreachable from the edge, from prod, and from the public internet. 
 ## Branch deploy policy
 
 - **Pull request** → lint + typecheck + integration tests, **no deploy**.
-- **`develop`** → lint + typecheck + integration, then deploy `cmcnew-dev` + smoke `deverp`/`devlms`.
+- **`develop`** → lint + typecheck + integration, then deploy `cmcnew-dev` + smoke `deverp`/`devteacher`/`devlms`.
 - **`main`** → lint + typecheck + integration, then deploy `cmcnew-prod` + smoke `erp`/`hoc`.
 
 Encoded in `Jenkinsfile` (single multibranch job, one executor). A red lint/typecheck/integration
@@ -49,7 +50,8 @@ docker network connect cmcnew-edge cmcnew-prod-nginx-1
 # 3. Dev secrets — copy the template and fill FRESH dev values (never reuse prod secrets)
 cp /root/cmcnew/.env.dev.example /root/cmcnew/.env.dev && chmod 600 /root/cmcnew/.env.dev
 #    Entra: the dev app may share the org's Entra registration (same tenant/client), but the
-#    dev callback URI (https://deverp.cmcvn.edu.vn/api/auth/sso/callback) must be registered on it.
+#    dev callback URIs (https://deverp.cmcvn.edu.vn/api/auth/sso/callback and
+#    https://devteacher.cmcvn.edu.vn/api/auth/sso/callback) must be registered on it.
 
 # 4. Verify the Entra credential non-interactively BEFORE relying on SSO (no MFA needed):
 TID=...; CID=...; SEC=...   # from .env.dev
@@ -94,10 +96,11 @@ migrate, `cmc_app` align, seed, nginx restart. See `docs/prod-deploy-security-ru
 ## Smoke checks
 
 ```bash
-for h in erp hoc deverp devlms; do curl -sS "https://$h.cmcvn.edu.vn/api/health"; echo; done
-# erp/hoc must return the main commit; deverp/devlms must return the develop commit (markers DIFFER).
+for h in erp teacher hoc deverp devteacher devlms; do curl -sS "https://$h.cmcvn.edu.vn/api/health"; echo; done
+# erp/teacher/hoc must return the main commit; deverp/devteacher/devlms must return the develop commit (markers DIFFER).
 curl -s -o /dev/null -w '%{http_code}\n' https://ci.cmcvn.edu.vn/login          # 200
 curl -s -o /dev/null -w '%{http_code}\n' https://deverp.cmcvn.edu.vn/api/auth/sso/login   # 302 → login.microsoftonline.com
+curl -s -o /dev/null -w '%{http_code}\n' https://devteacher.cmcvn.edu.vn/api/auth/sso/login # 302 → login.microsoftonline.com
 ```
 
 ## Rollback
@@ -115,10 +118,10 @@ curl -s -o /dev/null -w '%{http_code}\n' https://deverp.cmcvn.edu.vn/api/auth/ss
 ## SSO redirect checklist
 
 - Dev SSO start (`/api/auth/sso/login`) must 302 to `login.microsoftonline.com` with
-  `redirect_uri=https://deverp.cmcvn.edu.vn/api/auth/sso/callback` and set a host-only
+  host-correct `redirect_uri` for `deverp` and `devteacher`, and set a host-only
   `cmc.sso_tx` cookie (HttpOnly, Secure, SameSite=Lax). Prod must use the `erp` redirect URI.
-  Both verified live 2026-07-04.
-- **Full interactive login is human-only** (MFA-gated): open `https://deverp.cmcvn.edu.vn` in a
+- **Full interactive login is human-only** (MFA-gated): open `https://deverp.cmcvn.edu.vn` and
+  `https://devteacher.cmcvn.edu.vn` in a
   browser, sign in with a real `@cmcvn.edu.vn` staff account, confirm the callback lands and a
   `cmc.dev.session` cookie is set. To force the SSO lane (not password) for this test: set
   `STAFF_PASSWORD_LOGIN=false` in `.env.dev`, `docker compose ... up -d --no-deps --force-recreate dev-api`,

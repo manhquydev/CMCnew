@@ -5,6 +5,7 @@ import { rlsContextOf, lmsRlsContextOf, BLOCKED_LMS_LIFECYCLE } from '@cmc/auth'
 import { logEvent } from '@cmc/audit';
 import { router, protectedProcedure, requirePermission, lmsProcedure } from '../trpc.js';
 import { sessionEndUtc } from '../lib/exercise-open.js';
+import { assertTeachingSessionMutationAllowed } from '../lib/teaching-authz.js';
 
 // Same ICT offset as apps/api/src/lib/exercise-open.ts (ICT_OFFSET_HOURS). Not exported there,
 // so it's duplicated here rather than modifying that file (owned by a different, already-shipped phase).
@@ -51,7 +52,7 @@ export const attendanceRouter = router({
         const [session, enrollment] = await Promise.all([
           tx.classSession.findUniqueOrThrow({
             where: { id: input.classSessionId },
-            select: { classBatchId: true, facilityId: true, status: true },
+            select: { classBatchId: true, facilityId: true, status: true, teacherId: true },
           }),
           tx.enrollment.findUniqueOrThrow({
             where: { id: input.enrollmentId },
@@ -69,6 +70,7 @@ export const attendanceRouter = router({
         if (session.status === 'cancelled') {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Buổi học đã hủy — không thể điểm danh' });
         }
+        assertTeachingSessionMutationAllowed(ctx.session, session);
         // A student who has left the class (withdrawn/transferred) must not receive new attendance marks.
         // active / completed / reserved stay markable (final-session and trial attendance are valid).
         if (enrollment.status === 'withdrawn' || enrollment.status === 'transferred') {
@@ -141,11 +143,12 @@ export const attendanceRouter = router({
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const session = await tx.classSession.findUniqueOrThrow({
           where: { id: input.classSessionId },
-          select: { classBatchId: true, facilityId: true, status: true },
+          select: { classBatchId: true, facilityId: true, status: true, teacherId: true },
         });
         if (session.status === 'cancelled') {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Buổi học đã hủy — không thể điểm danh' });
         }
+        assertTeachingSessionMutationAllowed(ctx.session, session);
         // Same left-class guard as `mark`: transferred/withdrawn enrollments are excluded from
         // the active set, so markAll never writes an attendance row for a student who has left.
         // Also excludes students whose lifecycle is blocked (on_hold/withdrawn/transferred) even

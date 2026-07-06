@@ -45,8 +45,8 @@ async function makeBatch() {
 }
 
 async function makeUnit(orderGlobal: number) {
-  const unit = await withRls(SUPER, (tx) =>
-    tx.curriculumUnit.create({
+  const unit = await withRls(SUPER, async (tx) => {
+    const created = await tx.curriculumUnit.create({
       data: {
         courseId,
         unitCode: uniq('EON_U'),
@@ -56,8 +56,18 @@ async function makeUnit(orderGlobal: number) {
         theme: 'exercise-open-notify test unit',
         sessions: 1,
       },
-    }),
-  );
+    });
+    await tx.curriculumLesson.create({
+      data: {
+        courseId,
+        curriculumUnitId: created.id,
+        lessonCode: `${created.unitCode}-S01`,
+        seqInUnit: 1,
+        orderGlobal: created.orderGlobal * 100 + 1,
+      },
+    });
+    return created;
+  });
   cleanup.unitIds.push(unit.id);
   return unit.id;
 }
@@ -104,8 +114,13 @@ function nextIctSlot(): { sessionDate: Date; startTime: string; endTime: string 
 
 async function makeSession(batchId: string, unitId: string, opts: { hoursAgo?: number; status?: 'confirmed' | 'cancelled' } = {}) {
   const slot = opts.hoursAgo !== undefined ? ictSlotEndingAt(opts.hoursAgo) : nextIctSlot();
-  const session = await withRls(SUPER, (tx) =>
-    tx.classSession.create({
+  const session = await withRls(SUPER, async (tx) => {
+    const lesson = await tx.curriculumLesson.findFirstOrThrow({
+      where: { curriculumUnitId: unitId },
+      orderBy: { seqInUnit: 'asc' },
+      select: { id: true },
+    });
+    return tx.classSession.create({
       data: {
         facilityId: FACILITY,
         classBatchId: batchId,
@@ -115,17 +130,32 @@ async function makeSession(batchId: string, unitId: string, opts: { hoursAgo?: n
         status: opts.status ?? 'confirmed',
         isMakeup: false,
         curriculumUnitId: unitId,
+        curriculumLessonId: lesson.id,
       },
-    }),
-  );
+    });
+  });
   cleanup.sessionIds.push(session.id);
   return session;
 }
 
 async function makeExercise(unitId: string, status: 'draft' | 'published' = 'published') {
-  const exercise = await withRls(SUPER, (tx) =>
-    tx.exercise.create({ data: { curriculumUnitId: unitId, title: uniq('EON_EX'), type: 'homework', maxScore: 10, status } }),
-  );
+  const exercise = await withRls(SUPER, async (tx) => {
+    const lesson = await tx.curriculumLesson.findFirstOrThrow({
+      where: { curriculumUnitId: unitId },
+      orderBy: { seqInUnit: 'asc' },
+      select: { id: true },
+    });
+    return tx.exercise.create({
+      data: {
+        curriculumUnitId: unitId,
+        curriculumLessonId: lesson.id,
+        title: uniq('EON_EX'),
+        type: 'homework',
+        maxScore: 10,
+        status,
+      },
+    });
+  });
   cleanup.exerciseIds.push(exercise.id);
   return exercise;
 }

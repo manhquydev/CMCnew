@@ -25,6 +25,9 @@ GRAPH_CLIENT_SECRET="$(val GRAPH_CLIENT_SECRET)"
 GRAPH_SENDER_NOTIFY="$(val GRAPH_SENDER_NOTIFY)"
 GRAPH_SENDER_PAYROLL="$(val GRAPH_SENDER_PAYROLL)"
 GRAPH_SENDER_HR="$(val GRAPH_SENDER_HR)"
+BREVO_API_KEY="$(val BREVO_API_KEY)"
+BREVO_SENDER_EMAIL="$(val BREVO_SENDER_EMAIL)"
+BREVO_SENDER_NAME="$(val BREVO_SENDER_NAME)"
 
 # Fall back to ENTRA secret for Graph if a dedicated GRAPH_CLIENT_SECRET is not set
 # (same app registration is reused for SSO + Graph client-credentials).
@@ -45,7 +48,8 @@ DB_APP_PASSWORD=${DB_APP_PASSWORD}
 JWT_SECRET=${JWT_SECRET}
 COOKIE_SECURE=true
 ADMIN_APP_ORIGIN=https://erp.cmcvn.edu.vn
-CORS_ORIGINS=https://erp.cmcvn.edu.vn,https://hoc.cmcvn.edu.vn
+CORS_ORIGINS=https://erp.cmcvn.edu.vn,https://teacher.cmcvn.edu.vn,https://hoc.cmcvn.edu.vn
+STAFF_APP_ORIGINS=https://erp.cmcvn.edu.vn,https://teacher.cmcvn.edu.vn
 ENTRA_TENANT_ID=${ENTRA_TENANT_ID}
 ENTRA_CLIENT_ID=${ENTRA_CLIENT_ID}
 ENTRA_CLIENT_SECRET=${ENTRA_CLIENT_SECRET}
@@ -56,6 +60,9 @@ GRAPH_CLIENT_SECRET=${GRAPH_CLIENT_SECRET}
 GRAPH_SENDER_NOTIFY=${GRAPH_SENDER_NOTIFY}
 GRAPH_SENDER_PAYROLL=${GRAPH_SENDER_PAYROLL}
 GRAPH_SENDER_HR=${GRAPH_SENDER_HR}
+BREVO_API_KEY=${BREVO_API_KEY}
+BREVO_SENDER_EMAIL=${BREVO_SENDER_EMAIL}
+BREVO_SENDER_NAME=${BREVO_SENDER_NAME}
 SEED_SUPERADMIN_EMAIL=admin@cmcvn.edu.vn
 SEED_SUPERADMIN_PASSWORD=${SEED_SUPERADMIN_PASSWORD}
 DISABLE_CRON=0
@@ -66,5 +73,6 @@ chmod 600 "$OUT"
 echo "Wrote $OUT (chmod 600)"
 echo "  SSO (Entra) config: $([ -n "$ENTRA_CLIENT_ID" ] && echo present || echo MISSING)"
 echo "  Graph senders:      $([ -n "$GRAPH_SENDER_NOTIFY" ] && echo present || echo MISSING)"
+echo "  Brevo external mail:$([ -n "$BREVO_API_KEY" ] && [ -n "$BREVO_SENDER_EMAIL" ] && echo ' present' || echo ' MISSING')"
 echo "  Fresh secrets minted: DB_PASSWORD, DB_APP_PASSWORD, JWT_SECRET, SEED_SUPERADMIN_PASSWORD"
 echo "  Break-glass admin password is in $OUT (SEED_SUPERADMIN_PASSWORD) — retrieve via SSH."

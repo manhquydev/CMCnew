@@ -7,6 +7,7 @@ import { earnEntry, evaluateBadges } from '@cmc/domain-rewards';
 import { router, requirePermission } from '../trpc.js';
 import { emitNotification } from '../events.js';
 import { annotationDataSchema } from '../annotation.js';
+import { assertTeachingOwnershipFound, canManageAllTeaching } from '../lib/teaching-authz.js';
 
 const ENTITY = 'grade';
 
@@ -37,8 +38,31 @@ export const gradeRouter = router({
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const sub = await tx.submission.findUniqueOrThrow({
           where: { id: input.submissionId },
-          include: { exercise: { select: { maxScore: true } } },
+          include: { exercise: { select: { maxScore: true, curriculumLessonId: true, curriculumUnitId: true } } },
         });
+        if (!canManageAllTeaching(ctx.session)) {
+          const ownedSession = await tx.classSession.findFirst({
+            where: {
+              teacherId: ctx.session.userId,
+              ...(sub.exercise.curriculumLessonId
+                ? { curriculumLessonId: sub.exercise.curriculumLessonId }
+                : { curriculumUnitId: sub.exercise.curriculumUnitId }),
+              archivedAt: null,
+              status: { not: 'cancelled' },
+              batch: {
+                enrollments: {
+                  some: {
+                    studentId: sub.studentId,
+                    archivedAt: null,
+                    status: { notIn: ['withdrawn', 'transferred'] },
+                  },
+                },
+              },
+            },
+            select: { id: true },
+          });
+          assertTeachingOwnershipFound(!!ownedSession);
+        }
         // Score must not exceed the exercise maximum — an over-max score inflates the
         // normalised final grade (score/maxScore ratio used by computeFinalGrade).
         if (input.score > sub.exercise.maxScore) {
@@ -87,14 +111,37 @@ export const gradeRouter = router({
     .input(z.object({ submissionId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await withRls(rlsContextOf(ctx.session), async (tx) => {
+        const sub = await tx.submission.findUniqueOrThrow({
+          where: { id: input.submissionId },
+          include: { exercise: { select: { starReward: true, title: true, curriculumLessonId: true, curriculumUnitId: true } } },
+        });
+        if (!canManageAllTeaching(ctx.session)) {
+          const ownedSession = await tx.classSession.findFirst({
+            where: {
+              teacherId: ctx.session.userId,
+              ...(sub.exercise.curriculumLessonId
+                ? { curriculumLessonId: sub.exercise.curriculumLessonId }
+                : { curriculumUnitId: sub.exercise.curriculumUnitId }),
+              archivedAt: null,
+              status: { not: 'cancelled' },
+              batch: {
+                enrollments: {
+                  some: {
+                    studentId: sub.studentId,
+                    archivedAt: null,
+                    status: { notIn: ['withdrawn', 'transferred'] },
+                  },
+                },
+              },
+            },
+            select: { id: true },
+          });
+          assertTeachingOwnershipFound(!!ownedSession);
+        }
         const grade = await tx.grade.update({
           where: { submissionId: input.submissionId },
           data: { isPublished: true },
           select: gradeSelect,
-        });
-        const sub = await tx.submission.findUniqueOrThrow({
-          where: { id: input.submissionId },
-          include: { exercise: { select: { starReward: true, title: true } } },
         });
 
         // Earn stars — idempotent via @@unique(type, reference): re-publishing never double-credits.

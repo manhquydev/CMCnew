@@ -220,6 +220,31 @@ describe('CRM ↔ finance receipt linkage (decision 0037)', () => {
     expect(receipt.parentPhone).toBe(phone);
   });
 
+  it('giam_doc_dao_tao can create a draft parent/student intake receipt but cannot approve it', async () => {
+    if (!dbReachable) return;
+    const gd = await staffOf(Role.giam_doc_dao_tao);
+    const phone = `+84${uniq('dt')}`.slice(0, 12);
+
+    const result = await gd.finance.receiptCreate({
+      facilityId: FACILITY,
+      courseId,
+      yearsPrepaid: 1,
+      parentPhone: phone,
+      parentName: 'PH GDDT Intake',
+      parentEmail: 'parent-gddt-intake@cmc.test',
+      studentName: 'HS GDDT Intake',
+    });
+
+    const receipt = assertSuccess(result);
+    cleanup.receiptIds.push(receipt.id);
+    expect(receipt.status).toBe('draft');
+    expect(receipt.parentPhone).toBe(phone);
+
+    await expect(gd.finance.receiptApprove({ id: receipt.id })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    } satisfies Partial<TRPCError>);
+  });
+
   it('receiptCreate: two siblings sharing one phone can both be created via confirmDuplicate (never hard-blocked)', async () => {
     if (!dbReachable) return;
     const phone = `+84${uniq('7')}`.slice(0, 12);

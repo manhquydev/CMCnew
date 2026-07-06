@@ -10,6 +10,13 @@ import type { StaffNotifItem } from '@cmc/ui';
 import { can } from '@cmc/auth/permissions';
 import { NAV_GATES } from './nav-permissions.js';
 import {
+  erpHrefForSection,
+  isTeacherSurfaceRole,
+  TEACHER_SURFACE_SECTIONS,
+  SURFACE_COPY,
+  type AppSurface,
+} from './app-surface.js';
+import {
   IconArrowUp,
   IconBell,
   IconBook,
@@ -65,6 +72,7 @@ export type SectionKey =
   | 'certificate'
   // Finance / CRM
   | 'finance'
+  | 'family-intake'
   | 'email-outbox'
   | 'revenue-report'
   | 'reconcile-worklist'
@@ -339,6 +347,7 @@ export function Shell({
   navGroups,
   activeModuleKey,
   sectionTitle,
+  surface = 'erp',
   children,
 }: {
   activeSection: SectionKey;
@@ -353,10 +362,12 @@ export function Shell({
    *  highlights none rather than crashing or inventing a tab. */
   activeModuleKey: string | null;
   sectionTitle: string;
+  surface?: AppSurface;
   children: React.ReactNode;
 }) {
   const { me, logout } = useSession();
   const navigate = useNavigate();
+  const surfaceCopy = SURFACE_COPY[surface];
   const [mobileOpened, setMobileOpened] = useState(false);
   const facilityId = me.facilityIds[0] ?? null;
   const { unreadCount, notifications, fetchList, markAllRead, isMarkingAll } = useStaffNotif(facilityId);
@@ -445,14 +456,25 @@ export function Shell({
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </ActionIcon>
-            <Text fw={700} style={{ color: 'var(--cmc-brand)', fontSize: 18, letterSpacing: '-0.02em' }}>
-              CMC
+            <Text fw={700} style={{ color: 'var(--cmc-brand)', fontSize: 18 }}>
+              {surfaceCopy.topbarBrand}
             </Text>
             <Text size="sm" style={{ color: 'var(--cmc-text-muted)' }}>
-              {sectionTitle}
+              {surface === 'teacher' ? `${surfaceCopy.topbarContext} · ${sectionTitle}` : sectionTitle}
             </Text>
           </Group>
           <Group gap="sm">
+            {surface === 'teacher' && (
+              <Button
+                component="a"
+                href={erpHrefForSection(activeSection)}
+                variant="light"
+                size="xs"
+                visibleFrom="sm"
+              >
+                Mở ERP đầy đủ
+              </Button>
+            )}
             <Popover
               width={340}
               position="bottom-start"
@@ -579,6 +601,16 @@ export function Shell({
           overflowY: 'auto',
         }}
       >
+        {surface === 'teacher' && (
+          <Box px="xs" py={8}>
+            <Text size="xs" fw={700} tt="uppercase" c="dimmed">
+              Teacher Console
+            </Text>
+            <Text size="xs" c="dimmed">
+              Lịch dạy, lớp học, nhận xét LMS
+            </Text>
+          </Box>
+        )}
         {navGroups.map((group) => {
           const visible = group.items.filter((i) => i.visible);
           if (visible.length === 0) return null;
@@ -620,9 +652,11 @@ const I = (size = 18, stroke = 1.5) => ({ size, stroke });
 export function buildNavGroups({
   roles,
   isSuperAdmin,
+  surface = 'erp',
 }: {
   roles: string[];
   isSuperAdmin: boolean;
+  surface?: AppSurface;
 }): NavGroup[] {
   /**
    * Derive visibility from the shared permission registry via NAV_GATES.
@@ -703,6 +737,19 @@ export function buildNavGroups({
       ],
     },
     {
+      key: 'tiep-nhan',
+      groupLabel: 'Tiếp nhận',
+      icon: <IconUsers {...I()} />,
+      items: [
+        {
+          key: 'family-intake' as const,
+          label: 'Tiếp nhận phụ huynh + học sinh',
+          icon: <IconUsers {...I()} />,
+          visible: false,
+        },
+      ],
+    },
+    {
       key: 'crm-kinh-doanh',
       groupLabel: 'CRM & Kinh doanh',
       icon: <IconTrendingUp {...I()} />,
@@ -766,7 +813,57 @@ export function buildNavGroups({
       ],
     },
   ];
-  return groups;
+  if (surface !== 'teacher') return groups;
+
+  const teacherSurfaceLabels: Partial<Record<SectionKey, string>> = {
+    schedule: 'Lịch dạy hôm nay',
+    classes: 'Lớp & học liệu',
+    courses: 'Học liệu',
+    'student-mgmt': 'Học viên',
+    students: 'Học viên',
+    guardians: 'Phụ huynh',
+    'family-intake': 'Tiếp nhận phụ huynh + học sinh',
+    'edu-director-cockpit': 'Điều phối đào tạo',
+    'biz-director-cockpit': 'Bàn giao tuyển sinh',
+  };
+  const isTeacherSurfaceActor = isTeacherSurfaceRole(roles, isSuperAdmin);
+  const isTeacherSurfaceDirector =
+    isSuperAdmin || roles.includes('giam_doc_kinh_doanh') || roles.includes('giam_doc_dao_tao');
+  const teacherGroupLabels: Record<string, string> = {
+    'giang-day': 'Lịch & buổi học',
+    'lop-hoc': 'Lớp & bài tập',
+    'hoc-sinh': 'Học viên',
+    'tiep-nhan': 'Tiếp nhận học viên',
+    'quan-tri': 'Điều phối đào tạo',
+  };
+  const teacherGroupOrder = new Map([
+    ['giang-day', 0],
+    ['lop-hoc', 1],
+    ['hoc-sinh', 2],
+    ['tiep-nhan', 3],
+    ['quan-tri', 4],
+  ]);
+
+  return groups
+    .flatMap((group) => {
+      const groupLabel = teacherGroupLabels[group.key];
+      if (!groupLabel) return [];
+      return [{
+        ...group,
+        groupLabel,
+        items: group.items.map((item) => ({
+          ...item,
+          label: teacherSurfaceLabels[item.key] ?? item.label,
+          visible:
+            isTeacherSurfaceActor &&
+            TEACHER_SURFACE_SECTIONS.has(item.key) &&
+            (item.key === 'family-intake'
+              ? isTeacherSurfaceDirector && visible('family-intake')
+              : item.visible),
+        })),
+      }];
+    })
+    .sort((a, b) => (teacherGroupOrder.get(a.key) ?? 99) - (teacherGroupOrder.get(b.key) ?? 99));
 }
 
 // ─── Section title map ─────────────────────────────────────────────────────────
@@ -778,6 +875,7 @@ export const SECTION_TITLES: Record<SectionKey, string> = {
   org: 'Cơ sở & Người dùng',
   guardians: 'Phụ huynh',
   finance: 'Tài chính',
+  'family-intake': 'Tiếp nhận phụ huynh + học sinh',
   'email-outbox': 'Hộp thư gửi đi',
   'revenue-report': 'Báo cáo doanh thu',
   'reconcile-worklist': 'Đối soát theo kỳ',

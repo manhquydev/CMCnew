@@ -47,7 +47,7 @@ import { OverviewPanel } from './overview-panel';
 import { CompensationConfigPanel } from './compensation-panel';
 import { PayrollPanel } from './payroll-panel';
 import { KpiEvaluationPanel } from './kpi-evaluation-panel';
-import { FinancePanel } from './finance-panel';
+import { FamilyIntakePanel, FinancePanel } from './finance-panel';
 import { EmailOutboxPanel } from './email-outbox-panel';
 import { RevenueReportPanel } from './revenue-report';
 import { AttendanceReportPanel } from './attendance-report-panel';
@@ -77,6 +77,13 @@ import { Workspace, type NavAction } from './class-workspace';
 import { Shell, buildNavGroups, SECTION_TITLES, type SectionKey } from './shell';
 import { moduleOf } from './nav-modules';
 import { applyAdminMetadata, getAdminMetadata } from './link-preview-metadata';
+import {
+  currentAppSurface,
+  isTeacherSurfaceRole,
+  isTeacherSurfaceSection,
+  SURFACE_COPY,
+  type AppSurface,
+} from './app-surface';
 import { StaffProfilePanel } from './staff-profile';
 import { ProfileSettingsPanel } from './profile-settings-panel';
 import { ScheduleDetailPanel } from './schedule-detail';
@@ -105,7 +112,13 @@ const TH_STYLE: React.CSSProperties = {
 
 // ─── Persona → default landing ─────────────────────────────────────────────────
 
-function defaultSection(me: Session): SectionKey {
+function defaultSection(me: Session, surface: AppSurface = 'erp'): SectionKey {
+  if (surface === 'teacher') {
+    if (me.roles.includes('giam_doc_dao_tao')) return 'edu-director-cockpit';
+    if (me.roles.includes('giao_vien')) return 'schedule';
+    if (me.roles.includes('giam_doc_kinh_doanh')) return 'family-intake';
+    return 'profile';
+  }
   if (me.isSuperAdmin) return 'overview';
   if (me.roles.includes('giao_vien')) return 'schedule';
   if (me.roles.includes('sale') || me.roles.includes('ctv_mkt')) return 'crm';
@@ -567,7 +580,7 @@ function HrPayrollSection() {
 
 const ALL_SECTION_KEYS = new Set<string>([
   'overview', 'courses', 'students', 'org', 'guardians',
-  'hr', 'kpi', 'compensation', 'finance', 'email-outbox', 'revenue-report', 'reconcile-worklist', 'crm', 'cskh', 'rewards', 'badges',
+  'hr', 'kpi', 'compensation', 'finance', 'family-intake', 'email-outbox', 'revenue-report', 'reconcile-worklist', 'crm', 'cskh', 'rewards', 'badges',
   'schedule', 'attendance', 'attendance-report', 'grading', 'assessment',
   // 'certificate' intentionally omitted: the feature is hidden from nav (shell.tsx visible:false),
   // so #certificate is not a reachable hash route either. Re-add when the feature is re-enabled.
@@ -594,6 +607,7 @@ function ShiftRegSection() {
 function Dashboard() {
   const { me } = useSession();
   const navigate = useNavigate();
+  const surface = currentAppSurface();
   // section comes from /:section; oppId from the CRM record route /crm/opportunities/:oppId.
   const params = useParams<{ section?: string; oppId?: string }>();
   const [navAction, setNavAction] = useState<NavAction | null>(null);
@@ -616,27 +630,41 @@ function Dashboard() {
   // reproducing the "Không tải được tổng quan" error the nav hiding was meant to prevent entirely.
   const isReachableSection = (key: string): key is SectionKey => {
     if (!ALL_SECTION_KEYS.has(key)) return false;
-    const gate = NAV_GATES[key as SectionKey];
+    const section = key as SectionKey;
+    if (surface === 'teacher') {
+      if (!isTeacherSurfaceRole(me.roles, me.isSuperAdmin)) return section === 'profile';
+      if (!isTeacherSurfaceSection(section)) return false;
+    } else if (section === 'family-intake') {
+      return false;
+    }
+    if (
+      section === 'finance' &&
+      me.roles.includes('giam_doc_dao_tao') &&
+      can(me.roles, me.isSuperAdmin, 'finance', 'receiptCreate')
+    ) {
+      return true;
+    }
+    const gate = NAV_GATES[section];
     if (gate.kind === 'open') return true;
     if (gate.kind === 'superAdmin') return me.isSuperAdmin;
     return can(me.roles, me.isSuperAdmin, gate.module, gate.action);
   };
   const knownSection = !!(rawSection && isReachableSection(rawSection));
-  const activeSection: SectionKey = knownSection ? (rawSection as SectionKey) : defaultSection(me);
+  const activeSection: SectionKey = knownSection ? (rawSection as SectionKey) : defaultSection(me, surface);
   const activeModuleKey = moduleOf(activeSection);
 
   // Normalise "/" or an unknown section to the canonical persona-default path so the URL bar
   // always reflects a real section.
   useEffect(() => {
     if (!oppId && !knownSection) {
-      navigate('/' + defaultSection(me), { replace: true });
+      navigate('/' + defaultSection(me, surface), { replace: true });
     }
-  }, [oppId, knownSection, me, navigate]);
+  }, [oppId, knownSection, me, navigate, surface]);
 
-  // Keep the browser tab and share metadata aligned with the current ERP module.
+  // Keep the browser tab and share metadata aligned with the current product surface.
   useEffect(() => {
-    applyAdminMetadata(getAdminMetadata(activeSection, Boolean(oppId)));
-  }, [activeSection, oppId]);
+    applyAdminMetadata(getAdminMetadata(activeSection, Boolean(oppId), surface));
+  }, [activeSection, oppId, surface]);
 
   // goToClass: navigate to the class workspace with a pre-selected batch + tab.
   // Teachers see the classes workspace nested inside the consolidated "Quản lý học sinh" screen
@@ -675,7 +703,11 @@ function Dashboard() {
     navigate('/org');
   }
 
-  const navGroups = buildNavGroups({ roles: me.roles as string[], isSuperAdmin: me.isSuperAdmin });
+  const navGroups = buildNavGroups({
+    roles: me.roles as string[],
+    isSuperAdmin: me.isSuperAdmin,
+    surface,
+  });
 
   const renderContent = () => {
     switch (activeSection) {
@@ -694,7 +726,12 @@ function Dashboard() {
       // approval-inbox widget. KPI items route to the full 'kpi' panel, same resolution as
       // biz-director-cockpit-panel.tsx (see edu-director-cockpit-panel.tsx for why).
       case 'edu-director-cockpit':
-        return <EduDirectorCockpitPanel onNavigateToKpi={() => handleSectionChange('kpi')} />;
+        return (
+          <EduDirectorCockpitPanel
+            onNavigateToKpi={() => handleSectionChange('kpi')}
+            onNavigateToFinanceIntake={() => handleSectionChange(surface === 'teacher' ? 'family-intake' : 'finance')}
+          />
+        );
 
       case 'courses':
         return (
@@ -805,6 +842,16 @@ function Dashboard() {
           <Stack>
             <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Tài chính</Text>
             <FinancePanel />
+          </Stack>
+        );
+
+      case 'family-intake':
+        return (
+          <Stack>
+            <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
+              Tiếp nhận phụ huynh + học sinh
+            </Text>
+            <FamilyIntakePanel />
           </Stack>
         );
 
@@ -950,6 +997,7 @@ function Dashboard() {
       navGroups={navGroups}
       activeModuleKey={activeModuleKey}
       sectionTitle={SECTION_TITLES[activeSection]}
+      surface={surface}
     >
       {renderContent()}
     </Shell>
@@ -959,8 +1007,15 @@ function Dashboard() {
 // ─── App root ─────────────────────────────────────────────────────────────────
 
 function Authenticated() {
+  const surface = currentAppSurface();
+  const copy = SURFACE_COPY[surface];
   return (
-    <LoginGate appTitle="CMC Staff">
+    <LoginGate
+      appTitle={copy.loginTitle}
+      brandWord={copy.loginBrandWord}
+      loginDescription={copy.loginDescription}
+      heroDescription={copy.loginHeroDescription}
+    >
       <Dashboard />
     </LoginGate>
   );

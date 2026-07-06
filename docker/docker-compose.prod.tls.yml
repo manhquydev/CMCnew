@@ -83,8 +83,9 @@ services:
       AUTH_COOKIE_NAME: cmc.session
       # Behind real TLS → leave COOKIE_SECURE=true (default) so the session cookie is HTTPS-only.
       COOKIE_SECURE:    ${COOKIE_SECURE:-true}
-      CORS_ORIGINS:     ${CORS_ORIGINS:?CORS_ORIGINS is required (https://erp...,https://hoc...)}
+      CORS_ORIGINS:     ${CORS_ORIGINS:?CORS_ORIGINS is required (https://erp...,https://teacher...,https://hoc...)}
       ADMIN_APP_ORIGIN: ${ADMIN_APP_ORIGIN:?ADMIN_APP_ORIGIN is required (https://erp.cmcvn.edu.vn)}
+      STAFF_APP_ORIGINS: ${STAFF_APP_ORIGINS:-}
       CRM_LEAD_TOKEN:   ${CRM_LEAD_TOKEN:-}
       DISABLE_CRON:     ${DISABLE_CRON:-0}
       ENTRA_TENANT_ID:      ${ENTRA_TENANT_ID:-}

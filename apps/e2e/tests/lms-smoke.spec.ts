@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 // LMS auth (post SSO/OTP redirection):
-//   - Student: login code + password (unchanged) — used for the happy/error smoke.
+//   - Student: family phone is primary; login code + password is the break-glass fallback.
 //   - Parent:  passwordless Email OTP (two steps) — smoke covers step 1 (request code).
 // Seed: student loginCode HS-2026-0001, password = SEED_SUPERADMIN_PASSWORD (default ChangeMe!123).
 const STUDENT_CODE = process.env.TEST_LMS_STUDENT_CODE ?? 'HS-2026-0001';
@@ -25,9 +25,10 @@ test.describe('lms smoke', () => {
   test('student login (code + password) → app shell renders', async ({ page }) => {
     await page.goto('/');
     await page.getByText('Học sinh', { exact: true }).click();
-    await page.getByLabel('Mã đăng nhập').fill(STUDENT_CODE);
+    await page.getByRole('button', { name: 'Đăng nhập bằng mã học sinh (dự phòng)' }).click();
+    await page.getByLabel('Mã học sinh').fill(STUDENT_CODE);
     await page.getByLabel('Mật khẩu').fill(STUDENT_PASSWORD);
-    await page.getByRole('button', { name: 'Đăng nhập' }).click();
+    await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
 
     // After login the app shell renders with a logout control.
     await expect(page.getByRole('button', { name: 'Đăng xuất' })).toBeVisible({ timeout: 30_000 });
@@ -36,11 +37,12 @@ test.describe('lms smoke', () => {
   test('student wrong password shows error', async ({ page }) => {
     await page.goto('/');
     await page.getByText('Học sinh', { exact: true }).click();
-    await page.getByLabel('Mã đăng nhập').fill(STUDENT_CODE);
+    await page.getByRole('button', { name: 'Đăng nhập bằng mã học sinh (dự phòng)' }).click();
+    await page.getByLabel('Mã học sinh').fill(STUDENT_CODE);
     await page.getByLabel('Mật khẩu').fill('wrong-password-xyz');
-    await page.getByRole('button', { name: 'Đăng nhập' }).click();
+    await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
 
-    await expect(page.getByText(/đăng nhập thất bại/i)).toBeVisible({ timeout: 8_000 });
+    await expect(page.getByText(/Sai mã học sinh hoặc mật khẩu/i)).toBeVisible({ timeout: 8_000 });
   });
 
   test('parent OTP request (step 1) advances to code entry', async ({ page }) => {

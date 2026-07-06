@@ -1,4 +1,4 @@
-# CMCnew — DEV SERVER compose (deverp.cmcvn.edu.vn + devlms.cmcvn.edu.vn).
+# CMCnew — DEV SERVER compose (deverp.cmcvn.edu.vn + devteacher.cmcvn.edu.vn + devlms.cmcvn.edu.vn).
 # Pre-production stack that shares the box and the one edge nginx with cmcnew-prod,
 # but keeps its own database, Redis, secrets, cookies, and SSO redirect URI.
 # See docs/decisions/0032-dev-prod-cicd-environment-split.md.
@@ -7,8 +7,9 @@
 #   cmcnew-dev_default  — dev-postgres, dev-redis (NEVER on the edge, NEVER public-ported)
 #   cmcnew-edge         — dev-api, dev-admin, dev-lms  (reachable by the shared prod nginx)
 # The prod nginx (docker-compose.prod.tls.yml) is also attached to cmcnew-edge and routes:
-#   deverp.cmcvn.edu.vn  → cmcnew-dev-admin:80  (+ /api → cmcnew-dev-api:4000)
-#   devlms.cmcvn.edu.vn  → cmcnew-dev-lms:80    (+ /api → cmcnew-dev-api:4000)
+#   deverp.cmcvn.edu.vn      → cmcnew-dev-admin:80  (+ /api → cmcnew-dev-api:4000)
+#   devteacher.cmcvn.edu.vn  → cmcnew-dev-admin:80  (+ /api → cmcnew-dev-api:4000)
+#   devlms.cmcvn.edu.vn      → cmcnew-dev-lms:80    (+ /api → cmcnew-dev-api:4000)
 #
 # cmcnew-edge is an EXTERNAL network — create it once before first `up`:
 #   docker network create cmcnew-edge
@@ -87,8 +88,9 @@ services:
       AUTH_COOKIE_NAME: cmc.dev.session
       LMS_COOKIE_NAME:  cmc.dev.lms
       COOKIE_SECURE:    ${COOKIE_SECURE:-true}
-      CORS_ORIGINS:     ${CORS_ORIGINS:?CORS_ORIGINS is required (https://deverp...,https://devlms...)}
+      CORS_ORIGINS:     ${CORS_ORIGINS:?CORS_ORIGINS is required (https://deverp...,https://devteacher...,https://devlms...)}
       ADMIN_APP_ORIGIN: ${ADMIN_APP_ORIGIN:?ADMIN_APP_ORIGIN is required (https://deverp.cmcvn.edu.vn)}
+      STAFF_APP_ORIGINS: ${STAFF_APP_ORIGINS:-}
       CRM_LEAD_TOKEN:   ${CRM_LEAD_TOKEN:-}
       DISABLE_CRON:     ${DISABLE_CRON:-1}
       ENTRA_TENANT_ID:      ${ENTRA_TENANT_ID:-}

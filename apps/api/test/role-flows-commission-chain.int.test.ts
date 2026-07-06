@@ -8,6 +8,7 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
   let course: { id: string };
   let seller: { id: string };
   let otherSeller: { id: string };
+  let eduDirector: { id: string };
 
   const made = {
     userIds: [] as string[],
@@ -44,6 +45,17 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
           facilities: { create: [{ facilityId: FACILITY }] },
         },
       });
+      const edu = await tx.appUser.create({
+        data: {
+          email: `gddt-${suffix}@cmc.test`,
+          displayName: 'P3 Education Director',
+          passwordHash: 'dummy',
+          primaryRole: 'giam_doc_dao_tao',
+          roles: ['giam_doc_dao_tao'],
+          isActive: true,
+          facilities: { create: [{ facilityId: FACILITY }] },
+        },
+      });
       const c = await tx.course.create({
         data: { code: uniq('P3CRS'), name: 'P3 Commission Chain Course', program: 'UCREA' },
       });
@@ -55,12 +67,13 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
           effectiveFrom: new Date('2020-01-01'),
         },
       });
-      return { sellerUser, other, c };
+      return { sellerUser, other, edu, c };
     });
     seller = { id: rows.sellerUser.id };
     otherSeller = { id: rows.other.id };
+    eduDirector = { id: rows.edu.id };
     course = { id: rows.c.id };
-    made.userIds.push(rows.sellerUser.id, rows.other.id);
+    made.userIds.push(rows.sellerUser.id, rows.other.id, rows.edu.id);
     made.courseIds.push(rows.c.id);
   });
 
@@ -81,6 +94,16 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
       userId,
       roles: [Role.sale],
       primaryRole: Role.sale,
+      isSuperAdmin: false,
+      facilityIds: [FACILITY],
+    });
+  }
+
+  async function eduDirectorCaller() {
+    return staffCaller({
+      userId: eduDirector.id,
+      roles: [Role.giam_doc_dao_tao],
+      primaryRole: Role.giam_doc_dao_tao,
       isSuperAdmin: false,
       facilityIds: [FACILITY],
     });
@@ -293,6 +316,33 @@ describe('role-flows P3: commission chain from opportunity to receipt', () => {
     expect(ownList.map((r) => r.id)).toContain(ownDraft.id);
     expect(ownList.map((r) => r.id)).not.toContain(otherDraft.id);
     await expect((await saleCaller(seller.id)).finance.receiptList()).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+  });
+
+  it('education director intake draft is durable and visible through receiptListOwn only', async () => {
+    const director = await eduDirectorCaller();
+    const draft = assertSuccess(await director.finance.receiptCreate({
+      facilityId: FACILITY,
+      courseId: course.id,
+      yearsPrepaid: 1,
+      parentPhone: uniq('098'),
+      parentName: 'P3 Intake Parent',
+      parentEmail: `${uniq('p3-intake')}@cmc.test`,
+      studentName: 'P3 Intake Student',
+    }));
+    made.receiptIds.push(draft.id);
+
+    const ownList = await director.finance.receiptListOwn();
+    expect(ownList.map((r) => r.id)).toContain(draft.id);
+    expect(ownList.find((r) => r.id === draft.id)).toMatchObject({
+      status: 'draft',
+      parentName: 'P3 Intake Parent',
+      studentName: 'P3 Intake Student',
+    });
+
+    await expect(director.finance.receiptList()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(director.finance.receiptApprove({ id: draft.id })).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
   });

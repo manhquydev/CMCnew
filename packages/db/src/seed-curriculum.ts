@@ -167,6 +167,7 @@ function courseName(program: Program, levelCode: string): string {
 export interface SeedCurriculumResult {
   courses: number;
   units: number;
+  lessons: number;
 }
 
 /**
@@ -197,6 +198,7 @@ export async function seedCurriculum(
     courseIdByCode.set(code, course.id);
   }
 
+  let lessonCount = 0;
   for (const r of rows) {
     const courseId = courseIdByCode.get(courseCode(r.program, r.levelCode))!;
     const data = {
@@ -210,14 +212,35 @@ export async function seedCurriculum(
       thinkingGoal: r.thinkingGoal,
       sessions: r.sessions,
     };
-    await client.curriculumUnit.upsert({
+    const unit = await client.curriculumUnit.upsert({
       where: { unitCode: r.unitCode },
       update: data,
       create: { unitCode: r.unitCode, ...data },
     });
+    const sessions = Math.max(r.sessions, 1);
+    for (let seqInUnit = 1; seqInUnit <= sessions; seqInUnit++) {
+      const lessonCode = `${r.unitCode}-S${String(seqInUnit).padStart(2, '0')}`;
+      await client.curriculumLesson.upsert({
+        where: { lessonCode },
+        update: {
+          courseId,
+          curriculumUnitId: unit.id,
+          seqInUnit,
+          orderGlobal: r.orderGlobal * 100 + seqInUnit,
+        },
+        create: {
+          courseId,
+          curriculumUnitId: unit.id,
+          lessonCode,
+          seqInUnit,
+          orderGlobal: r.orderGlobal * 100 + seqInUnit,
+        },
+      });
+      lessonCount++;
+    }
   }
 
-  return { courses: byCourse.size, units: rows.length };
+  return { courses: byCourse.size, units: rows.length, lessons: lessonCount };
 }
 
 // ── CLI entrypoint ───────────────────────────────────────────────────────────
@@ -228,7 +251,7 @@ if (isMain) {
     datasources: { db: { url: process.env.DIRECT_URL ?? process.env.DATABASE_URL } },
   });
   seedCurriculum(prisma)
-    .then((r) => console.log(`✓ Curriculum seed: ${r.courses} khóa (theo level), ${r.units} unit`))
+    .then((r) => console.log(`✓ Curriculum seed: ${r.courses} khóa (theo level), ${r.units} unit, ${r.lessons} buổi`))
     .catch((e) => {
       console.error(e);
       process.exitCode = 1;

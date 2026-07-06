@@ -1,6 +1,6 @@
 import { withRls } from '@cmc/db';
 import type { Prisma } from '@cmc/db';
-import { openStudentIdsForUnit, sessionEndUtc } from '../lib/exercise-open.js';
+import { openStudentIdsForLesson, openStudentIdsForUnit, sessionEndUtc } from '../lib/exercise-open.js';
 import { emitNotification } from '../events.js';
 
 // System context: both triggers run outside the director's request-scoped RLS transaction
@@ -12,7 +12,8 @@ const NOTIF_TYPE = 'new_exercise_open';
 interface Candidate {
   studentId: string;
   exerciseId: string;
-  curriculumUnitId: string;
+  curriculumLessonId: string | null;
+  curriculumUnitId: string | null;
 }
 
 interface CreatedNotif {
@@ -77,7 +78,11 @@ async function dedupAndCreate(tx: Prisma.TransactionClient, candidates: Candidat
         recipientType: 'student',
         recipientId: c.studentId,
         type: NOTIF_TYPE,
-        payload: { exerciseId: c.exerciseId, curriculumUnitId: c.curriculumUnitId },
+        payload: {
+          exerciseId: c.exerciseId,
+          curriculumLessonId: c.curriculumLessonId,
+          curriculumUnitId: c.curriculumUnitId,
+        },
       },
       select: { id: true, type: true, payload: true, createdAt: true },
     });
@@ -109,15 +114,22 @@ export async function notifyForExercise(exerciseId: string, now: Date = new Date
   const created = await withRls(SYSTEM_CTX, async (tx) => {
     const exercise = await tx.exercise.findUnique({
       where: { id: exerciseId },
-      select: { id: true, status: true, archivedAt: true, curriculumUnitId: true },
+      select: { id: true, status: true, archivedAt: true, curriculumLessonId: true, curriculumUnitId: true },
     });
-    if (!exercise || exercise.status !== 'published' || exercise.archivedAt || !exercise.curriculumUnitId) return [];
+    if (!exercise || exercise.status !== 'published' || exercise.archivedAt) return [];
+    if (!exercise.curriculumLessonId && !exercise.curriculumUnitId) return [];
 
-    const studentIds = await openStudentIdsForUnit(tx, exercise.curriculumUnitId, now);
+    const studentIds = exercise.curriculumLessonId
+      ? await openStudentIdsForLesson(tx, exercise.curriculumLessonId, now)
+      : await openStudentIdsForUnit(tx, exercise.curriculumUnitId!, now);
     if (studentIds.length === 0) return [];
 
-    const curriculumUnitId = exercise.curriculumUnitId;
-    const candidates: Candidate[] = studentIds.map((studentId) => ({ studentId, exerciseId: exercise.id, curriculumUnitId }));
+    const candidates: Candidate[] = studentIds.map((studentId) => ({
+      studentId,
+      exerciseId: exercise.id,
+      curriculumLessonId: exercise.curriculumLessonId,
+      curriculumUnitId: exercise.curriculumUnitId,
+    }));
     return dedupAndCreate(tx, candidates);
   });
 
@@ -144,36 +156,53 @@ export async function runExerciseOpenNotifications(now: Date = new Date()): Prom
     const sessions = await tx.classSession.findMany({
       where: {
         status: { not: 'cancelled' },
-        curriculumUnitId: { not: null },
+        OR: [{ curriculumLessonId: { not: null } }, { curriculumUnitId: { not: null } }],
         sessionDate: { gte: dateFloor },
       },
-      select: { curriculumUnitId: true, sessionDate: true, endTime: true },
+      select: { curriculumLessonId: true, curriculumUnitId: true, sessionDate: true, endTime: true },
     });
 
     let scanned = 0;
+    const endedLessonIds = new Set<string>();
     const endedUnitIds = new Set<string>();
     for (const s of sessions) {
-      if (!s.curriculumUnitId) continue;
       const endUtc = sessionEndUtc(s.sessionDate, s.endTime).getTime();
       if (endUtc >= lookbackStart.getTime() && endUtc <= now.getTime()) {
         scanned++;
-        endedUnitIds.add(s.curriculumUnitId);
+        if (s.curriculumLessonId) endedLessonIds.add(s.curriculumLessonId);
+        if (s.curriculumUnitId) endedUnitIds.add(s.curriculumUnitId);
       }
     }
-    if (endedUnitIds.size === 0) return { created: [] as CreatedNotif[], sessionsScanned: scanned };
+    if (endedLessonIds.size === 0 && endedUnitIds.size === 0) {
+      return { created: [] as CreatedNotif[], sessionsScanned: scanned };
+    }
 
     const exercises = await tx.exercise.findMany({
-      where: { curriculumUnitId: { in: [...endedUnitIds] }, status: 'published', archivedAt: null },
-      select: { id: true, curriculumUnitId: true },
+      where: {
+        status: 'published',
+        archivedAt: null,
+        OR: [
+          { curriculumLessonId: { in: [...endedLessonIds] } },
+          { curriculumLessonId: null, curriculumUnitId: { in: [...endedUnitIds] } },
+        ],
+      },
+      select: { id: true, curriculumLessonId: true, curriculumUnitId: true },
     });
     if (exercises.length === 0) return { created: [] as CreatedNotif[], sessionsScanned: scanned };
 
     const candidates: Candidate[] = [];
     for (const ex of exercises) {
-      if (!ex.curriculumUnitId) continue;
-      const studentIds = await openStudentIdsForUnit(tx, ex.curriculumUnitId, now);
+      if (!ex.curriculumLessonId && !ex.curriculumUnitId) continue;
+      const studentIds = ex.curriculumLessonId
+        ? await openStudentIdsForLesson(tx, ex.curriculumLessonId, now)
+        : await openStudentIdsForUnit(tx, ex.curriculumUnitId!, now);
       for (const studentId of studentIds) {
-        candidates.push({ studentId, exerciseId: ex.id, curriculumUnitId: ex.curriculumUnitId });
+        candidates.push({
+          studentId,
+          exerciseId: ex.id,
+          curriculumLessonId: ex.curriculumLessonId,
+          curriculumUnitId: ex.curriculumUnitId,
+        });
       }
     }
     if (candidates.length === 0) return { created: [] as CreatedNotif[], sessionsScanned: scanned };

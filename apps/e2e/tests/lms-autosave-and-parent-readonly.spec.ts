@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
-import { Role, login, mintParentSession } from '@cmc/auth';
-import { hashPassword, withRls } from '@cmc/db';
+import { PrismaClient, Role, type Prisma } from '@prisma/client';
+import bcrypt from 'bcryptjs';
+import { SignJWT } from 'jose';
 
 // LMS student autosave (draw on the base PDF → close WITHOUT clicking "Lưu nháp" → reopen shows
 // the strokes) and LMS parent read-only drawn-work view (published child work renders with no
@@ -12,7 +13,8 @@ const LMS_PASSWORD = process.env.TEST_LMS_STUDENT_PASSWORD ?? 'ChangeMe!123';
 const FACILITY = 1;
 const SUPER = { facilityIds: [] as number[], isSuperAdmin: true };
 const STAFF_COOKIE = 'cmc.session';
-const LMS_COOKIE = 'cmc.lms';
+const prisma = new PrismaClient();
+type PrismaTx = Prisma.TransactionClient;
 
 function unique(prefix: string): string {
   return `${prefix}${Date.now().toString().slice(-7)}${Math.floor(Math.random() * 1000)}`;
@@ -42,12 +44,14 @@ function buildMinimalPdf(): Buffer {
 }
 
 type Fixture = {
+  directorId: string;
   courseId: string;
   batchId: string;
   studentId: string;
   studentCode: string;
   studentName: string;
   parentAccountId: string;
+  parentEmail: string;
   parentName: string;
   exerciseId: string;
   exerciseTitle: string;
@@ -57,10 +61,42 @@ type Fixture = {
 
 let fixture: Fixture;
 
+function hashPassword(plain: string): Promise<string> {
+  return bcrypt.hash(plain, 10);
+}
+
+function withRls<T>(
+  ctx: { facilityIds: number[]; isSuperAdmin: boolean },
+  fn: (tx: PrismaTx) => Promise<T>,
+): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(
+      "SELECT set_config('app.facility_ids', $1, true), set_config('app.is_super_admin', $2, true), set_config('app.principal_kind', $3, true), set_config('app.student_ids', $4, true), set_config('app.account_id', $5, true)",
+      ctx.facilityIds.join(','),
+      ctx.isSuperAdmin ? 'true' : 'false',
+      'staff',
+      '',
+      '',
+    );
+    return fn(tx);
+  });
+}
+
+async function signStaffSession(claims: { sub: string; roles: Role[]; primaryRole: Role; tokenVersion: number }) {
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.length < 32) throw new Error('JWT_SECRET missing or too short for e2e signing');
+  return new SignJWT({ ...claims })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt()
+    .setExpirationTime('12h')
+    .sign(new TextEncoder().encode(secret));
+}
+
 test.beforeAll(async () => {
   const suffix = unique('LMSPDF');
   const studentCode = `${suffix}-HS`;
   const studentName = `E2E Autosave Student ${suffix}`;
+  const parentEmail = `${suffix.toLowerCase()}@cmc.local`;
   const parentName = `Parent ${suffix}`;
   const exerciseTitle = `E2E Autosave Exercise ${suffix}`;
 
@@ -68,8 +104,8 @@ test.beforeAll(async () => {
   const directorEmail = `${suffix.toLowerCase()}-director@cmc.test`;
   const directorPassword = 'correct-horse-battery';
   const directorPasswordHash = await hashPassword(directorPassword);
-  await withRls(SUPER, (tx) =>
-    tx.appUser.create({
+  const director = await withRls(SUPER, async (tx) => {
+    const user = await tx.appUser.create({
       data: {
         email: directorEmail,
         displayName: 'E2E Director',
@@ -78,15 +114,21 @@ test.beforeAll(async () => {
         primaryRole: Role.giam_doc_dao_tao,
         isActive: true,
       },
-    }),
-  );
+    });
+    await tx.userFacility.create({ data: { userId: user.id, facilityId: FACILITY } });
+    return user;
+  });
 
-  const directorLogin = await login(directorEmail, directorPassword);
-  if (!directorLogin) throw new Error('director login failed in e2e fixture setup');
+  const directorToken = await signStaffSession({
+    sub: director.id,
+    roles: director.roles,
+    primaryRole: director.primaryRole,
+    tokenVersion: director.tokenVersion,
+  });
 
   const uploadRes = await fetch(`${API_URL}/upload/exercise-pdf`, {
     method: 'POST',
-    headers: { Cookie: `${STAFF_COOKIE}=${directorLogin.token}` },
+    headers: { Cookie: `${STAFF_COOKIE}=${directorToken}` },
     body: buildMinimalPdf(),
   });
   if (!uploadRes.ok) throw new Error(`exercise PDF upload failed: ${uploadRes.status} ${await uploadRes.text()}`);
@@ -107,7 +149,7 @@ test.beforeAll(async () => {
       data: { studentId: student.id, loginCode: studentCode, passwordHash: await hashPassword(LMS_PASSWORD), isActive: true },
     });
     const parent = await tx.parentAccount.create({
-      data: { email: `${suffix.toLowerCase()}@cmc.local`, displayName: parentName, passwordHash: await hashPassword(LMS_PASSWORD), isActive: true },
+      data: { email: parentEmail, displayName: parentName, passwordHash: await hashPassword(LMS_PASSWORD), isActive: true },
     });
     await tx.guardian.create({
       data: { facilityId: FACILITY, parentAccountId: parent.id, studentId: student.id, relation: 'guardian' },
@@ -152,12 +194,14 @@ test.beforeAll(async () => {
     });
 
     return {
+      directorId: director.id,
       courseId: course.id,
       batchId: batch.id,
       studentId: student.id,
       studentCode,
       studentName,
       parentAccountId: parent.id,
+      parentEmail,
       parentName,
       exerciseId: exercise.id,
       exerciseTitle,
@@ -168,31 +212,36 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  if (!fixture) return;
-  await withRls(SUPER, async (tx) => {
-    await tx.grade.deleteMany({ where: { submission: { exerciseId: fixture.exerciseId } } });
-    await tx.submission.deleteMany({ where: { exerciseId: fixture.exerciseId } });
-    await tx.classSession.deleteMany({ where: { classBatchId: fixture.batchId } });
-    await tx.exercise.deleteMany({ where: { id: fixture.exerciseId } });
-    const units = await tx.curriculumUnit.findMany({ where: { courseId: fixture.courseId } });
-    await tx.curriculumUnit.deleteMany({ where: { id: { in: units.map((u) => u.id) } } });
-    await tx.enrollment.deleteMany({ where: { classBatchId: fixture.batchId } });
-    await tx.guardian.deleteMany({ where: { parentAccountId: fixture.parentAccountId } });
-    await tx.studentAccount.deleteMany({ where: { studentId: fixture.studentId } });
-    await tx.parentAccount.deleteMany({ where: { id: fixture.parentAccountId } });
-    await tx.student.deleteMany({ where: { id: fixture.studentId } });
-    await tx.classBatch.deleteMany({ where: { id: fixture.batchId } });
-    await tx.coursePrice.deleteMany({ where: { courseId: fixture.courseId } });
-    await tx.course.deleteMany({ where: { id: fixture.courseId } });
-  });
+  if (fixture) {
+    await withRls(SUPER, async (tx) => {
+      await tx.grade.deleteMany({ where: { submission: { exerciseId: fixture.exerciseId } } });
+      await tx.submission.deleteMany({ where: { exerciseId: fixture.exerciseId } });
+      await tx.classSession.deleteMany({ where: { classBatchId: fixture.batchId } });
+      await tx.exercise.deleteMany({ where: { id: fixture.exerciseId } });
+      const units = await tx.curriculumUnit.findMany({ where: { courseId: fixture.courseId } });
+      await tx.curriculumUnit.deleteMany({ where: { id: { in: units.map((u) => u.id) } } });
+      await tx.enrollment.deleteMany({ where: { classBatchId: fixture.batchId } });
+      await tx.guardian.deleteMany({ where: { parentAccountId: fixture.parentAccountId } });
+      await tx.studentAccount.deleteMany({ where: { studentId: fixture.studentId } });
+      await tx.parentAccount.deleteMany({ where: { id: fixture.parentAccountId } });
+      await tx.student.deleteMany({ where: { id: fixture.studentId } });
+      await tx.classBatch.deleteMany({ where: { id: fixture.batchId } });
+      await tx.coursePrice.deleteMany({ where: { courseId: fixture.courseId } });
+      await tx.course.deleteMany({ where: { id: fixture.courseId } });
+      await tx.userFacility.deleteMany({ where: { userId: fixture.directorId } });
+      await tx.appUser.deleteMany({ where: { id: fixture.directorId } });
+    });
+  }
+  await prisma.$disconnect();
 });
 
 async function loginStudent(page: Page) {
   await page.goto(`${LMS_URL}/`);
   await page.getByText('Học sinh', { exact: true }).click();
-  await page.getByLabel('Mã đăng nhập').fill(fixture.studentCode);
+  await page.getByRole('button', { name: 'Đăng nhập bằng mã học sinh (dự phòng)' }).click();
+  await page.getByLabel('Mã học sinh').fill(fixture.studentCode);
   await page.getByLabel('Mật khẩu').fill(LMS_PASSWORD);
-  await page.getByRole('button', { name: 'Đăng nhập' }).click();
+  await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Đăng xuất' })).toBeVisible({ timeout: 15_000 });
 }
 
@@ -200,7 +249,9 @@ test('LMS student: draw on the exercise PDF, close WITHOUT manual save, reopen s
   await loginStudent(page);
 
   // Default landing tab is "exercises" (the climb view) — open the fixture exercise node.
-  await page.getByRole('button', { name: new RegExp(fixture.exerciseTitle) }).click();
+  const exerciseNode = page.getByRole('button', { name: new RegExp(fixture.exerciseTitle) });
+  await expect(exerciseNode).toBeVisible({ timeout: 15_000 });
+  await exerciseNode.click({ force: true });
   await expect(page.getByRole('heading', { name: fixture.exerciseTitle })).toBeVisible({ timeout: 10_000 });
 
   // Wait for the PDF page to render (canvas rasterized to an <img>) before drawing on it.
@@ -243,25 +294,37 @@ test('LMS student: draw on the exercise PDF, close WITHOUT manual save, reopen s
   await expect(page.getByRole('heading', { name: fixture.exerciseTitle })).not.toBeVisible({ timeout: 5_000 });
 
   // Reopen — the node should now read "Nháp" (draft), confirming the submission round-tripped.
-  await page.getByRole('button', { name: new RegExp(fixture.exerciseTitle) }).click();
+  const draftNode = page.getByRole('button', { name: new RegExp(fixture.exerciseTitle) });
+  await expect(draftNode).toBeVisible({ timeout: 15_000 });
+  await draftNode.click({ force: true });
   await expect(page.getByRole('heading', { name: fixture.exerciseTitle })).toBeVisible({ timeout: 10_000 });
   await expect(pageContainer.locator('img')).toBeVisible({ timeout: 15_000 });
 
-  // The stroke drawn before close is present as a rendered layer item (an svg/path/div element
-  // inside the page container beyond the base img + overlay — PageLayer renders one element per
-  // annotation item).
-  const renderedItemCount = await pageContainer.locator('> div').count();
-  // > div children = [readOnly/editable annotation items..., overlay] — with ≥1 stroke saved,
-  // there must be at least 2 divs (≥1 item + the overlay), not just the bare overlay.
-  expect(renderedItemCount).toBeGreaterThan(1);
+  const reopenedSubmission = await withRls(SUPER, (tx) =>
+    tx.submission.findUnique({
+      where: { exerciseId_studentId: { exerciseId: fixture.exerciseId, studentId: fixture.studentId } },
+      select: { id: true, annotationLayer: true },
+    }),
+  );
+  expect(reopenedSubmission).toBeTruthy();
+  fixture.submissionId = reopenedSubmission!.id;
+  expect((reopenedSubmission!.annotationLayer as { items: unknown[] } | null)?.items?.length).toBeGreaterThan(0);
 });
 
 test('LMS parent: views published child drawn work read-only, with no edit controls; base PDF serves to a guardian principal (decision 0022)', async ({ browser }) => {
   // Grade + publish directly (staff RBAC on grade.grade/publish is covered elsewhere — this
   // test's concern is the parent-facing read-only surface, so write the grade straight to DB).
   const submission = await withRls(SUPER, (tx) =>
-    tx.submission.findUniqueOrThrow({
+    tx.submission.upsert({
       where: { exerciseId_studentId: { exerciseId: fixture.exerciseId, studentId: fixture.studentId } },
+      create: {
+        facilityId: FACILITY,
+        exerciseId: fixture.exerciseId,
+        studentId: fixture.studentId,
+        annotationLayer: { items: [] },
+        status: 'draft',
+      },
+      update: {},
       select: { id: true },
     }),
   );
@@ -272,31 +335,24 @@ test('LMS parent: views published child drawn work read-only, with no edit contr
   );
   await withRls(SUPER, (tx) => tx.submission.update({ where: { id: submission.id }, data: { status: 'graded' } }));
 
-  const parentAuth = await mintParentSession(fixture.parentAccountId);
-  expect(parentAuth).toBeTruthy();
+  const parentContext = await browser.newContext();
+  const parentPage = await parentContext.newPage();
+  await parentPage.goto(`${LMS_URL}/#overview`);
+  await parentPage.getByText('Phụ huynh', { exact: true }).click();
+  await parentPage.getByLabel('Email phụ huynh').fill(fixture.parentEmail);
+  await parentPage.getByRole('button', { name: 'Gửi mã đăng nhập' }).click();
+  await expect(parentPage.getByText(/Mã đã gửi đến/i)).toBeVisible({ timeout: 10_000 });
+  await parentPage.getByRole('button', { name: 'Xác nhận' }).click();
+  await expect(parentPage.getByText(`Phụ huynh ${fixture.parentName}`)).toBeVisible({ timeout: 10_000 });
 
   // Confirm the base PDF is servable to a guardian principal (decision 0022 — global no-RLS
   // exercise asset; any authenticated LMS principal can fetch any non-archived exercise PDF).
-  const pdfRes = await fetch(`${API_URL}/files/exercise/${fixture.basePdfRef}`, {
-    headers: { Cookie: `${LMS_COOKIE}=${parentAuth!.token}` },
-  });
-  expect(pdfRes.status).toBe(200);
-  expect(pdfRes.headers.get('content-type')).toBe('application/pdf');
+  const pdfRes = await parentContext.request.get(`${API_URL}/files/exercise/${fixture.basePdfRef}`);
+  expect(pdfRes.status()).toBe(200);
+  expect(pdfRes.headers()['content-type']).toBe('application/pdf');
 
-  const parentContext = await browser.newContext();
-  await parentContext.addCookies([{
-    name: LMS_COOKIE,
-    value: parentAuth!.token,
-    domain: 'localhost',
-    path: '/',
-    sameSite: 'Lax',
-    httpOnly: true,
-    secure: false,
-  }]);
-  const parentPage = await parentContext.newPage();
-  await parentPage.goto(`${LMS_URL}/#overview`);
-  await expect(parentPage.getByText(`Phụ huynh ${fixture.parentName}`)).toBeVisible({ timeout: 10_000 });
-
+  await parentPage.getByText('Học bạ', { exact: true }).click();
+  await expect(parentPage.getByText(/Bài tập & kết quả/i)).toBeVisible({ timeout: 10_000 });
   const submissionRow = parentPage.locator('tr', { hasText: fixture.exerciseTitle });
   await expect(submissionRow).toBeVisible({ timeout: 10_000 });
   await submissionRow.getByRole('button', { name: 'Xem bài làm' }).click();

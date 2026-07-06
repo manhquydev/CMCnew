@@ -95,6 +95,25 @@ async function ensureExerciseUnit(courseId: string, courseCode: string) {
   });
 }
 
+async function ensureFirstLesson(courseId: string, unitId: string, unitCode: string) {
+  const existing = await prisma.curriculumLesson.findFirst({
+    where: { curriculumUnitId: unitId },
+    orderBy: { seqInUnit: 'asc' },
+  });
+  if (existing) return existing;
+  return prisma.curriculumLesson.upsert({
+    where: { lessonCode: `${unitCode}-S01` },
+    update: { courseId, curriculumUnitId: unitId, seqInUnit: 1, orderGlobal: 999_901 },
+    create: {
+      courseId,
+      curriculumUnitId: unitId,
+      lessonCode: `${unitCode}-S01`,
+      seqInUnit: 1,
+      orderGlobal: 999_901,
+    },
+  });
+}
+
 // A graded class for one student: batch + enrollment + 2 sessions w/ attendance + a homework and
 // a periodic-test exercise, each submitted and published — the quant inputs FinalGrade needs.
 async function seedGradedClass(opts: {
@@ -109,6 +128,7 @@ async function seedGradedClass(opts: {
 }) {
   const course = await prisma.course.findUniqueOrThrow({ where: { code: opts.courseCode } });
   const exerciseUnit = await ensureExerciseUnit(course.id, course.code);
+  const exerciseLesson = await ensureFirstLesson(course.id, exerciseUnit.id, exerciseUnit.unitCode);
   const batch = await prisma.classBatch.upsert({
     where: { facilityId_code: { facilityId: opts.facilityId, code: opts.batchCode } },
     update: {},
@@ -148,6 +168,7 @@ async function seedGradedClass(opts: {
         startTime: s.startTime,
         endTime: s.endTime,
         curriculumUnitId: exerciseUnit.id,
+        curriculumLessonId: exerciseLesson.id,
         teacherId: opts.teacherId,
         status: 'confirmed',
       },
@@ -175,12 +196,13 @@ async function seedGradedClass(opts: {
   ];
   for (const ex of exercises) {
     let exercise = await prisma.exercise.findFirst({
-      where: { curriculumUnitId: exerciseUnit.id, type: ex.type },
+      where: { curriculumLessonId: exerciseLesson.id, type: ex.type },
     });
     if (!exercise) {
       exercise = await prisma.exercise.create({
         data: {
           curriculumUnitId: exerciseUnit.id,
+          curriculumLessonId: exerciseLesson.id,
           title: ex.title,
           type: ex.type,
           status: 'published',

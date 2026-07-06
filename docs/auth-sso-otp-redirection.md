@@ -50,10 +50,11 @@ Library: **`@azure/msal-node`** `ConfidentialClientApplication` (Microsoft-recom
 (`signSession`) and set the existing staff cookie — so the rest of the app is unchanged.
 
 ```
-[ERP login page]  "Đăng nhập bằng tài khoản CMC EDU"
+[ERP/teacher login page]  "Đăng nhập bằng tài khoản CMC EDU"
       │ click
       ▼
 GET /auth/sso/login ── build authorize URL (PKCE + state in a short-lived cookie),
+      │                store validated returnOrigin/returnPath + redirectUri in tx cookie,
       │                scope: openid profile email, tenant-locked authority
       ▼
 [login.microsoftonline.com/<tenant>]  ← only @cmcvn.edu.vn org accounts (single-tenant)
@@ -66,7 +67,7 @@ GET /auth/sso/callback?code&state
       │  • find AppUser by email; NOT found OR inactive → 403 (no JIT — admin pre-creates)
       │  • signSession(claims) → set staff cookie (same as today)
       ▼
-[ERP app]  authenticated, no password involved
+[initiating staff host]  authenticated, no password involved
 ```
 
 Validation rules (all mandatory):
@@ -74,12 +75,21 @@ Validation rules (all mandatory):
 - Email domain == `cmcvn.edu.vn` (env `STAFF_EMAIL_DOMAIN`) — a second lock on top of single-tenant.
 - Account must already exist and be active → otherwise access denied (decision: admin pre-provisions).
 - `state` + PKCE `code_verifier` carried in an httpOnly, short-TTL cookie; rejected if missing/mismatched.
+- Return origin is allowlisted by `ADMIN_APP_ORIGIN` + `STAFF_APP_ORIGINS`; `teacher.cmcvn.edu.vn`
+  uses its own callback URI so the host-only tx/session cookies stay on the initiating staff host.
+- Direct SSO starts without `returnOrigin`, `Origin`, or `Referer` fall back to the
+  forwarded request host (`x-forwarded-proto` + `x-forwarded-host` / `host`) before ERP fallback.
+  This keeps direct `/api/auth/sso/login` smokes host-correct behind nginx/Cloudflare.
 
 Break-glass: the existing `auth.login(email,password)` stays, but is **restricted to super_admin**
 (so `admin@cmc.local`, which isn't an @cmcvn.edu.vn identity, can still get in if Azure is down).
 
-Azure config (dev/ops, one-time): add Redirect URIs for each environment to the CMC app —
-`https://<erp-host>/auth/sso/callback` (+ `http://localhost:4000/auth/sso/callback` for dev).
+Azure config (dev/ops, one-time): add Redirect URIs for each staff host to the CMC app —
+`https://erp.cmcvn.edu.vn/api/auth/sso/callback`,
+`https://teacher.cmcvn.edu.vn/api/auth/sso/callback`,
+`https://deverp.cmcvn.edu.vn/api/auth/sso/callback`,
+`https://devteacher.cmcvn.edu.vn/api/auth/sso/callback`, and
+`http://localhost:4000/auth/sso/callback` for local dev.
 
 ## 4. LMS parent — Email OTP (passwordless)
 
@@ -139,6 +149,7 @@ ENTRA_TENANT_ID="4dd49669-ef56-4163-9210-dba5b7101600"
 ENTRA_CLIENT_ID="bf0f8dc1-48c5-4f1f-9199-d5e5b41e4a75"
 ENTRA_CLIENT_SECRET=""                 # supplied later by IT; unset = SSO + OTP disabled
 ERP_SSO_REDIRECT_URI="http://localhost:4000/auth/sso/callback"
+STAFF_APP_ORIGINS="http://localhost:5173"
 STAFF_EMAIL_DOMAIN="cmcvn.edu.vn"
 # Graph email/OTP sender (app-only Mail.Send). Reuses ENTRA_* secret.
 GRAPH_CLIENT_SECRET="${ENTRA_CLIENT_SECRET}"
@@ -148,7 +159,12 @@ GRAPH_SENDER_NOTIFY="..."  GRAPH_SENDER_PAYROLL="..."  GRAPH_SENDER_HR="..."
 ## 7. Azure portal checklist (dev/ops)
 
 1. App "CMC" → Certificates & secrets → **New client secret** → copy value into `ENTRA_CLIENT_SECRET`.
-2. Authentication → **Redirect URIs (Web)** → add each ERP env callback (`.../auth/sso/callback`).
+2. Authentication → **Redirect URIs (Web)** → add each staff-host callback (`.../api/auth/sso/callback` in nginx-served envs).
+   Production live smoke now checks the ERP and teacher authorize URLs for `AADSTS50011` /
+   `AADSTS900971`, which proves Microsoft accepts both redirect URIs before login. A real
+   browser/MFA callback smoke is still required before calling SSO fully complete. Use
+   `scripts/verify-teacher-cmcvn-interactive-sso.ps1` for that operator-assisted proof; set
+   `SSO_ORIGINS=https://teacher.cmcvn.edu.vn,https://erp.cmcvn.edu.vn` to verify both staff hosts.
 3. API permissions → **Microsoft Graph → Application → `Mail.Send`** → **Grant admin consent**.
 4. (Recommended) Exchange RBAC scope so the app can only `Mail.Send` from the 3 shared mailboxes.
 5. SPF/DKIM/DMARC on the sending domain (see `plans/260626-email-graph-integration/phase-06-*`).
@@ -162,13 +178,13 @@ GRAPH_SENDER_NOTIFY="..."  GRAPH_SENDER_PAYROLL="..."  GRAPH_SENDER_HR="..."
 | R3 | LMS parent **Email OTP**: `login_otp` model, `otpRequest`/`otpVerify`, sync Graph send, race-safe attempt cap, throttle | **auth** | ✅ done |
 | R4 | ERP staff **SSO (OIDC)**: `@azure/msal-node`, `/auth/sso/login` + `/callback`, id_token validation, AppUser match, break-glass restricted to super_admin | **auth** | ✅ done |
 | R5 | Frontend: ERP "Đăng nhập CMC EDU" button + LMS email→OTP screens | normal | ✅ done |
-| R6 | Azure config + live smoke test (secret + redirect URIs supplied) | ops | ⏳ pending |
+| R6 | Azure config + live smoke test (secret + redirect URIs supplied) | ops | ⏳ partial: SSO-start + Entra pre-login passed; full interactive callback pending |
 
 **Backend R1–R4 done & verified (2026-06-26):** API typecheck + lint clean; 12 unit + 172 integration
 tests green against live Postgres (migrations applied). SSO + OTP are no-op until `ENTRA_CLIENT_SECRET`
 is set; the dev OTP fallback logs the code (non-prod only) so the flow is testable now. `ENTRA_TENANT_ID`
 must be the tenant **GUID** (not a domain). Frontend (R5) done: staff login has a "Đăng nhập bằng tài
 khoản CMC EDU" button (`packages/ui/src/login-gate.tsx`) and the LMS parent tab is a two-step email→OTP
-flow (`packages/ui/src/lms-login-gate.tsx`). Remaining: **R6 only** — Azure config (secret + redirect
-URI + Mail.Send consent) then the live smoke test.
+flow (`packages/ui/src/lms-login-gate.tsx`). Remaining: **R6 only** — SSO-start and Entra pre-login
+smoke passed in prod; final proof still needs a real browser/MFA callback and Graph Mail.Send consent.
 ```
