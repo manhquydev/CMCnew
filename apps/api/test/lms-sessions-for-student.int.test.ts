@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { LmsSession } from '@cmc/auth';
-import { seedCurriculum, courseCode, defaultCsvPath } from '@cmc/db';
+import { seedCurriculum, courseCode, defaultCsvPath } from '@cmc/db/seed-curriculum';
 import { lmsCaller, staffCaller, withRls, SUPER, uniq, prisma } from './helpers.js';
 
 /**

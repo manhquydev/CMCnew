@@ -17,7 +17,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { Role, loginStudent, DEFAULT_STUDENT_PASSWORD } from '@cmc/auth';
-import { seedCurriculum, defaultCsvPath, courseCode } from '@cmc/db';
+import { seedCurriculum, defaultCsvPath, courseCode } from '@cmc/db/seed-curriculum';
 import { staffCaller, withRls, SUPER, uniq, superAdminUserId, lmsCaller, prisma, assertSuccess } from './helpers.js';
 
 const FACILITY = 1;

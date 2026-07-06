@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { Role } from '@cmc/auth';
-import { seedCurriculum, parseCurriculumRows, courseCode, defaultCsvPath } from '@cmc/db';
+import { seedCurriculum, parseCurriculumRows, courseCode, defaultCsvPath } from '@cmc/db/seed-curriculum';
 import { appRouter } from '../src/routers/index.js';
 import type { ApiContext } from '../src/context.js';
 import { staffCaller, prisma, withRls, SUPER } from './helpers.js';

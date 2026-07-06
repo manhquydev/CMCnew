@@ -6,7 +6,7 @@ import {
   courseCode,
   defaultCsvPath,
   type CurriculumRow,
-} from '@cmc/db';
+} from '@cmc/db/seed-curriculum';
 import { prisma } from './helpers.js';
 
 // The CSV is the single source of truth: every expectation below is derived from it,

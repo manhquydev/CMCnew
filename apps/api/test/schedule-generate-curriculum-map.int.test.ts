@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { seedCurriculum, courseCode, defaultCsvPath } from '@cmc/db';
+import { seedCurriculum, courseCode, defaultCsvPath } from '@cmc/db/seed-curriculum';
 import { staffCaller, withRls, SUPER, uniq, prisma } from './helpers.js';
 
 /**
