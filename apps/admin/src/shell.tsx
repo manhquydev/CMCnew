@@ -816,6 +816,7 @@ export function buildNavGroups({
   if (surface !== 'teacher') return groups;
 
   const teacherSurfaceLabels: Partial<Record<SectionKey, string>> = {
+    overview: 'Hôm nay',
     schedule: 'Lịch dạy hôm nay',
     classes: 'Lớp & học liệu',
     courses: 'Học liệu',
@@ -859,6 +860,8 @@ export function buildNavGroups({
             TEACHER_SURFACE_SECTIONS.has(item.key) &&
             (item.key === 'family-intake'
               ? isTeacherSurfaceDirector && visible('family-intake')
+              : item.key === 'overview'
+              ? true
               : item.visible),
         })),
       }];

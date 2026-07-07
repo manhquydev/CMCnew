@@ -9,6 +9,7 @@ export const TEACHER_SURFACE_TARGET_ROLES = new Set([
 ]);
 
 export const TEACHER_SURFACE_SECTIONS = new Set<SectionKey>([
+  'overview',
   'schedule',
   'attendance',
   'attendance-report',

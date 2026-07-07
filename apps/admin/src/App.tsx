@@ -122,6 +122,7 @@ function defaultSection(me: Session, surface: AppSurface = 'erp'): SectionKey {
     if (me.roles.includes('giam_doc_dao_tao')) return 'edu-director-cockpit';
     if (me.roles.includes('giao_vien')) return 'overview';
     if (me.roles.includes('giam_doc_kinh_doanh')) return 'family-intake';
+    if (me.isSuperAdmin) return 'overview';
     return 'profile';
   }
   if (me.isSuperAdmin) return 'overview';
