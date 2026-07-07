@@ -11,10 +11,13 @@ export const TEACHER_SURFACE_TARGET_ROLES = new Set([
 export const TEACHER_SURFACE_SECTIONS = new Set<SectionKey>([
   'overview',
   'schedule',
-  // attendance / grading / assessment đã gộp vào "Lịch dạy" (calendar + session-detail 4 tab)
-  // trên teacher surface — bỏ khỏi đây để không hiện lại thành tab tác nghiệp trùng lặp cho mọi
-  // account (kể cả director/super_admin). Báo cáo điểm danh (tổng hợp) vẫn giữ cho giám đốc.
+  // attendance + grading giữ trong Set để director/super_admin vẫn direct-URL + bookmark được
+  // (isReachableSection dùng Set này làm gate). Chúng ĐƯỢC ẨN khỏi thanh nav teacher trong
+  // shell.tsx vì thao tác điểm danh/chấm bài đã gộp vào "Lịch dạy" (calendar + session-detail).
+  'attendance',
   'attendance-report',
+  'grading',
+  'assessment',
   'classes',
   'courses',
   'student-mgmt',

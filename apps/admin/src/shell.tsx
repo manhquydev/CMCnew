@@ -845,6 +845,12 @@ export function buildNavGroups({
     ['quan-tri', 4],
   ]);
 
+  // Điểm danh + Chấm bài đã gộp vào "Lịch dạy" (calendar + session-detail 4 tab) trên teacher
+  // surface — ẩn khỏi nav cho MỌI role (kể cả director/super_admin) để không lặp lại tác vụ. Vẫn
+  // reachable qua direct-URL vì còn trong TEACHER_SURFACE_SECTIONS. Báo cáo điểm danh + Học bạ là
+  // báo cáo (không trùng calendar) nên giữ hiển thị cho giám đốc.
+  const teacherNavMergedIntoCalendar = new Set<SectionKey>(['attendance', 'grading']);
+
   return groups
     .flatMap((group) => {
       const groupLabel = teacherGroupLabels[group.key];
@@ -858,6 +864,7 @@ export function buildNavGroups({
           visible:
             isTeacherSurfaceActor &&
             TEACHER_SURFACE_SECTIONS.has(item.key) &&
+            !teacherNavMergedIntoCalendar.has(item.key) &&
             (item.key === 'family-intake'
               ? isTeacherSurfaceDirector && visible('family-intake')
               : item.key === 'overview'
