@@ -29,7 +29,9 @@ export interface StaffNotifPayload {
  *   push();
  */
 export async function emitStaffNotif(tx: PrismaTx, payload: StaffNotifPayload): Promise<() => void> {
-  if (payload.recipientIds.length === 0) return () => {};
+  if (payload.recipientIds.length === 0) {
+    return () => undefined;
+  }
 
   // Persist rows sequentially to avoid concurrent writes on the same Prisma tx connection.
   const rows: Array<{

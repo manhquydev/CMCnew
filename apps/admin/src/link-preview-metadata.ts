@@ -18,9 +18,9 @@ export const ADMIN_CRM_OPPORTUNITY_METADATA: LinkPreviewMetadata = {
 };
 
 export const TEACHER_DEFAULT_METADATA: LinkPreviewMetadata = {
-  title: 'CMC Teacher | Lịch dạy & LMS',
+  title: 'CMC Teacher Lite | LMS nội bộ',
   description:
-    'Không gian làm việc cho giáo viên và đào tạo: lịch dạy, lớp học, điểm danh, nhận xét LMS và chấm bài.',
+    'Không gian làm việc gọn cho lớp học, học liệu, điểm danh, nhận xét, chấm bài và tài khoản LMS.',
 };
 
 export const ADMIN_SECTION_METADATA = {
@@ -45,8 +45,8 @@ export const ADMIN_SECTION_METADATA = {
     description: 'Tra cứu phụ huynh, liên kết học sinh và thông tin liên hệ phục vụ chăm sóc gia đình học viên.',
   },
   'family-intake': {
-    title: 'Tiếp nhận phụ huynh + học sinh | CMC Teacher',
-    description: 'Tạo phiếu nháp từ một form phụ huynh và học sinh để chuyển sang luồng provisioning đã chốt.',
+    title: 'Tạo học viên LMS | CMC Teacher Lite',
+    description: 'Tạo phụ huynh, học sinh, tài khoản LMS và ghi danh lớp trực tiếp cho Teacher Lite.',
   },
   finance: {
     title: 'Tài chính | CMC ERP',
@@ -150,7 +150,7 @@ const TEACHER_SECTION_TITLES: Partial<Record<SectionKey, string>> = {
   levelup: 'Duyệt cấp độ',
   students: 'Học viên',
   guardians: 'Phụ huynh',
-  'family-intake': 'Tiếp nhận phụ huynh + học sinh',
+  'family-intake': 'Tạo học viên LMS',
   'edu-director-cockpit': 'Điều phối đào tạo',
   'biz-director-cockpit': 'Bàn giao tuyển sinh',
   'payroll-checkin': 'Chấm công & lương',
@@ -168,7 +168,7 @@ export function getAdminMetadata(
     const title = TEACHER_SECTION_TITLES[section];
     if (!title) return TEACHER_DEFAULT_METADATA;
     return {
-      title: `${title} | CMC Teacher`,
+      title: `${title} | CMC Teacher Lite`,
       description: TEACHER_DEFAULT_METADATA.description,
     };
   }

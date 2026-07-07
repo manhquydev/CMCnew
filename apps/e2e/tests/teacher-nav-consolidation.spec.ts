@@ -28,7 +28,7 @@ async function loginTeacherSurface(page: import('@playwright/test').Page, email:
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Mật khẩu').fill(PASSWORD);
   await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
-  await expect(page.locator('header').getByText(/Teacher Console/)).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('header').getByText(/Teacher Lite/)).toBeVisible({ timeout: 10_000 });
 }
 
 function exactNav(page: import('@playwright/test').Page, label: string) {
@@ -88,7 +88,7 @@ test.describe('teacher.cmcvn surface scope', () => {
     for (const hiddenModule of ['Tài chính', 'CRM & Kinh doanh', 'Nhân sự', 'Công ca', 'Tiếp nhận học viên']) {
       await expect(exactNav(page, hiddenModule)).toHaveCount(0);
     }
-    await expect(page.getByText('CMC Teacher')).toBeVisible();
+    await expect(page.getByText('CMC Teacher Lite')).toBeVisible();
   });
 
   test('giam_doc_dao_tao sees training coordination and intake, not full finance', async ({ page }) => {
@@ -97,10 +97,9 @@ test.describe('teacher.cmcvn surface scope', () => {
     await expect(exactNav(page, 'Điều phối đào tạo')).toBeVisible();
     await expect(exactNav(page, 'Tiếp nhận học viên')).toBeVisible();
     await exactNav(page, 'Tiếp nhận học viên').click();
-    await expect(page.getByText('Tiếp nhận phụ huynh + học sinh', { exact: true })).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Thông tin phụ huynh + học sinh', { exact: true })).toBeVisible();
-    await expect(page.getByText('Hồ sơ tiếp nhận gần đây', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Tạo hồ sơ nháp' })).toBeVisible();
+    await expect(page.getByText('Tạo học viên LMS', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Tiếp nhận học viên', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Tạo học viên' })).toBeVisible();
     await expect(page.getByText('Lập phiếu thu', { exact: true })).toHaveCount(0);
     await expect(page.getByText('Mã voucher', { exact: false })).toHaveCount(0);
 
@@ -115,9 +114,9 @@ test.describe('teacher.cmcvn surface scope', () => {
     await page.getByLabel('Mật khẩu').fill(PASSWORD);
     await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
 
-    await expect(page.locator('header').getByText(/Teacher Console/)).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('header').getByText(/Teacher Lite/)).toBeVisible({ timeout: 10_000 });
     await expect(exactNav(page, 'Tiếp nhận học viên')).toBeVisible();
-    await expect(page.getByText('Tiếp nhận phụ huynh + học sinh', { exact: true })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Tạo học viên LMS', { exact: true })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText('Tài chính', { exact: true })).toHaveCount(0);
     await expect(exactNav(page, 'Tài chính')).toHaveCount(0);
   });

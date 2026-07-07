@@ -12,7 +12,7 @@ pipeline {
     timeout(time: 30, unit: 'MINUTES')
   }
   environment {
-    COMPOSE  = 'docker compose -f docker/docker-compose.prod.tls.yml --env-file /secrets/.env.production'
+    COMPOSE  = 'env -u CORS_ORIGINS -u STAFF_APP_ORIGINS docker compose -f docker/docker-compose.prod.tls.yml --env-file /secrets/.env.production'
     NODE_IMG = 'node:22-alpine'
   }
   stages {
@@ -57,6 +57,9 @@ pipeline {
           # Ensure an origin cert exists (self-signed for CF Full) so nginx can start —
           # self-heals a fresh volume, fails loud on a corrupt/invalid one.
           bash scripts/ensure-origin-cert.sh
+          # Ensure host bind-mount blob dirs are writable by the non-root API container user.
+          # Without this, Docker-created root:root dirs make PDF/photo uploads fail with EACCES.
+          CMC_BLOB_ROOT=/root/cmcnew/.data bash scripts/ensure-blob-store-dirs.sh
           # The prod nginx joins the shared cmcnew-edge network (declared `external` in the compose
           # file) to reach the dev app tier. Create it before `up` or compose aborts; idempotent,
           # and `|| true` because this shell runs with -e and the network persists between deploys.
@@ -108,7 +111,7 @@ pipeline {
             EXPECTED_MARKER="$2"
             HTML="$(curl -fsS "$URL")"
             if ! printf '%s' "$HTML" | grep -Fq "$EXPECTED_MARKER"; then
-              FOUND_TITLE="$(printf '%s' "$HTML" | sed -n 's/.*<title>\([^<]*\)<\/title>.*/\1/p' | head -n 1)"
+              FOUND_TITLE="$(printf '%s' "$HTML" | grep -o '<title>[^<]*</title>' | head -n 1 | cut -d '>' -f 2 | cut -d '<' -f 1)"
               echo "SPA identity mismatch for $URL: title='${FOUND_TITLE:-<missing>}' expected marker='$EXPECTED_MARKER'" >&2
               exit 1
             fi
@@ -117,7 +120,7 @@ pipeline {
             URL="$1"
             EXPECTED_MARKER="$2"
             HTML="$(curl -fsS "$URL")"
-            ASSET="$(printf '%s' "$HTML" | sed -n 's/.*src="\(\/assets\/index-[^"]*\.js\)".*/\1/p' | head -n 1)"
+            ASSET="$(printf '%s' "$HTML" | grep -o 'src="/assets/index-[^"]*.js"' | head -n 1 | cut -d '"' -f 2)"
             if [ -z "$ASSET" ]; then
               echo "SPA bundle marker check failed for $URL: missing Vite index asset" >&2
               exit 1
@@ -129,10 +132,14 @@ pipeline {
             fi
           }
           RESP="$(curl -fsS https://erp.cmcvn.edu.vn/api/health)"; echo "$RESP" | grep -q '"ok":true'
+          echo "$RESP" | grep -Fq "${GIT_COMMIT:-unknown}"
           assert_title_marker https://erp.cmcvn.edu.vn/ 'CMC ERP'
-          assert_bundle_marker https://teacher.cmcvn.edu.vn/ 'CMC Teacher'
-          curl -fsS https://teacher.cmcvn.edu.vn/api/health | grep -q '"ok":true'
+          assert_bundle_marker https://teacher.cmcvn.edu.vn/ 'CMC Teacher Lite'
+          TEACHER_RESP="$(curl -fsS https://teacher.cmcvn.edu.vn/api/health)"; echo "$TEACHER_RESP" | grep -q '"ok":true'
+          echo "$TEACHER_RESP" | grep -Fq "${GIT_COMMIT:-unknown}"
           assert_title_marker https://hoc.cmcvn.edu.vn/ 'CMC EDU'
+          LMS_RESP="$(curl -fsS https://hoc.cmcvn.edu.vn/api/health)"; echo "$LMS_RESP" | grep -q '"ok":true'
+          echo "$LMS_RESP" | grep -Fq "${GIT_COMMIT:-unknown}"
           echo "branch=main url=https://erp.cmcvn.edu.vn teacher=https://teacher.cmcvn.edu.vn commit=${GIT_COMMIT} health=$RESP smoke OK"
         '''
       }
@@ -152,7 +159,7 @@ pipeline {
           # The dev app tier joins the shared cmcnew-edge network; create it before `up` (external).
           docker network create cmcnew-edge 2>/dev/null || true
           # Explicit branch-to-environment mapping — dev project, dev env file, dev compose. No prod vars.
-          DEV="docker compose -f docker/docker-compose.dev.tls.yml --env-file /secrets/.env.dev"
+          DEV="env -u CORS_ORIGINS -u STAFF_APP_ORIGINS docker compose -f docker/docker-compose.dev.tls.yml --env-file /secrets/.env.dev"
           echo "deploying: project=cmcnew-dev env=/secrets/.env.dev commit=$APP_COMMIT"
           $DEV up -d dev-postgres dev-redis
           for i in $(seq 1 30); do
@@ -194,13 +201,13 @@ pipeline {
       when { branch 'develop' }   // smoke-test the deploy that only develop performs
       steps {
         sh '''
-          DEV="docker compose -f docker/docker-compose.dev.tls.yml --env-file /secrets/.env.dev"
+          DEV="env -u CORS_ORIGINS -u STAFF_APP_ORIGINS docker compose -f docker/docker-compose.dev.tls.yml --env-file /secrets/.env.dev"
           assert_title_marker() {
             URL="$1"
             EXPECTED_MARKER="$2"
             HTML="$(curl -fsS "$URL")"
             if ! printf '%s' "$HTML" | grep -Fq "$EXPECTED_MARKER"; then
-              FOUND_TITLE="$(printf '%s' "$HTML" | sed -n 's/.*<title>\([^<]*\)<\/title>.*/\1/p' | head -n 1)"
+              FOUND_TITLE="$(printf '%s' "$HTML" | grep -o '<title>[^<]*</title>' | head -n 1 | cut -d '>' -f 2 | cut -d '<' -f 1)"
               echo "SPA identity mismatch for $URL: title='${FOUND_TITLE:-<missing>}' expected marker='$EXPECTED_MARKER'" >&2
               exit 1
             fi
@@ -209,7 +216,7 @@ pipeline {
             URL="$1"
             EXPECTED_MARKER="$2"
             HTML="$(curl -fsS "$URL")"
-            ASSET="$(printf '%s' "$HTML" | sed -n 's/.*src="\(\/assets\/index-[^"]*\.js\)".*/\1/p' | head -n 1)"
+            ASSET="$(printf '%s' "$HTML" | grep -o 'src="/assets/index-[^"]*.js"' | head -n 1 | cut -d '"' -f 2)"
             if [ -z "$ASSET" ]; then
               echo "SPA bundle marker check failed for $URL: missing Vite index asset" >&2
               exit 1
@@ -244,14 +251,14 @@ pipeline {
           }
           $DEV exec -T dev-api wget -qO- http://localhost:4000/health
           RESP="$(curl -fsS https://deverp.cmcvn.edu.vn/api/health)"; echo "$RESP" | grep -q '"ok":true'
-          echo "$RESP" | grep -Fq "\"commit\":\"${GIT_COMMIT:-unknown}\""
+          echo "$RESP" | grep -Fq "${GIT_COMMIT:-unknown}"
           TEACHER_RESP="$(curl -fsS https://devteacher.cmcvn.edu.vn/api/health)"; echo "$TEACHER_RESP" | grep -q '"ok":true'
-          echo "$TEACHER_RESP" | grep -Fq "\"commit\":\"${GIT_COMMIT:-unknown}\""
+          echo "$TEACHER_RESP" | grep -Fq "${GIT_COMMIT:-unknown}"
           LMS_RESP="$(curl -fsS https://devlms.cmcvn.edu.vn/api/health)"; echo "$LMS_RESP" | grep -q '"ok":true'
-          echo "$LMS_RESP" | grep -Fq "\"commit\":\"${GIT_COMMIT:-unknown}\""
+          echo "$LMS_RESP" | grep -Fq "${GIT_COMMIT:-unknown}"
           assert_title_marker https://deverp.cmcvn.edu.vn/ 'CMC ERP'
-          assert_bundle_marker https://devteacher.cmcvn.edu.vn/ 'CMC Teacher'
-          assert_bundle_marker https://devteacher.cmcvn.edu.vn/ 'family-intake'
+          assert_bundle_marker https://devteacher.cmcvn.edu.vn/ 'CMC Teacher Lite'
+          assert_bundle_marker https://devteacher.cmcvn.edu.vn/ 'Tạo học viên LMS'
           assert_title_marker https://devlms.cmcvn.edu.vn/ 'CMC EDU'
           assert_cors_origin https://devteacher.cmcvn.edu.vn
           assert_sso_redirect https://devteacher.cmcvn.edu.vn https://devteacher.cmcvn.edu.vn/api/auth/sso/callback

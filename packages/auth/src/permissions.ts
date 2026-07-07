@@ -82,6 +82,13 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     myApprovals: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
 
+  teacherLite: {
+    createFamilyStudentAndEnroll: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    createClass: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    cancelClass: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    cancelSession: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+  },
+
   exercise: {
     upsert: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },

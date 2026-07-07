@@ -84,12 +84,12 @@ export const SURFACE_COPY: Record<AppSurface, {
       'Hệ thống quản lý tích hợp ERP dành cho ban giám đốc, giảng viên và nhân sự vận hành.',
   },
   teacher: {
-    topbarBrand: 'CMC Teacher',
-    topbarContext: 'Teacher Console',
-    loginTitle: 'CMC Teacher',
-    loginBrandWord: 'Teacher',
-    loginDescription: 'Đăng nhập để vào lịch dạy, lớp học, nhận xét LMS và vận hành đào tạo.',
+    topbarBrand: 'CMC Teacher Lite',
+    topbarContext: 'Teacher Lite',
+    loginTitle: 'CMC Teacher Lite',
+    loginBrandWord: 'Teacher Lite',
+    loginDescription: 'Đăng nhập để vào quy trình nội bộ đơn giản cho lớp học và LMS.',
     loginHeroDescription:
-      'Không gian làm việc cho giáo viên và đào tạo: lịch dạy, lớp học, điểm danh, nhận xét và chấm bài.',
+      'Không gian làm việc gọn cho giám đốc, giáo viên, phụ huynh và học sinh trên cùng dữ liệu LMS.',
   },
 };

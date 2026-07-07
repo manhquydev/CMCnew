@@ -117,6 +117,6 @@ describe('teacher nav consolidation', () => {
 
     expect(visibleItems.map((i) => i.key)).toContain('family-intake');
     expect(visibleItems.map((i) => i.key)).not.toContain('finance');
-    expect(visibleItems.find((i) => i.key === 'family-intake')?.label).toBe('Tiếp nhận phụ huynh + học sinh');
+    expect(visibleItems.find((i) => i.key === 'family-intake')?.label).toBe('Tạo học viên LMS');
   });
 });

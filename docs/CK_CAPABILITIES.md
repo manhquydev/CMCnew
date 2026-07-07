@@ -142,8 +142,9 @@ see CK_WORKFLOW §7). Use `/clear` between plan and build (SESSION_LOOP §3b).
 ## 6. Tier policy (unchanged from CK_WORKFLOW §5)
 
 Tier-1 (adopt now) = the Intake→Validate sets above. Tier-3 (`ship`, `vibe --ship`,
-`review-pr`, `team`) stay **deferred until a green CI exists** — GitHub Actions billing
-is blocked and Jenkins runs full pipeline only on `main`.
+`review-pr`, `team`) stay **deferred until a green CI exists**. GitHub Actions now
+runs the reference check/build gate; Jenkins remains the deploy pipeline for
+`develop` and `main`.
 
 ## 7. Catalog reconciliation (claims vs this install)
 

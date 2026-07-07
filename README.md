@@ -101,7 +101,7 @@ bash scripts/ci-integration-tests.sh   # spin ephemeral Postgres, chạy full in
 - Docker resource limit trên cả 9 service prod, tính theo capacity thật của VPS (2 vCPU / 7.8 GiB).
 - Jenkins publish check `CMCnew CI` lên GitHub PR (hiện mới report-only, chưa bật required-check — xem ghi chú unresolved trong `plans/260703-0022-devops-tier1-hardening/plan.md`).
 
-**CI gate hiện tại**: `.github/workflows/ci.yml` tồn tại nhưng luôn fail sau ~3s (GitHub Actions bị chặn billing trên repo private này) — giữ lại làm fallback tham khảo, không phải bug. Jenkins mới là CI thật đang chạy.
+**CI gate hiện tại**: `.github/workflows/ci.yml` chạy lint/typecheck/test/build như gate tham chiếu trên PR và `main`; Jenkins vẫn là deploy pipeline thật cho `develop`/`main`, gồm build image, migrate, deploy stack và smoke domain thật.
 
 ## Trạng thái (cập nhật 2026-07-03)
 

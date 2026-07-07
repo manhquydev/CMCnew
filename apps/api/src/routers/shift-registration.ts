@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { withRls } from '@cmc/db';
+import { type Prisma, withRls } from '@cmc/db';
 import { rlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
 import { router, requirePermission } from '../trpc.js';
@@ -19,7 +19,7 @@ function resolveShiftGroup(position: string): string {
 /// KINH_DOANH group falls back to giam_doc_kinh_doanh, the GIAO_VIEN group falls back to
 /// giam_doc_dao_tao. Legacy 'bgd' role is retired; there is no group-agnostic fallback anymore.
 async function resolveManager(
-  tx: any, userId: string, roles: string[],
+  tx: Prisma.TransactionClient, userId: string, roles: string[],
 ): Promise<{ managerId: string | null; nextManagerId: string | null }> {
   const profile = await tx.employmentProfile.findUnique({
     where: { userId },

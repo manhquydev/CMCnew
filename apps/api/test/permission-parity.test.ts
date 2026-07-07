@@ -247,6 +247,24 @@ describe('Education Director (giam_doc_dao_tao) permissions', () => {
   });
 });
 
+describe('Teacher Lite direct setup permission', () => {
+  it('both directors can run Teacher Lite workflows without broadening legacy class or CRM gates', () => {
+    const liteActions = [
+      'createFamilyStudentAndEnroll',
+      'createClass',
+      'cancelClass',
+      'cancelSession',
+    ];
+    for (const action of liteActions) {
+      expect(PERMISSIONS['teacherLite']![action]).toEqual(['giam_doc_kinh_doanh', 'giam_doc_dao_tao']);
+      expect(PERMISSIONS['teacherLite']![action]).not.toContain('giao_vien');
+    }
+    expect(PERMISSIONS['enrollment']!['enroll']).not.toContain('giam_doc_dao_tao');
+    expect(PERMISSIONS['classBatch']!['create']).not.toContain('giam_doc_kinh_doanh');
+    expect(PERMISSIONS['classBatch']!['cancel']).not.toContain('giam_doc_kinh_doanh');
+  });
+});
+
 describe('director payroll/KPI authority (3-heads executive board)', () => {
   const KD = 'giam_doc_kinh_doanh';
   const GD = 'giam_doc_dao_tao';

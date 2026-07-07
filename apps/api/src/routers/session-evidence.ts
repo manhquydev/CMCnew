@@ -217,7 +217,7 @@ export const sessionEvidenceRouter = router({
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const evidence = await tx.sessionEvidence.findUnique({
           where: { classSessionId: input.classSessionId },
-          include: { photos: true, comments: true, classSession: { select: { teacherId: true } } },
+          include: { photos: true, comments: true, classSession: { select: { facilityId: true, teacherId: true } } },
         });
         if (!evidence) throw new TRPCError({ code: 'NOT_FOUND', message: 'Chưa có nháp buổi học' });
         assertTeachingSessionMutationAllowed(ctx.session, evidence.classSession);
