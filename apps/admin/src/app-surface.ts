@@ -11,6 +11,9 @@ export const TEACHER_SURFACE_TARGET_ROLES = new Set([
 export const TEACHER_SURFACE_SECTIONS = new Set<SectionKey>([
   'overview',
   'schedule',
+  // attendance + grading giữ trong Set để director/super_admin vẫn direct-URL + bookmark được
+  // (isReachableSection dùng Set này làm gate). Chúng ĐƯỢC ẨN khỏi thanh nav teacher trong
+  // shell.tsx vì thao tác điểm danh/chấm bài đã gộp vào "Lịch dạy" (calendar + session-detail).
   'attendance',
   'attendance-report',
   'grading',
