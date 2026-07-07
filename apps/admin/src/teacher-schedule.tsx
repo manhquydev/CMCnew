@@ -71,8 +71,9 @@ export function TeacherSchedule() {
       .catch(e => notifyError(e, 'Không tải được cơ sở'));
   }, []);
 
-  // Load sessions for current view range
+  // Load sessions for current view range — requires a resolved facilityId (C1: backend field is required)
   const loadSessions = useCallback(() => {
+    if (facilityId === null) return;
     setLoading(true);
     let from: string, to: string;
     if (view === 'calendar') {
@@ -85,9 +86,7 @@ export function TeacherSchedule() {
       from = dayjs().subtract(2, 'week').format('YYYY-MM-DD');
       to = dayjs().add(2, 'week').format('YYYY-MM-DD');
     }
-    const queryInput: Record<string, unknown> = { from, to };
-    if (facilityId != null) queryInput.facilityId = facilityId;
-    trpc.schedule.mySessions.query(queryInput as Parameters<typeof trpc.schedule.mySessions.query>[0])
+    trpc.schedule.mySessions.query({ facilityId, from, to })
       .then(setSessions)
       .catch(e => notifyError(e, 'Không tải được lịch dạy'))
       .finally(() => setLoading(false));
@@ -98,6 +97,17 @@ export function TeacherSchedule() {
   // When session is in URL but sessions haven't loaded yet, show loader
   if (sessionId && !activeSession && loading) {
     return <Center py="xl" style={{ fontFamily: FONT }}><Loader size="sm" /></Center>;
+  }
+  // Session from URL not found in current month (H3 — cross-month refresh)
+  if (sessionId && !activeSession && !loading) {
+    return (
+      <div style={{ padding: '40px 24px', fontFamily: FONT, textAlign: 'center', color: C.muted }}>
+        <div style={{ fontSize: 14, marginBottom: 12 }}>Không tìm thấy buổi học trong tháng đang xem.</div>
+        <button onClick={closeSession} style={{ padding: '8px 20px', borderRadius: 8, background: C.brand, color: '#fff', border: 'none', cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 600 }}>
+          ← Quay về lịch
+        </button>
+      </div>
+    );
   }
   if (activeSession) {
     return <TeacherScheduleDetail session={activeSession} onBack={closeSession} />;

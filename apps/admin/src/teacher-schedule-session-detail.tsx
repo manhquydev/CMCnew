@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
-import { notifyError, notifySuccess, trpc, uploadSessionPhoto } from '@cmc/ui';
+import { API_URL, notifyError, notifySuccess, trpc, uploadSessionPhoto } from '@cmc/ui';
 import { Button, Center, Loader, NumberInput, Stack, Tabs, Text, Textarea } from '@mantine/core';
 
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
@@ -43,8 +43,7 @@ export interface SessionDetailProps {
 export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
   const enabled = session.status !== 'cancelled';
   const classSessionId = session.id;
-  // Use classBatchId if available on the type, fall back to batch.id
-  const classBatchId = (session as Record<string, unknown>).classBatchId as string ?? session.batch.id;
+  const classBatchId = session.classBatchId;
 
   // ── Attendance ──────────────────────────────────────────────────────────────
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
@@ -59,6 +58,9 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
   const [savedAt, setSavedAt] = useState(0);
   const [evidencePublished, setEvidencePublished] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear pending debounce on unmount to prevent post-unmount API call (M1)
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
   // ── Grading ─────────────────────────────────────────────────────────────────
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -152,9 +154,10 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
   // Attendance handlers
   async function markSingle(enrollmentId: string, status: AttStatus) {
     const prev = marks[enrollmentId];
-    setMarks(m => ({ ...m, [enrollmentId]: { status, excused: prev?.excused ?? false } }));
+    const excused = prev?.excused ?? false;
+    setMarks(m => ({ ...m, [enrollmentId]: { status, excused } }));
     try {
-      await trpc.attendance.mark.mutate({ classSessionId, enrollmentId, status, excused: false });
+      await trpc.attendance.mark.mutate({ classSessionId, enrollmentId, status, excused });
     } catch (e) {
       notifyError(e, 'Không lưu được điểm danh');
       setMarks(m => { const n = { ...m }; if (prev === undefined) delete n[enrollmentId]; else n[enrollmentId] = prev; return n; });
@@ -181,7 +184,12 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
     for (const file of Array.from(files)) {
       try {
         const ref = await uploadSessionPhoto(file);
-        updateDraft({ photos: [...draft.photos, { ref }] });
+        // Use functional update to avoid stale-closure bug when uploading multiple files (H2)
+        setDraft(prev => {
+          const next = { ...prev, photos: [...prev.photos, { ref }] };
+          scheduleSave(next);
+          return next;
+        });
       } catch (e) {
         notifyError(e, 'Upload ảnh thất bại');
       }
@@ -189,6 +197,8 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
   }
 
   async function publishEvidence() {
+    // Cancel pending debounce — don't let a stale upsertDraft fire after publish (M2)
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     setSaving(true);
     try {
       await trpc.sessionEvidence.upsertDraft.mutate({
@@ -300,7 +310,7 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
                   {draft.photos.map(p => (
                     <div key={p.ref} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', background: C.bg }}>
-                      <img src={`/files/session-photo/${p.ref}`} alt="" style={{ width: '100%', height: 90, objectFit: 'cover', display: 'block' }} />
+                      <img src={`${API_URL}/files/session-photo/${p.ref}`} alt="" style={{ width: '100%', height: 90, objectFit: 'cover', display: 'block' }} />
                       {enabled && (
                         <button onClick={() => updateDraft({ photos: draft.photos.filter(x => x.ref !== p.ref) })}
                           style={{ position: 'absolute', top: 4, right: 4, background: C.danger, border: 'none', borderRadius: 4, color: '#fff', cursor: 'pointer', width: 20, height: 20, fontSize: 11, lineHeight: '20px', padding: 0 }}>
