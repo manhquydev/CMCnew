@@ -66,7 +66,7 @@ import { AttendancePanel } from './attendance-panel';
 import { TeacherTodayPanel } from './teacher-today-panel';
 import { SessionWorkspace } from './session-workspace';
 import { HomeworkFeed } from './homework-feed';
-import { GradingClassPicker } from './grading-class-picker';
+
 import { SchedulePanel } from './schedule-panel';
 import { MeetingsPanel } from './meetings-panel';
 import { LevelApprovalPanel } from './level-approval-panel';
@@ -120,7 +120,7 @@ const TH_STYLE: React.CSSProperties = {
 function defaultSection(me: Session, surface: AppSurface = 'erp'): SectionKey {
   if (surface === 'teacher') {
     if (me.roles.includes('giam_doc_dao_tao')) return 'edu-director-cockpit';
-    if (me.roles.includes('giao_vien')) return 'schedule';
+    if (me.roles.includes('giao_vien')) return 'overview';
     if (me.roles.includes('giam_doc_kinh_doanh')) return 'family-intake';
     return 'profile';
   }
@@ -624,7 +624,7 @@ function Dashboard() {
   const [studentNav, setStudentNav] = useState<SearchNavAction | null>(null);
   const [staffNav, setStaffNav] = useState<SearchNavAction | null>(null);
   const [todaySession, setTodaySession] = useState<{ sessionId: string; batchId: string; batchCode: string } | null>(null);
-  const [gradingBatchId, setGradingBatchId] = useState<string | null>(null);
+
 
   // Active section is derived from the URL (single source of truth). A CRM record route
   // forces the crm section; a bare/unknown path falls back to the persona default.
@@ -691,7 +691,6 @@ function Dashboard() {
     setStudentNav(null);
     setStaffNav(null);
     setTodaySession(null);
-    setGradingBatchId(null);
     navigate('/' + key);
   }
 
@@ -733,7 +732,15 @@ function Dashboard() {
               />
             );
           }
-          return <TeacherTodayPanel onSelectSession={(sessionId, batchId, batchCode) => setTodaySession({ sessionId, batchId, batchCode })} />;
+          return (
+            <TeacherTodayPanel
+              onSelectSession={(sessionId, batchId, batchCode) =>
+                setTodaySession({ sessionId, batchId, batchCode })
+              }
+              onNavigateToGrading={() => handleSectionChange('grading')}
+              onNavigateToSchedule={() => handleSectionChange('schedule')}
+            />
+          );
         }
         return <OverviewPanel />;
 
@@ -812,10 +819,7 @@ function Dashboard() {
 
       case 'grading':
         if (surface === 'teacher') {
-          if (gradingBatchId) {
-            return <HomeworkFeed batchId={gradingBatchId} onBack={() => setGradingBatchId(null)} />;
-          }
-          return <GradingClassPicker onSelectBatch={setGradingBatchId} facilityId={me.facilityIds[0] ?? null} />;
+          return <HomeworkFeed facilityId={me.facilityIds[0] ?? null} />;
         }
         return (
           <Stack>

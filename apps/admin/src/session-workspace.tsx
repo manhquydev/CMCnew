@@ -1,26 +1,38 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
-import {
-  ActionIcon,
-  Badge,
-  Box,
-  Button,
-  Card,
-  Divider,
-  Grid,
-  Group,
-  Loader,
-  Center,
-  Stack,
-  Text,
-  Title,
-} from '@mantine/core';
-import { IconArrowLeft, IconUser } from '@tabler/icons-react';
-import { notifyError, StatusBadge, trpc } from '@cmc/ui';
-import { AttendanceRoster } from './attendance-roster.js';
+import { Button, Center, Loader } from '@mantine/core';
+import { notifyError, notifySuccess, trpc } from '@cmc/ui';
 import { SessionEvidencePanel } from './session-evidence-panel.js';
 
 type SessionRow = Awaited<ReturnType<typeof trpc.schedule.listSessions.query>>[number];
+type Enrollment = Awaited<ReturnType<typeof trpc.enrollment.listByBatch.query>>[number];
+
+const C = {
+  brand: '#0071E3',
+  brandMuted: '#E8F1FC',
+  text: '#1D1D1F',
+  text2: '#3C3C43',
+  muted: '#6E6E73',
+  faint: '#AEAEB2',
+  bg: '#F5F5F7',
+  surface: '#FFFFFF',
+  border: '#E5E5EA',
+  successBg: '#E6F4EA',
+  success: '#137333',
+  warningBg: '#FEF3E0',
+  warning: '#8A5A00',
+  dangerBg: '#FCE8E6',
+  danger: '#C5221F',
+};
+
+const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif';
+
+type AttStatus = 'present' | 'late' | 'absent';
+
+interface AttMark {
+  status: AttStatus;
+  excused: boolean;
+}
 
 interface SessionWorkspaceProps {
   classSessionId: string;
@@ -29,26 +41,87 @@ interface SessionWorkspaceProps {
   onBack: () => void;
 }
 
-export function SessionWorkspace({ classSessionId, batchId, batchCode, onBack }: SessionWorkspaceProps) {
+export function SessionWorkspace({
+  classSessionId,
+  batchId,
+  batchCode,
+  onBack,
+}: SessionWorkspaceProps) {
   const [session, setSession] = useState<SessionRow | null>(null);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [marks, setMarks] = useState<Record<string, AttMark>>({});
   const [loading, setLoading] = useState(true);
+  const [markingAll, setMarkingAll] = useState(false);
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
     setLoading(true);
-    trpc.schedule.listSessions
-      .query({ classBatchId: batchId })
-      .then((rows) => setSession(rows.find((s) => s.id === classSessionId) ?? null))
-      .catch((e) => notifyError(e, 'Không tải được thông tin buổi học'))
+    Promise.all([
+      trpc.schedule.listSessions.query({ classBatchId: batchId }),
+      trpc.enrollment.listByBatch.query({ classBatchId: batchId }),
+      trpc.attendance.listBySession.query({ classSessionId }),
+    ])
+      .then(([sessions, enrs, attRows]) => {
+        setSession(sessions.find((s) => s.id === classSessionId) ?? null);
+        setEnrollments(enrs);
+        const m: Record<string, AttMark> = {};
+        for (const r of attRows) {
+          m[r.enrollmentId] = { status: r.status as AttStatus, excused: r.excused };
+        }
+        setMarks(m);
+      })
+      .catch((e) => notifyError(e, 'Không tải được dữ liệu buổi học'))
       .finally(() => setLoading(false));
   }, [classSessionId, batchId]);
 
-  if (loading) {
-    return (
-      <Center py="xl">
-        <Loader size="sm" />
-      </Center>
-    );
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  async function markSingle(enrollmentId: string, status: AttStatus) {
+    const prev = marks[enrollmentId];
+    setMarks((m) => ({ ...m, [enrollmentId]: { status, excused: prev?.excused ?? false } }));
+    try {
+      await trpc.attendance.mark.mutate({
+        classSessionId,
+        enrollmentId,
+        status,
+        excused: false,
+      });
+    } catch (e) {
+      notifyError(e, 'Không lưu được điểm danh');
+      setMarks((m) => {
+        const next = { ...m };
+        if (prev === undefined) delete next[enrollmentId];
+        else next[enrollmentId] = prev;
+        return next;
+      });
+    }
   }
+
+  async function markAll() {
+    setMarkingAll(true);
+    try {
+      await trpc.attendance.markAll.mutate({
+        classSessionId,
+        defaultStatus: 'present',
+        overrides: [],
+      });
+      const m: Record<string, AttMark> = {};
+      for (const en of enrollments) m[en.id] = { status: 'present', excused: false };
+      setMarks(m);
+      notifySuccess('Đã điểm danh tất cả học sinh');
+    } catch (e) {
+      notifyError(e, 'Không điểm danh được');
+    } finally {
+      setMarkingAll(false);
+    }
+  }
+
+  // Count badges
+  const presentCount = enrollments.filter((e) => marks[e.id]?.status === 'present').length;
+  const lateCount = enrollments.filter((e) => marks[e.id]?.status === 'late').length;
+  const absentCount = enrollments.filter((e) => marks[e.id]?.status === 'absent').length;
+  const unmarkedCount = enrollments.filter((e) => !marks[e.id]).length;
 
   const sessionDate = session
     ? dayjs(session.sessionDate).format('DD/MM/YYYY')
@@ -56,134 +129,274 @@ export function SessionWorkspace({ classSessionId, batchId, batchCode, onBack }:
   const timeRange = session ? `${session.startTime} – ${session.endTime}` : '—';
 
   return (
-    <Stack gap={0} h="100%">
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', fontFamily: FONT }}>
       {/* Header */}
-      <Box p="md" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
-        <Group gap="sm">
-          <ActionIcon variant="subtle" onClick={onBack} aria-label="Quay lại">
-            <IconArrowLeft size={18} />
-          </ActionIcon>
-          <Title order={4}>
-            {batchCode ?? '—'}
-          </Title>
-          <Text c="dimmed" size="sm">
-            {sessionDate} · {timeRange}
-          </Text>
-          {session && (
-            <StatusBadge
-              status={session.status}
-              map={{
-                planned: { label: 'Sắp diễn ra', tone: 'draft' },
-                open: { label: 'Đang mở', tone: 'info' },
-                running: { label: 'Đang học', tone: 'active' },
-                closed: { label: 'Đã xong', tone: 'inactive' },
-                cancelled: { label: 'Đã hủy', tone: 'rejected' },
-              }}
-            />
-          )}
-        </Group>
-      </Box>
-
-      {/* 3-column content */}
-      <Grid gutter={0} style={{ flex: 1, overflow: 'hidden' }}>
-        {/* LEFT — Attendance roster (35%) */}
-        <Grid.Col
-          span={{ base: 12, md: 4 }}
-          style={{ borderRight: '1px solid var(--mantine-color-default-border)', overflowY: 'auto', height: '100%' }}
-          p="md"
+      <div
+        style={{
+          padding: '14px 24px',
+          borderBottom: `1px solid ${C.border}`,
+          background: C.surface,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 16,
+          flexWrap: 'wrap',
+        }}
+      >
+        <button
+          onClick={onBack}
+          style={{
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            padding: '6px 10px',
+            borderRadius: 8,
+            color: C.brand,
+            fontSize: 14,
+            fontWeight: 600,
+            fontFamily: FONT,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
         >
-          <Stack gap="xs" mb="sm">
-            <Group gap="xs">
-              <IconUser size={16} />
-              <Text fw={600} size="sm">
-                Điểm danh
-              </Text>
-            </Group>
-            <Button
-              size="xs"
-              variant="light"
-              color="green"
-              onClick={async () => {
-                try {
-                  await trpc.attendance.markAll.mutate({
-                    classSessionId,
-                    defaultStatus: 'present',
-                    overrides: [],
-                  });
-                } catch (e) {
-                  notifyError(e, 'Không điểm danh được');
-                }
+          ← Quay lại
+        </button>
+
+        <div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>
+          {batchCode ?? '—'}
+        </div>
+        <div style={{ fontSize: 13, color: C.muted }}>
+          {sessionDate} · {timeRange}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', flexWrap: 'wrap' }}>
+          <CountBadge label="Có mặt" count={presentCount} bg={C.successBg} color={C.success} />
+          <CountBadge label="Muộn" count={lateCount} bg={C.warningBg} color={C.warning} />
+          <CountBadge label="Vắng" count={absentCount} bg={C.dangerBg} color={C.danger} />
+          <CountBadge label="Chưa ghi" count={unmarkedCount} bg={C.bg} color={C.muted} />
+        </div>
+      </div>
+
+      {/* Cancelled banner */}
+      {!loading && session?.status === 'cancelled' && (
+        <div
+          style={{
+            background: '#FCE8E6',
+            color: '#C5221F',
+            padding: '10px 24px',
+            fontSize: 13,
+            fontWeight: 600,
+            fontFamily: FONT,
+            textAlign: 'center',
+          }}
+        >
+          Buổi học này đã bị hủy — không thể điểm danh
+        </div>
+      )}
+
+      {/* Body */}
+      {loading ? (
+        <Center style={{ flex: 1 }}>
+          <Loader size="sm" />
+        </Center>
+      ) : (
+        <div
+          style={{
+            flex: 1,
+            display: 'grid',
+            gridTemplateColumns: '1fr 380px',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Left: attendance roster */}
+          <div
+            style={{
+              borderRight: `1px solid ${C.border}`,
+              overflowY: 'auto',
+              padding: '20px 24px',
+            }}
+          >
+            {/* Bulk action */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 16,
               }}
             >
-              Điểm danh tất cả
-            </Button>
-          </Stack>
-          <Divider mb="sm" />
-          <AttendanceRoster
-            classSessionId={classSessionId}
-            batchId={batchId}
-            facilityId={session?.facilityId ?? 0}
-          />
-        </Grid.Col>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Điểm danh · {enrollments.length} học sinh
+              </div>
+              <Button
+                size="xs"
+                loading={markingAll}
+                disabled={session?.status === 'cancelled'}
+                onClick={markAll}
+                style={{ background: C.brand, color: '#fff', border: 'none', borderRadius: 8, fontFamily: FONT }}
+              >
+                Có mặt tất cả
+              </Button>
+            </div>
 
-        {/* CENTER — Session evidence (45%) */}
-        <Grid.Col
-          span={{ base: 12, md: 5 }}
-          style={{ borderRight: '1px solid var(--mantine-color-default-border)', overflowY: 'auto', height: '100%' }}
-          p="md"
-        >
-          <Text fw={600} size="sm" mb="sm">
-            Nhật ký buổi học
-          </Text>
-          <SessionEvidencePanel
-            classSessionId={classSessionId}
-            enabled={session?.status !== 'cancelled'}
-          />
-        </Grid.Col>
+            {enrollments.length === 0 ? (
+              <div style={{ textAlign: 'center', color: C.muted, fontSize: 14, padding: 24 }}>
+                Chưa có học sinh trong lớp
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {enrollments.map((enr) => {
+                  const mark = marks[enr.id];
+                  return (
+                    <StudentRow
+                      key={enr.id}
+                      name={enr.student.fullName}
+                      current={mark?.status ?? null}
+                      disabled={session?.status === 'cancelled'}
+                      onMark={(status) => markSingle(enr.id, status)}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
-        {/* RIGHT — Session info (20%) */}
-        <Grid.Col
-          span={{ base: 12, md: 3 }}
-          style={{ overflowY: 'auto', height: '100%' }}
-          p="md"
-        >
-          <Card withBorder radius="md" p="sm">
-            <Stack gap="xs">
-              <Text fw={600} size="sm">
-                Thông tin buổi học
-              </Text>
-              <Divider />
-              <Group justify="space-between">
-                <Text size="xs" c="dimmed">Ngày</Text>
-                <Text size="xs">{sessionDate}</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text size="xs" c="dimmed">Giờ</Text>
-                <Text size="xs">{timeRange}</Text>
-              </Group>
-              {session?.roomId && (
-                <Group justify="space-between">
-                  <Text size="xs" c="dimmed">Phòng</Text>
-                  <Text size="xs">{session.roomId}</Text>
-                </Group>
-              )}
-              {session?.curriculumUnitId && (
-                <Group justify="space-between" wrap="nowrap" align="flex-start">
-                  <Text size="xs" c="dimmed">Bài học</Text>
-                  <Text size="xs" ta="right" style={{ maxWidth: '60%' }} truncate>
-                    {session.curriculumUnitId.slice(0, 8)}…
-                  </Text>
-                </Group>
-              )}
-              {session?.status === 'cancelled' && (
-                <Badge color="red" variant="light" size="sm">
-                  Buổi học đã hủy
-                </Badge>
-              )}
-            </Stack>
-          </Card>
-        </Grid.Col>
-      </Grid>
-    </Stack>
+          {/* Right: session evidence */}
+          <div style={{ overflowY: 'auto', padding: '20px 24px' }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: C.muted,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                marginBottom: 14,
+              }}
+            >
+              Nhật ký buổi học
+            </div>
+            <SessionEvidencePanel
+              classSessionId={classSessionId}
+              enabled={session?.status !== 'cancelled'}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function CountBadge({
+  label,
+  count,
+  bg,
+  color,
+}: {
+  label: string;
+  count: number;
+  bg: string;
+  color: string;
+}) {
+  return (
+    <div
+      style={{
+        padding: '4px 10px',
+        borderRadius: 20,
+        background: bg,
+        color,
+        fontSize: 12,
+        fontWeight: 600,
+        display: 'flex',
+        gap: 5,
+        alignItems: 'center',
+      }}
+    >
+      <span style={{ fontSize: 14, fontWeight: 700 }}>{count}</span>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function StudentRow({
+  name,
+  current,
+  disabled,
+  onMark,
+}: {
+  name: string;
+  current: AttStatus | null;
+  disabled?: boolean;
+  onMark: (s: AttStatus) => void;
+}) {
+  const buttons: { status: AttStatus; label: string; bg: string; color: string; activeBg: string; activeColor: string }[] = [
+    { status: 'present', label: 'Có mặt', bg: C.bg, color: C.muted, activeBg: C.successBg, activeColor: C.success },
+    { status: 'late', label: 'Muộn', bg: C.bg, color: C.muted, activeBg: C.warningBg, activeColor: C.warning },
+    { status: 'absent', label: 'Vắng', bg: C.bg, color: C.muted, activeBg: C.dangerBg, activeColor: C.danger },
+  ];
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '10px 12px',
+        borderRadius: 10,
+        gap: 12,
+      }}
+    >
+      {/* Initials avatar */}
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          background: C.brandMuted,
+          color: C.brand,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 12,
+          fontWeight: 700,
+          flexShrink: 0,
+        }}
+      >
+        {name.charAt(0).toUpperCase()}
+      </div>
+
+      <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 500, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {name}
+      </div>
+
+      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+        {buttons.map((btn) => {
+          const active = current === btn.status;
+          return (
+            <button
+              key={btn.status}
+              onClick={() => !disabled && onMark(btn.status)}
+              disabled={disabled}
+              style={{
+                padding: '5px 10px',
+                borderRadius: 7,
+                border: active ? `1.5px solid ${btn.activeColor}` : `1px solid ${C.border}`,
+                background: active ? btn.activeBg : C.surface,
+                color: active ? btn.activeColor : C.muted,
+                fontSize: 12,
+                fontWeight: active ? 700 : 500,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                opacity: disabled ? 0.4 : 1,
+                fontFamily: FONT,
+                transition: 'all 0.1s',
+              }}
+            >
+              {btn.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
