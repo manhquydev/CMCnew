@@ -89,7 +89,12 @@ export function SessionWorkspace({
       });
     } catch (e) {
       notifyError(e, 'Không lưu được điểm danh');
-      setMarks((m) => ({ ...m, [enrollmentId]: prev ?? { status: 'absent', excused: false } }));
+      setMarks((m) => {
+        const next = { ...m };
+        if (prev === undefined) delete next[enrollmentId];
+        else next[enrollmentId] = prev;
+        return next;
+      });
     }
   }
 
@@ -172,6 +177,23 @@ export function SessionWorkspace({
         </div>
       </div>
 
+      {/* Cancelled banner */}
+      {!loading && session?.status === 'cancelled' && (
+        <div
+          style={{
+            background: '#FCE8E6',
+            color: '#C5221F',
+            padding: '10px 24px',
+            fontSize: 13,
+            fontWeight: 600,
+            fontFamily: FONT,
+            textAlign: 'center',
+          }}
+        >
+          Buổi học này đã bị hủy — không thể điểm danh
+        </div>
+      )}
+
       {/* Body */}
       {loading ? (
         <Center style={{ flex: 1 }}>
@@ -209,6 +231,7 @@ export function SessionWorkspace({
               <Button
                 size="xs"
                 loading={markingAll}
+                disabled={session?.status === 'cancelled'}
                 onClick={markAll}
                 style={{ background: C.brand, color: '#fff', border: 'none', borderRadius: 8, fontFamily: FONT }}
               >
@@ -229,6 +252,7 @@ export function SessionWorkspace({
                       key={enr.id}
                       name={enr.student.fullName}
                       current={mark?.status ?? null}
+                      disabled={session?.status === 'cancelled'}
                       onMark={(status) => markSingle(enr.id, status)}
                     />
                   );
@@ -298,10 +322,12 @@ function CountBadge({
 function StudentRow({
   name,
   current,
+  disabled,
   onMark,
 }: {
   name: string;
   current: AttStatus | null;
+  disabled?: boolean;
   onMark: (s: AttStatus) => void;
 }) {
   const buttons: { status: AttStatus; label: string; bg: string; color: string; activeBg: string; activeColor: string }[] = [
@@ -350,7 +376,8 @@ function StudentRow({
           return (
             <button
               key={btn.status}
-              onClick={() => onMark(btn.status)}
+              onClick={() => !disabled && onMark(btn.status)}
+              disabled={disabled}
               style={{
                 padding: '5px 10px',
                 borderRadius: 7,
@@ -359,7 +386,8 @@ function StudentRow({
                 color: active ? btn.activeColor : C.muted,
                 fontSize: 12,
                 fontWeight: active ? 700 : 500,
-                cursor: 'pointer',
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                opacity: disabled ? 0.4 : 1,
                 fontFamily: FONT,
                 transition: 'all 0.1s',
               }}

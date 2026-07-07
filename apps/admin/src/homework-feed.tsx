@@ -90,6 +90,7 @@ export function HomeworkFeed({ batchId: propBatchId, facilityId: propFacilityId,
   // Load exercises + all submissions when batch is selected
   useEffect(() => {
     if (!activeBatchId) return;
+    let cancelled = false;
     setExercises([]);
     setSubmissionMap({});
     setSelected(null);
@@ -97,18 +98,23 @@ export function HomeworkFeed({ batchId: propBatchId, facilityId: propFacilityId,
     trpc.exercise.listByClass
       .query({ classBatchId: activeBatchId })
       .then((exs) => {
+        if (cancelled) return;
         setExercises(exs);
         exs.forEach((ex) => {
           setLoadingSubmissions((p) => ({ ...p, [ex.id]: true }));
           trpc.submission.listByExercise
             .query({ exerciseId: ex.id })
-            .then((rows) => setSubmissionMap((p) => ({ ...p, [ex.id]: rows })))
-            .catch((e) => notifyError(e, 'Không tải được bài nộp'))
-            .finally(() => setLoadingSubmissions((p) => ({ ...p, [ex.id]: false })));
+            .then((rows) => {
+              if (cancelled) return;
+              setSubmissionMap((p) => ({ ...p, [ex.id]: rows }));
+            })
+            .catch((e) => { if (!cancelled) notifyError(e, 'Không tải được bài nộp'); })
+            .finally(() => { if (!cancelled) setLoadingSubmissions((p) => ({ ...p, [ex.id]: false })); });
         });
       })
-      .catch((e) => notifyError(e, 'Không tải được bài tập'))
-      .finally(() => setLoadingExercises(false));
+      .catch((e) => { if (!cancelled) notifyError(e, 'Không tải được bài tập'); })
+      .finally(() => { if (!cancelled) setLoadingExercises(false); });
+    return () => { cancelled = true; };
   }, [activeBatchId]);
 
   function selectSubmission(exercise: Exercise, sub: Submission) {

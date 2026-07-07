@@ -130,9 +130,10 @@ export function TeacherTodayPanel({
           onClick={onNavigateToSchedule}
         />
         <StatCard
-          title="Học sinh điểm danh"
-          value={loading ? '—' : activeSessions.length > 0 ? '...' : '0'}
-          sub={`${activeSessions.length} lớp hôm nay`}
+          title="Buổi tiếp theo"
+          value={loading ? '—' : nearestSession ? nearestSession.startTime : '—'}
+          sub={nearestSession ? nearestSession.batch.code : 'không có lớp nào'}
+          accent={C.brand}
           onClick={
             nearestSession
               ? () =>
@@ -146,15 +147,15 @@ export function TeacherTodayPanel({
         />
         <StatCard
           title="Bài chờ chấm"
-          value="..."
-          sub="+ sao khi chấm"
+          value="—"
+          sub="chưa có dữ liệu"
           accent={C.amber}
           onClick={onNavigateToGrading}
         />
         <StatCard
           title="Nhận xét chờ chốt"
-          value="..."
-          sub="xem danh sách"
+          value="—"
+          sub="chưa có dữ liệu"
           accent={C.muted}
         />
       </div>
