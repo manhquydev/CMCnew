@@ -13,11 +13,11 @@ try {
   const title = await page.title();
   const bodyText = await page.locator('body').innerText({ timeout: 10_000 });
 
-  if (!title.includes('CMC Teacher')) {
-    throw new Error(`Expected rendered title to include "CMC Teacher", got "${title}"`);
+  if (!title.includes('CMC Teacher Lite')) {
+    throw new Error(`Expected rendered title to include "CMC Teacher Lite", got "${title}"`);
   }
-  if (!bodyText.includes('CMC Teacher')) {
-    throw new Error('Expected rendered body to include "CMC Teacher"');
+  if (!bodyText.includes('CMC Teacher Lite')) {
+    throw new Error('Expected rendered body to include "CMC Teacher Lite"');
   }
   if (bodyText.includes('CMC Staff Portal')) {
     throw new Error('Teacher surface still renders the generic staff/ERP login portal');
@@ -26,7 +26,7 @@ try {
   console.log(JSON.stringify({
     url: origin,
     title,
-    hasTeacherBrand: bodyText.includes('CMC Teacher'),
+    hasTeacherBrand: bodyText.includes('CMC Teacher Lite'),
     status: 'pass',
   }, null, 2));
 } finally {

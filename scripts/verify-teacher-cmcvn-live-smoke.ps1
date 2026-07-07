@@ -135,8 +135,8 @@ $rootIdentity = @(
   Assert-RootIdentity 'https://erp.cmcvn.edu.vn' 'CMC ERP'
   Assert-RootIdentity 'https://hoc.cmcvn.edu.vn' 'CMC EDU'
 )
-$teacherBundle = Assert-RootAssetMarker 'https://teacher.cmcvn.edu.vn' 'CMC Teacher'
-$teacherIntakeRouteBundle = Assert-RootAssetMarker 'https://teacher.cmcvn.edu.vn' 'family-intake'
+$teacherBundle = Assert-RootAssetMarker 'https://teacher.cmcvn.edu.vn' 'CMC Teacher Lite'
+$teacherIntakeRouteBundle = Assert-RootAssetMarker 'https://teacher.cmcvn.edu.vn' 'Tạo học viên LMS'
 Assert-RenderedTeacherSurface
 
 $erpSso = Assert-SsoStart 'https://erp.cmcvn.edu.vn' 'https://erp.cmcvn.edu.vn/api/auth/sso/callback'

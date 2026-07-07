@@ -1,0 +1,28 @@
+import { router, requirePermission } from '../trpc.js';
+import {
+  createTeacherLiteDirectProvisioningInput,
+  createTeacherLiteFamilyStudentAndEnroll,
+} from '../services/teacher-lite-direct-provisioning.js';
+import {
+  cancelTeacherLiteClass,
+  cancelTeacherLiteClassInput,
+  cancelTeacherLiteSession,
+  cancelTeacherLiteSessionInput,
+  createTeacherLiteClass,
+  createTeacherLiteClassInput,
+} from '../services/teacher-lite-class-workflows.js';
+
+export const teacherLiteRouter = router({
+  createFamilyStudentAndEnroll: requirePermission('teacherLite', 'createFamilyStudentAndEnroll')
+    .input(createTeacherLiteDirectProvisioningInput)
+    .mutation(({ ctx, input }) => createTeacherLiteFamilyStudentAndEnroll(ctx.session, input)),
+  createClass: requirePermission('teacherLite', 'createClass')
+    .input(createTeacherLiteClassInput)
+    .mutation(({ ctx, input }) => createTeacherLiteClass(ctx.session, input)),
+  cancelClass: requirePermission('teacherLite', 'cancelClass')
+    .input(cancelTeacherLiteClassInput)
+    .mutation(({ ctx, input }) => cancelTeacherLiteClass(ctx.session, input)),
+  cancelSession: requirePermission('teacherLite', 'cancelSession')
+    .input(cancelTeacherLiteSessionInput)
+    .mutation(({ ctx, input }) => cancelTeacherLiteSession(ctx.session, input)),
+});

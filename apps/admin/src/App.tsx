@@ -48,6 +48,7 @@ import { CompensationConfigPanel } from './compensation-panel';
 import { PayrollPanel } from './payroll-panel';
 import { KpiEvaluationPanel } from './kpi-evaluation-panel';
 import { FamilyIntakePanel, FinancePanel } from './finance-panel';
+import { TeacherLiteIntakePanel } from './teacher-lite-intake-panel';
 import { EmailOutboxPanel } from './email-outbox-panel';
 import { RevenueReportPanel } from './revenue-report';
 import { AttendanceReportPanel } from './attendance-report-panel';
@@ -849,9 +850,9 @@ function Dashboard() {
         return (
           <Stack>
             <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">
-              Tiếp nhận phụ huynh + học sinh
+              Tạo học viên LMS
             </Text>
-            <FamilyIntakePanel />
+            {surface === 'teacher' ? <TeacherLiteIntakePanel /> : <FamilyIntakePanel />}
           </Stack>
         );
 

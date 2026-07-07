@@ -81,9 +81,9 @@ export const NAV_GATES: Record<SectionKey, NavGate> = {
 
   // finance: finance.receiptList = [ke_toan, giam_doc_kinh_doanh]
   finance:      { kind: 'permission', module: 'finance', action: 'receiptList' },
-  // family-intake is the teacher-domain one-form parent+student draft handoff. It deliberately
-  // uses receiptCreate underneath so MVP keeps the accepted provisioning/approval invariant.
-  'family-intake': { kind: 'permission', module: 'finance', action: 'receiptCreate' },
+  // family-intake is the teacher-domain direct LMS setup flow. It bypasses receipt/finance/CRM
+  // and calls teacherLite.createFamilyStudentAndEnroll.
+  'family-intake': { kind: 'permission', module: 'teacherLite', action: 'createFamilyStudentAndEnroll' },
 
   // email-outbox: email.outboxList = [giam_doc_kinh_doanh] only (v1, YAGNI)
   'email-outbox': { kind: 'permission', module: 'email', action: 'outboxList' },

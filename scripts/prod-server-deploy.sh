@@ -23,6 +23,10 @@ DB_APP_PASSWORD="$(val DB_APP_PASSWORD)"
 # docs/decisions/0029-canonical-origin-tls-self-signed-behind-cloudflare.md.
 bash scripts/ensure-origin-cert.sh
 
+# Blob stores are bind-mounted into the non-root API container. If Docker creates
+# the host dirs as root:root, uploads fail with EACCES even though the API is healthy.
+CMC_BLOB_ROOT=/root/cmcnew/.data bash scripts/ensure-blob-store-dirs.sh
+
 # The prod nginx joins the shared cmcnew-edge network (to reach the cmcnew-dev app tier).
 # It is declared `external` in the compose file, so it must exist before `up` or compose aborts.
 # Idempotent + `|| true` because this script runs under `set -e` and re-runs on every deploy.

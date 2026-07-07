@@ -489,6 +489,16 @@ model BatchCodeCounter {
   @@map("batch_code_counter")
 }
 
+/// Bộ đếm sinh mã học sinh trực tiếp theo (cơ sở, năm), dùng cho Teacher Lite khi không có phiếu thu.
+model StudentCodeCounter {
+  facilityId Int @map("facility_id")
+  year       Int
+  lastSeq    Int @default(0) @map("last_seq")
+
+  @@id([facilityId, year])
+  @@map("student_code_counter")
+}
+
 // ── Audit / Chatter (Odoo-style) — cross-cutting timeline on every record ──
 
 /// Một dòng timeline cho một record bất kỳ (thay đổi field/trạng thái hoặc ghi chú).

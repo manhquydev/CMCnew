@@ -70,6 +70,11 @@ docker compose -f docker/docker-compose.prod.yml --env-file .env.production run 
 docker compose -f docker/docker-compose.prod.yml --env-file .env.production up -d --build
 ```
 
+Trước khi start API, chạy `CMC_BLOB_ROOT=/root/cmcnew/.data bash scripts/ensure-blob-store-dirs.sh`
+hoặc dùng `scripts/prod-server-deploy.sh`/Jenkins. Script này tạo và `chown` `.data/pdf` +
+`.data/session-photos` cho user API trong container; nếu thiếu bước này, upload PDF/ảnh có thể
+trả 500 `EACCES` dù API health vẫn xanh.
+
 **Resource limits:** tất cả 9 service đã cấu hình limit trong `docker-compose.prod.tls.yml` (postgres/api: 1GiB/0.75cpu, redis: 256MiB/0.25cpu, nginx/admin/lms/certbot: 128MiB/0.25cpu, api-migrate/api-seed: 768MiB/0.5cpu). Cài đặt cho VPS 2vCPU/7.8GiB với Jenkins reservation 3GiB/1.5cpu.
 
 ## 3. TLS / HTTPS (BẮT BUỘC trước khi mở cho người dùng)

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { can } from '@cmc/auth/permissions';
 import { uploadExercisePdf, trpc, useSession, notifyError, notifySuccess, StatusBadge, type StatusDef } from '@cmc/ui';
 import {
@@ -56,7 +56,7 @@ export function CourseExerciseManager({ course }: { course: Course }) {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<{ unit: CurriculumUnit; lesson: CurriculumLesson; type: ExerciseType; current?: Exercise } | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const preview = await trpc.curriculum.listByCourse.query({ courseId: course.id });
@@ -77,11 +77,11 @@ export function CourseExerciseManager({ course }: { course: Course }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [course.id]);
 
   useEffect(() => {
     load();
-  }, [course.id]);
+  }, [load]);
 
   const rows = useMemo(
     () => units.flatMap((unit) => unit.lessons.map((lesson) => ({

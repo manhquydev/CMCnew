@@ -57,6 +57,9 @@ pipeline {
           # Ensure an origin cert exists (self-signed for CF Full) so nginx can start —
           # self-heals a fresh volume, fails loud on a corrupt/invalid one.
           bash scripts/ensure-origin-cert.sh
+          # Ensure host bind-mount blob dirs are writable by the non-root API container user.
+          # Without this, Docker-created root:root dirs make PDF/photo uploads fail with EACCES.
+          CMC_BLOB_ROOT=/root/cmcnew/.data bash scripts/ensure-blob-store-dirs.sh
           # The prod nginx joins the shared cmcnew-edge network (declared `external` in the compose
           # file) to reach the dev app tier. Create it before `up` or compose aborts; idempotent,
           # and `|| true` because this shell runs with -e and the network persists between deploys.
@@ -131,7 +134,7 @@ pipeline {
           RESP="$(curl -fsS https://erp.cmcvn.edu.vn/api/health)"; echo "$RESP" | grep -q '"ok":true'
           echo "$RESP" | grep -Fq "${GIT_COMMIT:-unknown}"
           assert_title_marker https://erp.cmcvn.edu.vn/ 'CMC ERP'
-          assert_bundle_marker https://teacher.cmcvn.edu.vn/ 'CMC Teacher'
+          assert_bundle_marker https://teacher.cmcvn.edu.vn/ 'CMC Teacher Lite'
           TEACHER_RESP="$(curl -fsS https://teacher.cmcvn.edu.vn/api/health)"; echo "$TEACHER_RESP" | grep -q '"ok":true'
           echo "$TEACHER_RESP" | grep -Fq "${GIT_COMMIT:-unknown}"
           assert_title_marker https://hoc.cmcvn.edu.vn/ 'CMC EDU'
@@ -254,8 +257,8 @@ pipeline {
           LMS_RESP="$(curl -fsS https://devlms.cmcvn.edu.vn/api/health)"; echo "$LMS_RESP" | grep -q '"ok":true'
           echo "$LMS_RESP" | grep -Fq "${GIT_COMMIT:-unknown}"
           assert_title_marker https://deverp.cmcvn.edu.vn/ 'CMC ERP'
-          assert_bundle_marker https://devteacher.cmcvn.edu.vn/ 'CMC Teacher'
-          assert_bundle_marker https://devteacher.cmcvn.edu.vn/ 'family-intake'
+          assert_bundle_marker https://devteacher.cmcvn.edu.vn/ 'CMC Teacher Lite'
+          assert_bundle_marker https://devteacher.cmcvn.edu.vn/ 'Tạo học viên LMS'
           assert_title_marker https://devlms.cmcvn.edu.vn/ 'CMC EDU'
           assert_cors_origin https://devteacher.cmcvn.edu.vn
           assert_sso_redirect https://devteacher.cmcvn.edu.vn https://devteacher.cmcvn.edu.vn/api/auth/sso/callback

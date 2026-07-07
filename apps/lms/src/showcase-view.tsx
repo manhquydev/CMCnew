@@ -65,13 +65,32 @@ function Medal3SVG({ size = 28 }: { size?: number }) {
   );
 }
 
+type ClimbNode = {
+  id: string;
+  step: number;
+  title: string;
+  state: 'done' | 'current' | 'upcoming';
+  reward: number;
+  starsEarned?: number;
+  program: 'BLACK_HOLE' | 'BRIGHT_IG' | 'UCREA';
+};
+
+type GiftItem = {
+  id: string;
+  name: string;
+  stars: number;
+  img: string;
+  stock: number;
+  desc: string;
+};
+
 export function ShowcaseView() {
   const [role, setRole] = useState<'student' | 'parent'>('student');
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [mobileOpened, setMobileOpened] = useState(false);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [modalOpened, setModalOpened] = useState(false);
-  const [selectedCloud, setSelectedCloud] = useState<any>(null);
+  const [selectedCloud, setSelectedCloud] = useState<ClimbNode | null>(null);
   const [stars, setStars] = useState(320);
 
   // Mock data for student
@@ -83,7 +102,7 @@ export function ShowcaseView() {
     levelName: 'BRIGHT I.G · Trí tuệ',
   };
 
-  const climbNodes = [
+  const climbNodes: ClimbNode[] = [
     { id: '1', step: 1, title: 'Làm quen với số học', state: 'done', reward: 10, starsEarned: 3, program: 'BLACK_HOLE' },
     { id: '2', step: 2, title: 'Hình học quanh ta', state: 'done', reward: 15, starsEarned: 3, program: 'BLACK_HOLE' },
     { id: '3', step: 3, title: 'Phép cộng thần kỳ', state: 'done', reward: 10, starsEarned: 2, program: 'BLACK_HOLE' },
@@ -100,7 +119,7 @@ export function ShowcaseView() {
     { rank: 5, name: 'Phạm Đức Anh', stars: 290, avatar: 'DA', color: 'teal' },
   ];
 
-  const giftItems = [
+  const giftItems: GiftItem[] = [
     { id: 'g1', name: 'Bộ lắp ráp LEGO Creative', stars: 150, img: '🧩', stock: 5, desc: 'Kích thích tư duy logic và sáng tạo không giới hạn.' },
     { id: 'g2', name: 'Bình nước CMC năng động', stars: 80, img: '🥤', stock: 12, desc: 'Bình giữ nhiệt chất liệu an toàn, đồng hành cùng con mỗi ngày.' },
     { id: 'g3', name: 'Balo rút học viên siêu chất', stars: 100, img: '🎒', stock: 8, desc: 'Tiện lợi, nhẹ nhàng và thời trang dành riêng cho CMCers.' },
@@ -120,12 +139,12 @@ export function ShowcaseView() {
     { date: '24/06/2026', topic: 'Ứng dụng hình học cơ bản', attendance: 'Hiện diện', score: '10/10', comment: 'Xuất sắc! Con liên kết hình ảnh thực tế rất nhanh nhạy.' },
   ];
 
-  const handleCloudClick = (node: any) => {
+  const handleCloudClick = (node: ClimbNode) => {
     setSelectedCloud(node);
     setModalOpened(true);
   };
 
-  const handleRedeem = (gift: any) => {
+  const handleRedeem = (gift: GiftItem) => {
     if (stars >= gift.stars) {
       setStars(prev => prev - gift.stars);
       notifySuccess(`Đổi quà "${gift.name}" thành công! Hệ thống sẽ gửi thông báo duyệt đến phụ huynh.`, 'Đổi quà thành công');

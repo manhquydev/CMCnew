@@ -38,6 +38,7 @@ import { checkInOutRouter } from './check-in-out.js';
 import { facilityNetworkRouter } from './facility-ip.js';
 import { emailRouter } from './email.js';
 import { searchRouter } from './search.js';
+import { teacherLiteRouter } from './teacher-lite.js';
 
 export const appRouter = router({
   health: publicProcedure.query(() => ({ ok: true, ts: new Date().toISOString() })),
@@ -80,6 +81,7 @@ export const appRouter = router({
   facilityNetwork: facilityNetworkRouter,
   email: emailRouter,
   search: searchRouter,
+  teacherLite: teacherLiteRouter,
 });
 
 export type AppRouter = typeof appRouter;

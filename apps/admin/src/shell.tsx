@@ -604,10 +604,10 @@ export function Shell({
         {surface === 'teacher' && (
           <Box px="xs" py={8}>
             <Text size="xs" fw={700} tt="uppercase" c="dimmed">
-              Teacher Console
+              Teacher Lite
             </Text>
             <Text size="xs" c="dimmed">
-              Lịch dạy, lớp học, nhận xét LMS
+              Lớp học, học liệu, LMS
             </Text>
           </Box>
         )}
@@ -822,7 +822,7 @@ export function buildNavGroups({
     'student-mgmt': 'Học viên',
     students: 'Học viên',
     guardians: 'Phụ huynh',
-    'family-intake': 'Tiếp nhận phụ huynh + học sinh',
+    'family-intake': 'Tạo học viên LMS',
     'edu-director-cockpit': 'Điều phối đào tạo',
     'biz-director-cockpit': 'Bàn giao tuyển sinh',
   };
@@ -875,7 +875,7 @@ export const SECTION_TITLES: Record<SectionKey, string> = {
   org: 'Cơ sở & Người dùng',
   guardians: 'Phụ huynh',
   finance: 'Tài chính',
-  'family-intake': 'Tiếp nhận phụ huynh + học sinh',
+  'family-intake': 'Tạo học viên LMS',
   'email-outbox': 'Hộp thư gửi đi',
   'revenue-report': 'Báo cáo doanh thu',
   'reconcile-worklist': 'Đối soát theo kỳ',
