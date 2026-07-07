@@ -66,6 +66,7 @@ import { AttendancePanel } from './attendance-panel';
 import { TeacherTodayPanel } from './teacher-today-panel';
 import { SessionWorkspace } from './session-workspace';
 import { HomeworkFeed } from './homework-feed';
+import { TeacherSchedule } from './teacher-schedule';
 
 import { SchedulePanel } from './schedule-panel';
 import { MeetingsPanel } from './meetings-panel';
@@ -795,6 +796,11 @@ function Dashboard() {
 
       // ── Academic / Teaching ───────────────────────────────────────────────
       case 'schedule':
+        // Teacher surface: unified calendar + session detail (push-navigation)
+        if (surface === 'teacher') {
+          return <TeacherSchedule />;
+        }
+        // ERP surface: existing schedule panel unchanged
         return (
           <Stack>
             <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Lịch dạy</Text>

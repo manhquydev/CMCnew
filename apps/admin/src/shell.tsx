@@ -817,7 +817,7 @@ export function buildNavGroups({
 
   const teacherSurfaceLabels: Partial<Record<SectionKey, string>> = {
     overview: 'Hôm nay',
-    schedule: 'Lịch dạy hôm nay',
+    schedule: 'Lịch dạy',
     classes: 'Lớp & học liệu',
     courses: 'Học liệu',
     'student-mgmt': 'Học viên',
