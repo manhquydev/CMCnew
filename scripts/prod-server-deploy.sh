@@ -10,6 +10,7 @@ cd /root/cmcnew
 [ -f prodenv.txt ] && { mv -f prodenv.txt .env.production; chmod 600 .env.production; }
 ENVF=.env.production
 [ -f "$ENVF" ] || { echo "FATAL: $ENVF missing" >&2; exit 1; }
+export CMC_BLOB_ROOT="${CMC_BLOB_ROOT:-/root/cmcnew/.data}"
 COMPOSE="docker compose -f docker/docker-compose.prod.tls.yml --env-file $ENVF"
 
 val() { grep -m1 "^$1=" "$ENVF" | cut -d= -f2-; }
@@ -25,7 +26,7 @@ bash scripts/ensure-origin-cert.sh
 
 # Blob stores are bind-mounted into the non-root API container. If Docker creates
 # the host dirs as root:root, uploads fail with EACCES even though the API is healthy.
-CMC_BLOB_ROOT=/root/cmcnew/.data bash scripts/ensure-blob-store-dirs.sh
+bash scripts/ensure-blob-store-dirs.sh
 
 # The prod nginx joins the shared cmcnew-edge network (to reach the cmcnew-dev app tier).
 # It is declared `external` in the compose file, so it must exist before `up` or compose aborts.

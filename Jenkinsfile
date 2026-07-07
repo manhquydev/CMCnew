@@ -12,6 +12,7 @@ pipeline {
     timeout(time: 30, unit: 'MINUTES')
   }
   environment {
+    CMC_BLOB_ROOT = '/root/cmcnew/.data'
     COMPOSE  = 'env -u CORS_ORIGINS -u STAFF_APP_ORIGINS docker compose -f docker/docker-compose.prod.tls.yml --env-file /secrets/.env.production'
     NODE_IMG = 'node:22-alpine'
   }
@@ -59,7 +60,7 @@ pipeline {
           bash scripts/ensure-origin-cert.sh
           # Ensure host bind-mount blob dirs are writable by the non-root API container user.
           # Without this, Docker-created root:root dirs make PDF/photo uploads fail with EACCES.
-          CMC_BLOB_ROOT=/root/cmcnew/.data bash scripts/ensure-blob-store-dirs.sh
+          bash scripts/ensure-blob-store-dirs.sh
           # The prod nginx joins the shared cmcnew-edge network (declared `external` in the compose
           # file) to reach the dev app tier. Create it before `up` or compose aborts; idempotent,
           # and `|| true` because this shell runs with -e and the network persists between deploys.
