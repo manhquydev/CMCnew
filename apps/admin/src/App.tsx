@@ -63,6 +63,10 @@ import { TermsPanel } from './terms-panel';
 import { GradingPanel } from './grading';
 import { AssessmentPanel } from './assessment-panel';
 import { AttendancePanel } from './attendance-panel';
+import { TeacherTodayPanel } from './teacher-today-panel';
+import { SessionWorkspace } from './session-workspace';
+import { HomeworkFeed } from './homework-feed';
+import { GradingClassPicker } from './grading-class-picker';
 import { SchedulePanel } from './schedule-panel';
 import { MeetingsPanel } from './meetings-panel';
 import { LevelApprovalPanel } from './level-approval-panel';
@@ -619,6 +623,8 @@ function Dashboard() {
   // in a row still re-applies. classBatches search results reuse goToClass/navAction as-is.
   const [studentNav, setStudentNav] = useState<SearchNavAction | null>(null);
   const [staffNav, setStaffNav] = useState<SearchNavAction | null>(null);
+  const [todaySession, setTodaySession] = useState<{ sessionId: string; batchId: string; batchCode: string } | null>(null);
+  const [gradingBatchId, setGradingBatchId] = useState<string | null>(null);
 
   // Active section is derived from the URL (single source of truth). A CRM record route
   // forces the crm section; a bare/unknown path falls back to the persona default.
@@ -684,6 +690,8 @@ function Dashboard() {
     setSelectedSession(null);
     setStudentNav(null);
     setStaffNav(null);
+    setTodaySession(null);
+    setGradingBatchId(null);
     navigate('/' + key);
   }
 
@@ -714,6 +722,19 @@ function Dashboard() {
     switch (activeSection) {
       // ── Admin / Settings ──────────────────────────────────────────────────
       case 'overview':
+        if (surface === 'teacher') {
+          if (todaySession) {
+            return (
+              <SessionWorkspace
+                classSessionId={todaySession.sessionId}
+                batchId={todaySession.batchId}
+                batchCode={todaySession.batchCode}
+                onBack={() => setTodaySession(null)}
+              />
+            );
+          }
+          return <TeacherTodayPanel onSelectSession={(sessionId, batchId, batchCode) => setTodaySession({ sessionId, batchId, batchCode })} />;
+        }
         return <OverviewPanel />;
 
       // Executive Cockpit (Phase 3): giam_doc_kinh_doanh-only landing — summary widget +
@@ -790,6 +811,12 @@ function Dashboard() {
         );
 
       case 'grading':
+        if (surface === 'teacher') {
+          if (gradingBatchId) {
+            return <HomeworkFeed batchId={gradingBatchId} onBack={() => setGradingBatchId(null)} />;
+          }
+          return <GradingClassPicker onSelectBatch={setGradingBatchId} facilityId={me.facilityIds[0] ?? null} />;
+        }
         return (
           <Stack>
             <Text size="xl" fw={600} style={{ color: 'var(--cmc-text)' }} mb="xs">Chấm bài</Text>

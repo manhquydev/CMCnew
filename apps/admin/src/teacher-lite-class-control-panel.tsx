@@ -1,19 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { can } from '@cmc/auth/permissions';
 import {
+  Badge,
+  Box,
   Button,
   Card,
+  Chip,
   Divider,
   Group,
   NumberInput,
   Select,
   Stack,
+  Stepper,
   Text,
   TextInput,
   Title,
 } from '@mantine/core';
 import { DateInput } from '@mantine/dates';
-import { IconRefresh } from '@tabler/icons-react';
+import { IconCalendar, IconPlus, IconX } from '@tabler/icons-react';
 import { notifyError, notifySuccess, parseApiDate, toApiDate, trpc, useSession } from '@cmc/ui';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
@@ -22,13 +26,13 @@ type ClassBatch = Awaited<ReturnType<typeof trpc.classBatch.list.query>>[number]
 type ClassSession = Awaited<ReturnType<typeof trpc.schedule.listSessions.query>>[number];
 
 const DAYS = [
-  { value: '1', label: 'Thứ 2' },
-  { value: '2', label: 'Thứ 3' },
-  { value: '3', label: 'Thứ 4' },
-  { value: '4', label: 'Thứ 5' },
-  { value: '5', label: 'Thứ 6' },
-  { value: '6', label: 'Thứ 7' },
-  { value: '0', label: 'Chủ nhật' },
+  { value: '1', label: 'T2' },
+  { value: '2', label: 'T3' },
+  { value: '3', label: 'T4' },
+  { value: '4', label: 'T5' },
+  { value: '5', label: 'T6' },
+  { value: '6', label: 'T7' },
+  { value: '0', label: 'CN' },
 ];
 
 function sessionLabel(session: ClassSession) {
@@ -36,27 +40,47 @@ function sessionLabel(session: ClassSession) {
   return `${date} ${session.startTime}-${session.endTime} (${session.status})`;
 }
 
+function estimateSessionCount(startDate: string, endDate: string, dayOfWeek: string): number {
+  if (!startDate || !endDate) return 0;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (start >= end) return 0;
+  const targetDay = Number(dayOfWeek);
+  let count = 0;
+  const cur = new Date(start);
+  while (cur <= end) {
+    if (cur.getDay() === targetDay) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
 export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => void }) {
   const { me } = useSession();
   const canManage = can(me.roles, me.isSuperAdmin, 'teacherLite', 'createClass');
+
+  const [step, setStep] = useState(0);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [batches, setBatches] = useState<ClassBatch[]>([]);
   const [sessions, setSessions] = useState<ClassSession[]>([]);
+
   const [facilityId, setFacilityId] = useState<number | null>(me.facilityIds[0] ?? null);
   const [courseId, setCourseId] = useState<string | null>(null);
+  const [capacity, setCapacity] = useState<number | ''>('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [capacity, setCapacity] = useState<number | ''>('');
   const [dayOfWeek, setDayOfWeek] = useState('1');
   const [startTime, setStartTime] = useState('18:00');
   const [endTime, setEndTime] = useState('19:30');
+
   const [cancelClassId, setCancelClassId] = useState<string | null>(null);
   const [cancelClassReason, setCancelClassReason] = useState('');
   const [sessionClassId, setSessionClassId] = useState<string | null>(null);
   const [cancelSessionId, setCancelSessionId] = useState<string | null>(null);
   const [cancelSessionReason, setCancelSessionReason] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
 
   const load = useCallback(() => {
     trpc.facility.list.query().then(setFacilities).catch((e) => notifyError(e, 'Không tải được cơ sở'));
@@ -67,39 +91,25 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
     trpc.classBatch.list.query().then(setBatches).catch((e) => notifyError(e, 'Không tải được lớp'));
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    if (!sessionClassId) {
-      setSessions([]);
-      setCancelSessionId(null);
-      return;
-    }
+    if (!sessionClassId) { setSessions([]); setCancelSessionId(null); return; }
     trpc.schedule.listSessions
       .query({ classBatchId: sessionClassId })
       .then((rows) => {
         setSessions(rows);
-        setCancelSessionId((current) => current ?? rows.find((s) => s.status !== 'cancelled')?.id ?? null);
+        setCancelSessionId((cur) => cur ?? rows.find((s) => s.status !== 'cancelled')?.id ?? null);
       })
       .catch((e) => notifyError(e, 'Không tải được buổi học'));
   }, [sessionClassId]);
 
   const filteredBatches = useMemo(
-    () => batches.filter((batch) => !facilityId || batch.facilityId === facilityId),
+    () => batches.filter((b) => !facilityId || b.facilityId === facilityId),
     [batches, facilityId],
   );
-  const activeBatches = filteredBatches.filter((batch) => batch.status !== 'cancelled');
-
-  async function refreshAll() {
-    load();
-    onChanged?.();
-    if (sessionClassId) {
-      const rows = await trpc.schedule.listSessions.query({ classBatchId: sessionClassId });
-      setSessions(rows);
-    }
-  }
+  const activeBatches = filteredBatches.filter((b) => b.status !== 'cancelled');
+  const estimatedSessions = estimateSessionCount(startDate, endDate, dayOfWeek);
 
   async function createClass() {
     if (!facilityId || !courseId || !startDate || !endDate || !startTime || !endTime) {
@@ -114,17 +124,15 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
         startDate,
         endDate,
         capacity: typeof capacity === 'number' ? capacity : undefined,
-        slot: {
-          dayOfWeek: Number(dayOfWeek),
-          startTime,
-          endTime,
-        },
+        slot: { dayOfWeek: Number(dayOfWeek), startTime, endTime },
         generateSessions: true,
       });
-      notifySuccess(`Đã tạo lớp ${result.batch.code} và ${result.sessions.created} buổi.`, 'Teacher Lite');
+      notifySuccess(`Đã tạo lớp ${result.batch.code} và ${result.sessions.created} buổi.`, 'Tạo lớp thành công');
       setCancelClassId(result.batch.id);
       setSessionClassId(result.batch.id);
-      await refreshAll();
+      setStep(0);
+      await load();
+      onChanged?.();
     } catch (e) {
       notifyError(e, 'Không tạo được lớp');
     } finally {
@@ -140,9 +148,10 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
     setBusy(true);
     try {
       const result = await trpc.teacherLite.cancelClass.mutate({ id: cancelClassId, reason: cancelClassReason.trim() });
-      notifySuccess(`Đã hủy lớp, ${result.cancelledSessions} buổi tương lai đã hủy.`, 'Teacher Lite');
+      notifySuccess(`Đã hủy lớp, ${result.cancelledSessions} buổi tương lai đã hủy.`);
       setCancelClassReason('');
-      await refreshAll();
+      await load();
+      onChanged?.();
     } catch (e) {
       notifyError(e, 'Không hủy được lớp');
     } finally {
@@ -158,9 +167,11 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
     setBusy(true);
     try {
       await trpc.teacherLite.cancelSession.mutate({ sessionId: cancelSessionId, reason: cancelSessionReason.trim() });
-      notifySuccess('Đã hủy buổi học.', 'Teacher Lite');
+      notifySuccess('Đã hủy buổi học.');
       setCancelSessionReason('');
-      await refreshAll();
+      const rows = await trpc.schedule.listSessions.query({ classBatchId: sessionClassId! });
+      setSessions(rows);
+      onChanged?.();
     } catch (e) {
       notifyError(e, 'Không hủy được buổi học');
     } finally {
@@ -171,75 +182,188 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
   if (!canManage) return null;
 
   return (
-    <Card withBorder>
+    <Card withBorder radius="md" p="lg">
       <Group justify="space-between" mb="md">
-        <Title order={5}>Lớp học nhanh</Title>
-        <Button size="xs" variant="subtle" leftSection={<IconRefresh size={14} />} onClick={load}>
-          Tải lại
+        <Group gap="xs">
+          <IconCalendar size={18} />
+          <Title order={5}>Tạo lớp học</Title>
+        </Group>
+        <Button
+          size="xs"
+          variant={showCancel ? 'filled' : 'subtle'}
+          color="red"
+          leftSection={<IconX size={14} />}
+          onClick={() => setShowCancel((v) => !v)}
+        >
+          Hủy lớp / buổi
         </Button>
       </Group>
-      <Stack>
-        <Group grow align="flex-end">
-          <Select
-            label="Cơ sở"
-            withAsterisk
-            searchable
-            data={facilities.map((facility) => ({ value: String(facility.id), label: `${facility.code} - ${facility.name}` }))}
-            value={facilityId ? String(facilityId) : null}
-            onChange={(value) => setFacilityId(value ? Number(value) : null)}
-          />
-          <Select
-            label="Khóa học"
-            withAsterisk
-            searchable
-            data={courses.map((course) => ({ value: course.id, label: `${course.code} - ${course.name}` }))}
-            value={courseId}
-            onChange={setCourseId}
-          />
-          <NumberInput label="Sĩ số" min={1} value={capacity} onChange={(value) => setCapacity(typeof value === 'number' ? value : '')} />
-        </Group>
-        <Group grow align="flex-end">
-          <DateInput label="Ngày bắt đầu" withAsterisk valueFormat="DD/MM/YYYY" value={parseApiDate(startDate)} onChange={(date) => setStartDate(toApiDate(date) ?? '')} />
-          <DateInput label="Ngày kết thúc" withAsterisk valueFormat="DD/MM/YYYY" value={parseApiDate(endDate)} onChange={(date) => setEndDate(toApiDate(date) ?? '')} />
-          <Select label="Thứ" withAsterisk data={DAYS} value={dayOfWeek} onChange={(value) => value && setDayOfWeek(value)} allowDeselect={false} />
-          <TextInput label="Bắt đầu" withAsterisk value={startTime} onChange={(e) => setStartTime(e.currentTarget.value)} />
-          <TextInput label="Kết thúc" withAsterisk value={endTime} onChange={(e) => setEndTime(e.currentTarget.value)} />
-        </Group>
-        <Group>
-          <Button onClick={createClass} loading={busy}>Tạo lớp</Button>
-        </Group>
-        <Divider />
-        <Group grow align="flex-end">
-          <Select
-            label="Hủy lớp"
-            searchable
-            data={activeBatches.map((batch) => ({ value: batch.id, label: `${batch.code} - ${batch.name}` }))}
-            value={cancelClassId}
-            onChange={setCancelClassId}
-          />
-          <TextInput label="Lý do" value={cancelClassReason} onChange={(e) => setCancelClassReason(e.currentTarget.value)} />
-          <Button color="red" variant="light" onClick={cancelClass} loading={busy}>Hủy lớp</Button>
-        </Group>
-        <Group grow align="flex-end">
-          <Select
-            label="Lớp có buổi"
-            searchable
-            data={activeBatches.map((batch) => ({ value: batch.id, label: `${batch.code} - ${batch.name}` }))}
-            value={sessionClassId}
-            onChange={setSessionClassId}
-          />
-          <Select
-            label="Hủy buổi"
-            searchable
-            data={sessions.filter((session) => session.status !== 'cancelled').map((session) => ({ value: session.id, label: sessionLabel(session) }))}
-            value={cancelSessionId}
-            onChange={setCancelSessionId}
-          />
-          <TextInput label="Lý do" value={cancelSessionReason} onChange={(e) => setCancelSessionReason(e.currentTarget.value)} />
-          <Button color="red" variant="light" onClick={cancelSession} loading={busy}>Hủy buổi</Button>
-        </Group>
-        <Text size="sm" c="dimmed">Học liệu: Khóa học / Bài tập theo bài.</Text>
-      </Stack>
+
+      <Stepper active={step} onStepClick={setStep} size="sm" mb="lg">
+        <Stepper.Step label="Khóa học" description="Cơ sở & khóa" />
+        <Stepper.Step label="Lịch học" description="Ngày & giờ" />
+      </Stepper>
+
+      {step === 0 && (
+        <Stack gap="sm">
+          <Group grow align="flex-end">
+            <Select
+              label="Cơ sở"
+              withAsterisk
+              searchable
+              data={facilities.map((f) => ({ value: String(f.id), label: `${f.code} – ${f.name}` }))}
+              value={facilityId ? String(facilityId) : null}
+              onChange={(v) => setFacilityId(v ? Number(v) : null)}
+            />
+            <Select
+              label="Khóa học"
+              withAsterisk
+              searchable
+              data={courses.map((c) => ({ value: c.id, label: `${c.code} – ${c.name}` }))}
+              value={courseId}
+              onChange={setCourseId}
+            />
+            <NumberInput
+              label="Sĩ số (tùy chọn)"
+              min={1}
+              value={capacity}
+              onChange={(v) => setCapacity(typeof v === 'number' ? v : '')}
+            />
+          </Group>
+          <Group>
+            <Button
+              disabled={!facilityId || !courseId}
+              onClick={() => setStep(1)}
+              leftSection={<IconPlus size={14} />}
+            >
+              Tiếp theo
+            </Button>
+          </Group>
+        </Stack>
+      )}
+
+      {step === 1 && (
+        <Stack gap="sm">
+          <Group grow align="flex-end">
+            <DateInput
+              label="Ngày bắt đầu"
+              withAsterisk
+              valueFormat="DD/MM/YYYY"
+              value={parseApiDate(startDate)}
+              onChange={(d) => setStartDate(toApiDate(d) ?? '')}
+            />
+            <DateInput
+              label="Ngày kết thúc"
+              withAsterisk
+              valueFormat="DD/MM/YYYY"
+              value={parseApiDate(endDate)}
+              onChange={(d) => setEndDate(toApiDate(d) ?? '')}
+            />
+          </Group>
+
+          <Box>
+            <Text size="sm" fw={500} mb={6}>
+              Thứ học <Text component="span" c="red">*</Text>
+            </Text>
+            <Chip.Group value={dayOfWeek} onChange={(v) => v && setDayOfWeek(v as string)}>
+              <Group gap="xs">
+                {DAYS.map((d) => (
+                  <Chip key={d.value} value={d.value} size="sm">
+                    {d.label}
+                  </Chip>
+                ))}
+              </Group>
+            </Chip.Group>
+          </Box>
+
+          <Group grow align="flex-end">
+            <TextInput
+              label="Giờ bắt đầu"
+              withAsterisk
+              placeholder="18:00"
+              value={startTime}
+              onChange={(e) => setStartTime(e.currentTarget.value)}
+            />
+            <TextInput
+              label="Giờ kết thúc"
+              withAsterisk
+              placeholder="19:30"
+              value={endTime}
+              onChange={(e) => setEndTime(e.currentTarget.value)}
+            />
+          </Group>
+
+          {estimatedSessions > 0 && (
+            <Badge variant="light" color="blue" size="sm">
+              Ước tính {estimatedSessions} buổi học
+            </Badge>
+          )}
+
+          <Group>
+            <Button variant="subtle" onClick={() => setStep(0)}>Quay lại</Button>
+            <Button
+              loading={busy}
+              disabled={!startDate || !endDate || !startTime || !endTime}
+              onClick={createClass}
+              leftSection={<IconPlus size={14} />}
+            >
+              Tạo lớp
+            </Button>
+          </Group>
+        </Stack>
+      )}
+
+      {showCancel && (
+        <>
+          <Divider my="md" />
+          <Stack gap="sm">
+            <Text size="sm" fw={600} c="red">Hủy lớp</Text>
+            <Group grow align="flex-end">
+              <Select
+                label="Chọn lớp"
+                searchable
+                data={activeBatches.map((b) => ({ value: b.id, label: `${b.code} – ${b.name}` }))}
+                value={cancelClassId}
+                onChange={setCancelClassId}
+              />
+              <TextInput
+                label="Lý do"
+                value={cancelClassReason}
+                onChange={(e) => setCancelClassReason(e.currentTarget.value)}
+              />
+              <Button color="red" variant="light" loading={busy} onClick={cancelClass}>
+                Hủy lớp
+              </Button>
+            </Group>
+
+            <Text size="sm" fw={600} c="orange">Hủy buổi học</Text>
+            <Group grow align="flex-end">
+              <Select
+                label="Chọn lớp"
+                searchable
+                data={activeBatches.map((b) => ({ value: b.id, label: `${b.code} – ${b.name}` }))}
+                value={sessionClassId}
+                onChange={setSessionClassId}
+              />
+              <Select
+                label="Chọn buổi"
+                searchable
+                data={sessions.filter((s) => s.status !== 'cancelled').map((s) => ({ value: s.id, label: sessionLabel(s) }))}
+                value={cancelSessionId}
+                onChange={setCancelSessionId}
+              />
+              <TextInput
+                label="Lý do"
+                value={cancelSessionReason}
+                onChange={(e) => setCancelSessionReason(e.currentTarget.value)}
+              />
+              <Button color="orange" variant="light" loading={busy} onClick={cancelSession}>
+                Hủy buổi
+              </Button>
+            </Group>
+          </Stack>
+        </>
+      )}
     </Card>
   );
 }
