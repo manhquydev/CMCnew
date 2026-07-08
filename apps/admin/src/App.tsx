@@ -751,7 +751,7 @@ function Dashboard() {
       // biz-director-cockpit-panel.tsx for why: the aggregate item lacks the composite
       // userId+periodKey key kpiEvalConfirm/kpiEvalApprove require).
       case 'biz-director-cockpit':
-        return <BizDirectorCockpitPanel onNavigateToKpi={() => handleSectionChange('kpi')} />;
+        return <BizDirectorCockpitPanel onNavigateToKpi={() => handleSectionChange('kpi')} hideKpi={surface === 'teacher'} />;
 
       // Executive Cockpit (Phase 4): giam_doc_dao_tao-only landing — summary widget +
       // approval-inbox widget. KPI items route to the full 'kpi' panel, same resolution as
@@ -761,6 +761,7 @@ function Dashboard() {
           <EduDirectorCockpitPanel
             onNavigateToKpi={() => handleSectionChange('kpi')}
             onNavigateToFinanceIntake={() => handleSectionChange(surface === 'teacher' ? 'family-intake' : 'finance')}
+            hideKpi={surface === 'teacher'}
           />
         );
 

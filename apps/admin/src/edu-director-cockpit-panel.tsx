@@ -71,7 +71,7 @@ function actionLabel(domain: string): string | null {
 /** Approval-inbox widget — lists dashboard.myApprovals items with a one-click action per domain
  *  where the aggregate item carries enough data to call the mutation directly; kpi routes to the
  *  full KPI panel instead (see INLINE_APPROVE_DOMAINS comment above). */
-function ApprovalInboxCard({ onNavigateToKpi }: { onNavigateToKpi: () => void }) {
+function ApprovalInboxCard({ onNavigateToKpi, hideKpi }: { onNavigateToKpi: () => void; hideKpi?: boolean }) {
   const { me } = useSession();
   const fid = me.facilityIds[0];
   const [items, setItems] = useState<ApprovalItem[] | null>(null);
@@ -86,14 +86,16 @@ function ApprovalInboxCard({ onNavigateToKpi }: { onNavigateToKpi: () => void })
     trpc.dashboard.myApprovals
       .query({ facilityId: fid })
       .then((rows) => {
-        setItems(rows);
+        // Teacher-lite lược bỏ KPI: ẩn item KPI khỏi hộp duyệt để nút "Xử lý trong KPI" không
+        // route tới /kpi (section không thuộc teacher surface → dead-end redirect). ERP surface giữ.
+        setItems(hideKpi ? rows.filter((r) => r.domain !== 'kpi') : rows);
         setError(false);
       })
       .catch((e) => {
         setError(true);
         notifyError(e, 'Không tải được hộp duyệt');
       });
-  }, [fid]);
+  }, [fid, hideKpi]);
 
   useEffect(() => {
     load();
@@ -246,15 +248,17 @@ function IntakeShortcutCard({ onNavigateToFinanceIntake }: { onNavigateToFinance
 export function EduDirectorCockpitPanel({
   onNavigateToKpi,
   onNavigateToFinanceIntake,
+  hideKpi,
 }: {
   onNavigateToKpi: () => void;
   onNavigateToFinanceIntake: () => void;
+  hideKpi?: boolean;
 }) {
   return (
     <Stack>
       <OverviewPanel />
       <IntakeShortcutCard onNavigateToFinanceIntake={onNavigateToFinanceIntake} />
-      <ApprovalInboxCard onNavigateToKpi={onNavigateToKpi} />
+      <ApprovalInboxCard onNavigateToKpi={onNavigateToKpi} hideKpi={hideKpi} />
     </Stack>
   );
 }
