@@ -13,6 +13,50 @@ function assertFacilityAccess(session: RequestSession, facilityId: number) {
   }
 }
 
+export const teacherLiteOverviewStatsInput = z.object({ facilityId: z.number().int().positive() });
+export type TeacherLiteOverviewStatsInput = z.infer<typeof teacherLiteOverviewStatsInput>;
+
+/**
+ * Đếm cho stat card trang Hôm nay của giáo viên:
+ * - pendingGrading: bài HS đã nộp (status='submitted') của CHÍNH học sinh trong các lớp giáo viên dạy
+ *   (scope theo studentId để tránh over-count vì Exercise là global dùng chung nhiều lớp).
+ * - pendingEvidence: buổi giáo viên dạy đã diễn ra (sessionDate <= hôm nay, chưa hủy) mà nhật ký chưa publish.
+ */
+export async function teacherLiteOverviewStats(
+  session: RequestSession,
+  input: TeacherLiteOverviewStatsInput,
+) {
+  assertFacilityAccess(session, input.facilityId);
+  return withRls(
+    { facilityIds: session.facilityIds, isSuperAdmin: session.isSuperAdmin },
+    async (tx) => {
+      const sessions = await tx.classSession.findMany({
+        where: { teacherId: session.userId, facilityId: input.facilityId, status: { not: 'cancelled' } },
+        select: { classBatchId: true, sessionDate: true, evidence: { select: { status: true } } },
+      });
+      const batchIds = [...new Set(sessions.map((s) => s.classBatchId))];
+      let pendingGrading = 0;
+      if (batchIds.length > 0) {
+        const enrollments = await tx.enrollment.findMany({
+          where: { classBatchId: { in: batchIds }, status: 'active', archivedAt: null },
+          select: { studentId: true },
+        });
+        const studentIds = [...new Set(enrollments.map((e) => e.studentId))];
+        if (studentIds.length > 0) {
+          pendingGrading = await tx.submission.count({
+            where: { studentId: { in: studentIds }, status: 'submitted', archivedAt: null },
+          });
+        }
+      }
+      const now = new Date();
+      const pendingEvidence = sessions.filter(
+        (s) => s.sessionDate <= now && (!s.evidence || s.evidence.status !== 'published'),
+      ).length;
+      return { pendingGrading, pendingEvidence };
+    },
+  );
+}
+
 export const teacherLiteStudentArchiveInput = z.object({ id: z.string().uuid() });
 export type TeacherLiteStudentArchiveInput = z.infer<typeof teacherLiteStudentArchiveInput>;
 

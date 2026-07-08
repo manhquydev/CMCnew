@@ -50,6 +50,7 @@ export function TeacherTodayPanel({
   const [facilityId, setFacilityId] = useState<number | null>(me.facilityIds[0] ?? null);
   const [sessions, setSessions] = useState<MySession[]>([]);
   const [loading, setLoading] = useState(false);
+  const [stats, setStats] = useState<{ pendingGrading: number; pendingEvidence: number } | null>(null);
 
   useEffect(() => {
     trpc.facility.list
@@ -70,6 +71,15 @@ export function TeacherTodayPanel({
       .catch((e) => notifyError(e, 'Không tải được lịch dạy'))
       .finally(() => setLoading(false));
   }, [facilityId, today]);
+
+  useEffect(() => {
+    if (!facilityId) return;
+    setStats(null);
+    trpc.teacherLite.overviewStats
+      .query({ facilityId })
+      .then(setStats)
+      .catch(() => setStats(null));
+  }, [facilityId]);
 
   const activeSessions = sessions.filter((s) => s.status !== 'cancelled');
   const nearestSession = activeSessions[0];
@@ -147,15 +157,15 @@ export function TeacherTodayPanel({
         />
         <StatCard
           title="Bài chờ chấm"
-          value="—"
-          sub="chưa có dữ liệu"
+          value={stats ? String(stats.pendingGrading) : '—'}
+          sub={stats ? (stats.pendingGrading > 0 ? 'cần chấm' : 'đã chấm hết') : 'đang tải…'}
           accent={C.amber}
           onClick={onNavigateToGrading}
         />
         <StatCard
-          title="Nhận xét chờ chốt"
-          value="—"
-          sub="chưa có dữ liệu"
+          title="Nhật ký chờ chốt"
+          value={stats ? String(stats.pendingEvidence) : '—'}
+          sub={stats ? (stats.pendingEvidence > 0 ? 'buổi chưa đăng' : 'đã đăng hết') : 'đang tải…'}
           accent={C.muted}
         />
       </div>

@@ -89,6 +89,8 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     cancelSession: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     // Teacher-lite CRUD bypass (2026-07-08): soft-archive học sinh (giữ RLS + audit, không hard-delete).
     studentArchive: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    // Overview stat cards (bài chờ chấm / nhật ký chờ chốt) cho trang Hôm nay của giáo viên.
+    overviewStats: ['giao_vien', 'giam_doc_dao_tao', 'giam_doc_kinh_doanh'],
   },
 
   exercise: {
