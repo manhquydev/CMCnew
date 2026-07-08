@@ -8,6 +8,12 @@ dependencies: [1]
 
 # Phase 5: Giám đốc quản lý nhân sự gọn + overview + cancel confirm
 
+## Progress (2026-07-08)
+- **5c DONE (`37472f2`):** confirm modal trước khi hủy lớp/buổi (cascade warning + echo lý do) trong
+  `teacher-lite-class-control-panel.tsx`.
+- **5a PENDING:** staff-mgmt-lite (giám đốc quản lý đội GV, CHỈ role `giao_vien` — validate chốt RT-5).
+- **5b PENDING:** /overview 2 stat thật ("Bài chờ chấm", "Nhận xét chờ chốt").
+
 ## Overview
 
 Ba mảnh hoàn thiện: (a) màn quản lý đội giáo viên BẢN GỌN cho giám đốc trong teacher-lite (không

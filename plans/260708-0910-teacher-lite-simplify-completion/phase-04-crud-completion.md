@@ -9,6 +9,12 @@ dependencies: [3]
 
 # Phase 4: CRUD completion (HS/PH sửa-xóa + audit)
 
+## Progress (2026-07-08)
+- **4a DONE (`80bbe83`):** widen `student.update` += `giam_doc_dao_tao` (user-approved). GĐĐT sửa được HS
+  (UI students-panel có sẵn; nav gate dùng student.update nên section tự hiện cho GĐĐT).
+- **4b PENDING:** `teacherLite.studentArchive` / `parentUpdate` / `parentArchive` + audit `parentCreate`
+  + UI nút xóa/sửa. Cần verify schema Student.archivedAt / ParentAccount / Guardian trước khi viết service.
+
 ## Overview
 
 Hoàn thiện CRUD học viên + phụ huynh trên teacher-lite: thêm student archive (soft-delete), parent
