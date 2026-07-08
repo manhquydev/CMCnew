@@ -111,7 +111,12 @@ export async function openedLessonIdsFor(
         enrollments: {
           some: {
             studentId: { in: studentIds },
-            status: 'active',
+            // 'completed' (director marked the student's run through this class finished) must
+            // still see past published exercises/grades — only 'active' would make a student's
+            // whole homework history vanish from the LMS the moment their enrollment closes.
+            // Actually opening NEW work still requires 'active' (assertExerciseOpenForStudent
+            // below, unchanged) — this only affects what's listed/visible.
+            status: { in: ['active', 'completed'] },
             archivedAt: null,
           },
         },
@@ -148,7 +153,8 @@ export async function openedUnitIdsFor(
         enrollments: {
           some: {
             studentId: { in: studentIds },
-            status: 'active',
+            // Same reasoning as openedLessonIdsFor above: 'completed' must keep seeing past work.
+            status: { in: ['active', 'completed'] },
             archivedAt: null,
           },
         },
