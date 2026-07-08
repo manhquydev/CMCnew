@@ -15,7 +15,9 @@ dependencies: [3]
 - **4b IN PROGRESS:**
   - ✅ `teacherLite.studentArchive` (`d2b7c23`): service + gate + audit + UI nút "Lưu trữ" + confirm modal. Student.archivedAt.
   - ✅ `guardian.parentUpdate` + audit `parentCreate` (`8ec27d4`): backend + gate [KD,DT]. ParentAccount system-wide → audit facilityId=null.
-  - ⏳ Còn: UI sửa PH (guardians-panel chưa có bảng row-action) + `parentArchive` (deactivate isActive — cần product call semantics).
+  - ✅ UI sửa PH `ParentEditCard` (`6644a61`): guardians-panel. "PH sửa được" end-to-end.
+  - ⏳ Còn `parentArchive` — BLOCKED cần user chốt: "xóa PH" = deactivate `isActive=false`? Rủi ro: HS đăng nhập
+    bằng SĐT phụ huynh (decision 0033) — deactivate PH có thể chặn login HS. Cần xác nhận interaction trước khi build.
 
 ## Overview
 
