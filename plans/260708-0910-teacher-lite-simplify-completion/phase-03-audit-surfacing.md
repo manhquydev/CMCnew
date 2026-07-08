@@ -1,9 +1,9 @@
 ---
 phase: 3
-title: "Audit surfacing"
-status: pending
+title: Audit surfacing
+status: completed
 priority: P1
-effort: "M"
+effort: M
 dependencies: []
 ---
 

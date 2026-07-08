@@ -53,7 +53,7 @@ Nền tảng đã có (không xây lại): audit infra `@cmc/audit` (`RecordEven
 |-------|------|--------|
 | 1 | [Nav simplification](./phase-01-nav-simplification.md) | Completed |
 | 2 | [LMS flow verify + session material upload](./phase-02-lms-flow-verify-session-material-upload.md) | Pending |
-| 3 | [Audit surfacing](./phase-03-audit-surfacing.md) | Pending |
+| 3 | [Audit surfacing](./phase-03-audit-surfacing.md) | Completed |
 | 4 | [CRUD completion](./phase-04-crud-completion.md) | Pending |
 | 5 | [Director staff-mgmt + overview + cancel confirm](./phase-05-director-staff-mgmt-overview-cancel-confirm.md) | Pending |
 
