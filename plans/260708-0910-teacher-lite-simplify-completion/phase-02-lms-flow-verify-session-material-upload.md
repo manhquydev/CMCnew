@@ -9,6 +9,14 @@ dependencies: [1]
 
 # Phase 2: LMS flow verify + session material upload (ƯU TIÊN #1)
 
+## Progress (2026-07-08) — 2b ĐÃ BUILD SẴN (correction)
+- **2b DONE (đã tồn tại):** "upload học liệu theo buổi" KHÔNG phải pending-migration. Đã có đầy đủ:
+  model `CurriculumLesson` (schema:195), `exercise.upsert(curriculumLessonId)` + `listByLesson`/`listByUnit`,
+  và UI `CourseExerciseManager` (`course-exercise-manager.tsx:106`) — "Một unit 4 buổi có 4 slot upload
+  riêng, bài tự mở sau buổi tương ứng". Truy cập qua section "Học liệu" (courses) trên nav teacher-lite.
+  Plan `260706-1752` thực chất đã được implement. → Domain "upload tài liệu tương ứng buổi" THỎA.
+- **2a PENDING (verify):** HS làm/nộp bài — built (`260702-1007`), cần **login HS test** để verify live.
+
 ## Overview
 
 Đảm bảo luồng LMS PH+HS hoạt động thật: (a) **verify live** HS thấy file bài tập → làm → nộp → GV thấy
