@@ -114,10 +114,16 @@ services:
       # Host bind-mounts (NOT a named volume), mirroring docker-compose.prod.tls.yml — without
       # these, photo-store.ts/pdf-store.ts write into the container's writable layer only and get
       # wiped on every `--force-recreate` (config change, image rebuild, redeploy).
-      # NOTE: uses a dev-only `.data-dev/` dir (NOT `.data/`, which is prod's bind-mount target on
-      # the same host) — sharing `.data/` here would leak dev/prod uploaded files into one folder.
-      - ../.data-dev/pdf:/app/apps/api/.data/pdf
-      - ../.data-dev/session-photos:/app/apps/api/.data/session-photos
+      # NOTE 1: dev-only `.data-dev/` (NOT `.data/`, prod's bind-mount target on the same host) —
+      # sharing `.data/` here would leak dev/prod uploaded files into one folder.
+      # NOTE 2: ABSOLUTE path required, same reasoning as the nginx-prod.conf mount below in the
+      # prod file — Jenkins runs compose from its own per-build workspace dir, which it deletes
+      # via cleanWs() after the build. A relative `../.data-dev/...` path resolves INSIDE that
+      # ephemeral workspace and gets wiped on the very next build, silently orphaning the mount
+      # (confirmed live: dev-api's bind source was `/var/jenkins_home/workspace/.../.data-dev/pdf`,
+      # already deleted, causing ENOENT on every upload).
+      - /root/cmcnew/.data-dev/pdf:/app/apps/api/.data/pdf
+      - /root/cmcnew/.data-dev/session-photos:/app/apps/api/.data/session-photos
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:4000/health || exit 1']
       interval: 10s
