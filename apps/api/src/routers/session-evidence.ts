@@ -139,14 +139,13 @@ export const sessionEvidenceRouter = router({
             throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nhận xét chỉ áp dụng cho học sinh đang học trong lớp' });
           }
         }
-        // A photoRef only passing the hex-shape regex doesn't mean the file was
-        // ever uploaded — verify it's actually on disk before linking it, so a
-        // fabricated ref can't reach publish() and 404 for the parent viewing it.
-        for (const p of input.photos) {
-          if (!(await sessionPhotoExists(p.ref))) {
-            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Ảnh không tồn tại, vui lòng tải lại' });
-          }
-        }
+        // A photoRef only passing the hex-shape regex doesn't mean the file is still on disk
+        // (fabricated ref, or the store was wiped by a redeploy) — drop dead refs instead of
+        // blocking the whole save (comments/summary are unrelated to a stale photo), and tell
+        // the teacher which ones were dropped so they can re-upload.
+        const photoChecks = await Promise.all(input.photos.map((p) => sessionPhotoExists(p.ref)));
+        const livePhotos = input.photos.filter((_, i) => photoChecks[i]);
+        const droppedCount = input.photos.length - livePhotos.length;
 
         const evidence = await tx.sessionEvidence.upsert({
           where: { classSessionId: input.classSessionId },
@@ -168,9 +167,9 @@ export const sessionEvidenceRouter = router({
         });
 
         await tx.sessionEvidencePhoto.deleteMany({ where: { sessionEvidenceId: evidence.id } });
-        if (input.photos.length > 0) {
+        if (livePhotos.length > 0) {
           await tx.sessionEvidencePhoto.createMany({
-            data: input.photos.map((p, i) => ({
+            data: livePhotos.map((p, i) => ({
               sessionEvidenceId: evidence.id,
               photoRef: p.ref,
               sortOrder: p.sortOrder ?? i,
@@ -201,13 +200,14 @@ export const sessionEvidenceRouter = router({
           actorId: ctx.session.userId,
         });
 
-        return tx.sessionEvidence.findUniqueOrThrow({
+        const saved = await tx.sessionEvidence.findUniqueOrThrow({
           where: { id: evidence.id },
           include: {
             photos: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
             comments: true,
           },
         });
+        return { ...saved, droppedPhotoCount: droppedCount };
       }),
     ),
 
@@ -217,10 +217,17 @@ export const sessionEvidenceRouter = router({
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const evidence = await tx.sessionEvidence.findUnique({
           where: { classSessionId: input.classSessionId },
-          include: { photos: true, comments: true, classSession: { select: { facilityId: true, teacherId: true } } },
+          include: {
+            photos: true,
+            comments: true,
+            classSession: { select: { facilityId: true, teacherId: true, batch: { select: { status: true } } } },
+          },
         });
         if (!evidence) throw new TRPCError({ code: 'NOT_FOUND', message: 'Chưa có nháp buổi học' });
         assertTeachingSessionMutationAllowed(ctx.session, evidence.classSession);
+        if (evidence.classSession.batch.status === 'cancelled') {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Lớp đã hủy, không thể publish bằng chứng buổi học lên LMS' });
+        }
         if (!evidence.summary?.trim()) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cần có tóm tắt buổi học trước khi publish' });
         }
