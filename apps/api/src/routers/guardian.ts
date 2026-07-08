@@ -47,8 +47,8 @@ export const guardianRouter = router({
       // Normalize email so OTP login (which looks up by lower-cased email) always matches, and so the
       // unique constraint is effectively case-insensitive.
       const email = input.email?.trim().toLowerCase();
-      return withRls(rlsContextOf(ctx.session), (tx) =>
-        tx.parentAccount.create({
+      return withRls(rlsContextOf(ctx.session), async (tx) => {
+        const created = await tx.parentAccount.create({
           data: {
             displayName: input.displayName,
             email,
@@ -56,9 +56,63 @@ export const guardianRouter = router({
             passwordHash,
           },
           select: { id: true, email: true, phone: true, displayName: true },
-        }),
-      );
+        });
+        // parent_account là identity system-wide (không facilityId) → audit facilityId=null.
+        await logEvent(tx, {
+          facilityId: null,
+          entityType: 'parent_account',
+          entityId: created.id,
+          type: 'created',
+          body: `Tạo tài khoản phụ huynh ${created.displayName}`,
+          actorId: ctx.session.userId,
+        });
+        return created;
+      });
     }),
+
+  parentUpdate: requirePermission('guardian', 'parentUpdate')
+    .input(
+      z
+        .object({
+          id: z.string().uuid(),
+          displayName: z.string().min(1).optional(),
+          email: z.string().email().optional(),
+          phone: z.string().min(6).optional(),
+        })
+        .refine((v) => v.displayName !== undefined || v.email !== undefined || v.phone !== undefined, {
+          message: 'Không có trường nào để cập nhật',
+        }),
+    )
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const before = await tx.parentAccount.findUnique({
+          where: { id: input.id },
+          select: { id: true, displayName: true, email: true, phone: true },
+        });
+        if (!before) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy tài khoản phụ huynh' });
+        }
+        const email = input.email?.trim().toLowerCase();
+        const data: Prisma.ParentAccountUpdateInput = {};
+        if (input.displayName !== undefined) data.displayName = input.displayName;
+        if (input.email !== undefined) data.email = email;
+        if (input.phone !== undefined) data.phone = input.phone;
+        const updated = await tx.parentAccount.update({
+          where: { id: input.id },
+          data,
+          select: { id: true, email: true, phone: true, displayName: true },
+        });
+        await logEvent(tx, {
+          facilityId: null,
+          entityType: 'parent_account',
+          entityId: updated.id,
+          type: 'updated',
+          body: `Cập nhật phụ huynh ${updated.displayName}`,
+          actorId: ctx.session.userId,
+        });
+        return updated;
+      }),
+    ),
 
   // Guardians of a student, with the parent's identity.
   listForStudent: requirePermission('guardian', 'listForStudent')

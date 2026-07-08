@@ -205,6 +205,7 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   guardian: {
     parentList: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     parentCreate: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    parentUpdate: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     listForStudent: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     link: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     unlink: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
