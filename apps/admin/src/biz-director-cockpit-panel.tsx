@@ -162,7 +162,7 @@ function ApprovalInboxCard({ onNavigateToKpi, hideKpi }: { onNavigateToKpi: () =
         <EmptyState
           icon={<IconInbox size={28} stroke={1.5} />}
           title="Không có việc chờ duyệt"
-          description="Mọi phiếu thu, đổi quà, đăng ký ca và KPI đang chờ đều đã được xử lý."
+          description={`Mọi phiếu thu, đổi quà, đăng ký ca${hideKpi ? '' : ' và KPI'} đang chờ đều đã được xử lý.`}
           py={32}
         />
       )}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
-import { API_URL, notifyError, notifySuccess, trpc, uploadSessionPhoto } from '@cmc/ui';
+import { API_URL, Chatter, notifyError, notifySuccess, trpc, uploadSessionPhoto } from '@cmc/ui';
 import { Button, Center, Loader, NumberInput, Stack, Tabs, Text, Textarea } from '@mantine/core';
 
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
@@ -265,6 +265,7 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
           <Tabs.Tab value="evidence">Ảnh & Nhận xét</Tabs.Tab>
           <Tabs.Tab value="grading">Chấm bài</Tabs.Tab>
           <Tabs.Tab value="notes">Nhật ký</Tabs.Tab>
+          <Tabs.Tab value="history">Lịch sử</Tabs.Tab>
         </Tabs.List>
 
         {/* ── Tab 1: Điểm danh ── */}
@@ -424,6 +425,12 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
               )}
             </div>
           </Stack>
+        </Tabs.Panel>
+
+        {/* ── Tab 5: Lịch sử ── audit timeline "ai điểm danh/chấm/hủy buổi lúc nào" (class_session
+            đã whitelist trong audit.NOTE_TARGETS). ── */}
+        <Tabs.Panel value="history" pt="sm">
+          <Chatter entityType="class_session" entityId={classSessionId} />
         </Tabs.Panel>
       </Tabs>
     </div>

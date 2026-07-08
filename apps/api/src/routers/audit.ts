@@ -21,6 +21,10 @@ const NOTE_TARGETS: Record<
   // CSKH after-sale cases: CSKH staff post notes / track resolution history on a case.
   // facilityId is resolved from the case record so cross-facility access is blocked by RLS.
   after_sale_case: (tx, id) => tx.afterSaleCase.findUnique({ where: { id }, select: { facilityId: true } }),
+  // Buổi học: điểm danh (attendance.mark), nhật ký buổi (session-evidence), và hủy buổi (teacher-lite
+  // cancelSession) đều logEvent dưới entityType='class_session'. Whitelist để teacher-lite session-detail
+  // đọc được "ai điểm danh/chấm/hủy buổi lúc nào". facilityId lấy từ chính buổi (RLS-safe, không tin client).
+  class_session: (tx, id) => tx.classSession.findUnique({ where: { id }, select: { facilityId: true } }),
 };
 
 // Chatter timeline (Odoo-style) — dùng chung cho mọi record.
