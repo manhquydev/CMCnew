@@ -165,6 +165,19 @@ export const guardianRouter = router({
       ),
     ),
 
+  // Students linked to a parent, with the student's identity (reverse of listForStudent) — powers
+  // the parent record-detail hub's "học sinh liên kết" section.
+  listForParent: requirePermission('guardian', 'listForStudent')
+    .input(z.object({ parentAccountId: z.string().uuid() }))
+    .query(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), (tx) =>
+        tx.guardian.findMany({
+          where: { parentAccountId: input.parentAccountId },
+          include: { student: { select: { id: true, studentCode: true, fullName: true } } },
+        }),
+      ),
+    ),
+
   // Link a parent to a student (facility inherited from the student). Idempotent on the unique.
   link: requirePermission('guardian', 'link')
     .input(
