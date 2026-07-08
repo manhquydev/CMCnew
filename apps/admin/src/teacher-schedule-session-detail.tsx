@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
-import { API_URL, Chatter, notifyError, notifySuccess, trpc, uploadSessionPhoto } from '@cmc/ui';
-import { Button, Center, Loader, NumberInput, Stack, Tabs, Text, Textarea } from '@mantine/core';
+import { API_URL, Chatter, notifyError, notifySuccess, trpc, uploadSessionPhoto, useSession } from '@cmc/ui';
+import { Button, Center, Group, Loader, Menu, Modal, NumberInput, Stack, Tabs, Text, Textarea } from '@mantine/core';
+import { can } from '@cmc/auth/permissions';
 
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
 type Enrollment = Awaited<ReturnType<typeof trpc.enrollment.listByBatch.query>>[number];
@@ -38,12 +39,16 @@ type EvidenceDraft = {
 export interface SessionDetailProps {
   session: MySession;
   onBack: () => void;
+  /** Called after a mutation that changes the calendar (e.g. cancel) so the list refetches. */
+  onChanged?: () => void;
 }
 
-export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
+export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDetailProps) {
   const enabled = session.status !== 'cancelled';
   const classSessionId = session.id;
   const classBatchId = session.classBatchId;
+  const { me } = useSession();
+  const canCancel = can(me.roles, me.isSuperAdmin, 'teacherLite', 'cancelSession');
 
   // ── Attendance ──────────────────────────────────────────────────────────────
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
@@ -69,6 +74,11 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
   const [gradingId, setGradingId] = useState<string | null>(null);
   const [gradeScore, setGradeScore] = useState<number | string>('');
   const [gradeFeedback, setGradeFeedback] = useState('');
+
+  // ── Cancel session / class ──────────────────────────────────────────────────
+  const [cancelKind, setCancelKind] = useState<null | 'class' | 'session'>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelBusy, setCancelBusy] = useState(false);
 
   // Load attendance roster
   useEffect(() => {
@@ -218,6 +228,32 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
     }
   }
 
+  async function submitCancel() {
+    const reason = cancelReason.trim();
+    if (!reason) {
+      notifyError('Nhập lý do hủy.', 'Thiếu thông tin');
+      return;
+    }
+    setCancelBusy(true);
+    try {
+      if (cancelKind === 'class') {
+        const r = await trpc.teacherLite.cancelClass.mutate({ id: classBatchId, reason });
+        notifySuccess(`Đã hủy lớp, ${r.cancelledSessions} buổi tương lai đã hủy.`);
+      } else {
+        await trpc.teacherLite.cancelSession.mutate({ sessionId: classSessionId, reason });
+        notifySuccess('Đã hủy buổi học.');
+      }
+      setCancelKind(null);
+      setCancelReason('');
+      onChanged?.(); // refetch calendar so the cancelled status shows immediately
+      onBack();
+    } catch (e) {
+      notifyError(e, cancelKind === 'class' ? 'Không hủy được lớp' : 'Không hủy được buổi học');
+    } finally {
+      setCancelBusy(false);
+    }
+  }
+
   async function saveGrade() {
     if (!gradingId || typeof gradeScore !== 'number') return;
     try {
@@ -251,11 +287,28 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
         <div style={{ fontSize: 13, color: C.muted }}>{dayjs(session.sessionDate).format('DD/MM/YYYY')}</div>
         <div style={{ fontSize: 13, color: C.muted }}>{session.startTime}–{session.endTime}</div>
         <div style={{ padding: '3px 10px', borderRadius: 6, background: C.bg, color: st.color, fontSize: 12, fontWeight: 600 }}>{st.label}</div>
-        {attLoaded && (
-          <div style={{ marginLeft: 'auto', fontSize: 12, color: C.muted }}>
-            {presentCount}/{enrollments.length} có mặt
-          </div>
-        )}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+          {attLoaded && (
+            <div style={{ fontSize: 12, color: C.muted }}>
+              {presentCount}/{enrollments.length} có mặt
+            </div>
+          )}
+          {canCancel && (
+            <Menu position="bottom-end" withinPortal>
+              <Menu.Target>
+                <Button size="xs" variant="default" style={{ fontFamily: FONT }}>Thao tác</Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item color="orange" disabled={!enabled} onClick={() => { setCancelReason(''); setCancelKind('session'); }}>
+                  Hủy buổi học
+                </Menu.Item>
+                <Menu.Item color="red" onClick={() => { setCancelReason(''); setCancelKind('class'); }}>
+                  Hủy lớp
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          )}
+        </div>
       </div>
 
       {/* 4-tab content */}
@@ -433,6 +486,42 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
           <Chatter entityType="class_session" entityId={classSessionId} />
         </Tabs.Panel>
       </Tabs>
+
+      <Modal
+        opened={cancelKind !== null}
+        onClose={() => setCancelKind(null)}
+        title={cancelKind === 'class' ? 'Xác nhận hủy lớp' : 'Xác nhận hủy buổi học'}
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            {cancelKind === 'class'
+              ? 'Hủy lớp sẽ hủy TẤT CẢ buổi học tương lai và các buổi họp phụ huynh đã lên lịch. Buổi đã diễn ra được giữ lại. Hành động này được ghi log.'
+              : 'Hủy buổi học này. Hành động được ghi log kèm lý do.'}
+          </Text>
+          <Textarea
+            label="Lý do hủy"
+            withAsterisk
+            placeholder="Nhập lý do..."
+            minRows={2}
+            value={cancelReason}
+            onChange={e => setCancelReason(e.currentTarget.value)}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" disabled={cancelBusy} onClick={() => setCancelKind(null)}>
+              Quay lại
+            </Button>
+            <Button
+              color={cancelKind === 'class' ? 'red' : 'orange'}
+              loading={cancelBusy}
+              disabled={!cancelReason.trim()}
+              onClick={submitCancel}
+            >
+              Xác nhận hủy
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </div>
   );
 }

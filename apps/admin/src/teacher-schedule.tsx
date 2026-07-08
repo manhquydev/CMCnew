@@ -110,7 +110,7 @@ export function TeacherSchedule() {
     );
   }
   if (activeSession) {
-    return <TeacherScheduleDetail session={activeSession} onBack={closeSession} />;
+    return <TeacherScheduleDetail session={activeSession} onBack={closeSession} onChanged={loadSessions} />;
   }
 
   return (
