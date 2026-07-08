@@ -114,6 +114,45 @@ export const guardianRouter = router({
       }),
     ),
 
+  // Archive (deactivate) phụ huynh. CHẶN nếu còn liên kết con: học sinh đăng nhập LMS bằng SĐT phụ
+  // huynh (decision 0033) và loginFamilyByPhone yêu cầu parent.isActive — deactivate PH đang có con sẽ
+  // KHÓA login của các con. Chỉ archive được PH mồ côi (đã gỡ hết Guardian). Bump tokenVersion để thu hồi
+  // ticket đang phát. Đây là semantics an toàn duy nhất (xác định bởi code, không phải lựa chọn nghiệp vụ).
+  parentArchive: requirePermission('guardian', 'parentArchive')
+    .input(z.object({ id: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const before = await tx.parentAccount.findUnique({
+          where: { id: input.id },
+          select: { id: true, displayName: true, isActive: true },
+        });
+        if (!before) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Không tìm thấy tài khoản phụ huynh' });
+        }
+        const linkCount = await tx.guardian.count({ where: { parentAccountId: input.id } });
+        if (linkCount > 0) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `Phụ huynh còn liên kết ${linkCount} học sinh — gỡ liên kết trước khi lưu trữ (nếu không sẽ khóa đăng nhập của học sinh).`,
+          });
+        }
+        const updated = await tx.parentAccount.update({
+          where: { id: input.id },
+          data: { isActive: false, tokenVersion: { increment: 1 } },
+          select: { id: true, displayName: true },
+        });
+        await logEvent(tx, {
+          facilityId: null,
+          entityType: 'parent_account',
+          entityId: updated.id,
+          type: 'archived',
+          body: `Lưu trữ phụ huynh ${updated.displayName}`,
+          actorId: ctx.session.userId,
+        });
+        return updated;
+      }),
+    ),
+
   // Guardians of a student, with the parent's identity.
   listForStudent: requirePermission('guardian', 'listForStudent')
     .input(z.object({ studentId: z.string().uuid() }))

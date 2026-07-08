@@ -227,6 +227,21 @@ function ParentEditCard({ parents, onSaved }: { parents: ParentT[]; onSaved: () 
     }
   }
 
+  async function archive() {
+    if (!parentId) return;
+    setBusy(true);
+    try {
+      await trpc.guardian.parentArchive.mutate({ id: parentId });
+      notifySuccess('Đã lưu trữ phụ huynh');
+      setParentId(null);
+      onSaved();
+    } catch (e) {
+      notifyError(e, 'Lưu trữ phụ huynh thất bại');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
       <Text fw={600} style={{ color: 'var(--cmc-text)' }} mb="md">
@@ -249,11 +264,17 @@ function ParentEditCard({ parents, onSaved }: { parents: ParentT[]; onSaved: () 
               <TextInput label="Email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} disabled={busy} />
               <TextInput label="SĐT" value={phone} onChange={(e) => setPhone(e.currentTarget.value)} disabled={busy} />
             </Group>
-            <Group justify="flex-end">
+            <Group justify="space-between">
+              <Button variant="subtle" color="red" radius={9999} loading={busy} onClick={archive}>
+                Lưu trữ phụ huynh
+              </Button>
               <Button variant="filled" radius={9999} loading={busy} onClick={save}>
                 Lưu thay đổi
               </Button>
             </Group>
+            <Text size="xs" c="dimmed">
+              Lưu trữ chỉ được khi phụ huynh không còn liên kết học sinh (tránh khóa đăng nhập LMS của con).
+            </Text>
           </>
         )}
       </Stack>
