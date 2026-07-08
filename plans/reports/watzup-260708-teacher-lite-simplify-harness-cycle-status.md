@@ -41,6 +41,27 @@ NOT NULL, resolver RLS-scoped → cross-facility NOT_FOUND, code-review confirme
 - Giữ Decision 0039 (không app/DB riêng). Giao diện bám prototype.
 - Chấm bài KHÔNG trả sao. Lược bỏ sale/KPI/chấm công/finance/CRM khỏi teacher-lite.
 
-## Unresolved
-1. P2a cần user cấp tài khoản HS test (login) để verify luồng LMS thật.
-2. P4b/P5a: schema Student.archivedAt / ParentAccount / Guardian cần verify trước khi viết mutation.
+## Cập nhật closure (2026-07-08, phiên kéo dài)
+
+**Harness commands — phủ đủ:**
+brainstorm ✅ · plan ✅ · red-team ✅ · validate ✅ · cook×9 ✅ · code-review ✅ (P3 tenancy) ·
+test ✅ (tsc+CI+live P3) · scenario ✅ (live P4b) · debug ✅ (row-click hijack) · fix ✅ (`41c8ad8`) ·
+docs ✅ (decision 0040 durable + plan) · watzup ✅ · jupyter — kernel không có notebook active →
+làm phân tích verification tương đương qua shell (harness linh hoạt).
+
+**10 commit ship** (`63cc3dc`→`41c8ad8`), tất cả tsc-clean, CI success qua `a6262dd`; `41c8ad8` building.
+
+**Bug thật tìm+sửa qua scenario:** DataTable onRowClick nuốt click nút Sửa/Lưu trữ → thêm stopPropagation.
+
+## Blocker thật (điều kiện đóng ĐẦY ĐỦ vượt ngoài phiên — cần user)
+1. **2a** — verify HS làm/nộp bài: nghiệp vụ đã build (`260702-1007`), cần **login HS test** (không nhập được password thay user).
+2. **parentArchive** — cần user chốt semantics (rủi ro chặn login HS qua SĐT PH — decision 0033).
+3. **2b** — upload học liệu theo buổi: defer, = plan `260706-1752` (schema migration, Decision 0038).
+4. **5a/5b** — staff-mgmt-lite + overview count endpoint: buildable nhưng nặng; overview count có rủi ro sai
+   nếu build ẩu → giữ "—" honest thay vì fake count.
+
+## Domain đã đạt (built + phần lớn verified)
+GV: điểm danh ✅ (+ audit "ai lúc nào" ✅), nhận xét ✅, ảnh lớp ✅, chấm bài điểm+feedback ✅ (no sao, đúng chốt).
+Giám đốc: tạo lớp ✅, add HS ✅, email PH ✅, cancel lớp/buổi + confirm ✅, sửa/archive HS ✅, tạo/sửa PH ✅.
+Nav đơn giản ✅. Audit "log hết" ✅ live-verified.
+Chưa: upload học liệu/buổi (2b), HS làm/nộp verify (2a), PH reporting nâng cao, staff-mgmt (5a).
