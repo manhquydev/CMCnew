@@ -54,8 +54,8 @@ Nền tảng đã có (không xây lại): audit infra `@cmc/audit` (`RecordEven
 | 1 | [Nav simplification](./phase-01-nav-simplification.md) | Completed (63cc3dc, deployed dev) |
 | 2 | [LMS flow verify + session material upload](./phase-02-lms-flow-verify-session-material-upload.md) | Pending (2a chờ HS login; 2b defer to 260706-1752) |
 | 3 | [Audit surfacing](./phase-03-audit-surfacing.md) | Completed (52e90db, live-verified dev) |
-| 4 | [CRUD completion](./phase-04-crud-completion.md) | Partial — 4a done (80bbe83); 4b pending |
-| 5 | [Director staff-mgmt + overview + cancel confirm](./phase-05-director-staff-mgmt-overview-cancel-confirm.md) | Partial — 5c done (37472f2); 5a/5b pending |
+| 4 | [CRUD completion](./phase-04-crud-completion.md) | Mostly done — 4a + studentArchive + parentUpdate/audit + parent edit UI; only parentArchive blocked (0033 decision) |
+| 5 | [Director staff-mgmt + overview + cancel confirm](./phase-05-director-staff-mgmt-overview-cancel-confirm.md) | Completed |
 
 ## Nguyên tắc API bypass (user-directed 2026-07-08)
 

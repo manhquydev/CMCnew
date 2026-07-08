@@ -1,18 +1,20 @@
 ---
 phase: 5
-title: "Director staff-mgmt + overview + cancel confirm"
-status: pending
+title: Director staff-mgmt + overview + cancel confirm
+status: completed
 priority: P2
-dependencies: [1]
+dependencies:
+  - 1
 ---
 
 # Phase 5: Giám đốc quản lý nhân sự gọn + overview + cancel confirm
 
-## Progress (2026-07-08)
-- **5c DONE (`37472f2`):** confirm modal trước khi hủy lớp/buổi (cascade warning + echo lý do) trong
-  `teacher-lite-class-control-panel.tsx`.
-- **5a PENDING:** staff-mgmt-lite (giám đốc quản lý đội GV, CHỈ role `giao_vien` — validate chốt RT-5).
-- **5b PENDING:** /overview 2 stat thật ("Bài chờ chấm", "Nhận xét chờ chốt").
+## Progress (2026-07-08) — PHASE 5 COMPLETE
+- **5c DONE (`37472f2`):** confirm modal trước khi hủy lớp/buổi (cascade warning + echo lý do).
+- **5a DONE (`e0418c7`):** section "Đội ngũ giáo viên" (staff-lite) — director xem roster GV (user.listTeachers,
+  DT-gated); thêm GV link ERP đầy đủ (create cần full HR form). Read-only lean by design.
+- **5b DONE (`af3a7da`):** /overview 2 stat thật qua `teacherLite.overviewStats` (pendingGrading scope theo
+  HS của GV để tránh over-count exercise global; pendingEvidence = buổi đã diễn ra chưa publish nhật ký).
 
 ## Overview
 
