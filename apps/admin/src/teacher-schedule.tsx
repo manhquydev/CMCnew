@@ -17,14 +17,6 @@ const C = {
 };
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif';
 
-const SESSION_STATUS: Record<string, { label: string; color: string }> = {
-  planned:   { label: 'Sắp dạy',   color: '#0071E3' },
-  open:      { label: 'Đang mở',   color: '#1565C0' },
-  running:   { label: 'Đang học',  color: '#137333' },
-  closed:    { label: 'Đã xong',   color: '#6E6E73' },
-  cancelled: { label: 'Đã hủy',    color: '#C5221F' },
-};
-
 export function TeacherSchedule() {
   const { me } = useSession();
 
