@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
-import { API_URL, Chatter, notifyError, notifySuccess, trpc, uploadSessionPhoto, useSession, WorkflowStatusbar } from '@cmc/ui';
-import { Button, Center, Drawer, Group, Loader, Menu, Modal, NumberInput, Stack, Tabs, Text, Textarea } from '@mantine/core';
+import { API_URL, Chatter, notifyError, notifySuccess, PdfAnnotator, trpc, uploadSessionPhoto, useSession, WorkflowStatusbar } from '@cmc/ui';
+import { Button, Center, Drawer, Group, Loader, Menu, Modal, NumberInput, Select, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core';
 import { can } from '@cmc/auth/permissions';
 import { effectiveSessionStatus, SESSION_STAGES, SESSION_TERMINAL } from './session-status';
 import { StudentDetailPanel } from './student-detail.js';
@@ -24,10 +24,33 @@ const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-
 type AttStatus = 'present' | 'late' | 'absent';
 interface AttMark { status: AttStatus; excused: boolean }
 
+type StudentComment = {
+  participation?: string;
+  strength?: string;
+  needsImprovement?: string;
+  teacherNote?: string;
+};
+
+/** Record<studentId, comment> -> the array shape sessionEvidence.upsertDraft expects; drops
+ * entries with no field set so an untouched student never creates an empty comment row. */
+function commentsToArray(comments: Record<string, StudentComment>) {
+  return Object.entries(comments)
+    .filter(([, c]) => c.participation || c.strength || c.needsImprovement || c.teacherNote?.trim())
+    .map(([studentId, c]) => ({
+      studentId,
+      participation: c.participation as 'Tích cực' | 'Ổn định' | 'Cần khuyến khích thêm' | undefined,
+      strength: c.strength as 'Tư duy logic' | 'Sáng tạo' | 'Giao tiếp' | 'Tập trung' | 'Hợp tác' | undefined,
+      needsImprovement: c.needsImprovement as 'Luyện trình bày' | 'Tăng tập trung' | 'Ôn kiến thức nền' | 'Mạnh dạn phát biểu' | undefined,
+      teacherNote: c.teacherNote?.trim() || undefined,
+    }));
+}
+
 type EvidenceDraft = {
   summary: string;
   internalNote: string;
   photos: Array<{ ref: string }>;
+  /** Nhận xét riêng từng học sinh (participation/strength/needsImprovement/teacherNote), keyed by studentId. */
+  comments: Record<string, StudentComment>;
 };
 
 export interface SessionDetailProps {
@@ -52,8 +75,11 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
   const [drawerStudentId, setDrawerStudentId] = useState<string | null>(null);
 
   // ── Evidence (unified state prevents Tab 2 / Tab 4 race) ────────────────────
-  const [draft, setDraft] = useState<EvidenceDraft>({ summary: '', internalNote: '', photos: [] });
+  const [draft, setDraft] = useState<EvidenceDraft>({ summary: '', internalNote: '', photos: [], comments: {} });
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [commentTemplate, setCommentTemplate] = useState<{
+    participation: readonly string[]; strength: readonly string[]; needsImprovement: readonly string[];
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(0);
   const [evidencePublished, setEvidencePublished] = useState(false);
@@ -69,6 +95,10 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
   const [gradingId, setGradingId] = useState<string | null>(null);
   const [gradeScore, setGradeScore] = useState<number | string>('');
   const [gradeFeedback, setGradeFeedback] = useState('');
+  // Bài HS làm trên PDF (annotation layer) — hiển thị cho GV chấm, đúng prototype "Chấm bài".
+  const [gradingLayer, setGradingLayer] = useState<
+    Awaited<ReturnType<typeof trpc.submission.layerForGrading.query>> | null
+  >(null);
 
   // ── Cancel session / class ──────────────────────────────────────────────────
   const [cancelKind, setCancelKind] = useState<null | 'class' | 'session'>(null);
@@ -98,17 +128,28 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
           ? ((detail as Record<string, unknown>).session as Record<string, unknown>).evidence
           : detail;
         const evAny = ev as Record<string, unknown> | undefined | null;
+        const comments: Record<string, StudentComment> = {};
+        for (const c of (evAny?.comments as Array<Record<string, unknown>>) ?? []) {
+          comments[c.studentId as string] = {
+            participation: (c.participation as string) ?? undefined,
+            strength: (c.strength as string) ?? undefined,
+            needsImprovement: (c.needsImprovement as string) ?? undefined,
+            teacherNote: (c.teacherNote as string) ?? undefined,
+          };
+        }
         setDraft({
           summary: (evAny?.summary as string) ?? '',
           internalNote: (evAny?.internalNote as string) ?? '',
           photos: ((evAny?.photos as Array<Record<string, unknown>>) ?? [])
             .sort((a, b) => (a.sortOrder as number) - (b.sortOrder as number))
             .map(p => ({ ref: (p.photoRef ?? p.ref) as string })),
+          comments,
         });
         setEvidencePublished(evAny?.status === 'published');
         setDraftLoaded(true);
       })
       .catch(() => setDraftLoaded(true));
+    trpc.sessionEvidence.commentTemplate.query().then(setCommentTemplate).catch(() => {});
   }, [classSessionId]);
 
   // Load exercises for this class batch
@@ -137,7 +178,7 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
           summary: next.summary.trim() || undefined,
           internalNote: next.internalNote.trim() || undefined,
           photos: next.photos.map((p, i) => ({ ref: p.ref, sortOrder: i })),
-          comments: [],
+          comments: commentsToArray(next.comments),
         });
         setSavedAt(Date.now());
       } catch (e) {
@@ -151,6 +192,18 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
   function updateDraft(patch: Partial<EvidenceDraft>) {
     setDraft(prev => {
       const next = { ...prev, ...patch };
+      scheduleSave(next);
+      return next;
+    });
+  }
+
+  /** Nhận xét riêng cho 1 học sinh (participation/strength/needsImprovement/teacherNote). */
+  function updateStudentComment(studentId: string, patch: Partial<StudentComment>) {
+    setDraft(prev => {
+      const next = {
+        ...prev,
+        comments: { ...prev.comments, [studentId]: { ...prev.comments[studentId], ...patch } },
+      };
       scheduleSave(next);
       return next;
     });
@@ -190,11 +243,32 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
       try {
         const ref = await uploadSessionPhoto(file);
         // Use functional update to avoid stale-closure bug when uploading multiple files (H2)
+        let saved: EvidenceDraft | null = null;
         setDraft(prev => {
-          const next = { ...prev, photos: [...prev.photos, { ref }] };
-          scheduleSave(next);
-          return next;
+          saved = { ...prev, photos: [...prev.photos, { ref }] };
+          return saved;
         });
+        if (!saved) continue;
+        // Save the new photo IMMEDIATELY (bypass the 1s debounce used for text fields) — the
+        // <img> below renders as soon as the ref lands in state and requests /files/session-photo/
+        // right away, but the file route only serves refs already linked in sessionEvidencePhoto
+        // (RLS-safe visibility gate). Debouncing here would 403 the freshly-uploaded photo until
+        // the debounce fires.
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        setSaving(true);
+        try {
+          const next: EvidenceDraft = saved;
+          await trpc.sessionEvidence.upsertDraft.mutate({
+            classSessionId,
+            summary: next.summary.trim() || undefined,
+            internalNote: next.internalNote.trim() || undefined,
+            photos: next.photos.map((p, i) => ({ ref: p.ref, sortOrder: i })),
+            comments: commentsToArray(next.comments),
+          });
+          setSavedAt(Date.now());
+        } finally {
+          setSaving(false);
+        }
       } catch (e) {
         notifyError(e, 'Upload ảnh thất bại');
       }
@@ -211,7 +285,7 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
         summary: draft.summary.trim() || undefined,
         internalNote: draft.internalNote.trim() || undefined,
         photos: draft.photos.map((p, i) => ({ ref: p.ref, sortOrder: i })),
-        comments: [],
+        comments: commentsToArray(draft.comments),
       });
       await trpc.sessionEvidence.publish.mutate({ classSessionId });
       setEvidencePublished(true);
@@ -358,6 +432,50 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
                 value={draft.summary} disabled={!draftLoaded || !enabled}
                 onChange={e => updateDraft({ summary: e.currentTarget.value })} />
             </div>
+
+            <div>
+              <Text size="sm" fw={500} mb={8}>Nhận xét từng học sinh</Text>
+              {(() => {
+                const attended = enrollments.filter(enr => {
+                  const s = marks[enr.id]?.status;
+                  return s === 'present' || s === 'late';
+                });
+                if (!attLoaded) return <Text size="xs" c="dimmed">Đang tải điểm danh…</Text>;
+                if (attended.length === 0) {
+                  return <Text size="xs" c="dimmed">Điểm danh trước để nhận xét từng học sinh có mặt.</Text>;
+                }
+                return (
+                  <Stack gap={10}>
+                    {attended.map(enr => {
+                      const c = draft.comments[enr.studentId] ?? {};
+                      return (
+                        <div key={enr.id} style={{ padding: 10, background: C.bg, borderRadius: 8 }}>
+                          <Text size="xs" fw={600} mb={6}>{enr.student.fullName}</Text>
+                          <Group gap={6} grow mb={6}>
+                            <Select size="xs" placeholder="Tham gia" clearable
+                              data={commentTemplate?.participation as unknown as string[] ?? []}
+                              value={c.participation ?? null} disabled={!enabled}
+                              onChange={v => updateStudentComment(enr.studentId, { participation: v ?? undefined })} />
+                            <Select size="xs" placeholder="Điểm mạnh" clearable
+                              data={commentTemplate?.strength as unknown as string[] ?? []}
+                              value={c.strength ?? null} disabled={!enabled}
+                              onChange={v => updateStudentComment(enr.studentId, { strength: v ?? undefined })} />
+                            <Select size="xs" placeholder="Cần cải thiện" clearable
+                              data={commentTemplate?.needsImprovement as unknown as string[] ?? []}
+                              value={c.needsImprovement ?? null} disabled={!enabled}
+                              onChange={v => updateStudentComment(enr.studentId, { needsImprovement: v ?? undefined })} />
+                          </Group>
+                          <TextInput size="xs" placeholder="Ghi chú thêm (tuỳ chọn)..."
+                            value={c.teacherNote ?? ''} disabled={!enabled}
+                            onChange={e => updateStudentComment(enr.studentId, { teacherNote: e.currentTarget.value })} />
+                        </div>
+                      );
+                    })}
+                  </Stack>
+                );
+              })()}
+            </div>
+
             <div>
               <Text size="sm" fw={500} mb={8}>Ảnh lớp học</Text>
               {draft.photos.length > 0 && (
@@ -425,6 +543,13 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
                         setGradingId(sub.id);
                         setGradeScore(gradeAny?.score as number ?? '');
                         setGradeFeedback(gradeAny?.feedback as string ?? '');
+                        // Tải bài HS làm trên PDF (nếu bài tập có đề PDF) để GV xem khi chấm.
+                        setGradingLayer(null);
+                        if (selectedEx?.basePdfRef) {
+                          trpc.submission.layerForGrading.query({ submissionId: sub.id })
+                            .then(setGradingLayer)
+                            .catch(() => setGradingLayer(null));
+                        }
                       }} style={{
                         padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
                         background: gradingId === sub.id ? C.brandMuted : C.surface,
@@ -441,6 +566,17 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
               )}
               {gradingId && (
                 <div style={{ marginTop: 14, padding: 16, background: C.surface, borderRadius: 12, border: `1px solid ${C.border}` }}>
+                  {selectedEx?.basePdfRef && gradingLayer?.student && (
+                    <div style={{ marginBottom: 12 }}>
+                      <Text size="xs" fw={600} mb={4}>Bài học sinh đã làm</Text>
+                      <PdfAnnotator
+                        pdfRef={selectedEx.basePdfRef}
+                        value={gradingLayer.student}
+                        onChange={() => {}}
+                        editable={false}
+                      />
+                    </div>
+                  )}
                   <NumberInput label="Điểm (0–10)" min={0} max={10} step={0.5} value={gradeScore} onChange={setGradeScore} mb="sm" />
                   <Textarea label="Nhận xét" placeholder="Ghi nhận xét..." minRows={2} value={gradeFeedback} onChange={e => setGradeFeedback(e.currentTarget.value)} mb="sm" />
                   <Button size="sm" onClick={saveGrade} style={{ background: C.brand, color: '#fff', fontFamily: FONT }}>Lưu điểm</Button>
