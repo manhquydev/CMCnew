@@ -110,6 +110,14 @@ services:
       BREVO_SENDER_NAME:    ${BREVO_SENDER_NAME:-}
       CALLIO_API_BASE:      ${CALLIO_API_BASE:-}
       CALLIO_API_TOKEN:     ${CALLIO_API_TOKEN:-}
+    volumes:
+      # Host bind-mounts (NOT a named volume), mirroring docker-compose.prod.tls.yml — without
+      # these, photo-store.ts/pdf-store.ts write into the container's writable layer only and get
+      # wiped on every `--force-recreate` (config change, image rebuild, redeploy).
+      # NOTE: uses a dev-only `.data-dev/` dir (NOT `.data/`, which is prod's bind-mount target on
+      # the same host) — sharing `.data/` here would leak dev/prod uploaded files into one folder.
+      - ../.data-dev/pdf:/app/apps/api/.data/pdf
+      - ../.data-dev/session-photos:/app/apps/api/.data/session-photos
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:4000/health || exit 1']
       interval: 10s

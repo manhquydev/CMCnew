@@ -94,7 +94,15 @@ export function SessionEvidenceTab({
                     .map((photo) => (
                       <Card key={photo.id} withBorder radius="md" p="xs">
                         <Stack gap={6}>
-                          <Image src={photoUrl(photo.photoRef)} h={160} fit="cover" radius="sm" />
+                          {/* contain (not cover): evidence photos are often portrait — cover crops
+                              a tall photo down to a thin horizontal strip inside the fixed height. */}
+                          <Image
+                            src={photoUrl(photo.photoRef)}
+                            h={220}
+                            fit="contain"
+                            radius="sm"
+                            style={{ backgroundColor: 'var(--mantine-color-gray-1)' }}
+                          />
                         </Stack>
                       </Card>
                     ))}
