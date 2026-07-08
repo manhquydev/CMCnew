@@ -213,10 +213,19 @@ export function StudentsPanel({
           >
             Chi tiết
           </Button>
-          <Button size="compact-xs" variant="subtle" onClick={() => openEdit(s)}>
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            onClick={(e) => { e.stopPropagation(); openEdit(s); }}
+          >
             Sửa
           </Button>
-          <Button size="compact-xs" variant="subtle" color="red" onClick={() => setArchiveTarget(s)}>
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            color="red"
+            onClick={(e) => { e.stopPropagation(); setArchiveTarget(s); }}
+          >
             Lưu trữ
           </Button>
         </Group>
