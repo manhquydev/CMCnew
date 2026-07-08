@@ -170,7 +170,7 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
   // Server may silently drop photo refs whose file no longer exists on disk (e.g. wiped by a
   // redeploy) rather than blocking the whole save — sync local state to the server's truth and
   // tell the teacher, so a dead ref isn't resubmitted forever on every subsequent save.
-  function applyDraftSaveResult(result: { photos: { photoRef: string }[]; droppedPhotoCount: number }) {
+  function applyDraftSaveResult(result: Awaited<ReturnType<typeof trpc.sessionEvidence.upsertDraft.mutate>>) {
     if (result.droppedPhotoCount > 0) {
       notifyInfo(`${result.droppedPhotoCount} ảnh bị lỗi (file gốc không còn) đã được tự động gỡ khỏi buổi học — tải lại ảnh nếu cần.`, 'Ảnh lỗi đã được gỡ');
       setDraft(prev => ({ ...prev, photos: result.photos.map((p) => ({ ref: p.photoRef })) }));
