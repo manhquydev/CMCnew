@@ -45,9 +45,9 @@ Decision 0039/0040). Liên kết LMS trên backend chung (không app/DB riêng).
 - `0f162aa` chevron statusbar Odoo + fix bug "Sắp dạy" (time-derived status).
 
 ## Thứ tự thực thi (mỗi module = 1 workflow design→implement→verify, tôi review/fix + tsc + commit + live-verify)
-1. 🔄 **/students** record-detail hub (đang chạy, workflow w5x0umwdu) — pattern chuẩn.
+1. ✅ **/students** record-detail hub — pattern chuẩn (student-detail.tsx).
 2. **Session-detail LINKED**: click HS trong chi tiết buổi → mở chi tiết HS (contextual). Chatter sidebar + smart-stats.
-3. **/classes** hub + **sinh buổi TỰ ĐỘNG** (bỏ nút thủ công) + quản lý học liệu theo buổi.
+3. ✅ **/classes** hub (record-detail + chevron + Chatter + tab Học liệu) + **sinh buổi TỰ ĐỘNG** khi tạo lớp — chưa commit, chờ tsc/live-verify.
 4. **/guardians** hub (CRUD đầy đủ đã có: create/edit/archive).
 5. **Thêm nhân sự GV nhanh** (form gọn thay vì link ERP) + **Thêm HS nhanh** (đã có teacherLite provisioning).
 6. **LMS học viên responsive** (mobile+desktop) + làm bài tương tác — verify + hoàn thiện.
@@ -55,7 +55,7 @@ Decision 0039/0040). Liên kết LMS trên backend chung (không app/DB riêng).
 ## Acceptance (toàn plan)
 - [ ] Mọi màn teacher-lite theo record-detail hub + chevron + Chatter sidebar (prototype).
 - [ ] Trong chi tiết buổi, click HS → chi tiết HS (liên kết, không mở trang rời).
-- [ ] Sinh buổi tự động khi tạo lớp; không còn thao tác sinh buổi thủ công.
+- [x] Sinh buổi tự động khi tạo lớp; không còn thao tác sinh buổi thủ công ban đầu (bấm "Tạo lớp" là xong). Nếu tự sinh fail/skip: toast báo rõ + nút 1-click "Sinh buổi ngay" ngay tại tab "Buổi học" (không phải đào menu); menu "Sinh lại buổi theo lịch" giữ làm recompute khi buổi bị hủy/dời (xem báo cáo `plans/reports/brainstorm-260708-1814-classhub-generate-sessions-fallback-button-report.md`).
 - [ ] Director thêm GV nhanh + CRUD nhân sự/PH/HS đầy đủ; thêm HS nhanh không cần phiếu thu.
 - [ ] Chấm bài xem được bài HS làm (✅). Học liệu upload theo buổi (✅ CourseExerciseManager).
 - [ ] LMS học viên responsive mobile+desktop, làm bài tương tác.

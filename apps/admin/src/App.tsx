@@ -594,7 +594,7 @@ const ALL_SECTION_KEYS = new Set<string>([
   // so #certificate is not a reachable hash route either. Re-add when the feature is re-enabled.
   'classes', 'meetings', 'levelup', 'my-payslips',
   'checkin', 'shift-registration', 'facility-network', 'shift-config',
-  'student-mgmt', 'payroll-checkin',
+  'student-mgmt', 'payroll-checkin', 'staff-lite',
   'biz-director-cockpit', 'edu-director-cockpit',
   'profile',
 ]);

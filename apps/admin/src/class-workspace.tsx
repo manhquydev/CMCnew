@@ -10,6 +10,7 @@ import {
   trpc,
   Chatter,
   notifyError,
+  notifyInfo,
   notifySuccess,
   useSession,
   FacilityPicker,
@@ -227,6 +228,10 @@ function CreateClassModal({
       setErr('Mỗi khung lịch cần thứ + giờ bắt đầu/kết thúc');
       return;
     }
+    if (!startDate) {
+      setErr('Chọn ngày khai giảng (hệ thống cần ngày này để tự sinh buổi học)');
+      return;
+    }
     setBusy(true);
     setErr('');
     try {
@@ -244,6 +249,23 @@ function CreateClassModal({
           teacherId: s.teacherId ?? undefined,
         })),
       });
+      // Sinh buổi tự động ngay sau khi tạo lớp — không còn thao tác "Sinh buổi" thủ công
+      // ban đầu. endDate dùng giá trị ước tính theo khung khóa cứng (endDateAuto effect ở
+      // trên). Cả 2 nhánh fail đều phải báo rõ (không im lặng) — nút "Sinh buổi ngay" trong
+      // tab "Buổi học" (SessionsTab) là lối thoát thủ công 1-click cho cả 2 case.
+      if (endDate) {
+        try {
+          await trpc.schedule.generateSessions.mutate({
+            classBatchId: created.id,
+            startDate: toApiDate(startDate)!,
+            endDate: toApiDate(endDate)!,
+          });
+        } catch (e) {
+          notifyError(e, 'Đã tạo lớp nhưng sinh buổi tự động lỗi — vào tab "Buổi học" bấm "Sinh buổi ngay"');
+        }
+      } else {
+        notifyInfo('Đã tạo lớp — chưa xác định được ngày kết thúc nên chưa tự sinh buổi, vào tab "Buổi học" bấm "Sinh buổi ngay"');
+      }
       notifySuccess(`Đã tạo lớp ${created.code}`);
       close();
       reset();
@@ -301,7 +323,7 @@ function CreateClassModal({
             </Card>
           )}
           <Group grow>
-            <DateInput label="Khai giảng" value={startDate} onChange={setStartDate} valueFormat="DD/MM/YYYY" clearable />
+            <DateInput label="Khai giảng" required value={startDate} onChange={setStartDate} valueFormat="DD/MM/YYYY" clearable />
             <DateInput
               label={endDateAuto ? 'Kết thúc (ước tính, có thể sửa)' : 'Kết thúc'}
               value={endDate}
@@ -603,7 +625,21 @@ function ScheduleTab({
 
 // ─── SessionsTab ──────────────────────────────────────────────────────────────
 
-function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Room[]; teachers: Teacher[] }) {
+function SessionsTab({
+  batchId,
+  rooms,
+  teachers,
+  canGenerate,
+  onGenerate,
+}: {
+  batchId: string;
+  rooms: Room[];
+  teachers: Teacher[];
+  /** Whether the viewer may trigger session generation (mirrors the hub's "Thao tác" gate). */
+  canGenerate: boolean;
+  /** Runs `schedule.generateSessions` using the batch's own stored dates — no input needed. */
+  onGenerate: () => void;
+}) {
   const { me } = useSession();
   const canCreateMakeup = can(me.roles, me.isSuperAdmin, 'schedule', 'createMakeupSession');
   const [sessions, setSessions] = useState<ClassSession[]>([]);
@@ -657,7 +693,12 @@ function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Roo
         {sessions.length === 0 && (
           <Table.Tr>
             <Table.Td colSpan={5}>
-              <Text c="dimmed" size="sm">Chưa có buổi học. Dùng "Thao tác → Sinh lại buổi theo lịch" nếu lớp chưa có buổi.</Text>
+              <Group gap="sm">
+                <Text c="dimmed" size="sm">Chưa có buổi học.</Text>
+                {canGenerate && (
+                  <Button size="xs" variant="light" onClick={onGenerate}>Sinh buổi ngay</Button>
+                )}
+              </Group>
             </Table.Td>
           </Table.Tr>
         )}
@@ -1429,7 +1470,14 @@ function ClassHub({
               <ScheduleTab batch={batch} facilityId={facilityId} rooms={rooms} teachers={teachers} />
             </Tabs.Panel>
             <Tabs.Panel value="sessions" pt="md">
-              <SessionsTab key={sessionsReloadKey} batchId={batch.id} rooms={rooms} teachers={teachers} />
+              <SessionsTab
+                key={sessionsReloadKey}
+                batchId={batch.id}
+                rooms={rooms}
+                teachers={teachers}
+                canGenerate={canGenerate}
+                onGenerate={doGenerate}
+              />
             </Tabs.Panel>
             <Tabs.Panel value="enroll" pt="md">
               <EnrollTab batch={batch} facilityId={facilityId} />
