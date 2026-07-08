@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
-import { API_URL, notifyError, notifySuccess, trpc, uploadSessionPhoto } from '@cmc/ui';
-import { Button, Center, Loader, NumberInput, Stack, Tabs, Text, Textarea } from '@mantine/core';
+import { API_URL, Chatter, notifyError, notifyInfo, notifySuccess, PdfAnnotator, trpc, uploadSessionPhoto, useSession, WorkflowStatusbar } from '@cmc/ui';
+import { Button, Center, Drawer, Group, Loader, Menu, Modal, NumberInput, Select, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core';
+import { can } from '@cmc/auth/permissions';
+import { effectiveSessionStatus, SESSION_STAGES, SESSION_TERMINAL } from './session-status';
+import { StudentDetailPanel } from './student-detail.js';
 
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
 type Enrollment = Awaited<ReturnType<typeof trpc.enrollment.listByBatch.query>>[number];
@@ -18,42 +21,65 @@ const C = {
 };
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif';
 
-const SESSION_STATUS: Record<string, { label: string; color: string }> = {
-  planned:   { label: 'Sắp dạy',  color: C.brand },
-  open:      { label: 'Đang mở',  color: '#1565C0' },
-  running:   { label: 'Đang học', color: C.success },
-  closed:    { label: 'Đã xong',  color: C.muted },
-  cancelled: { label: 'Đã hủy',   color: C.danger },
-};
-
 type AttStatus = 'present' | 'late' | 'absent';
 interface AttMark { status: AttStatus; excused: boolean }
+
+type StudentComment = {
+  participation?: string;
+  strength?: string;
+  needsImprovement?: string;
+  teacherNote?: string;
+};
+
+/** Record<studentId, comment> -> the array shape sessionEvidence.upsertDraft expects; drops
+ * entries with no field set so an untouched student never creates an empty comment row. */
+function commentsToArray(comments: Record<string, StudentComment>) {
+  return Object.entries(comments)
+    .filter(([, c]) => c.participation || c.strength || c.needsImprovement || c.teacherNote?.trim())
+    .map(([studentId, c]) => ({
+      studentId,
+      participation: c.participation as 'Tích cực' | 'Ổn định' | 'Cần khuyến khích thêm' | undefined,
+      strength: c.strength as 'Tư duy logic' | 'Sáng tạo' | 'Giao tiếp' | 'Tập trung' | 'Hợp tác' | undefined,
+      needsImprovement: c.needsImprovement as 'Luyện trình bày' | 'Tăng tập trung' | 'Ôn kiến thức nền' | 'Mạnh dạn phát biểu' | undefined,
+      teacherNote: c.teacherNote?.trim() || undefined,
+    }));
+}
 
 type EvidenceDraft = {
   summary: string;
   internalNote: string;
   photos: Array<{ ref: string }>;
+  /** Nhận xét riêng từng học sinh (participation/strength/needsImprovement/teacherNote), keyed by studentId. */
+  comments: Record<string, StudentComment>;
 };
 
 export interface SessionDetailProps {
   session: MySession;
   onBack: () => void;
+  /** Called after a mutation that changes the calendar (e.g. cancel) so the list refetches. */
+  onChanged?: () => void;
 }
 
-export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
+export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDetailProps) {
   const enabled = session.status !== 'cancelled';
   const classSessionId = session.id;
   const classBatchId = session.classBatchId;
+  const { me } = useSession();
+  const canCancel = can(me.roles, me.isSuperAdmin, 'teacherLite', 'cancelSession');
 
   // ── Attendance ──────────────────────────────────────────────────────────────
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [marks, setMarks] = useState<Record<string, AttMark>>({});
   const [markingAll, setMarkingAll] = useState(false);
   const [attLoaded, setAttLoaded] = useState(false);
+  const [drawerStudentId, setDrawerStudentId] = useState<string | null>(null);
 
   // ── Evidence (unified state prevents Tab 2 / Tab 4 race) ────────────────────
-  const [draft, setDraft] = useState<EvidenceDraft>({ summary: '', internalNote: '', photos: [] });
+  const [draft, setDraft] = useState<EvidenceDraft>({ summary: '', internalNote: '', photos: [], comments: {} });
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [commentTemplate, setCommentTemplate] = useState<{
+    participation: readonly string[]; strength: readonly string[]; needsImprovement: readonly string[];
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(0);
   const [evidencePublished, setEvidencePublished] = useState(false);
@@ -69,6 +95,15 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
   const [gradingId, setGradingId] = useState<string | null>(null);
   const [gradeScore, setGradeScore] = useState<number | string>('');
   const [gradeFeedback, setGradeFeedback] = useState('');
+  // Bài HS làm trên PDF (annotation layer) — hiển thị cho GV chấm, đúng prototype "Chấm bài".
+  const [gradingLayer, setGradingLayer] = useState<
+    Awaited<ReturnType<typeof trpc.submission.layerForGrading.query>> | null
+  >(null);
+
+  // ── Cancel session / class ──────────────────────────────────────────────────
+  const [cancelKind, setCancelKind] = useState<null | 'class' | 'session'>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelBusy, setCancelBusy] = useState(false);
 
   // Load attendance roster
   useEffect(() => {
@@ -93,17 +128,28 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
           ? ((detail as Record<string, unknown>).session as Record<string, unknown>).evidence
           : detail;
         const evAny = ev as Record<string, unknown> | undefined | null;
+        const comments: Record<string, StudentComment> = {};
+        for (const c of (evAny?.comments as Array<Record<string, unknown>>) ?? []) {
+          comments[c.studentId as string] = {
+            participation: (c.participation as string) ?? undefined,
+            strength: (c.strength as string) ?? undefined,
+            needsImprovement: (c.needsImprovement as string) ?? undefined,
+            teacherNote: (c.teacherNote as string) ?? undefined,
+          };
+        }
         setDraft({
           summary: (evAny?.summary as string) ?? '',
           internalNote: (evAny?.internalNote as string) ?? '',
           photos: ((evAny?.photos as Array<Record<string, unknown>>) ?? [])
             .sort((a, b) => (a.sortOrder as number) - (b.sortOrder as number))
             .map(p => ({ ref: (p.photoRef ?? p.ref) as string })),
+          comments,
         });
         setEvidencePublished(evAny?.status === 'published');
         setDraftLoaded(true);
       })
       .catch(() => setDraftLoaded(true));
+    trpc.sessionEvidence.commentTemplate.query().then(setCommentTemplate).catch(() => {});
   }, [classSessionId]);
 
   // Load exercises for this class batch
@@ -121,19 +167,30 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
       .catch(() => setSubmissions([]));
   }, [selectedEx]);
 
+  // Server may silently drop photo refs whose file no longer exists on disk (e.g. wiped by a
+  // redeploy) rather than blocking the whole save — sync local state to the server's truth and
+  // tell the teacher, so a dead ref isn't resubmitted forever on every subsequent save.
+  function applyDraftSaveResult(result: Awaited<ReturnType<typeof trpc.sessionEvidence.upsertDraft.mutate>>) {
+    if (result.droppedPhotoCount > 0) {
+      notifyInfo(`${result.droppedPhotoCount} ảnh bị lỗi (file gốc không còn) đã được tự động gỡ khỏi buổi học — tải lại ảnh nếu cần.`, 'Ảnh lỗi đã được gỡ');
+      setDraft(prev => ({ ...prev, photos: result.photos.map((p) => ({ ref: p.photoRef })) }));
+    }
+  }
+
   // Unified debounced save — both Tab 2 and Tab 4 go through here
   const scheduleSave = useCallback((next: EvidenceDraft) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       setSaving(true);
       try {
-        await trpc.sessionEvidence.upsertDraft.mutate({
+        const result = await trpc.sessionEvidence.upsertDraft.mutate({
           classSessionId,
           summary: next.summary.trim() || undefined,
           internalNote: next.internalNote.trim() || undefined,
           photos: next.photos.map((p, i) => ({ ref: p.ref, sortOrder: i })),
-          comments: [],
+          comments: commentsToArray(next.comments),
         });
+        applyDraftSaveResult(result);
         setSavedAt(Date.now());
       } catch (e) {
         notifyError(e, 'Lưu thất bại');
@@ -146,6 +203,18 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
   function updateDraft(patch: Partial<EvidenceDraft>) {
     setDraft(prev => {
       const next = { ...prev, ...patch };
+      scheduleSave(next);
+      return next;
+    });
+  }
+
+  /** Nhận xét riêng cho 1 học sinh (participation/strength/needsImprovement/teacherNote). */
+  function updateStudentComment(studentId: string, patch: Partial<StudentComment>) {
+    setDraft(prev => {
+      const next = {
+        ...prev,
+        comments: { ...prev.comments, [studentId]: { ...prev.comments[studentId], ...patch } },
+      };
       scheduleSave(next);
       return next;
     });
@@ -185,11 +254,33 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
       try {
         const ref = await uploadSessionPhoto(file);
         // Use functional update to avoid stale-closure bug when uploading multiple files (H2)
+        let saved: EvidenceDraft | null = null;
         setDraft(prev => {
-          const next = { ...prev, photos: [...prev.photos, { ref }] };
-          scheduleSave(next);
-          return next;
+          saved = { ...prev, photos: [...prev.photos, { ref }] };
+          return saved;
         });
+        if (!saved) continue;
+        // Save the new photo IMMEDIATELY (bypass the 1s debounce used for text fields) — the
+        // <img> below renders as soon as the ref lands in state and requests /files/session-photo/
+        // right away, but the file route only serves refs already linked in sessionEvidencePhoto
+        // (RLS-safe visibility gate). Debouncing here would 403 the freshly-uploaded photo until
+        // the debounce fires.
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        setSaving(true);
+        try {
+          const next: EvidenceDraft = saved;
+          const result = await trpc.sessionEvidence.upsertDraft.mutate({
+            classSessionId,
+            summary: next.summary.trim() || undefined,
+            internalNote: next.internalNote.trim() || undefined,
+            photos: next.photos.map((p, i) => ({ ref: p.ref, sortOrder: i })),
+            comments: commentsToArray(next.comments),
+          });
+          applyDraftSaveResult(result);
+          setSavedAt(Date.now());
+        } finally {
+          setSaving(false);
+        }
       } catch (e) {
         notifyError(e, 'Upload ảnh thất bại');
       }
@@ -201,13 +292,14 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setSaving(true);
     try {
-      await trpc.sessionEvidence.upsertDraft.mutate({
+      const result = await trpc.sessionEvidence.upsertDraft.mutate({
         classSessionId,
         summary: draft.summary.trim() || undefined,
         internalNote: draft.internalNote.trim() || undefined,
         photos: draft.photos.map((p, i) => ({ ref: p.ref, sortOrder: i })),
-        comments: [],
+        comments: commentsToArray(draft.comments),
       });
+      applyDraftSaveResult(result);
       await trpc.sessionEvidence.publish.mutate({ classSessionId });
       setEvidencePublished(true);
       notifySuccess('Đã đăng nhật ký lên LMS');
@@ -215,6 +307,32 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
       notifyError(e, 'Đăng nhật ký thất bại');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function submitCancel() {
+    const reason = cancelReason.trim();
+    if (!reason) {
+      notifyError('Nhập lý do hủy.', 'Thiếu thông tin');
+      return;
+    }
+    setCancelBusy(true);
+    try {
+      if (cancelKind === 'class') {
+        const r = await trpc.teacherLite.cancelClass.mutate({ id: classBatchId, reason });
+        notifySuccess(`Đã hủy lớp, ${r.cancelledSessions} buổi tương lai đã hủy.`);
+      } else {
+        await trpc.teacherLite.cancelSession.mutate({ sessionId: classSessionId, reason });
+        notifySuccess('Đã hủy buổi học.');
+      }
+      setCancelKind(null);
+      setCancelReason('');
+      onChanged?.(); // refetch calendar so the cancelled status shows immediately
+      onBack();
+    } catch (e) {
+      notifyError(e, cancelKind === 'class' ? 'Không hủy được lớp' : 'Không hủy được buổi học');
+    } finally {
+      setCancelBusy(false);
     }
   }
 
@@ -231,7 +349,6 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
     }
   }
 
-  const st = SESSION_STATUS[session.status] ?? { label: session.status, color: C.muted };
   const presentCount = enrollments.filter(e => marks[e.id]?.status === 'present').length;
   const savedIndicator = savedAt > 0 ? <span style={{ fontSize: 11, color: C.success }}>✓ Đã lưu</span> : null;
 
@@ -250,12 +367,34 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
         <div style={{ fontSize: 14, fontWeight: 700 }}>{session.batch.code}</div>
         <div style={{ fontSize: 13, color: C.muted }}>{dayjs(session.sessionDate).format('DD/MM/YYYY')}</div>
         <div style={{ fontSize: 13, color: C.muted }}>{session.startTime}–{session.endTime}</div>
-        <div style={{ padding: '3px 10px', borderRadius: 6, background: C.bg, color: st.color, fontSize: 12, fontWeight: 600 }}>{st.label}</div>
-        {attLoaded && (
-          <div style={{ marginLeft: 'auto', fontSize: 12, color: C.muted }}>
-            {presentCount}/{enrollments.length} có mặt
-          </div>
-        )}
+        <WorkflowStatusbar
+          stages={SESSION_STAGES}
+          terminal={SESSION_TERMINAL}
+          current={effectiveSessionStatus(session.sessionDate, session.startTime, session.endTime, session.status).stage}
+          ariaLabel="Trạng thái buổi học"
+        />
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+          {attLoaded && (
+            <div style={{ fontSize: 12, color: C.muted }}>
+              {presentCount}/{enrollments.length} có mặt
+            </div>
+          )}
+          {canCancel && (
+            <Menu position="bottom-end" withinPortal>
+              <Menu.Target>
+                <Button size="xs" variant="default" style={{ fontFamily: FONT }}>Thao tác</Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item color="orange" disabled={!enabled} onClick={() => { setCancelReason(''); setCancelKind('session'); }}>
+                  Hủy buổi học
+                </Menu.Item>
+                <Menu.Item color="red" onClick={() => { setCancelReason(''); setCancelKind('class'); }}>
+                  Hủy lớp
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          )}
+        </div>
       </div>
 
       {/* 4-tab content */}
@@ -265,6 +404,7 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
           <Tabs.Tab value="evidence">Ảnh & Nhận xét</Tabs.Tab>
           <Tabs.Tab value="grading">Chấm bài</Tabs.Tab>
           <Tabs.Tab value="notes">Nhật ký</Tabs.Tab>
+          <Tabs.Tab value="history">Lịch sử</Tabs.Tab>
         </Tabs.List>
 
         {/* ── Tab 1: Điểm danh ── */}
@@ -286,7 +426,8 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
                 </div>
               ) : enrollments.map(enr => (
                 <StudentRow key={enr.id} name={enr.student.fullName} current={marks[enr.id]?.status ?? null}
-                  disabled={!enabled} onMark={s => markSingle(enr.id, s)} />
+                  disabled={!enabled} onMark={s => markSingle(enr.id, s)}
+                  onOpenStudent={() => setDrawerStudentId(enr.studentId)} />
               ))}
             </div>
           )}
@@ -304,6 +445,50 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
                 value={draft.summary} disabled={!draftLoaded || !enabled}
                 onChange={e => updateDraft({ summary: e.currentTarget.value })} />
             </div>
+
+            <div>
+              <Text size="sm" fw={500} mb={8}>Nhận xét từng học sinh</Text>
+              {(() => {
+                const attended = enrollments.filter(enr => {
+                  const s = marks[enr.id]?.status;
+                  return s === 'present' || s === 'late';
+                });
+                if (!attLoaded) return <Text size="xs" c="dimmed">Đang tải điểm danh…</Text>;
+                if (attended.length === 0) {
+                  return <Text size="xs" c="dimmed">Điểm danh trước để nhận xét từng học sinh có mặt.</Text>;
+                }
+                return (
+                  <Stack gap={10}>
+                    {attended.map(enr => {
+                      const c = draft.comments[enr.studentId] ?? {};
+                      return (
+                        <div key={enr.id} style={{ padding: 10, background: C.bg, borderRadius: 8 }}>
+                          <Text size="xs" fw={600} mb={6}>{enr.student.fullName}</Text>
+                          <Group gap={6} grow mb={6}>
+                            <Select size="xs" placeholder="Tham gia" clearable
+                              data={commentTemplate?.participation as unknown as string[] ?? []}
+                              value={c.participation ?? null} disabled={!enabled}
+                              onChange={v => updateStudentComment(enr.studentId, { participation: v ?? undefined })} />
+                            <Select size="xs" placeholder="Điểm mạnh" clearable
+                              data={commentTemplate?.strength as unknown as string[] ?? []}
+                              value={c.strength ?? null} disabled={!enabled}
+                              onChange={v => updateStudentComment(enr.studentId, { strength: v ?? undefined })} />
+                            <Select size="xs" placeholder="Cần cải thiện" clearable
+                              data={commentTemplate?.needsImprovement as unknown as string[] ?? []}
+                              value={c.needsImprovement ?? null} disabled={!enabled}
+                              onChange={v => updateStudentComment(enr.studentId, { needsImprovement: v ?? undefined })} />
+                          </Group>
+                          <TextInput size="xs" placeholder="Ghi chú thêm (tuỳ chọn)..."
+                            value={c.teacherNote ?? ''} disabled={!enabled}
+                            onChange={e => updateStudentComment(enr.studentId, { teacherNote: e.currentTarget.value })} />
+                        </div>
+                      );
+                    })}
+                  </Stack>
+                );
+              })()}
+            </div>
+
             <div>
               <Text size="sm" fw={500} mb={8}>Ảnh lớp học</Text>
               {draft.photos.length > 0 && (
@@ -371,6 +556,13 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
                         setGradingId(sub.id);
                         setGradeScore(gradeAny?.score as number ?? '');
                         setGradeFeedback(gradeAny?.feedback as string ?? '');
+                        // Tải bài HS làm trên PDF (nếu bài tập có đề PDF) để GV xem khi chấm.
+                        setGradingLayer(null);
+                        if (selectedEx?.basePdfRef) {
+                          trpc.submission.layerForGrading.query({ submissionId: sub.id })
+                            .then(setGradingLayer)
+                            .catch(() => setGradingLayer(null));
+                        }
                       }} style={{
                         padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
                         background: gradingId === sub.id ? C.brandMuted : C.surface,
@@ -385,13 +577,38 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
                   })}
                 </Stack>
               )}
-              {gradingId && (
-                <div style={{ marginTop: 14, padding: 16, background: C.surface, borderRadius: 12, border: `1px solid ${C.border}` }}>
-                  <NumberInput label="Điểm (0–10)" min={0} max={10} step={0.5} value={gradeScore} onChange={setGradeScore} mb="sm" />
-                  <Textarea label="Nhận xét" placeholder="Ghi nhận xét..." minRows={2} value={gradeFeedback} onChange={e => setGradeFeedback(e.currentTarget.value)} mb="sm" />
-                  <Button size="sm" onClick={saveGrade} style={{ background: C.brand, color: '#fff', fontFamily: FONT }}>Lưu điểm</Button>
-                </div>
-              )}
+              {gradingId && (() => {
+                const gradingSub = submissions.find(s => s.id === gradingId) as Record<string, unknown> | undefined;
+                const answerText = (gradingSub?.answerText as string | null | undefined)?.trim();
+                const hasPdfWork = Boolean(selectedEx?.basePdfRef && gradingLayer?.student);
+                return (
+                  <div style={{ marginTop: 14, padding: 16, background: C.surface, borderRadius: 12, border: `1px solid ${C.border}` }}>
+                    {hasPdfWork && (
+                      <div style={{ marginBottom: 12 }}>
+                        <Text size="xs" fw={600} mb={4}>Bài học sinh đã làm</Text>
+                        <PdfAnnotator
+                          pdfRef={selectedEx!.basePdfRef!}
+                          value={gradingLayer!.student}
+                          onChange={() => {}}
+                          editable={false}
+                        />
+                      </div>
+                    )}
+                    {answerText && (
+                      <div style={{ marginBottom: 12 }}>
+                        <Text size="xs" fw={600} mb={4}>Câu trả lời của học sinh</Text>
+                        <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{answerText}</Text>
+                      </div>
+                    )}
+                    {!hasPdfWork && !answerText && (
+                      <Text size="sm" c="dimmed" mb="sm">Học sinh chưa lưu bài làm (chưa vẽ trên PDF hoặc chưa nhập câu trả lời).</Text>
+                    )}
+                    <NumberInput label="Điểm (0–10)" min={0} max={10} step={0.5} value={gradeScore} onChange={setGradeScore} mb="sm" />
+                    <Textarea label="Nhận xét" placeholder="Ghi nhận xét..." minRows={2} value={gradeFeedback} onChange={e => setGradeFeedback(e.currentTarget.value)} mb="sm" />
+                    <Button size="sm" onClick={saveGrade} style={{ background: C.brand, color: '#fff', fontFamily: FONT }}>Lưu điểm</Button>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </Tabs.Panel>
@@ -425,18 +642,78 @@ export function TeacherScheduleDetail({ session, onBack }: SessionDetailProps) {
             </div>
           </Stack>
         </Tabs.Panel>
+
+        {/* ── Tab 5: Lịch sử ── audit timeline "ai điểm danh/chấm/hủy buổi lúc nào" (class_session
+            đã whitelist trong audit.NOTE_TARGETS). ── */}
+        <Tabs.Panel value="history" pt="sm">
+          <Chatter entityType="class_session" entityId={classSessionId} />
+        </Tabs.Panel>
       </Tabs>
+
+      <Drawer
+        opened={drawerStudentId !== null}
+        onClose={() => setDrawerStudentId(null)}
+        position="right"
+        size="lg"
+        padding={0}
+        withCloseButton={false}
+        title={null}
+      >
+        {drawerStudentId && (
+          <StudentDetailPanel
+            studentId={drawerStudentId}
+            onBack={() => setDrawerStudentId(null)}
+          />
+        )}
+      </Drawer>
+
+      <Modal
+        opened={cancelKind !== null}
+        onClose={() => setCancelKind(null)}
+        title={cancelKind === 'class' ? 'Xác nhận hủy lớp' : 'Xác nhận hủy buổi học'}
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            {cancelKind === 'class'
+              ? 'Hủy lớp sẽ hủy TẤT CẢ buổi học tương lai và các buổi họp phụ huynh đã lên lịch. Buổi đã diễn ra được giữ lại. Hành động này được ghi log.'
+              : 'Hủy buổi học này. Hành động được ghi log kèm lý do.'}
+          </Text>
+          <Textarea
+            label="Lý do hủy"
+            withAsterisk
+            placeholder="Nhập lý do..."
+            minRows={2}
+            value={cancelReason}
+            onChange={e => setCancelReason(e.currentTarget.value)}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" disabled={cancelBusy} onClick={() => setCancelKind(null)}>
+              Quay lại
+            </Button>
+            <Button
+              color={cancelKind === 'class' ? 'red' : 'orange'}
+              loading={cancelBusy}
+              disabled={!cancelReason.trim()}
+              onClick={submitCancel}
+            >
+              Xác nhận hủy
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </div>
   );
 }
 
 // ─── StudentRow ────────────────────────────────────────────────────────────────
 
-function StudentRow({ name, current, disabled, onMark }: {
+function StudentRow({ name, current, disabled, onMark, onOpenStudent }: {
   name: string;
   current: AttStatus | null;
   disabled?: boolean;
   onMark: (s: AttStatus) => void;
+  onOpenStudent: () => void;
 }) {
   const btns: { status: AttStatus; label: string; activeBg: string; activeColor: string }[] = [
     { status: 'present', label: 'Có mặt', activeBg: C.successBg, activeColor: C.success },
@@ -445,11 +722,20 @@ function StudentRow({ name, current, disabled, onMark }: {
   ];
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', borderRadius: 8, gap: 10 }}>
-      <div style={{ width: 30, height: 30, borderRadius: '50%', background: C.brandMuted, color: C.brand, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
-        {name.charAt(0).toUpperCase()}
-      </div>
-      <div style={{ flex: 1, fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: C.text }}>
-        {name}
+      <div
+        onClick={onOpenStudent}
+        role="button"
+        tabIndex={0}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onOpenStudent(); }}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, cursor: 'pointer' }}
+        title="Xem hồ sơ học sinh"
+      >
+        <div style={{ width: 30, height: 30, borderRadius: '50%', background: C.brandMuted, color: C.brand, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+          {name.charAt(0).toUpperCase()}
+        </div>
+        <div style={{ flex: 1, fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: C.text, minWidth: 0 }}>
+          {name}
+        </div>
       </div>
       <div style={{ display: 'flex', gap: 4 }}>
         {btns.map(btn => {

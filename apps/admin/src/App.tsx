@@ -64,6 +64,7 @@ import { GradingPanel } from './grading';
 import { AssessmentPanel } from './assessment-panel';
 import { AttendancePanel } from './attendance-panel';
 import { TeacherTodayPanel } from './teacher-today-panel';
+import { TeacherStaffLitePanel } from './teacher-staff-lite-panel';
 import { SessionWorkspace } from './session-workspace';
 import { HomeworkFeed } from './homework-feed';
 import { TeacherSchedule } from './teacher-schedule';
@@ -593,7 +594,7 @@ const ALL_SECTION_KEYS = new Set<string>([
   // so #certificate is not a reachable hash route either. Re-add when the feature is re-enabled.
   'classes', 'meetings', 'levelup', 'my-payslips',
   'checkin', 'shift-registration', 'facility-network', 'shift-config',
-  'student-mgmt', 'payroll-checkin',
+  'student-mgmt', 'payroll-checkin', 'staff-lite',
   'biz-director-cockpit', 'edu-director-cockpit',
   'profile',
 ]);
@@ -750,8 +751,11 @@ function Dashboard() {
       // approval-inbox widget. KPI items route to the full 'kpi' panel (see
       // biz-director-cockpit-panel.tsx for why: the aggregate item lacks the composite
       // userId+periodKey key kpiEvalConfirm/kpiEvalApprove require).
+      case 'staff-lite':
+        return <TeacherStaffLitePanel />;
+
       case 'biz-director-cockpit':
-        return <BizDirectorCockpitPanel onNavigateToKpi={() => handleSectionChange('kpi')} />;
+        return <BizDirectorCockpitPanel onNavigateToKpi={() => handleSectionChange('kpi')} hideKpi={surface === 'teacher'} />;
 
       // Executive Cockpit (Phase 4): giam_doc_dao_tao-only landing — summary widget +
       // approval-inbox widget. KPI items route to the full 'kpi' panel, same resolution as
@@ -761,6 +765,7 @@ function Dashboard() {
           <EduDirectorCockpitPanel
             onNavigateToKpi={() => handleSectionChange('kpi')}
             onNavigateToFinanceIntake={() => handleSectionChange(surface === 'teacher' ? 'family-intake' : 'finance')}
+            hideKpi={surface === 'teacher'}
           />
         );
 

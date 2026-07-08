@@ -73,3 +73,8 @@ export {
   type PlacedEvent,
   type HourWindow,
 } from './calendar-view.js';
+export {
+  WorkflowStatusbar,
+  type WorkflowStatusbarProps,
+  type WorkflowStage,
+} from './workflow-statusbar.js';

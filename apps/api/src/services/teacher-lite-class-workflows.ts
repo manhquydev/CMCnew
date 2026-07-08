@@ -78,7 +78,11 @@ async function cancelFutureParentMeetings(
   return result.count;
 }
 
-async function generateInitialSessions(
+/**
+ * Sinh buổi học ban đầu từ 1..n khung lịch tuần — dùng chung bởi teacherLite.createClass
+ * (1 slot) và classBatch.create (n slots), thay cho nút "Sinh buổi" thủ công.
+ */
+export async function generateInitialSessions(
   tx: Prisma.TransactionClient,
   args: {
     facilityId: number;
@@ -86,13 +90,15 @@ async function generateInitialSessions(
     courseId: string;
     startDate?: string;
     endDate?: string;
-    slot?: z.infer<typeof slotSchema>;
+    slots?: z.infer<typeof slotSchema>[];
     actorId: string;
   },
 ) {
-  if (!args.slot || !args.startDate || !args.endDate) return { created: 0, skipped: 0 };
+  if (!args.slots || args.slots.length === 0 || !args.startDate || !args.endDate) {
+    return { created: 0, skipped: 0 };
+  }
 
-  const candidates = enumerateSessions([args.slot], args.startDate, args.endDate);
+  const candidates = enumerateSessions(args.slots, args.startDate, args.endDate);
   if (candidates.length === 0) return { created: 0, skipped: 0 };
 
   const existing = await tx.classSession.findMany({
@@ -153,7 +159,7 @@ async function generateInitialSessions(
     entityType: 'class_batch',
     entityId: args.classBatchId,
     type: 'updated',
-    body: `Teacher Lite tao ${fresh.length} buoi hoc ban dau`,
+    body: `Tu dong sinh ${fresh.length} buoi hoc ban dau`,
     actorId: args.actorId,
   });
   return { created: fresh.length, skipped: candidates.length - fresh.length };
@@ -215,7 +221,7 @@ export async function createTeacherLiteClass(
               courseId: batch.courseId,
               startDate: input.startDate,
               endDate: input.endDate,
-              slot: input.slot,
+              slots: input.slot ? [input.slot] : undefined,
               actorId: session.userId,
             })
           : { created: 0, skipped: 0 };

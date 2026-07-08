@@ -87,6 +87,10 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     createClass: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     cancelClass: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     cancelSession: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    // Teacher-lite CRUD bypass (2026-07-08): soft-archive học sinh (giữ RLS + audit, không hard-delete).
+    studentArchive: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    // Overview stat cards (bài chờ chấm / nhật ký chờ chốt) cho trang Hôm nay của giáo viên.
+    overviewStats: ['giao_vien', 'giam_doc_dao_tao', 'giam_doc_kinh_doanh'],
   },
 
   exercise: {
@@ -203,6 +207,8 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   guardian: {
     parentList: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     parentCreate: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    parentUpdate: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
+    parentArchive: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     listForStudent: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     link: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     unlink: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
@@ -276,12 +282,14 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     editSlot: ['giam_doc_dao_tao'],
     removeSlot: ['giam_doc_dao_tao'],
     createMakeupSession: ['giam_doc_dao_tao'],
+    recomputeForBatch: ['giam_doc_dao_tao'],
   },
 
   student: {
     // student.create is gated to superAdminProcedure (break-glass only); not in registry.
     // Normal students are created atomically at receipt.approve.
-    update: ['sale', 'giam_doc_kinh_doanh'],
+    // giam_doc_dao_tao added (2026-07-08, user-approved) so GĐĐT can edit students on teacher-lite.
+    update: ['sale', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     // LMS password reset: both directors (account-level action with security impact).
     resetLmsPassword: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },

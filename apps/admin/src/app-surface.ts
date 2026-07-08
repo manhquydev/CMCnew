@@ -21,6 +21,7 @@ export const TEACHER_SURFACE_SECTIONS = new Set<SectionKey>([
   'classes',
   'courses',
   'student-mgmt',
+  'staff-lite',
   'meetings',
   'levelup',
   'students',

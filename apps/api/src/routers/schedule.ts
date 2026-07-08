@@ -604,6 +604,29 @@ export const scheduleRouter = router({
       }),
     ),
 
+  // Recompute curriculum-lesson mapping for all non-cancelled, non-makeup sessions of a batch.
+  // Use when sessions were created before curriculum was seeded, leaving curriculumLessonId null.
+  recomputeForBatch: requirePermission('schedule', 'recomputeForBatch')
+    .input(z.object({ classBatchId: z.string().uuid() }))
+    .mutation(({ ctx, input }) =>
+      withRls(rlsContextOf(ctx.session), async (tx) => {
+        const batch = await tx.classBatch.findUniqueOrThrow({
+          where: { id: input.classBatchId },
+          select: { courseId: true, facilityId: true, name: true },
+        });
+        const result = await recomputeCurriculumMapping(tx, input.classBatchId, batch.courseId);
+        await logEvent(tx, {
+          facilityId: batch.facilityId,
+          entityType: 'class_batch',
+          entityId: input.classBatchId,
+          type: 'updated',
+          body: `Recompute curriculum mapping: ${result ? `${result.mappedCount} buổi mapped, ${result.overflowCount} dư, ${result.uncoveredUnits} unit chưa phủ` : 'không có unit nào'}`,
+          actorId: ctx.session.userId,
+        });
+        return result;
+      }),
+    ),
+
   // Xóa khung lịch (soft-archive) — buổi đã sinh từ khung này KHÔNG bị xóa (giữ audit/điểm danh).
   removeSlot: requirePermission('schedule', 'removeSlot')
     .input(z.object({ slotId: z.string().uuid() }))

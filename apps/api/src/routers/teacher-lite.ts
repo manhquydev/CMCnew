@@ -11,6 +11,12 @@ import {
   createTeacherLiteClass,
   createTeacherLiteClassInput,
 } from '../services/teacher-lite-class-workflows.js';
+import {
+  teacherLiteOverviewStats,
+  teacherLiteOverviewStatsInput,
+  teacherLiteStudentArchive,
+  teacherLiteStudentArchiveInput,
+} from '../services/teacher-lite-crud.js';
 
 export const teacherLiteRouter = router({
   createFamilyStudentAndEnroll: requirePermission('teacherLite', 'createFamilyStudentAndEnroll')
@@ -25,4 +31,10 @@ export const teacherLiteRouter = router({
   cancelSession: requirePermission('teacherLite', 'cancelSession')
     .input(cancelTeacherLiteSessionInput)
     .mutation(({ ctx, input }) => cancelTeacherLiteSession(ctx.session, input)),
+  studentArchive: requirePermission('teacherLite', 'studentArchive')
+    .input(teacherLiteStudentArchiveInput)
+    .mutation(({ ctx, input }) => teacherLiteStudentArchive(ctx.session, input)),
+  overviewStats: requirePermission('teacherLite', 'overviewStats')
+    .input(teacherLiteOverviewStatsInput)
+    .query(({ ctx, input }) => teacherLiteOverviewStats(ctx.session, input)),
 });

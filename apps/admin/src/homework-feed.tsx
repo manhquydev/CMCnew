@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
 import { Center, Loader, NumberInput, Rating, Select, Textarea } from '@mantine/core';
-import { notifyError, notifySuccess, trpc, useSession } from '@cmc/ui';
+import { notifyError, notifySuccess, trpc, useSession, PdfAnnotator, WorkflowStatusbar } from '@cmc/ui';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type ClassBatch = Awaited<ReturnType<typeof trpc.classBatch.list.query>>[number];
@@ -63,6 +63,10 @@ export function HomeworkFeed({ batchId: propBatchId, facilityId: propFacilityId,
   const [stars, setStars] = useState(0);
   const [feedback, setFeedback] = useState('');
   const [saving, setSaving] = useState(false);
+  // Bài HS làm trên PDF (annotation layer) — hiển thị cho GV chấm, đúng prototype "Chấm bài".
+  const [gradingLayer, setGradingLayer] = useState<
+    Awaited<ReturnType<typeof trpc.submission.layerForGrading.query>> | null
+  >(null);
 
   const activeBatchId = propBatchId ?? selectedBatchId;
 
@@ -125,6 +129,14 @@ export function HomeworkFeed({ batchId: propBatchId, facilityId: propFacilityId,
       sub.grade?.score != null ? Math.round((sub.grade.score / maxScore) * 5) : 0,
     );
     setFeedback(sub.grade?.feedback ?? '');
+    // Tải bài HS làm trên PDF (nếu bài tập có đề PDF) để GV xem khi chấm.
+    setGradingLayer(null);
+    if (exercise.basePdfRef) {
+      trpc.submission.layerForGrading
+        .query({ submissionId: sub.id })
+        .then(setGradingLayer)
+        .catch(() => setGradingLayer(null));
+    }
   }
 
   async function handleSave() {
@@ -450,7 +462,42 @@ export function HomeworkFeed({ batchId: propBatchId, facilityId: propFacilityId,
                       selected.submission.submittedAt ?? selected.submission.createdAt,
                     ).format('DD/MM/YYYY HH:mm')}
                   </div>
+                  <div style={{ marginTop: 10 }}>
+                    <WorkflowStatusbar
+                      stages={[
+                        { value: 'draft', label: 'Nháp' },
+                        { value: 'submitted', label: 'Đã nộp' },
+                        { value: 'graded', label: 'Đã chấm' },
+                      ]}
+                      current={selected.submission.status}
+                      ariaLabel="Trạng thái bài nộp"
+                    />
+                  </div>
                 </div>
+
+                {/* Bài HS làm trên PDF (annotation layer) — đúng prototype "Chấm bài" */}
+                {selected.exercise.basePdfRef && gradingLayer?.student && (
+                  <div style={{ marginBottom: 20 }}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: C.muted,
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                        marginBottom: 8,
+                      }}
+                    >
+                      Bài làm trên đề (PDF)
+                    </div>
+                    <PdfAnnotator
+                      pdfRef={selected.exercise.basePdfRef}
+                      value={gradingLayer.student}
+                      onChange={() => {}}
+                      editable={false}
+                    />
+                  </div>
+                )}
 
                 {/* Answer text */}
                 {selected.submission.answerText && (

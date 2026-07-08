@@ -4,17 +4,23 @@
  * parent-meeting management. Exported Workspace component is driven by NavAction
  * so that SchedulePanel's goToClass can pre-open a specific class + tab.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import {
   trpc,
   Chatter,
   notifyError,
+  notifyInfo,
   notifySuccess,
   useSession,
   FacilityPicker,
   StatusBadge,
   InitialsAvatar,
+  PageHeader,
+  DataTable,
+  EmptyState,
+  WorkflowStatusbar,
+  type DataTableColumn,
   type StatusDef,
 } from '@cmc/ui';
 import { can } from '@cmc/auth/permissions';
@@ -22,12 +28,11 @@ import {
   Button,
   Card,
   Checkbox,
-  Grid,
   Group,
   Loader,
+  Menu,
   Modal,
   NumberInput,
-  Pagination,
   Select,
   SegmentedControl,
   Stack,
@@ -35,12 +40,46 @@ import {
   Tabs,
   Text,
   TextInput,
-  Title,
 } from '@mantine/core';
 import { DateInput, TimeInput } from '@mantine/dates';
 import { useDisclosure } from '@mantine/hooks';
+import { IconArrowLeft, IconSchool } from '@tabler/icons-react';
 import { AttendanceRoster } from './attendance-roster.js';
 import { StudentDetailPanel } from './student-detail.js';
+import { CourseExerciseManager } from './course-exercise-manager.js';
+
+// ─── Record-shell field row — mirrors student-detail.tsx's Field (160px right-aligned
+// label) so the class hub's Thông tin grid matches the shipped student hub. ──────
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <Group wrap="nowrap" gap="md" align="center">
+      <Text
+        size="sm"
+        style={{
+          width: 'var(--cmc-form-label-w)',
+          minWidth: 'var(--cmc-form-label-w)',
+          flexShrink: 0,
+          textAlign: 'right',
+          fontSize: 'var(--cmc-form-label-font)',
+          color: 'var(--cmc-form-label-color)',
+        }}
+      >
+        {label}
+      </Text>
+      <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+    </Group>
+  );
+}
+
+// Happy-path ClassStatus sequence for the header chevron. `cancelled` is an off-path
+// terminal (rendered as a red chip after the flow, never inside the arrow chain).
+const CLASS_STAGES = [
+  { value: 'planned', label: 'Đã lên kế hoạch' },
+  { value: 'open', label: 'Đang mở' },
+  { value: 'running', label: 'Đang học' },
+  { value: 'closed', label: 'Đã đóng' },
+];
+const CLASS_TERMINAL = [{ value: 'cancelled', label: 'Đã hủy' }];
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
@@ -80,7 +119,6 @@ const ENROLLMENT_STATUS_MAP: Record<string, StatusDef> = {
 const DOW = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 const fmtDate = (d: string | Date) => dayjs(d).format('DD/MM/YYYY');
 const toApiDate = (d: Date | null) => (d ? dayjs(d).format('YYYY-MM-DD') : undefined);
-const PAGE_SIZE = 20;
 
 // ─── NavAction ────────────────────────────────────────────────────────────────
 
@@ -190,6 +228,10 @@ function CreateClassModal({
       setErr('Mỗi khung lịch cần thứ + giờ bắt đầu/kết thúc');
       return;
     }
+    if (!startDate) {
+      setErr('Chọn ngày khai giảng (hệ thống cần ngày này để tự sinh buổi học)');
+      return;
+    }
     setBusy(true);
     setErr('');
     try {
@@ -207,6 +249,23 @@ function CreateClassModal({
           teacherId: s.teacherId ?? undefined,
         })),
       });
+      // Sinh buổi tự động ngay sau khi tạo lớp — không còn thao tác "Sinh buổi" thủ công
+      // ban đầu. endDate dùng giá trị ước tính theo khung khóa cứng (endDateAuto effect ở
+      // trên). Cả 2 nhánh fail đều phải báo rõ (không im lặng) — nút "Sinh buổi ngay" trong
+      // tab "Buổi học" (SessionsTab) là lối thoát thủ công 1-click cho cả 2 case.
+      if (endDate) {
+        try {
+          await trpc.schedule.generateSessions.mutate({
+            classBatchId: created.id,
+            startDate: toApiDate(startDate)!,
+            endDate: toApiDate(endDate)!,
+          });
+        } catch (e) {
+          notifyError(e, 'Đã tạo lớp nhưng sinh buổi tự động lỗi — vào tab "Buổi học" bấm "Sinh buổi ngay"');
+        }
+      } else {
+        notifyInfo('Đã tạo lớp — chưa xác định được ngày kết thúc nên chưa tự sinh buổi, vào tab "Buổi học" bấm "Sinh buổi ngay"');
+      }
       notifySuccess(`Đã tạo lớp ${created.code}`);
       close();
       reset();
@@ -264,7 +323,7 @@ function CreateClassModal({
             </Card>
           )}
           <Group grow>
-            <DateInput label="Khai giảng" value={startDate} onChange={setStartDate} valueFormat="DD/MM/YYYY" clearable />
+            <DateInput label="Khai giảng" required value={startDate} onChange={setStartDate} valueFormat="DD/MM/YYYY" clearable />
             <DateInput
               label={endDateAuto ? 'Kết thúc (ước tính, có thể sửa)' : 'Kết thúc'}
               value={endDate}
@@ -414,13 +473,11 @@ function ScheduleTab({
   facilityId,
   rooms,
   teachers,
-  onSessionsGenerated,
 }: {
   batch: Batch;
   facilityId: number;
   rooms: Room[];
   teachers: Teacher[];
-  onSessionsGenerated?: () => void;
 }) {
   const { me } = useSession();
   const canAddSlot = can(me.roles, me.isSuperAdmin, 'schedule', 'addSlot');
@@ -433,8 +490,6 @@ function ScheduleTab({
   const [end, setEnd] = useState('19:30');
   const [roomId, setRoomId] = useState<string | null>(null);
   const [teacherId, setTeacherId] = useState<string | null>(null);
-  const [range, setRange] = useState<{ from: Date | null; to: Date | null }>({ from: null, to: null });
-  const [msg, setMsg] = useState('');
   const [loadingSlots, setLoadingSlots] = useState(false);
   const roomLabel = useCallback(
     (id: string | null) => (id ? (rooms.find((r) => r.id === id)?.code ?? '—') : '—'),
@@ -468,21 +523,6 @@ function ScheduleTab({
       load();
     } catch (e) {
       notifyError(e, 'Thêm khung lịch thất bại');
-    }
-  }
-
-  async function generate() {
-    setMsg('');
-    try {
-      const r = await trpc.schedule.generateSessions.mutate({
-        classBatchId: batch.id,
-        startDate: toApiDate(range.from)!,
-        endDate: toApiDate(range.to)!,
-      });
-      setMsg(`Đã tạo ${r.created} buổi (bỏ qua ${r.skipped}).`);
-      onSessionsGenerated?.();
-    } catch (e) {
-      setMsg('Lỗi: ' + (e instanceof Error ? e.message : ''));
     }
   }
 
@@ -579,26 +619,27 @@ function ScheduleTab({
           onSaved={load}
         />
       )}
-      {canAddSlot && (
-        <Card withBorder>
-          <Text fw={600} mb="xs">Sinh buổi học</Text>
-          <Group align="flex-end">
-            <DateInput label="Từ ngày" value={range.from} onChange={(d) => setRange((r) => ({ ...r, from: d }))} valueFormat="DD/MM/YYYY" />
-            <DateInput label="Đến ngày" value={range.to} onChange={(d) => setRange((r) => ({ ...r, to: d }))} valueFormat="DD/MM/YYYY" />
-            <Button onClick={generate} disabled={!range.from || !range.to}>Sinh lịch</Button>
-          </Group>
-          {msg && (
-            <Text size="sm" mt="xs" c={msg.startsWith('Lỗi') ? 'red' : 'green'}>{msg}</Text>
-          )}
-        </Card>
-      )}
     </Stack>
   );
 }
 
 // ─── SessionsTab ──────────────────────────────────────────────────────────────
 
-function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Room[]; teachers: Teacher[] }) {
+function SessionsTab({
+  batchId,
+  rooms,
+  teachers,
+  canGenerate,
+  onGenerate,
+}: {
+  batchId: string;
+  rooms: Room[];
+  teachers: Teacher[];
+  /** Whether the viewer may trigger session generation (mirrors the hub's "Thao tác" gate). */
+  canGenerate: boolean;
+  /** Runs `schedule.generateSessions` using the batch's own stored dates — no input needed. */
+  onGenerate: () => void;
+}) {
   const { me } = useSession();
   const canCreateMakeup = can(me.roles, me.isSuperAdmin, 'schedule', 'createMakeupSession');
   const [sessions, setSessions] = useState<ClassSession[]>([]);
@@ -652,7 +693,12 @@ function SessionsTab({ batchId, rooms, teachers }: { batchId: string; rooms: Roo
         {sessions.length === 0 && (
           <Table.Tr>
             <Table.Td colSpan={5}>
-              <Text c="dimmed" size="sm">Chưa có buổi học. Vào tab "Lịch" để sinh buổi.</Text>
+              <Group gap="sm">
+                <Text c="dimmed" size="sm">Chưa có buổi học.</Text>
+                {canGenerate && (
+                  <Button size="xs" variant="light" onClick={onGenerate}>Sinh buổi ngay</Button>
+                )}
+              </Group>
             </Table.Td>
           </Table.Tr>
         )}
@@ -1040,7 +1086,7 @@ function AttendanceTab({ batch, facilityId }: { batch: Batch; facilityId: number
     <Stack>
       <Select
         label="Chọn buổi học"
-        placeholder={sessions.length ? 'Chọn buổi' : 'Chưa có buổi học — sinh lịch ở tab Lịch'}
+        placeholder={sessions.length ? 'Chọn buổi' : 'Chưa có buổi học'}
         data={sessions.map((s) => ({ value: s.id, label: `${fmtDate(s.sessionDate)} ${s.startTime}` }))}
         value={sessionId}
         onChange={setSessionId}
@@ -1211,27 +1257,40 @@ function TransferEnrollmentModal({
   );
 }
 
-function ClassDetail({
+function ClassHub({
   batch,
   facilityId,
+  facilityCode,
+  course,
   rooms,
   teachers,
+  onBack,
   onChanged,
   initialTab = 'schedule',
 }: {
   batch: Batch;
   facilityId: number;
+  facilityCode?: string;
+  /** Full Course (with id) looked up in Workspace — required by CourseExerciseManager.
+   *  Undefined while `course.list` is still loading; the Học liệu tab guards on it. */
+  course?: Course;
   rooms: Room[];
   teachers: Teacher[];
+  onBack: () => void;
   onChanged: () => void;
   initialTab?: string;
 }) {
   const { me } = useSession();
   const canSetStatus = can(me.roles, me.isSuperAdmin, 'classBatch', 'setStatus');
   const canUpdateClass = can(me.roles, me.isSuperAdmin, 'classBatch', 'update');
+  // Session generation was gated by schedule.addSlot in the old ScheduleTab; keep that gate for
+  // the relocated "Sinh lại buổi theo lịch" repair action so who-can-do-it does not widen.
+  const canGenerate = can(me.roles, me.isSuperAdmin, 'schedule', 'addSlot');
+  const canRecompute = can(me.roles, me.isSuperAdmin, 'schedule', 'recomputeForBatch');
   const [cancelOpen, cancel] = useDisclosure(false);
   const [editOpen, edit] = useDisclosure(false);
   const [reason, setReason] = useState('');
+  const [activeTab, setActiveTab] = useState(initialTab === 'log' ? 'schedule' : initialTab);
   // Bug fix (bug-log #8): generateSessions succeeds but the sibling "Buổi học" tab (SessionsTab)
   // has its own React Query-less local state, so it never re-fetches. Bumping this key remounts
   // SessionsTab, forcing its `useEffect(load, [load])` to refire — mirrors the `key={reloadKey}`
@@ -1267,70 +1326,183 @@ function ClassDetail({
     }
   }
 
+  // Repair action (relocated from the old ScheduleTab "Sinh buổi học" card): materialize sessions
+  // over the class's own start/end window. Not a routine control — used when a class has no sessions.
+  async function doGenerate() {
+    const from = batch.startDate ? toApiDate(new Date(batch.startDate)) : undefined;
+    const to = batch.endDate ? toApiDate(new Date(batch.endDate)) : undefined;
+    if (!from || !to) {
+      notifyError(new Error('Lớp chưa có ngày khai giảng/kết thúc'), 'Đặt ngày (Sửa) trước khi sinh buổi');
+      return;
+    }
+    try {
+      const r = await trpc.schedule.generateSessions.mutate({ classBatchId: batch.id, startDate: from, endDate: to });
+      notifySuccess(`Đã tạo ${r.created} buổi (bỏ qua ${r.skipped}).`);
+      setSessionsReloadKey((k) => k + 1);
+    } catch (e) {
+      notifyError(e, 'Sinh buổi thất bại');
+    }
+  }
+
+  async function doRecompute() {
+    try {
+      const r = await trpc.schedule.recomputeForBatch.mutate({ classBatchId: batch.id });
+      notifySuccess(
+        r
+          ? `Map curriculum: ${r.mappedCount} buổi, ${r.overflowCount} dư, ${r.uncoveredUnits} unit chưa phủ.`
+          : 'Khóa này chưa có khung chương trình.',
+      );
+      setSessionsReloadKey((k) => k + 1);
+    } catch (e) {
+      notifyError(e, 'Map khung CT thất bại');
+    }
+  }
+
+  const subtitle = [batch.course.name, facilityCode].filter(Boolean).join(' · ');
+  const hasMenu = canSetStatus || canGenerate || canRecompute;
+
   return (
-    <Card withBorder>
-      <Group justify="space-between" mb="md">
-        <div>
-          <Group gap="xs">
-            <Title order={5}>{batch.code}</Title>
-            <StatusBadge status={batch.status} map={BATCH_STATUS_MAP} pill />
-          </Group>
-          <Text c="dimmed" size="sm">{batch.course.code} — {batch.course.name}</Text>
-        </div>
-        {canSetStatus && (
-          <Group gap="xs">
-            {canUpdateClass && <Button size="xs" variant="default" onClick={edit.open}>Sửa</Button>}
-            {batch.status !== 'cancelled' ? (
-              <>
-                <Select
-                  size="xs" w={130} placeholder="Đổi trạng thái"
-                  value={null}
-                  data={['open', 'running', 'closed']}
-                  onChange={(v) => v && setStatus(v)}
-                />
-                <Button size="xs" color="red" variant="light" onClick={cancel.open}>Hủy lớp</Button>
-              </>
-            ) : (
-              <Button size="xs" onClick={doReopen}>Mở lại</Button>
-            )}
-          </Group>
-        )}
+    <Stack>
+      <Group>
+        <Button variant="subtle" size="compact-sm" leftSection={<IconArrowLeft size={16} />} onClick={onBack}>
+          Lớp học
+        </Button>
       </Group>
 
-      <Tabs defaultValue={initialTab}>
-        <Tabs.List>
-          <Tabs.Tab value="schedule">Lịch</Tabs.Tab>
-          <Tabs.Tab value="sessions">Buổi học</Tabs.Tab>
-          <Tabs.Tab value="enroll">Ghi danh</Tabs.Tab>
-          <Tabs.Tab value="attendance">Điểm danh</Tabs.Tab>
-          <Tabs.Tab value="meetings">Họp PH</Tabs.Tab>
-          <Tabs.Tab value="log">Nhật ký</Tabs.Tab>
-        </Tabs.List>
-        <Tabs.Panel value="schedule" pt="md">
-          <ScheduleTab
-            batch={batch}
-            facilityId={facilityId}
-            rooms={rooms}
-            teachers={teachers}
-            onSessionsGenerated={() => setSessionsReloadKey((k) => k + 1)}
-          />
-        </Tabs.Panel>
-        <Tabs.Panel value="sessions" pt="md">
-          <SessionsTab key={sessionsReloadKey} batchId={batch.id} rooms={rooms} teachers={teachers} />
-        </Tabs.Panel>
-        <Tabs.Panel value="enroll" pt="md">
-          <EnrollTab batch={batch} facilityId={facilityId} />
-        </Tabs.Panel>
-        <Tabs.Panel value="attendance" pt="md">
-          <AttendanceTab batch={batch} facilityId={facilityId} />
-        </Tabs.Panel>
-        <Tabs.Panel value="meetings" pt="md">
-          <MeetingsTab batch={batch} facilityId={facilityId} />
-        </Tabs.Panel>
-        <Tabs.Panel value="log" pt="md">
+      {/* Header card — eyebrow + code + chevron (display-only) + Sửa + Thao tác menu */}
+      <Card withBorder radius="md" p="lg" style={{ borderColor: 'var(--cmc-border)' }}>
+        <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+          <div>
+            <Text
+              style={{
+                fontSize: 'var(--cmc-text-xs)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: 'var(--cmc-text-muted)',
+                fontWeight: 600,
+              }}
+            >
+              Lớp học
+            </Text>
+            <Text fw={700} style={{ fontSize: 'var(--cmc-text-xl)', lineHeight: 1.15 }}>
+              {batch.code}
+            </Text>
+            {subtitle && <Text size="sm" c="dimmed">{subtitle}</Text>}
+          </div>
+
+          <Group gap="sm" align="center">
+            {canUpdateClass && (
+              <Button variant="default" size="xs" onClick={edit.open}>Sửa</Button>
+            )}
+            {hasMenu && (
+              <Menu position="bottom-end" withinPortal>
+                <Menu.Target>
+                  <Button variant="default" size="xs">Thao tác</Button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  {canSetStatus && batch.status !== 'cancelled' && (
+                    <>
+                      <Menu.Label>Đổi trạng thái</Menu.Label>
+                      <Menu.Item onClick={() => setStatus('open')}>Đang mở</Menu.Item>
+                      <Menu.Item onClick={() => setStatus('running')}>Đang học</Menu.Item>
+                      <Menu.Item onClick={() => setStatus('closed')}>Đã đóng</Menu.Item>
+                    </>
+                  )}
+                  {(canGenerate || canRecompute) && (
+                    <>
+                      <Menu.Label>Buổi học</Menu.Label>
+                      {canGenerate && (
+                        <Menu.Item onClick={doGenerate}>Sinh lại buổi theo lịch</Menu.Item>
+                      )}
+                      {canRecompute && (
+                        <Menu.Item onClick={doRecompute}>Map lại khung CT</Menu.Item>
+                      )}
+                    </>
+                  )}
+                  {canSetStatus && (
+                    <>
+                      <Menu.Divider />
+                      {batch.status !== 'cancelled' ? (
+                        <Menu.Item color="red" onClick={cancel.open}>Hủy lớp</Menu.Item>
+                      ) : (
+                        <Menu.Item onClick={doReopen}>Mở lại</Menu.Item>
+                      )}
+                    </>
+                  )}
+                </Menu.Dropdown>
+              </Menu>
+            )}
+          </Group>
+        </Group>
+
+        <Group mt="md">
+          <WorkflowStatusbar stages={CLASS_STAGES} current={batch.status} terminal={CLASS_TERMINAL} />
+        </Group>
+      </Card>
+
+      {/* Body: main column (Thông tin + tabs) + sticky chatter rail */}
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 480px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Card withBorder radius="sm" p="lg">
+            <Stack gap="sm">
+              <Field label="Mã lớp"><Text size="sm">{batch.code}</Text></Field>
+              <Field label="Khóa học"><Text size="sm">{batch.course.code} — {batch.course.name}</Text></Field>
+              <Field label="Cơ sở"><Text size="sm">{facilityCode ?? `#${batch.facilityId}`}</Text></Field>
+              <Field label="Khai giảng"><Text size="sm">{batch.startDate ? fmtDate(batch.startDate) : '—'}</Text></Field>
+              <Field label="Kết thúc"><Text size="sm">{batch.endDate ? fmtDate(batch.endDate) : '—'}</Text></Field>
+              <Field label="Sĩ số"><Text size="sm">{batch.capacity ?? '—'}</Text></Field>
+              <Field label="Trạng thái">
+                <StatusBadge status={batch.status} map={BATCH_STATUS_MAP} pill />
+              </Field>
+            </Stack>
+          </Card>
+
+          <Tabs value={activeTab} onChange={(v) => v && setActiveTab(v)} variant="outline">
+            <Tabs.List>
+              <Tabs.Tab value="schedule">Lịch</Tabs.Tab>
+              <Tabs.Tab value="sessions">Buổi học</Tabs.Tab>
+              <Tabs.Tab value="enroll">Ghi danh</Tabs.Tab>
+              <Tabs.Tab value="attendance">Điểm danh</Tabs.Tab>
+              <Tabs.Tab value="materials">Học liệu</Tabs.Tab>
+              <Tabs.Tab value="meetings">Họp PH</Tabs.Tab>
+            </Tabs.List>
+            <Tabs.Panel value="schedule" pt="md">
+              <ScheduleTab batch={batch} facilityId={facilityId} rooms={rooms} teachers={teachers} />
+            </Tabs.Panel>
+            <Tabs.Panel value="sessions" pt="md">
+              <SessionsTab
+                key={sessionsReloadKey}
+                batchId={batch.id}
+                rooms={rooms}
+                teachers={teachers}
+                canGenerate={canGenerate}
+                onGenerate={doGenerate}
+              />
+            </Tabs.Panel>
+            <Tabs.Panel value="enroll" pt="md">
+              <EnrollTab batch={batch} facilityId={facilityId} />
+            </Tabs.Panel>
+            <Tabs.Panel value="attendance" pt="md">
+              <AttendanceTab batch={batch} facilityId={facilityId} />
+            </Tabs.Panel>
+            <Tabs.Panel value="materials" pt="md">
+              {course ? (
+                <CourseExerciseManager course={course} />
+              ) : (
+                <Text c="dimmed" size="sm">Đang tải khóa học…</Text>
+              )}
+            </Tabs.Panel>
+            <Tabs.Panel value="meetings" pt="md">
+              <MeetingsTab batch={batch} facilityId={facilityId} />
+            </Tabs.Panel>
+          </Tabs>
+        </div>
+
+        {/* Chatter rail — class_batch is whitelisted in the audit router's NOTE_TARGETS gate. */}
+        <div style={{ flex: '0 1 var(--cmc-chatter-w)', width: 'var(--cmc-chatter-w)', position: 'sticky', top: 12 }}>
           <Chatter entityType="class_batch" entityId={batch.id} />
-        </Tabs.Panel>
-      </Tabs>
+        </div>
+      </div>
 
       {canUpdateClass && (
         <EditClassModal batch={batch} opened={editOpen} onClose={edit.close} onSaved={onChanged} />
@@ -1344,7 +1516,7 @@ function ClassDetail({
           </Stack>
         </Modal>
       )}
-    </Card>
+    </Stack>
   );
 }
 
@@ -1561,21 +1733,7 @@ export function Workspace({ navAction }: { navAction: NavAction | null }) {
   const visible = facilityId ? batches.filter((b) => b.facilityId === facilityId) : batches;
   const facilityRooms = facilityId ? rooms.filter((r) => r.facilityId === facilityId) : rooms;
 
-  const [classSearch, setClassSearch] = useState('');
   const [classStatusFilter, setClassStatusFilter] = useState('all');
-  const [classPage, setClassPage] = useState(1);
-
-  const filteredBatches = useMemo(() => {
-    const q = classSearch.toLowerCase();
-    return visible.filter((b) => {
-      const matchText = !q || b.code.toLowerCase().includes(q) || b.name.toLowerCase().includes(q);
-      const matchStatus = classStatusFilter === 'all' || b.status === classStatusFilter;
-      return matchText && matchStatus;
-    });
-  }, [visible, classSearch, classStatusFilter]);
-
-  const totalPages = Math.ceil(filteredBatches.length / PAGE_SIZE);
-  const pageItems = filteredBatches.slice((classPage - 1) * PAGE_SIZE, classPage * PAGE_SIZE);
 
   function handleSelectBatch(b: Batch) {
     setSelected(b);
@@ -1583,111 +1741,123 @@ export function Workspace({ navAction }: { navAction: NavAction | null }) {
     setDetailKey(`click-${b.id}`);
   }
 
-  const hintText =
-    detailTab === 'enroll'
-      ? 'Chọn một lớp để ghi danh.'
-      : detailTab === 'log'
-      ? 'Chọn một lớp để xem nhật ký.'
-      : `Chọn một lớp để xem chi tiết.`;
+  // Push-detail: when a batch is selected, render the hub full-width (mirrors students-panel.tsx).
+  if (selected && facilityId) {
+    const fac = facilities.find((f) => f.id === selected.facilityId);
+    const fullCourse = courses.find((c) => c.id === selected.courseId);
+    return (
+      <ClassHub
+        key={detailKey}
+        batch={selected}
+        facilityId={facilityId}
+        facilityCode={fac?.code}
+        course={fullCourse}
+        rooms={facilityRooms}
+        teachers={teachers}
+        initialTab={detailTab}
+        onBack={() => setSelected(null)}
+        onChanged={loadBatches}
+      />
+    );
+  }
+
+  const rows = classStatusFilter === 'all' ? visible : visible.filter((b) => b.status === classStatusFilter);
+
+  const columns: DataTableColumn<Batch>[] = [
+    {
+      key: 'code',
+      header: 'Mã lớp',
+      width: 160,
+      sortValue: (b) => b.code,
+      render: (b) => (
+        <Text size="sm" fw={500} c="var(--cmc-brand)" style={{ fontFamily: 'var(--cmc-font-mono)' }}>
+          {b.code}
+        </Text>
+      ),
+    },
+    {
+      key: 'course',
+      header: 'Khóa học',
+      sortValue: (b) => b.course.name,
+      render: (b) => <Text size="sm">{b.course.code} — {b.course.name}</Text>,
+    },
+    {
+      key: 'status',
+      header: 'Trạng thái',
+      sortValue: (b) => b.status,
+      render: (b) => <StatusBadge status={b.status} map={BATCH_STATUS_MAP} pill />,
+    },
+    {
+      key: 'facility',
+      header: 'Cơ sở',
+      width: 90,
+      render: (b) => {
+        const fac = facilities.find((f) => f.id === b.facilityId);
+        return <Text size="xs" c="dimmed">{fac?.code ?? `#${b.facilityId}`}</Text>;
+      },
+    },
+  ];
 
   return (
     <Stack>
-      <Group justify="space-between">
-        <FacilityPicker
-          facilities={facilities}
-          clearable={false}
-          value={facilityId}
-          onChange={(v) => { setFacilityId(v); setClassPage(1); }}
-          w={240}
-        />
-        {facilityId && canManageClass && (
-          <Group gap="xs" align="flex-end">
-            <RoomsManager facilityId={facilityId} rooms={facilityRooms} reload={loadRooms} />
-            <CreateClassModal
-              facilityId={facilityId}
-              courses={courses}
-              rooms={facilityRooms}
-              teachers={teachers}
-              onCreated={loadBatches}
+      <PageHeader
+        title="Lớp học"
+        subtitle={`${visible.length} lớp`}
+        actions={
+          facilityId && canManageClass ? (
+            <Group gap="xs">
+              <RoomsManager facilityId={facilityId} rooms={facilityRooms} reload={loadRooms} />
+              <CreateClassModal
+                facilityId={facilityId}
+                courses={courses}
+                rooms={facilityRooms}
+                teachers={teachers}
+                onCreated={loadBatches}
+              />
+            </Group>
+          ) : undefined
+        }
+      />
+
+      <DataTable
+        data={rows}
+        columns={columns}
+        getRowKey={(b) => b.id}
+        searchText={(b) => `${b.code} ${b.course.name}`}
+        searchPlaceholder="Mã lớp hoặc khóa học"
+        onRowClick={(b) => handleSelectBatch(b)}
+        toolbar={
+          <Group gap="sm">
+            <FacilityPicker
+              facilities={facilities}
+              clearable={false}
+              value={facilityId}
+              onChange={(v) => setFacilityId(v)}
+              w={220}
+            />
+            <SegmentedControl
+              size="xs"
+              value={classStatusFilter}
+              onChange={setClassStatusFilter}
+              data={[
+                { value: 'all', label: 'Tất cả' },
+                { value: 'planned', label: 'Kế hoạch' },
+                { value: 'open', label: 'Đang mở' },
+                { value: 'running', label: 'Đang học' },
+                { value: 'closed', label: 'Đã đóng' },
+                { value: 'cancelled', label: 'Đã hủy' },
+              ]}
             />
           </Group>
-        )}
-      </Group>
-      <Grid>
-        <Grid.Col span={{ base: 12, md: 4 }}>
-          <Card withBorder>
-            <Title order={5} mb="sm">
-              Lớp học ({filteredBatches.length}{filteredBatches.length !== visible.length ? `/${visible.length}` : ''})
-            </Title>
-            <Stack gap="xs" mb="sm">
-              <TextInput
-                placeholder="Tìm lớp..." size="xs"
-                value={classSearch}
-                onChange={(e) => { setClassSearch(e.currentTarget.value); setClassPage(1); }}
-              />
-              <SegmentedControl
-                size="xs"
-                value={classStatusFilter}
-                onChange={(v) => { setClassStatusFilter(v); setClassPage(1); }}
-                data={[
-                  { value: 'all', label: 'Tất cả' },
-                  { value: 'planned', label: 'Đã lên kế hoạch' },
-                  { value: 'open', label: 'Đang mở' },
-                  { value: 'running', label: 'Đang học' },
-                  { value: 'closed', label: 'Đã đóng' },
-                  { value: 'cancelled', label: 'Đã hủy' },
-                ]}
-              />
-            </Stack>
-            <Table highlightOnHover>
-              <Table.Tbody>
-                {pageItems.map((b) => (
-                  <Table.Tr
-                    key={b.id}
-                    style={{ cursor: 'pointer' }}
-                    bg={selected?.id === b.id ? 'var(--mantine-color-cmc-0)' : undefined}
-                    onClick={() => handleSelectBatch(b)}
-                  >
-                    <Table.Td>
-                      {/* name now always equals code (see class-creation form fix) — one line, not two */}
-                      <Text fw={600}>{b.code}</Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <StatusBadge status={b.status} map={BATCH_STATUS_MAP} size="xs" pill />
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-            {totalPages > 1 && (
-              <Pagination total={totalPages} value={classPage} onChange={setClassPage} size="sm" mt="md" />
-            )}
-            {visible.length === 0 && (
-              <Text c="dimmed" size="sm">Chưa có lớp. Bấm "Tạo lớp".</Text>
-            )}
-            {visible.length > 0 && filteredBatches.length === 0 && (
-              <Text c="dimmed" size="sm">Không tìm thấy lớp phù hợp.</Text>
-            )}
-          </Card>
-        </Grid.Col>
-        <Grid.Col span={{ base: 12, md: 8 }}>
-          {selected && facilityId ? (
-            <ClassDetail
-              key={detailKey}
-              batch={selected}
-              facilityId={facilityId}
-              rooms={facilityRooms}
-              teachers={teachers}
-              initialTab={detailTab}
-              onChanged={loadBatches}
-            />
-          ) : (
-            <Card withBorder>
-              <Text c="dimmed">{hintText}</Text>
-            </Card>
-          )}
-        </Grid.Col>
-      </Grid>
+        }
+        emptyState={
+          <EmptyState
+            icon={<IconSchool size={28} stroke={1.5} />}
+            title="Chưa có lớp"
+            description="Bấm “Tạo lớp” để mở lớp mới theo khung chương trình."
+          />
+        }
+      />
     </Stack>
   );
 }

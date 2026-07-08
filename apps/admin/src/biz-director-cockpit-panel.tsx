@@ -69,7 +69,7 @@ function actionLabel(domain: string): string | null {
 /** Approval-inbox widget — lists dashboard.myApprovals items with a one-click action per domain
  *  where the aggregate item carries enough data to call the mutation directly; kpi routes to the
  *  full KPI panel instead (see INLINE_APPROVE_DOMAINS comment above). */
-function ApprovalInboxCard({ onNavigateToKpi }: { onNavigateToKpi: () => void }) {
+function ApprovalInboxCard({ onNavigateToKpi, hideKpi }: { onNavigateToKpi: () => void; hideKpi?: boolean }) {
   const { me } = useSession();
   const fid = me.facilityIds[0];
   const [items, setItems] = useState<ApprovalItem[] | null>(null);
@@ -84,14 +84,15 @@ function ApprovalInboxCard({ onNavigateToKpi }: { onNavigateToKpi: () => void })
     trpc.dashboard.myApprovals
       .query({ facilityId: fid })
       .then((rows) => {
-        setItems(rows);
+        // Teacher-lite lược bỏ KPI: ẩn item KPI khỏi hộp duyệt để không route dead-end tới /kpi.
+        setItems(hideKpi ? rows.filter((r) => r.domain !== 'kpi') : rows);
         setError(false);
       })
       .catch((e) => {
         setError(true);
         notifyError(e, 'Không tải được hộp duyệt');
       });
-  }, [fid]);
+  }, [fid, hideKpi]);
 
   useEffect(() => {
     load();
@@ -161,7 +162,7 @@ function ApprovalInboxCard({ onNavigateToKpi }: { onNavigateToKpi: () => void })
         <EmptyState
           icon={<IconInbox size={28} stroke={1.5} />}
           title="Không có việc chờ duyệt"
-          description="Mọi phiếu thu, đổi quà, đăng ký ca và KPI đang chờ đều đã được xử lý."
+          description={`Mọi phiếu thu, đổi quà, đăng ký ca${hideKpi ? '' : ' và KPI'} đang chờ đều đã được xử lý.`}
           py={32}
         />
       )}
@@ -228,12 +229,18 @@ function ApprovalInboxCard({ onNavigateToKpi }: { onNavigateToKpi: () => void })
  *  see crm-director-dashboard.tsx for data-shape notes), and the approval-inbox widget built on
  *  dashboard.myApprovals (Phase 1). No new mutations: every action button in the inbox calls an
  *  existing router procedure directly. */
-export function BizDirectorCockpitPanel({ onNavigateToKpi }: { onNavigateToKpi: () => void }) {
+export function BizDirectorCockpitPanel({
+  onNavigateToKpi,
+  hideKpi,
+}: {
+  onNavigateToKpi: () => void;
+  hideKpi?: boolean;
+}) {
   return (
     <Stack>
       <OverviewPanel />
       <CrmDirectorDashboardCard />
-      <ApprovalInboxCard onNavigateToKpi={onNavigateToKpi} />
+      <ApprovalInboxCard onNavigateToKpi={onNavigateToKpi} hideKpi={hideKpi} />
     </Stack>
   );
 }

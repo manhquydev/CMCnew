@@ -2,30 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   trpc,
   notifyError,
-  notifySuccess,
   PageHeader,
   DataTable,
   StatusBadge,
   InitialsAvatar,
   EmptyState,
   FacilityPicker,
-  toApiDate,
-  parseApiDate,
   type DataTableColumn,
   type StatusDef,
 } from '@cmc/ui';
-import {
-  Badge,
-  Button,
-  Group,
-  Modal,
-  Stack,
-  Text,
-  TextInput,
-} from '@mantine/core';
-import { DateInput } from '@mantine/dates';
-import { useForm } from '@mantine/form';
-import { IconRefresh, IconExternalLink, IconSchool } from '@tabler/icons-react';
+import { Badge, Button, Group, Stack, Text } from '@mantine/core';
+import { IconRefresh, IconSchool } from '@tabler/icons-react';
 import { StudentDetailPanel } from './student-detail.js';
 
 type StudentT = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
@@ -63,13 +50,6 @@ export function StudentsPanel({
     setDetailStudentId(initialDetailId.id);
   }, [initialDetailId]);
 
-  const [editTarget, setEditTarget] = useState<StudentT | null>(null);
-  const [editBusy, setEditBusy] = useState(false);
-
-  const editForm = useForm({
-    initialValues: { fullName: '', dateOfBirth: '' },
-  });
-
   const load = useCallback(() => {
     setLoading(true);
     setLoadError(null);
@@ -95,6 +75,10 @@ export function StudentsPanel({
       <StudentDetailPanel
         studentId={detailStudentId}
         onBack={() => setDetailStudentId(null)}
+        onArchived={() => {
+          setDetailStudentId(null);
+          load();
+        }}
       />
     );
   }
@@ -103,33 +87,6 @@ export function StudentsPanel({
     ? students.filter((s) => String(s.facilityId) === facilityId)
     : students;
 
-  function openEdit(s: StudentT) {
-    setEditTarget(s);
-    editForm.setValues({
-      fullName: s.fullName,
-      dateOfBirth: s.dateOfBirth ? new Date(s.dateOfBirth).toISOString().split('T')[0] : '',
-    });
-  }
-
-  async function onEdit(values: typeof editForm.values) {
-    if (!editTarget) return;
-    setEditBusy(true);
-    try {
-      await trpc.student.update.mutate({
-        id: editTarget.id,
-        fullName: values.fullName.trim() || undefined,
-        dateOfBirth: values.dateOfBirth ? values.dateOfBirth : null,
-      });
-      notifySuccess('Đã cập nhật hồ sơ học sinh');
-      setEditTarget(null);
-      load();
-    } catch (e) {
-      notifyError(e, 'Cập nhật học sinh thất bại');
-    } finally {
-      setEditBusy(false);
-    }
-  }
-
   const columns: DataTableColumn<StudentT>[] = [
     {
       key: 'code',
@@ -137,7 +94,7 @@ export function StudentsPanel({
       width: 130,
       sortValue: (s) => s.studentCode,
       render: (s) => (
-        <Text size="sm" fw={500} style={{ fontFamily: 'var(--cmc-font-mono)' }}>
+        <Text size="sm" fw={500} c="var(--cmc-brand)" style={{ fontFamily: 'var(--cmc-font-mono)' }}>
           {s.studentCode}
         </Text>
       ),
@@ -180,27 +137,6 @@ export function StudentsPanel({
           </Text>
         );
       },
-    },
-    {
-      key: 'actions',
-      header: '',
-      width: 150,
-      align: 'right',
-      render: (s) => (
-        <Group gap={4} wrap="nowrap" justify="flex-end">
-          <Button
-            size="compact-xs"
-            variant="subtle"
-            leftSection={<IconExternalLink size={12} />}
-            onClick={() => setDetailStudentId(s.id)}
-          >
-            Chi tiết
-          </Button>
-          <Button size="compact-xs" variant="subtle" onClick={() => openEdit(s)}>
-            Sửa
-          </Button>
-        </Group>
-      ),
     },
   ];
 
@@ -248,40 +184,6 @@ export function StudentsPanel({
           />
         }
       />
-
-      <Modal
-        opened={!!editTarget}
-        onClose={() => setEditTarget(null)}
-        title={`Sửa: ${editTarget?.fullName ?? ''}`}
-        radius="xl"
-        centered
-      >
-        <form onSubmit={editForm.onSubmit(onEdit)}>
-          <Stack>
-            <TextInput label="Họ tên" {...editForm.getInputProps('fullName')} />
-            <DateInput
-              label="Ngày sinh"
-              valueFormat="DD/MM/YYYY"
-              clearable
-              placeholder="Để trống để xóa"
-              value={parseApiDate(editForm.values.dateOfBirth)}
-              onChange={(d) => editForm.setFieldValue('dateOfBirth', toApiDate(d) ?? '')}
-              error={editForm.errors.dateOfBirth}
-            />
-            <Text size="xs" c="dimmed">
-              Đổi chương trình: thực hiện qua phiếu thu. Đổi vòng đời: thực hiện qua Chăm sóc KH.
-            </Text>
-            <Group justify="flex-end" mt="xs">
-              <Button variant="subtle" onClick={() => setEditTarget(null)}>
-                Hủy
-              </Button>
-              <Button type="submit" variant="filled" radius={9999} loading={editBusy}>
-                Lưu
-              </Button>
-            </Group>
-          </Stack>
-        </form>
-      </Modal>
     </Stack>
   );
 }

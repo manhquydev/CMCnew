@@ -1,21 +1,47 @@
-import { useEffect, useState } from 'react';
-import { trpc, notifyError, Chatter } from '@cmc/ui';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  ActionIcon,
+  trpc,
+  notifyError,
+  notifySuccess,
+  Chatter,
+  StatusBadge,
+  InitialsAvatar,
+  toApiDate,
+  parseApiDate,
+  type StatusDef,
+} from '@cmc/ui';
+import {
   Badge,
   Button,
   Card,
   Group,
+  Menu,
+  Modal,
   Skeleton,
   Stack,
   Table,
   Tabs,
   Text,
-  Title,
+  TextInput,
 } from '@mantine/core';
+import { DateInput } from '@mantine/dates';
+import { useForm } from '@mantine/form';
 import { IconArrowLeft, IconRefresh } from '@tabler/icons-react';
 
 type DetailT = Awaited<ReturnType<typeof trpc.student.detail.query>>;
+
+// Lifecycle → semantic pill. The StudentLifecycle enum (admitted/active/on_hold/
+// transferred/withdrawn/completed) is not a strict linear workflow — on_hold is a
+// reversible pause, transferred/withdrawn are off-path exits — so the header shows a
+// StatusBadge pill rather than forcing a WorkflowStatusbar chevron onto a non-sequential set.
+const LIFECYCLE_STATUS: Record<string, StatusDef> = {
+  admitted: { label: 'Đã nhận', tone: 'info' },
+  active: { label: 'Đang học', tone: 'active' },
+  on_hold: { label: 'Tạm dừng', tone: 'pending' },
+  transferred: { label: 'Chuyển', tone: 'pending' },
+  withdrawn: { label: 'Nghỉ', tone: 'rejected' },
+  completed: { label: 'Hoàn thành', tone: 'active' },
+};
 
 const LIFECYCLE_COLOR: Record<string, string> = {
   admitted: 'blue',
@@ -468,20 +494,90 @@ function GradesTab({ s }: { s: DetailT }) {
   );
 }
 
-// ─── Main export ─────────────────────────────────────────────────────────────
+// ─── Smart-stat tile — clickable count that drives the section tab below ──────
+
+function SmartTile({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="cmc-student-tile"
+      aria-pressed={active}
+      style={{
+        flex: '1 1 110px',
+        minWidth: 100,
+        textAlign: 'left',
+        padding: '10px 14px',
+        borderRadius: 'var(--cmc-radius-sm)',
+        border: `1px solid ${active ? 'var(--cmc-brand)' : 'var(--cmc-border)'}`,
+        background: active ? 'var(--cmc-brand-muted)' : 'var(--cmc-surface)',
+        cursor: 'pointer',
+        fontFamily: 'var(--cmc-font)',
+        transition: 'border-color 150ms var(--cmc-ease-out)',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 'var(--cmc-text-xs)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+          color: 'var(--cmc-text-muted)',
+          fontWeight: 600,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 'var(--cmc-text-lg)',
+          fontWeight: 700,
+          color: 'var(--cmc-text)',
+          lineHeight: 1.2,
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {count}
+      </div>
+    </button>
+  );
+}
+
+// ─── Main export — record hub (header + smart tiles + section tabs + chatter rail) ──
 
 export function StudentDetailPanel({
   studentId,
   onBack,
+  onArchived,
 }: {
   studentId: string;
   onBack: () => void;
+  /** Called after a successful archive so the caller can reload the list + leave the hub.
+   *  Falls back to onBack when not provided. */
+  onArchived?: () => void;
 }) {
   const [detail, setDetail] = useState<DetailT | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState<string>('enrollments');
 
-  useEffect(() => {
+  const [editOpen, setEditOpen] = useState(false);
+  const [editBusy, setEditBusy] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archiveBusy, setArchiveBusy] = useState(false);
+
+  const editForm = useForm({ initialValues: { fullName: '', dateOfBirth: '' } });
+
+  const loadDetail = useCallback(() => {
     setLoading(true);
     setError('');
     trpc.student.detail
@@ -497,17 +593,64 @@ export function StudentDetailPanel({
       });
   }, [studentId]);
 
+  useEffect(() => {
+    loadDetail();
+  }, [loadDetail]);
+
+  function openEdit() {
+    if (!detail) return;
+    editForm.setValues({
+      fullName: detail.fullName,
+      dateOfBirth: detail.dateOfBirth ? new Date(detail.dateOfBirth).toISOString().split('T')[0] : '',
+    });
+    setEditOpen(true);
+  }
+
+  async function onEdit(values: typeof editForm.values) {
+    if (!detail) return;
+    setEditBusy(true);
+    try {
+      await trpc.student.update.mutate({
+        id: detail.id,
+        fullName: values.fullName.trim() || undefined,
+        dateOfBirth: values.dateOfBirth ? values.dateOfBirth : null,
+      });
+      notifySuccess('Đã cập nhật hồ sơ học sinh');
+      setEditOpen(false);
+      loadDetail();
+    } catch (e) {
+      notifyError(e, 'Cập nhật học sinh thất bại');
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  async function onArchive() {
+    if (!detail) return;
+    setArchiveBusy(true);
+    try {
+      await trpc.teacherLite.studentArchive.mutate({ id: detail.id });
+      notifySuccess(`Đã lưu trữ học sinh ${detail.fullName}`);
+      setArchiveOpen(false);
+      (onArchived ?? onBack)();
+    } catch (e) {
+      notifyError(e, 'Lưu trữ học sinh thất bại');
+    } finally {
+      setArchiveBusy(false);
+    }
+  }
+
   return (
     <Stack>
       <Group>
-        <ActionIcon variant="subtle" onClick={onBack} title="Quay lại danh sách">
-          <IconArrowLeft size={18} />
-        </ActionIcon>
-        {detail ? (
-          <Title order={5}>{detail.fullName} — {detail.studentCode}</Title>
-        ) : (
-          <Skeleton height={24} width={200} />
-        )}
+        <Button
+          variant="subtle"
+          size="compact-sm"
+          leftSection={<IconArrowLeft size={16} />}
+          onClick={onBack}
+        >
+          Học sinh
+        </Button>
       </Group>
 
       {loading && (
@@ -518,61 +661,194 @@ export function StudentDetailPanel({
         </Stack>
       )}
 
-      {error && !loading && (
-        <Text c="red" size="sm">{error}</Text>
-      )}
+      {error && !loading && <Text c="red" size="sm">{error}</Text>}
 
       {detail && !loading && (
-        <Tabs defaultValue="info" variant="outline">
-          <Tabs.List>
-            <Tabs.Tab value="info">Thông tin HS</Tabs.Tab>
-            <Tabs.Tab value="guardians">
-              Phụ huynh {detail.guardians.length > 0 && `(${detail.guardians.length})`}
-            </Tabs.Tab>
-            <Tabs.Tab value="enrollments">
-              Ghi danh {detail.enrollments.length > 0 && `(${detail.enrollments.length})`}
-            </Tabs.Tab>
-            <Tabs.Tab value="opportunities">Cơ hội</Tabs.Tab>
-            <Tabs.Tab value="receipts">
-              Thanh toán {detail.receipts.length > 0 && `(${detail.receipts.length})`}
-            </Tabs.Tab>
-            <Tabs.Tab value="grades">
-              Điểm {detail.finalGrades.length > 0 && `(${detail.finalGrades.length})`}
-            </Tabs.Tab>
-            <Tabs.Tab value="history">Lịch sử</Tabs.Tab>
-          </Tabs.List>
+        <>
+          {/* Header card */}
+          <Card withBorder radius="md" p="lg" style={{ borderColor: 'var(--cmc-border)' }}>
+            <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+              <Group gap="md" wrap="nowrap" align="center">
+                <InitialsAvatar name={detail.fullName} size={40} />
+                <div>
+                  <Text
+                    style={{
+                      fontSize: 'var(--cmc-text-xs)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      color: 'var(--cmc-text-muted)',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Học sinh
+                  </Text>
+                  <Text fw={700} style={{ fontSize: 'var(--cmc-text-xl)', lineHeight: 1.15 }}>
+                    {detail.fullName}
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    {[detail.studentCode, detail.program, detail.level].filter(Boolean).join(' · ')}
+                  </Text>
+                </div>
+              </Group>
 
-          <Tabs.Panel value="info" pt="md">
-            <InfoTab s={detail} />
-          </Tabs.Panel>
+              <Group gap="sm" align="center">
+                <StatusBadge status={detail.lifecycle ?? ''} map={LIFECYCLE_STATUS} pill />
+                <Button variant="default" size="xs" onClick={openEdit}>
+                  Sửa
+                </Button>
+                <Menu position="bottom-end" withinPortal>
+                  <Menu.Target>
+                    <Button variant="default" size="xs">Thao tác</Button>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    <Menu.Item color="red" onClick={() => setArchiveOpen(true)}>
+                      Lưu trữ học sinh
+                    </Menu.Item>
+                  </Menu.Dropdown>
+                </Menu>
+              </Group>
+            </Group>
 
-          <Tabs.Panel value="guardians" pt="md">
-            <GuardiansTab s={detail} />
-          </Tabs.Panel>
+            {/* Smart-stat tiles — click to switch the section tab below */}
+            <Group gap="sm" mt="md" wrap="wrap">
+              <style>{`.cmc-student-tile:hover { border-color: var(--cmc-brand); }`}</style>
+              <SmartTile
+                label="Ghi danh"
+                count={detail.enrollments.length}
+                active={activeTab === 'enrollments'}
+                onClick={() => setActiveTab('enrollments')}
+              />
+              <SmartTile
+                label="Phụ huynh"
+                count={detail.guardians.length}
+                active={activeTab === 'guardians'}
+                onClick={() => setActiveTab('guardians')}
+              />
+              <SmartTile
+                label="Phiếu thu"
+                count={detail.receipts.length}
+                active={activeTab === 'receipts'}
+                onClick={() => setActiveTab('receipts')}
+              />
+              <SmartTile
+                label="Điểm"
+                count={detail.finalGrades.length}
+                active={activeTab === 'grades'}
+                onClick={() => setActiveTab('grades')}
+              />
+            </Group>
+          </Card>
 
-          <Tabs.Panel value="enrollments" pt="md">
-            <EnrollmentsTab s={detail} />
-          </Tabs.Panel>
+          {/* Body: main column + sticky chatter rail (wraps below on narrow widths) */}
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div
+              style={{
+                flex: '1 1 480px',
+                minWidth: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 16,
+              }}
+            >
+              <InfoTab s={detail} />
 
-          <Tabs.Panel value="opportunities" pt="md">
-            <OpportunitiesTab s={detail} />
-          </Tabs.Panel>
+              <Tabs value={activeTab} onChange={(v) => v && setActiveTab(v)} variant="outline">
+                <Tabs.List>
+                  <Tabs.Tab value="enrollments">
+                    Ghi danh {detail.enrollments.length > 0 && `(${detail.enrollments.length})`}
+                  </Tabs.Tab>
+                  <Tabs.Tab value="guardians">
+                    Phụ huynh {detail.guardians.length > 0 && `(${detail.guardians.length})`}
+                  </Tabs.Tab>
+                  <Tabs.Tab value="receipts">
+                    Thanh toán {detail.receipts.length > 0 && `(${detail.receipts.length})`}
+                  </Tabs.Tab>
+                  <Tabs.Tab value="grades">
+                    Điểm {detail.finalGrades.length > 0 && `(${detail.finalGrades.length})`}
+                  </Tabs.Tab>
+                  <Tabs.Tab value="opportunities">Cơ hội</Tabs.Tab>
+                </Tabs.List>
 
-          <Tabs.Panel value="receipts" pt="md">
-            <ReceiptsTab s={detail} />
-          </Tabs.Panel>
+                <Tabs.Panel value="enrollments" pt="md"><EnrollmentsTab s={detail} /></Tabs.Panel>
+                <Tabs.Panel value="guardians" pt="md"><GuardiansTab s={detail} /></Tabs.Panel>
+                <Tabs.Panel value="receipts" pt="md"><ReceiptsTab s={detail} /></Tabs.Panel>
+                <Tabs.Panel value="grades" pt="md"><GradesTab s={detail} /></Tabs.Panel>
+                <Tabs.Panel value="opportunities" pt="md"><OpportunitiesTab s={detail} /></Tabs.Panel>
+              </Tabs>
+            </div>
 
-          <Tabs.Panel value="grades" pt="md">
-            <GradesTab s={detail} />
-          </Tabs.Panel>
-
-          <Tabs.Panel value="history" pt="md">
-            {/* Chatter sidebar: Odoo-style timeline of all audit events + staff notes on this student.
+            {/* Chatter rail: Odoo-style timeline of all audit events + staff notes on this student.
                 entityType="student" is whitelisted in the audit router's NOTE_TARGETS gate. */}
-            <Chatter entityType="student" entityId={studentId} />
-          </Tabs.Panel>
-        </Tabs>
+            <div
+              style={{
+                flex: '0 1 var(--cmc-chatter-w)',
+                width: 'var(--cmc-chatter-w)',
+                position: 'sticky',
+                top: 12,
+              }}
+            >
+              <Chatter entityType="student" entityId={studentId} />
+            </div>
+          </div>
+        </>
       )}
+
+      <Modal
+        opened={editOpen}
+        onClose={() => setEditOpen(false)}
+        title={`Sửa: ${detail?.fullName ?? ''}`}
+        radius="xl"
+        centered
+      >
+        <form onSubmit={editForm.onSubmit(onEdit)}>
+          <Stack>
+            <TextInput label="Họ tên" {...editForm.getInputProps('fullName')} />
+            <DateInput
+              label="Ngày sinh"
+              valueFormat="DD/MM/YYYY"
+              clearable
+              placeholder="Để trống để xóa"
+              value={parseApiDate(editForm.values.dateOfBirth)}
+              onChange={(d) => editForm.setFieldValue('dateOfBirth', toApiDate(d) ?? '')}
+              error={editForm.errors.dateOfBirth}
+            />
+            <Text size="xs" c="dimmed">
+              Đổi chương trình: thực hiện qua phiếu thu. Đổi vòng đời: thực hiện qua Chăm sóc KH.
+            </Text>
+            <Group justify="flex-end" mt="xs">
+              <Button variant="subtle" onClick={() => setEditOpen(false)}>
+                Hủy
+              </Button>
+              <Button type="submit" variant="filled" radius={9999} loading={editBusy}>
+                Lưu
+              </Button>
+            </Group>
+          </Stack>
+        </form>
+      </Modal>
+
+      <Modal
+        opened={archiveOpen}
+        onClose={() => setArchiveOpen(false)}
+        title="Lưu trữ học sinh"
+        radius="xl"
+        centered
+      >
+        <Stack>
+          <Text size="sm">
+            Lưu trữ học sinh <b>{detail?.fullName}</b>? Học sinh sẽ ẩn khỏi danh sách (không xóa
+            cứng). Hành động được ghi log.
+          </Text>
+          <Group justify="flex-end" mt="xs">
+            <Button variant="subtle" onClick={() => setArchiveOpen(false)} disabled={archiveBusy}>
+              Hủy
+            </Button>
+            <Button color="red" variant="filled" radius={9999} loading={archiveBusy} onClick={onArchive}>
+              Lưu trữ
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   );
 }

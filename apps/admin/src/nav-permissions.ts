@@ -125,6 +125,9 @@ export const NAV_GATES: Record<SectionKey, NavGate> = {
   // placeholder so NAV_GATES stays a complete Record<SectionKey, NavGate> for the type checker.
   'student-mgmt':     { kind: 'open' },
   'payroll-checkin':  { kind: 'open' },
+  // Teacher-lite staff roster: gate 'open' placeholder; real visibility (director-only on teacher
+  // surface) lives in buildNavGroups (shell.tsx). Server user.listTeachers is the true gate.
+  'staff-lite':       { kind: 'open' },
 
   // ── Executive Cockpit (Phase 3) ─────────────────────────────────────────
   // Aggregate screen visible ONLY to giam_doc_kinh_doanh-only accounts (replaces 'overview').

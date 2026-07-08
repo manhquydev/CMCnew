@@ -20,7 +20,6 @@ const ERASE_RADIUS_PX = 14;
 // Mirrors the server caps in apps/api/src/annotation.ts — client-side UX guard only, not a security boundary.
 const MAX_ITEMS = 500;
 const MAX_INK_POINTS = 2000;
-const MIN_SCALE = 1;
 const MAX_SCALE = 4;
 // Bounds simultaneously-rasterized page bitmaps in memory regardless of document length.
 const MAX_RENDERED_PAGES = 6;
@@ -166,6 +165,12 @@ export function PdfAnnotator({
   const [, force] = useState(0);
 
   // View transform (pinch-zoom + pan) — display-only, never baked into stored normalised coords.
+  // fitScale = the page shrunk to fit the container's width (≤1 on narrow/mobile viewports, 1 on
+  // desktop where the container is already ≥ RENDER_WIDTH) — the floor for pinch zoom-out and the
+  // default view, so a phone shows the whole page instead of a 720px-wide slice cut off by overflow.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [fitScale, setFitScale] = useState(1);
+  const fitAppliedRef = useRef(false);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -197,6 +202,7 @@ export function PdfAnnotator({
     visiblePages.current = new Set();
     rasterizing.current = new Set();
     docRef.current = null;
+    fitAppliedRef.current = false;
     (async () => {
       try {
         const res = await fetch(`${API_URL}/files/exercise/${pdfRef}`, { credentials: 'include' });
@@ -232,6 +238,20 @@ export function PdfAnnotator({
       docRef.current = null;
     };
   }, [pdfRef]);
+
+  // Fit the page to the container's width once it's known (mobile: shrink below RENDER_WIDTH so
+  // the whole page is visible instead of cropped by the pinch-container's overflow:hidden; desktop:
+  // container is already ≥ RENDER_WIDTH so this is a no-op, scale stays 1). Applied once per document
+  // load — does not fight a user who has since pinch-zoomed.
+  useEffect(() => {
+    if (dims.length === 0 || fitAppliedRef.current || !containerRef.current) return;
+    const containerWidth = containerRef.current.clientWidth;
+    if (containerWidth <= 0) return;
+    const fit = Math.min(1, containerWidth / RENDER_WIDTH);
+    fitAppliedRef.current = true;
+    setFitScale(fit);
+    setScale(fit);
+  }, [dims]);
 
   // Bumps a page to most-recently-used and evicts least-recently-used bitmaps past the cap.
   // Never evicts a page currently on screen (visiblePages) — a still-visible page must not go
@@ -437,7 +457,7 @@ export function PdfAnnotator({
       const dist = Math.hypot(b!.x - a!.x, b!.y - a!.y);
       const mid = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
       const ratio = pinch.current.startDist === 0 ? 1 : dist / pinch.current.startDist;
-      const nextScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, pinch.current.startScale * ratio));
+      const nextScale = Math.min(MAX_SCALE, Math.max(fitScale, pinch.current.startScale * ratio));
       setScale(nextScale);
       setOffset({
         x: pinch.current.startOffset.x + (mid.x - pinch.current.startMid.x),
@@ -452,7 +472,7 @@ export function PdfAnnotator({
   }
 
   function resetZoom() {
-    setScale(1);
+    setScale(fitScale);
     setOffset({ x: 0, y: 0 });
   }
 
@@ -535,7 +555,7 @@ export function PdfAnnotator({
           <button type="button" onClick={clearAll} disabled={items.length === 0} style={btn}>
             Xóa hết
           </button>
-          {scale !== 1 && (
+          {scale !== fitScale && (
             <button type="button" onClick={resetZoom} style={btn}>
               Thu nhỏ lại
             </button>
@@ -548,6 +568,7 @@ export function PdfAnnotator({
       )}
 
       <div
+        ref={containerRef}
         onPointerDown={pinchDown}
         onPointerMove={pinchMove}
         onPointerUp={pinchUp}

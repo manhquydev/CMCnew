@@ -4,6 +4,7 @@ import 'dayjs/locale/vi';
 import { FacilityPicker, notifyError, trpc, useSession } from '@cmc/ui';
 import { Center, Loader } from '@mantine/core';
 import { TeacherScheduleDetail } from './teacher-schedule-session-detail';
+import { effectiveSessionStatus } from './session-status';
 
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
@@ -15,14 +16,6 @@ const C = {
   bg: '#F5F5F7', surface: '#FFFFFF', border: '#E5E5EA',
 };
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif';
-
-const SESSION_STATUS: Record<string, { label: string; color: string }> = {
-  planned:   { label: 'Sắp dạy',   color: '#0071E3' },
-  open:      { label: 'Đang mở',   color: '#1565C0' },
-  running:   { label: 'Đang học',  color: '#137333' },
-  closed:    { label: 'Đã xong',   color: '#6E6E73' },
-  cancelled: { label: 'Đã hủy',    color: '#C5221F' },
-};
 
 export function TeacherSchedule() {
   const { me } = useSession();
@@ -110,7 +103,7 @@ export function TeacherSchedule() {
     );
   }
   if (activeSession) {
-    return <TeacherScheduleDetail session={activeSession} onBack={closeSession} />;
+    return <TeacherScheduleDetail session={activeSession} onBack={closeSession} onChanged={loadSessions} />;
   }
 
   return (
@@ -302,7 +295,8 @@ function KanbanView({ sessions, onSelect }: { sessions: MySession[]; onSelect: (
 // ─── Shared sub-components ────────────────────────────────────────────────────
 
 function SessionCard({ session, onClick, compact }: { session: MySession; onClick: () => void; compact?: boolean }) {
-  const st = SESSION_STATUS[session.status] ?? { label: session.status, color: C.muted };
+  // Trạng thái suy theo GIỜ THỰC (fix bug buổi đã qua vẫn hiện "Sắp dạy") — xem session-status.ts.
+  const st = effectiveSessionStatus(session.sessionDate, session.startTime, session.endTime, session.status);
   return (
     <div onClick={onClick} style={{
       background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
