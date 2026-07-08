@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
-import { API_URL, Chatter, notifyError, notifySuccess, PdfAnnotator, trpc, uploadSessionPhoto, useSession, WorkflowStatusbar } from '@cmc/ui';
+import { API_URL, Chatter, notifyError, notifyInfo, notifySuccess, PdfAnnotator, trpc, uploadSessionPhoto, useSession, WorkflowStatusbar } from '@cmc/ui';
 import { Button, Center, Drawer, Group, Loader, Menu, Modal, NumberInput, Select, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core';
 import { can } from '@cmc/auth/permissions';
 import { effectiveSessionStatus, SESSION_STAGES, SESSION_TERMINAL } from './session-status';
@@ -167,19 +167,30 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
       .catch(() => setSubmissions([]));
   }, [selectedEx]);
 
+  // Server may silently drop photo refs whose file no longer exists on disk (e.g. wiped by a
+  // redeploy) rather than blocking the whole save — sync local state to the server's truth and
+  // tell the teacher, so a dead ref isn't resubmitted forever on every subsequent save.
+  function applyDraftSaveResult(result: { photos: { photoRef: string }[]; droppedPhotoCount: number }) {
+    if (result.droppedPhotoCount > 0) {
+      notifyInfo(`${result.droppedPhotoCount} ảnh bị lỗi (file gốc không còn) đã được tự động gỡ khỏi buổi học — tải lại ảnh nếu cần.`, 'Ảnh lỗi đã được gỡ');
+      setDraft(prev => ({ ...prev, photos: result.photos.map((p) => ({ ref: p.photoRef })) }));
+    }
+  }
+
   // Unified debounced save — both Tab 2 and Tab 4 go through here
   const scheduleSave = useCallback((next: EvidenceDraft) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       setSaving(true);
       try {
-        await trpc.sessionEvidence.upsertDraft.mutate({
+        const result = await trpc.sessionEvidence.upsertDraft.mutate({
           classSessionId,
           summary: next.summary.trim() || undefined,
           internalNote: next.internalNote.trim() || undefined,
           photos: next.photos.map((p, i) => ({ ref: p.ref, sortOrder: i })),
           comments: commentsToArray(next.comments),
         });
+        applyDraftSaveResult(result);
         setSavedAt(Date.now());
       } catch (e) {
         notifyError(e, 'Lưu thất bại');
@@ -258,13 +269,14 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
         setSaving(true);
         try {
           const next: EvidenceDraft = saved;
-          await trpc.sessionEvidence.upsertDraft.mutate({
+          const result = await trpc.sessionEvidence.upsertDraft.mutate({
             classSessionId,
             summary: next.summary.trim() || undefined,
             internalNote: next.internalNote.trim() || undefined,
             photos: next.photos.map((p, i) => ({ ref: p.ref, sortOrder: i })),
             comments: commentsToArray(next.comments),
           });
+          applyDraftSaveResult(result);
           setSavedAt(Date.now());
         } finally {
           setSaving(false);
@@ -280,13 +292,14 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setSaving(true);
     try {
-      await trpc.sessionEvidence.upsertDraft.mutate({
+      const result = await trpc.sessionEvidence.upsertDraft.mutate({
         classSessionId,
         summary: draft.summary.trim() || undefined,
         internalNote: draft.internalNote.trim() || undefined,
         photos: draft.photos.map((p, i) => ({ ref: p.ref, sortOrder: i })),
         comments: commentsToArray(draft.comments),
       });
+      applyDraftSaveResult(result);
       await trpc.sessionEvidence.publish.mutate({ classSessionId });
       setEvidencePublished(true);
       notifySuccess('Đã đăng nhật ký lên LMS');
@@ -564,24 +577,38 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
                   })}
                 </Stack>
               )}
-              {gradingId && (
-                <div style={{ marginTop: 14, padding: 16, background: C.surface, borderRadius: 12, border: `1px solid ${C.border}` }}>
-                  {selectedEx?.basePdfRef && gradingLayer?.student && (
-                    <div style={{ marginBottom: 12 }}>
-                      <Text size="xs" fw={600} mb={4}>Bài học sinh đã làm</Text>
-                      <PdfAnnotator
-                        pdfRef={selectedEx.basePdfRef}
-                        value={gradingLayer.student}
-                        onChange={() => {}}
-                        editable={false}
-                      />
-                    </div>
-                  )}
-                  <NumberInput label="Điểm (0–10)" min={0} max={10} step={0.5} value={gradeScore} onChange={setGradeScore} mb="sm" />
-                  <Textarea label="Nhận xét" placeholder="Ghi nhận xét..." minRows={2} value={gradeFeedback} onChange={e => setGradeFeedback(e.currentTarget.value)} mb="sm" />
-                  <Button size="sm" onClick={saveGrade} style={{ background: C.brand, color: '#fff', fontFamily: FONT }}>Lưu điểm</Button>
-                </div>
-              )}
+              {gradingId && (() => {
+                const gradingSub = submissions.find(s => s.id === gradingId) as Record<string, unknown> | undefined;
+                const answerText = (gradingSub?.answerText as string | null | undefined)?.trim();
+                const hasPdfWork = Boolean(selectedEx?.basePdfRef && gradingLayer?.student);
+                return (
+                  <div style={{ marginTop: 14, padding: 16, background: C.surface, borderRadius: 12, border: `1px solid ${C.border}` }}>
+                    {hasPdfWork && (
+                      <div style={{ marginBottom: 12 }}>
+                        <Text size="xs" fw={600} mb={4}>Bài học sinh đã làm</Text>
+                        <PdfAnnotator
+                          pdfRef={selectedEx!.basePdfRef!}
+                          value={gradingLayer!.student}
+                          onChange={() => {}}
+                          editable={false}
+                        />
+                      </div>
+                    )}
+                    {answerText && (
+                      <div style={{ marginBottom: 12 }}>
+                        <Text size="xs" fw={600} mb={4}>Câu trả lời của học sinh</Text>
+                        <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{answerText}</Text>
+                      </div>
+                    )}
+                    {!hasPdfWork && !answerText && (
+                      <Text size="sm" c="dimmed" mb="sm">Học sinh chưa lưu bài làm (chưa vẽ trên PDF hoặc chưa nhập câu trả lời).</Text>
+                    )}
+                    <NumberInput label="Điểm (0–10)" min={0} max={10} step={0.5} value={gradeScore} onChange={setGradeScore} mb="sm" />
+                    <Textarea label="Nhận xét" placeholder="Ghi nhận xét..." minRows={2} value={gradeFeedback} onChange={e => setGradeFeedback(e.currentTarget.value)} mb="sm" />
+                    <Button size="sm" onClick={saveGrade} style={{ background: C.brand, color: '#fff', fontFamily: FONT }}>Lưu điểm</Button>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </Tabs.Panel>
