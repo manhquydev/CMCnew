@@ -173,6 +173,15 @@ export function PdfAnnotator({
   // fitScale = the page shrunk to fit the container's width (≤1 on narrow/mobile viewports, 1 on
   // desktop where the container is already ≥ RENDER_WIDTH) — the floor for pinch zoom-out and the
   // default view, so a phone shows the whole page instead of a 720px-wide slice cut off by overflow.
+  // outerRef clips (its own layout width never changes) and is what fitScale is measured
+  // against; containerRef carries the pinch-zoom/pan transform. They must be different elements —
+  // overflow:hidden and transform on the SAME element clips in PRE-transform coordinates, so a
+  // 720px-wide page inside a 390px-wide mobile container gets cropped to its left ~54% before
+  // the shrink-to-fit scale ever gets a chance to bring the full page into view (reproduced live:
+  // a landscape PDF opened on a phone showed only its left portion, the rest cut off — RENDER_WIDTH
+  // is a fixed 720 for every page regardless of orientation, so this hit every mobile document,
+  // just most visibly on wide/landscape ones).
+  const outerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [fitScale, setFitScale] = useState(1);
   const fitAppliedRef = useRef(false);
@@ -249,8 +258,8 @@ export function PdfAnnotator({
   // container is already ≥ RENDER_WIDTH so this is a no-op, scale stays 1). Applied once per document
   // load — does not fight a user who has since pinch-zoomed.
   useEffect(() => {
-    if (dims.length === 0 || fitAppliedRef.current || !containerRef.current) return;
-    const containerWidth = containerRef.current.clientWidth;
+    if (dims.length === 0 || fitAppliedRef.current || !outerRef.current) return;
+    const containerWidth = outerRef.current.clientWidth;
     if (containerWidth <= 0) return;
     const fit = Math.min(1, containerWidth / RENDER_WIDTH);
     fitAppliedRef.current = true;
@@ -586,6 +595,7 @@ export function PdfAnnotator({
         <div style={{ color: '#e8590c', fontSize: 12, marginBottom: 8 }}>{capMsg}</div>
       )}
 
+      <div ref={outerRef} style={{ width: '100%', overflow: 'hidden' }}>
       <div
         ref={containerRef}
         onPointerDown={pinchDown}
@@ -594,7 +604,6 @@ export function PdfAnnotator({
         onPointerCancel={pinchUp}
         style={{
           touchAction: 'none',
-          overflow: 'hidden',
           transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
           transformOrigin: '0 0',
         }}
@@ -625,6 +634,7 @@ export function PdfAnnotator({
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );
