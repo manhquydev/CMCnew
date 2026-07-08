@@ -65,6 +65,23 @@ export function StudentsPanel({
 
   const [editTarget, setEditTarget] = useState<StudentT | null>(null);
   const [editBusy, setEditBusy] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<StudentT | null>(null);
+  const [archiveBusy, setArchiveBusy] = useState(false);
+
+  async function onArchive() {
+    if (!archiveTarget) return;
+    setArchiveBusy(true);
+    try {
+      await trpc.teacherLite.studentArchive.mutate({ id: archiveTarget.id });
+      notifySuccess(`Đã lưu trữ học sinh ${archiveTarget.fullName}`);
+      setArchiveTarget(null);
+      load();
+    } catch (e) {
+      notifyError(e, 'Lưu trữ học sinh thất bại');
+    } finally {
+      setArchiveBusy(false);
+    }
+  }
 
   const editForm = useForm({
     initialValues: { fullName: '', dateOfBirth: '' },
@@ -199,6 +216,9 @@ export function StudentsPanel({
           <Button size="compact-xs" variant="subtle" onClick={() => openEdit(s)}>
             Sửa
           </Button>
+          <Button size="compact-xs" variant="subtle" color="red" onClick={() => setArchiveTarget(s)}>
+            Lưu trữ
+          </Button>
         </Group>
       ),
     },
@@ -281,6 +301,29 @@ export function StudentsPanel({
             </Group>
           </Stack>
         </form>
+      </Modal>
+
+      <Modal
+        opened={!!archiveTarget}
+        onClose={() => setArchiveTarget(null)}
+        title="Lưu trữ học sinh"
+        radius="xl"
+        centered
+      >
+        <Stack>
+          <Text size="sm">
+            Lưu trữ học sinh <b>{archiveTarget?.fullName}</b>? Học sinh sẽ ẩn khỏi danh sách (không xóa
+            cứng). Hành động được ghi log.
+          </Text>
+          <Group justify="flex-end" mt="xs">
+            <Button variant="subtle" onClick={() => setArchiveTarget(null)} disabled={archiveBusy}>
+              Hủy
+            </Button>
+            <Button color="red" variant="filled" radius={9999} loading={archiveBusy} onClick={onArchive}>
+              Lưu trữ
+            </Button>
+          </Group>
+        </Stack>
       </Modal>
     </Stack>
   );
