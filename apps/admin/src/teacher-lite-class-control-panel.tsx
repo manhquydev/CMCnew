@@ -8,6 +8,7 @@ import {
   Chip,
   Divider,
   Group,
+  Modal,
   NumberInput,
   Select,
   Stack,
@@ -140,11 +141,27 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
     }
   }
 
-  async function cancelClass() {
+  // Hủy lớp/buổi là hành động phá hủy (cascade buổi tương lai) → confirm modal trước khi gọi mutate.
+  const [confirmCancel, setConfirmCancel] = useState<null | 'class' | 'session'>(null);
+
+  function requestCancelClass() {
     if (!cancelClassId || !cancelClassReason.trim()) {
       notifyError('Chọn lớp và nhập lý do hủy.', 'Thiếu thông tin');
       return;
     }
+    setConfirmCancel('class');
+  }
+
+  function requestCancelSession() {
+    if (!cancelSessionId || !cancelSessionReason.trim()) {
+      notifyError('Chọn buổi và nhập lý do hủy.', 'Thiếu thông tin');
+      return;
+    }
+    setConfirmCancel('session');
+  }
+
+  async function cancelClass() {
+    if (!cancelClassId || !cancelClassReason.trim()) return;
     setBusy(true);
     try {
       const result = await trpc.teacherLite.cancelClass.mutate({ id: cancelClassId, reason: cancelClassReason.trim() });
@@ -156,14 +173,12 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
       notifyError(e, 'Không hủy được lớp');
     } finally {
       setBusy(false);
+      setConfirmCancel(null);
     }
   }
 
   async function cancelSession() {
-    if (!cancelSessionId || !cancelSessionReason.trim()) {
-      notifyError('Chọn buổi và nhập lý do hủy.', 'Thiếu thông tin');
-      return;
-    }
+    if (!cancelSessionId || !cancelSessionReason.trim()) return;
     setBusy(true);
     try {
       await trpc.teacherLite.cancelSession.mutate({ sessionId: cancelSessionId, reason: cancelSessionReason.trim() });
@@ -176,6 +191,7 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
       notifyError(e, 'Không hủy được buổi học');
     } finally {
       setBusy(false);
+      setConfirmCancel(null);
     }
   }
 
@@ -331,7 +347,7 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
                 value={cancelClassReason}
                 onChange={(e) => setCancelClassReason(e.currentTarget.value)}
               />
-              <Button color="red" variant="light" loading={busy} onClick={cancelClass}>
+              <Button color="red" variant="light" loading={busy} onClick={requestCancelClass}>
                 Hủy lớp
               </Button>
             </Group>
@@ -357,13 +373,43 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
                 value={cancelSessionReason}
                 onChange={(e) => setCancelSessionReason(e.currentTarget.value)}
               />
-              <Button color="orange" variant="light" loading={busy} onClick={cancelSession}>
+              <Button color="orange" variant="light" loading={busy} onClick={requestCancelSession}>
                 Hủy buổi
               </Button>
             </Group>
           </Stack>
         </>
       )}
+
+      <Modal
+        opened={confirmCancel !== null}
+        onClose={() => setConfirmCancel(null)}
+        title={confirmCancel === 'class' ? 'Xác nhận hủy lớp' : 'Xác nhận hủy buổi học'}
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            {confirmCancel === 'class'
+              ? 'Hủy lớp sẽ hủy TẤT CẢ buổi học tương lai và các buổi họp phụ huynh đã lên lịch. Buổi đã diễn ra được giữ lại. Hành động này được ghi log.'
+              : 'Hủy buổi học này. Hành động được ghi log kèm lý do.'}
+          </Text>
+          <Text size="sm" c="dimmed">
+            Lý do: {confirmCancel === 'class' ? cancelClassReason : cancelSessionReason}
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setConfirmCancel(null)} disabled={busy}>
+              Quay lại
+            </Button>
+            <Button
+              color={confirmCancel === 'class' ? 'red' : 'orange'}
+              loading={busy}
+              onClick={() => (confirmCancel === 'class' ? cancelClass() : cancelSession())}
+            >
+              Xác nhận hủy
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Card>
   );
 }
