@@ -136,12 +136,17 @@ export function PdfAnnotator({
   onChange,
   editable = true,
   readOnlyLayers = [],
+  maxHeight,
 }: {
   pdfRef: string;
   value: AnnotationData | null;
   onChange?: (v: AnnotationData) => void;
   editable?: boolean;
   readOnlyLayers?: { items: AnnotationItem[]; opacity?: number }[];
+  /** Bounds the scrollable page area so the toolbar can stay sticky and reachable on a long
+   *  multi-page document, instead of scrolling away with page 1. Unset = old unbounded behavior
+   *  (grows to fit content; caller's own container scrolls) — existing callers are unaffected. */
+  maxHeight?: string;
 }) {
   // Measured eagerly for every page (cheap — no raster); drives layout + annotation alignment.
   const [dims, setDims] = useState<PageDim[]>([]);
@@ -490,9 +495,23 @@ export function PdfAnnotator({
   const live = drawing.current ? [...items, drawing.current] : items;
 
   return (
-    <div>
+    <div style={maxHeight ? { maxHeight, overflowY: 'auto' } : undefined}>
       {editable && (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            marginBottom: 8,
+            // Sticky only when the caller bounds our height (i.e. WE scroll internally) — otherwise
+            // the caller's own container scrolls and a sticky toolbar here would have nothing to
+            // stick to, or worse, pin itself against unrelated content.
+            ...(maxHeight
+              ? { position: 'sticky' as const, top: 0, zIndex: 1, background: '#fff', paddingTop: 4, paddingBottom: 8 }
+              : {}),
+          }}
+        >
           {(['ink', 'highlight', 'text', 'eraser'] as Tool[]).map((t) => (
             <button
               key={t}
