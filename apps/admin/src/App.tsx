@@ -64,6 +64,7 @@ import { GradingPanel } from './grading';
 import { AssessmentPanel } from './assessment-panel';
 import { AttendancePanel } from './attendance-panel';
 import { TeacherTodayPanel } from './teacher-today-panel';
+import { TeacherStaffLitePanel } from './teacher-staff-lite-panel';
 import { SessionWorkspace } from './session-workspace';
 import { HomeworkFeed } from './homework-feed';
 import { TeacherSchedule } from './teacher-schedule';
@@ -750,6 +751,9 @@ function Dashboard() {
       // approval-inbox widget. KPI items route to the full 'kpi' panel (see
       // biz-director-cockpit-panel.tsx for why: the aggregate item lacks the composite
       // userId+periodKey key kpiEvalConfirm/kpiEvalApprove require).
+      case 'staff-lite':
+        return <TeacherStaffLitePanel />;
+
       case 'biz-director-cockpit':
         return <BizDirectorCockpitPanel onNavigateToKpi={() => handleSectionChange('kpi')} hideKpi={surface === 'teacher'} />;
 

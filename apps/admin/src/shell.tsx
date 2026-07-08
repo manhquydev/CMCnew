@@ -92,6 +92,8 @@ export type SectionKey =
   // Teacher nav consolidation (Lịch 360) — giao_vien-only aggregate screens
   | 'student-mgmt'
   | 'payroll-checkin'
+  // Teacher-lite lean staff roster — director-only, teacher surface
+  | 'staff-lite'
   // Executive Cockpit (Phase 3) — giam_doc_kinh_doanh-only aggregate screen
   | 'biz-director-cockpit'
   // Executive Cockpit (Phase 4) — giam_doc_dao_tao-only aggregate screen
@@ -810,6 +812,8 @@ export function buildNavGroups({
         { key: 'org' as const, label: 'Cơ sở & Người dùng', icon: <IconBuilding {...I()} />, visible: visible('org') },
         { key: 'facility-network' as const, label: 'IP WiFi chấm công', icon: <IconWifi {...I()} />, visible: visible('facility-network') },
         { key: 'shift-config' as const, label: 'Danh mục ca', icon: <IconAdjustments {...I()} />, visible: visible('shift-config') },
+        // Teacher-lite only (visible:false on ERP; teacher flatMap shows it to directors). Lean GV roster.
+        { key: 'staff-lite' as const, label: 'Đội ngũ giáo viên', icon: <IconUsers {...I()} />, visible: false },
       ],
     },
   ];
@@ -826,6 +830,7 @@ export function buildNavGroups({
     'family-intake': 'Tạo học viên LMS',
     'edu-director-cockpit': 'Điều phối đào tạo',
     'biz-director-cockpit': 'Bàn giao tuyển sinh',
+    'staff-lite': 'Đội ngũ giáo viên',
   };
   const isTeacherSurfaceActor = isTeacherSurfaceRole(roles, isSuperAdmin);
   const isTeacherSurfaceDirector =
@@ -869,6 +874,8 @@ export function buildNavGroups({
               ? isTeacherSurfaceDirector && visible('family-intake')
               : item.key === 'overview'
               ? true
+              : item.key === 'staff-lite'
+              ? isSuperAdmin || roles.includes('giam_doc_dao_tao')
               : item.visible),
         })),
       }];
@@ -914,6 +921,7 @@ export const SECTION_TITLES: Record<SectionKey, string> = {
   // Teacher nav consolidation (Lịch 360)
   'student-mgmt': 'Quản lý học sinh',
   'payroll-checkin': 'Chấm công & lương',
+  'staff-lite': 'Đội ngũ giáo viên',
   // Executive Cockpit (Phase 3)
   'biz-director-cockpit': 'Cockpit điều hành',
   // Executive Cockpit (Phase 4)
