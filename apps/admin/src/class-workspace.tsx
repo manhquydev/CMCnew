@@ -426,6 +426,7 @@ function ScheduleTab({
   const canAddSlot = can(me.roles, me.isSuperAdmin, 'schedule', 'addSlot');
   const canEditSlot = can(me.roles, me.isSuperAdmin, 'schedule', 'editSlot');
   const canRemoveSlot = can(me.roles, me.isSuperAdmin, 'schedule', 'removeSlot');
+  const canRecompute = can(me.roles, me.isSuperAdmin, 'schedule', 'recomputeForBatch');
   const [editing, setEditing] = useState<Slot | null>(null);
   const [slots, setSlots] = useState<Awaited<ReturnType<typeof trpc.schedule.listSlots.query>>>([]);
   const [day, setDay] = useState<string | null>('1');
@@ -481,6 +482,16 @@ function ScheduleTab({
       });
       setMsg(`Đã tạo ${r.created} buổi (bỏ qua ${r.skipped}).`);
       onSessionsGenerated?.();
+    } catch (e) {
+      setMsg('Lỗi: ' + (e instanceof Error ? e.message : ''));
+    }
+  }
+
+  async function recomputeCurriculum() {
+    setMsg('');
+    try {
+      const r = await trpc.schedule.recomputeForBatch.mutate({ classBatchId: batch.id });
+      setMsg(r ? `Map curriculum: ${r.mappedCount} buổi, ${r.overflowCount} dư, ${r.uncoveredUnits} unit chưa phủ.` : 'Khóa này chưa có khung chương trình.');
     } catch (e) {
       setMsg('Lỗi: ' + (e instanceof Error ? e.message : ''));
     }
@@ -586,6 +597,11 @@ function ScheduleTab({
             <DateInput label="Từ ngày" value={range.from} onChange={(d) => setRange((r) => ({ ...r, from: d }))} valueFormat="DD/MM/YYYY" />
             <DateInput label="Đến ngày" value={range.to} onChange={(d) => setRange((r) => ({ ...r, to: d }))} valueFormat="DD/MM/YYYY" />
             <Button onClick={generate} disabled={!range.from || !range.to}>Sinh lịch</Button>
+            {canRecompute && (
+              <Button variant="light" onClick={recomputeCurriculum} title="Gán lại buổi học → bài học khung chương trình (dùng khi bài tập không mở cho học sinh)">
+                Map lại khung CT
+              </Button>
+            )}
           </Group>
           {msg && (
             <Text size="sm" mt="xs" c={msg.startsWith('Lỗi') ? 'red' : 'green'}>{msg}</Text>

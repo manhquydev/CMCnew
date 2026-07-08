@@ -194,7 +194,7 @@ function ExerciseEditor({
   const [basePdfRef, setBasePdfRef] = useState(current?.basePdfRef ?? '');
   const [maxScore, setMaxScore] = useState<number | string>(current?.maxScore ?? 10);
   const [starReward, setStarReward] = useState<number | string>(current?.starReward ?? 10);
-  const [status, setStatus] = useState<ExerciseStatus>((current?.status as ExerciseStatus | undefined) ?? 'draft');
+  const [status, setStatus] = useState<ExerciseStatus>((current?.status as ExerciseStatus | undefined) ?? 'published');
   const [pdf, setPdf] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
 
