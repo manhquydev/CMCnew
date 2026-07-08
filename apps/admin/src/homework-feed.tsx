@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
 import { Center, Loader, NumberInput, Rating, Select, Textarea } from '@mantine/core';
-import { notifyError, notifySuccess, trpc, useSession, PdfAnnotator } from '@cmc/ui';
+import { notifyError, notifySuccess, trpc, useSession, PdfAnnotator, WorkflowStatusbar } from '@cmc/ui';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type ClassBatch = Awaited<ReturnType<typeof trpc.classBatch.list.query>>[number];
@@ -461,6 +461,17 @@ export function HomeworkFeed({ batchId: propBatchId, facilityId: propFacilityId,
                     {dayjs(
                       selected.submission.submittedAt ?? selected.submission.createdAt,
                     ).format('DD/MM/YYYY HH:mm')}
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <WorkflowStatusbar
+                      stages={[
+                        { value: 'draft', label: 'Nháp' },
+                        { value: 'submitted', label: 'Đã nộp' },
+                        { value: 'graded', label: 'Đã chấm' },
+                      ]}
+                      current={selected.submission.status}
+                      ariaLabel="Trạng thái bài nộp"
+                    />
                   </div>
                 </div>
 

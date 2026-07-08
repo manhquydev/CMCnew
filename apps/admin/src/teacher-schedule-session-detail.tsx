@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
-import { API_URL, Chatter, notifyError, notifySuccess, trpc, uploadSessionPhoto, useSession } from '@cmc/ui';
+import { API_URL, Chatter, notifyError, notifySuccess, trpc, uploadSessionPhoto, useSession, WorkflowStatusbar } from '@cmc/ui';
 import { Button, Center, Group, Loader, Menu, Modal, NumberInput, Stack, Tabs, Text, Textarea } from '@mantine/core';
 import { can } from '@cmc/auth/permissions';
+import { effectiveSessionStatus, SESSION_STAGES, SESSION_TERMINAL } from './session-status';
 
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
 type Enrollment = Awaited<ReturnType<typeof trpc.enrollment.listByBatch.query>>[number];
@@ -18,14 +19,6 @@ const C = {
   warning: '#8A5A00', warningBg: '#FEF3E0',
 };
 const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif';
-
-const SESSION_STATUS: Record<string, { label: string; color: string }> = {
-  planned:   { label: 'Sắp dạy',  color: C.brand },
-  open:      { label: 'Đang mở',  color: '#1565C0' },
-  running:   { label: 'Đang học', color: C.success },
-  closed:    { label: 'Đã xong',  color: C.muted },
-  cancelled: { label: 'Đã hủy',   color: C.danger },
-};
 
 type AttStatus = 'present' | 'late' | 'absent';
 interface AttMark { status: AttStatus; excused: boolean }
@@ -267,7 +260,6 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
     }
   }
 
-  const st = SESSION_STATUS[session.status] ?? { label: session.status, color: C.muted };
   const presentCount = enrollments.filter(e => marks[e.id]?.status === 'present').length;
   const savedIndicator = savedAt > 0 ? <span style={{ fontSize: 11, color: C.success }}>✓ Đã lưu</span> : null;
 
@@ -286,7 +278,12 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
         <div style={{ fontSize: 14, fontWeight: 700 }}>{session.batch.code}</div>
         <div style={{ fontSize: 13, color: C.muted }}>{dayjs(session.sessionDate).format('DD/MM/YYYY')}</div>
         <div style={{ fontSize: 13, color: C.muted }}>{session.startTime}–{session.endTime}</div>
-        <div style={{ padding: '3px 10px', borderRadius: 6, background: C.bg, color: st.color, fontSize: 12, fontWeight: 600 }}>{st.label}</div>
+        <WorkflowStatusbar
+          stages={SESSION_STAGES}
+          terminal={SESSION_TERMINAL}
+          current={effectiveSessionStatus(session.sessionDate, session.startTime, session.endTime, session.status).stage}
+          ariaLabel="Trạng thái buổi học"
+        />
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
           {attLoaded && (
             <div style={{ fontSize: 12, color: C.muted }}>

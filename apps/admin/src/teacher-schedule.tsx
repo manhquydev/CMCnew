@@ -4,6 +4,7 @@ import 'dayjs/locale/vi';
 import { FacilityPicker, notifyError, trpc, useSession } from '@cmc/ui';
 import { Center, Loader } from '@mantine/core';
 import { TeacherScheduleDetail } from './teacher-schedule-session-detail';
+import { effectiveSessionStatus } from './session-status';
 
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
@@ -302,7 +303,8 @@ function KanbanView({ sessions, onSelect }: { sessions: MySession[]; onSelect: (
 // ─── Shared sub-components ────────────────────────────────────────────────────
 
 function SessionCard({ session, onClick, compact }: { session: MySession; onClick: () => void; compact?: boolean }) {
-  const st = SESSION_STATUS[session.status] ?? { label: session.status, color: C.muted };
+  // Trạng thái suy theo GIỜ THỰC (fix bug buổi đã qua vẫn hiện "Sắp dạy") — xem session-status.ts.
+  const st = effectiveSessionStatus(session.sessionDate, session.startTime, session.endTime, session.status);
   return (
     <div onClick={onClick} style={{
       background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
