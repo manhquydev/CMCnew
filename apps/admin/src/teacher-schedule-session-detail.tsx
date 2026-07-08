@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { API_URL, Chatter, notifyError, notifySuccess, trpc, uploadSessionPhoto, useSession, WorkflowStatusbar } from '@cmc/ui';
-import { Button, Center, Group, Loader, Menu, Modal, NumberInput, Stack, Tabs, Text, Textarea } from '@mantine/core';
+import { Button, Center, Drawer, Group, Loader, Menu, Modal, NumberInput, Stack, Tabs, Text, Textarea } from '@mantine/core';
 import { can } from '@cmc/auth/permissions';
 import { effectiveSessionStatus, SESSION_STAGES, SESSION_TERMINAL } from './session-status';
+import { StudentDetailPanel } from './student-detail.js';
 
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
 type Enrollment = Awaited<ReturnType<typeof trpc.enrollment.listByBatch.query>>[number];
@@ -48,6 +49,7 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
   const [marks, setMarks] = useState<Record<string, AttMark>>({});
   const [markingAll, setMarkingAll] = useState(false);
   const [attLoaded, setAttLoaded] = useState(false);
+  const [drawerStudentId, setDrawerStudentId] = useState<string | null>(null);
 
   // ── Evidence (unified state prevents Tab 2 / Tab 4 race) ────────────────────
   const [draft, setDraft] = useState<EvidenceDraft>({ summary: '', internalNote: '', photos: [] });
@@ -337,7 +339,8 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
                 </div>
               ) : enrollments.map(enr => (
                 <StudentRow key={enr.id} name={enr.student.fullName} current={marks[enr.id]?.status ?? null}
-                  disabled={!enabled} onMark={s => markSingle(enr.id, s)} />
+                  disabled={!enabled} onMark={s => markSingle(enr.id, s)}
+                  onOpenStudent={() => setDrawerStudentId(enr.studentId)} />
               ))}
             </div>
           )}
@@ -484,6 +487,23 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
         </Tabs.Panel>
       </Tabs>
 
+      <Drawer
+        opened={drawerStudentId !== null}
+        onClose={() => setDrawerStudentId(null)}
+        position="right"
+        size="lg"
+        padding={0}
+        withCloseButton={false}
+        title={null}
+      >
+        {drawerStudentId && (
+          <StudentDetailPanel
+            studentId={drawerStudentId}
+            onBack={() => setDrawerStudentId(null)}
+          />
+        )}
+      </Drawer>
+
       <Modal
         opened={cancelKind !== null}
         onClose={() => setCancelKind(null)}
@@ -525,11 +545,12 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
 
 // ─── StudentRow ────────────────────────────────────────────────────────────────
 
-function StudentRow({ name, current, disabled, onMark }: {
+function StudentRow({ name, current, disabled, onMark, onOpenStudent }: {
   name: string;
   current: AttStatus | null;
   disabled?: boolean;
   onMark: (s: AttStatus) => void;
+  onOpenStudent: () => void;
 }) {
   const btns: { status: AttStatus; label: string; activeBg: string; activeColor: string }[] = [
     { status: 'present', label: 'Có mặt', activeBg: C.successBg, activeColor: C.success },
@@ -538,11 +559,20 @@ function StudentRow({ name, current, disabled, onMark }: {
   ];
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', borderRadius: 8, gap: 10 }}>
-      <div style={{ width: 30, height: 30, borderRadius: '50%', background: C.brandMuted, color: C.brand, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
-        {name.charAt(0).toUpperCase()}
-      </div>
-      <div style={{ flex: 1, fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: C.text }}>
-        {name}
+      <div
+        onClick={onOpenStudent}
+        role="button"
+        tabIndex={0}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onOpenStudent(); }}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, cursor: 'pointer' }}
+        title="Xem hồ sơ học sinh"
+      >
+        <div style={{ width: 30, height: 30, borderRadius: '50%', background: C.brandMuted, color: C.brand, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+          {name.charAt(0).toUpperCase()}
+        </div>
+        <div style={{ flex: 1, fontSize: 14, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: C.text, minWidth: 0 }}>
+          {name}
+        </div>
       </div>
       <div style={{ display: 'flex', gap: 4 }}>
         {btns.map(btn => {
