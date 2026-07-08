@@ -90,7 +90,7 @@ export function StudentShell({ principal }: StudentShellProps) {
     <AppShell
       header={{ height: 56 }}
       navbar={{ width: 240, breakpoint: 'sm', collapsed: { mobile: !mobileOpened } }}
-      padding={32}
+      padding={{ base: 12, sm: 32 }}
       bg="var(--cmc-bg)"
     >
       {/* ── Topbar ── */}
