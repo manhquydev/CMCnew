@@ -12,8 +12,10 @@ dependencies: [3]
 ## Progress (2026-07-08)
 - **4a DONE (`80bbe83`):** widen `student.update` += `giam_doc_dao_tao` (user-approved). GĐĐT sửa được HS
   (UI students-panel có sẵn; nav gate dùng student.update nên section tự hiện cho GĐĐT).
-- **4b PENDING:** `teacherLite.studentArchive` / `parentUpdate` / `parentArchive` + audit `parentCreate`
-  + UI nút xóa/sửa. Cần verify schema Student.archivedAt / ParentAccount / Guardian trước khi viết service.
+- **4b IN PROGRESS:**
+  - ✅ `teacherLite.studentArchive` (`d2b7c23`): service + gate + audit + UI nút "Lưu trữ" + confirm modal. Student.archivedAt.
+  - ✅ `guardian.parentUpdate` + audit `parentCreate` (`8ec27d4`): backend + gate [KD,DT]. ParentAccount system-wide → audit facilityId=null.
+  - ⏳ Còn: UI sửa PH (guardians-panel chưa có bảng row-action) + `parentArchive` (deactivate isActive — cần product call semantics).
 
 ## Overview
 
