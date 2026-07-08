@@ -1,9 +1,9 @@
 ---
 phase: 1
-title: "Nav simplification"
-status: pending
+title: Nav simplification
+status: completed
 priority: P1
-effort: "S"
+effort: S
 dependencies: []
 ---
 

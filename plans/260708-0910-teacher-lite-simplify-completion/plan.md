@@ -1,20 +1,34 @@
 ---
-title: "Teacher Lite Simplify + Completion"
-description: "Đơn giản hóa teacher-lite (bỏ ERP-heavy), hoàn thiện luồng LMS PH+HS, surface audit log, CRUD HS/PH, giám đốc quản lý nhân sự gọn — giữ Decision 0039."
+title: Teacher Lite Simplify + Completion
+description: >-
+  Đơn giản hóa teacher-lite (bỏ ERP-heavy), hoàn thiện luồng LMS PH+HS, surface
+  audit log, CRUD HS/PH, giám đốc quản lý nhân sự gọn — giữ Decision 0039.
 status: pending
 priority: P1
-branch: "develop"
-tags: ["teacher-lite", "lms", "audit", "crud", "nav-simplify", "high-risk"]
+branch: develop
+tags:
+  - teacher-lite
+  - lms
+  - audit
+  - crud
+  - nav-simplify
+  - high-risk
 blockedBy: []
 blocks: []
 relatedPlans:
-  - "260706-1752-session-level-exercises (pending — upload học liệu theo buổi; Phase 2 absorb/depend)"
-  - "260702-1007-lms-homework-pdf-completion (completed — HS làm/nộp bài; Phase 2 chỉ verify live)"
-  - "260707-teacher-lite-direct-lms-mvp (local-verified — Decision 0039 provisioning)"
-created: "2026-07-08T02:23:32.524Z"
-createdBy: "ck:plan"
+  - >-
+    260706-1752-session-level-exercises (pending — upload học liệu theo buổi;
+    Phase 2 absorb/depend)
+  - >-
+    260702-1007-lms-homework-pdf-completion (completed — HS làm/nộp bài; Phase 2
+    chỉ verify live)
+  - >-
+    260707-teacher-lite-direct-lms-mvp (local-verified — Decision 0039
+    provisioning)
+created: '2026-07-08T02:23:32.524Z'
+createdBy: 'ck:plan'
 source: skill
-brainstormReport: "plans/reports/audit-first-teacher-lite-deficiency-register-260708-report.md"
+brainstormReport: plans/reports/audit-first-teacher-lite-deficiency-register-260708-report.md
 ---
 
 # Teacher Lite Simplify + Completion
@@ -37,7 +51,7 @@ Nền tảng đã có (không xây lại): audit infra `@cmc/audit` (`RecordEven
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Nav simplification](./phase-01-nav-simplification.md) | Pending |
+| 1 | [Nav simplification](./phase-01-nav-simplification.md) | Completed |
 | 2 | [LMS flow verify + session material upload](./phase-02-lms-flow-verify-session-material-upload.md) | Pending |
 | 3 | [Audit surfacing](./phase-03-audit-surfacing.md) | Pending |
 | 4 | [CRUD completion](./phase-04-crud-completion.md) | Pending |
