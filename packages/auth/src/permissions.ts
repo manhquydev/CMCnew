@@ -281,7 +281,8 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
   student: {
     // student.create is gated to superAdminProcedure (break-glass only); not in registry.
     // Normal students are created atomically at receipt.approve.
-    update: ['sale', 'giam_doc_kinh_doanh'],
+    // giam_doc_dao_tao added (2026-07-08, user-approved) so GĐĐT can edit students on teacher-lite.
+    update: ['sale', 'giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     // LMS password reset: both directors (account-level action with security impact).
     resetLmsPassword: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
