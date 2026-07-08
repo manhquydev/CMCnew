@@ -9,6 +9,7 @@ import { nextBatchCode } from '../services/batch-code.js';
 import { emitStaffNotif } from '../lib/emit-staff-notif.js';
 import { assertSlotRefsInFacility } from '../lib/slot-refs-guard.js';
 import { DOW_LABEL } from '../lib/day-of-week-label.js';
+import { generateInitialSessions } from '../services/teacher-lite-class-workflows.js';
 
 const ENTITY = 'class_batch';
 const TERMINAL_STATUSES: ClassStatus[] = ['closed', 'cancelled'];
@@ -170,6 +171,17 @@ export const classBatchRouter = router({
             actorId: ctx.session.userId,
           });
         }
+        // Sinh buổi học tự động ngay khi tạo lớp (không còn thao tác "Sinh buổi" thủ công) —
+        // no-op nếu chưa có khung lịch hoặc chưa có ngày khai giảng/kết thúc.
+        await generateInitialSessions(tx, {
+          facilityId: batch.facilityId,
+          classBatchId: batch.id,
+          courseId: batch.courseId,
+          startDate: input.startDate,
+          endDate: input.endDate,
+          slots,
+          actorId: ctx.session.userId,
+        });
         await addFollower(tx, ENTITY, batch.id, ctx.session.userId);
         return batch;
       }),
