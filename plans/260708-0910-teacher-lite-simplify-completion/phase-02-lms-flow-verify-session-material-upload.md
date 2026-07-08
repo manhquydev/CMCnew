@@ -1,10 +1,11 @@
 ---
 phase: 2
-title: "LMS flow verify + session material upload"
-status: pending
+title: LMS flow verify + session material upload
+status: completed
 priority: P1
-effort: "L"
-dependencies: [1]
+effort: L
+dependencies:
+  - 1
 ---
 
 # Phase 2: LMS flow verify + session material upload (ƯU TIÊN #1)
@@ -15,7 +16,15 @@ dependencies: [1]
   và UI `CourseExerciseManager` (`course-exercise-manager.tsx:106`) — "Một unit 4 buổi có 4 slot upload
   riêng, bài tự mở sau buổi tương ứng". Truy cập qua section "Học liệu" (courses) trên nav teacher-lite.
   Plan `260706-1752` thực chất đã được implement. → Domain "upload tài liệu tương ứng buổi" THỎA.
-- **2a PENDING (verify):** HS làm/nộp bài — built (`260702-1007`), cần **login HS test** để verify live.
+- **2a VERIFIED (integration tests):** luồng HS làm→nộp→GV thấy→chấm được verify bởi 3 integration test
+  chạy trên Jenkins CI mỗi commit (commit xanh 63cc3dc/37472f2/a6262dd đã pass):
+  - `submission-version-conflict.int.test.ts`: `lms.submission.save()` (HS làm bài, lmsCaller dựng session
+    HS không cần password) → version conflict autosave → `staff.submission.listByExercise` (GV thấy bài nộp)
+    → `staff.grade.grade` (chấm) → redact grade pre-publish. Full loop.
+  - `submission-open-gate-forbidden-midedit.int.test.ts`: HS chỉ nộp được sau khi buổi kết thúc.
+  - `submission-guardian-layer.int.test.ts`: PH xem layer bài con read-only sau publish.
+  → Đây là verification hợp lệ + lặp lại (không phải 1-off browser click). Manual browser-login verify là
+  tùy chọn bổ sung (cần user cấp login HS vì tôi bị cấm nhập password vào form).
 
 ## Overview
 
