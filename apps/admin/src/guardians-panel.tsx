@@ -189,6 +189,78 @@ function ParentPasswordResetCard({ parents }: { parents: ParentT[] }) {
   );
 }
 
+/** Sửa thông tin phụ huynh (tên/email/SĐT) — gọi guardian.parentUpdate (gate [KD,DT]). */
+function ParentEditCard({ parents, onSaved }: { parents: ParentT[]; onSaved: () => void }) {
+  const [parentId, setParentId] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  function pick(id: string | null) {
+    setParentId(id);
+    const p = parents.find((x) => x.id === id);
+    setName(p?.displayName ?? '');
+    setEmail(p?.email ?? '');
+    setPhone(p?.phone ?? '');
+  }
+
+  async function save() {
+    if (!parentId || !name.trim()) {
+      notifyError(new Error('Chọn phụ huynh và nhập tên.'), 'Thiếu thông tin');
+      return;
+    }
+    setBusy(true);
+    try {
+      await trpc.guardian.parentUpdate.mutate({
+        id: parentId,
+        displayName: name.trim(),
+        email: email.trim() || undefined,
+        phone: phone.trim() || undefined,
+      });
+      notifySuccess('Đã cập nhật phụ huynh');
+      onSaved();
+    } catch (e) {
+      notifyError(e, 'Cập nhật phụ huynh thất bại');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card radius="lg" p="xl" style={{ border: '1px solid var(--cmc-border)' }}>
+      <Text fw={600} style={{ color: 'var(--cmc-text)' }} mb="md">
+        Sửa thông tin phụ huynh
+      </Text>
+      <Stack gap="sm">
+        <Select
+          label="Phụ huynh"
+          searchable
+          placeholder="Chọn phụ huynh"
+          disabled={busy}
+          data={parents.map((p) => ({ value: p.id, label: `${p.displayName} (${p.phone ?? p.email ?? ''})` }))}
+          value={parentId}
+          onChange={pick}
+        />
+        {parentId && (
+          <>
+            <TextInput label="Họ tên" value={name} onChange={(e) => setName(e.currentTarget.value)} disabled={busy} />
+            <Group grow>
+              <TextInput label="Email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} disabled={busy} />
+              <TextInput label="SĐT" value={phone} onChange={(e) => setPhone(e.currentTarget.value)} disabled={busy} />
+            </Group>
+            <Group justify="flex-end">
+              <Button variant="filled" radius={9999} loading={busy} onClick={save}>
+                Lưu thay đổi
+              </Button>
+            </Group>
+          </>
+        )}
+      </Stack>
+    </Card>
+  );
+}
+
 export function GuardiansPanel() {
   const [students, setStudents] = useState<StudentT[]>([]);
   const [parents, setParents] = useState<ParentT[]>([]);
@@ -295,6 +367,7 @@ export function GuardiansPanel() {
     <Stack>
       <LinkRequestQueue />
 
+      <ParentEditCard parents={parents} onSaved={loadParents} />
       <ParentPasswordResetCard parents={parents} />
 
       <Select
