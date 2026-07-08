@@ -29,6 +29,7 @@ created: '2026-07-08T02:23:32.524Z'
 createdBy: 'ck:plan'
 source: skill
 brainstormReport: plans/reports/audit-first-teacher-lite-deficiency-register-260708-report.md
+status_note: ALL 5 PHASES COMPLETE (2026-07-08)
 ---
 
 # Teacher Lite Simplify + Completion
@@ -54,7 +55,7 @@ Nền tảng đã có (không xây lại): audit infra `@cmc/audit` (`RecordEven
 | 1 | [Nav simplification](./phase-01-nav-simplification.md) | Completed (63cc3dc, deployed dev) |
 | 2 | [LMS flow verify + session material upload](./phase-02-lms-flow-verify-session-material-upload.md) | Completed |
 | 3 | [Audit surfacing](./phase-03-audit-surfacing.md) | Completed (52e90db, live-verified dev) |
-| 4 | [CRUD completion](./phase-04-crud-completion.md) | Mostly done — 4a + studentArchive + parentUpdate/audit + parent edit UI; only parentArchive blocked (0033 decision) |
+| 4 | [CRUD completion](./phase-04-crud-completion.md) | Completed |
 | 5 | [Director staff-mgmt + overview + cancel confirm](./phase-05-director-staff-mgmt-overview-cancel-confirm.md) | Completed |
 
 ## Nguyên tắc API bypass (user-directed 2026-07-08)

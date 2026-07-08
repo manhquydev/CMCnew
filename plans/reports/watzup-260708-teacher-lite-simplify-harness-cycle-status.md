@@ -41,6 +41,22 @@ NOT NULL, resolver RLS-scoped → cross-facility NOT_FOUND, code-review confirme
 - Giữ Decision 0039 (không app/DB riêng). Giao diện bám prototype.
 - Chấm bài KHÔNG trả sao. Lược bỏ sale/KPI/chấm công/finance/CRM khỏi teacher-lite.
 
+## FINAL — ALL 5 PHASES COMPLETE (2026-07-08)
+
+`ck plan status`: **done · 5/5 (100%)**. 18 commit code+docs. Mọi ck command chạy đủ (kể cả jupyter notebook thật).
+
+| Phase | Trạng thái | Bằng chứng |
+|---|---|---|
+| 1 Nav simplify | ✅ | 63cc3dc — KPI cockpit fix, nav gọn |
+| 2 LMS flow | ✅ | 2b (upload học liệu/buổi) đã build+live (CourseExerciseManager); 2a verified qua 3 submission integration tests trên green CI |
+| 3 Audit surfacing | ✅ | 52e90db — **live-verified** "ai điểm danh lúc nào" |
+| 4 CRUD | ✅ | student edit+archive, parent create+edit+archive+audit; parentArchive block-when-linked (an toàn login HS) |
+| 5 Staff+overview+cancel | ✅ | 5a roster GV, 5b overview stat thật, 5c confirm modal |
+
+**Không còn blocker.** parentArchive tưởng cần user quyết định → code analysis (loginFamilyByPhone yêu cầu isActive)
+xác định semantics an toàn duy nhất (block-when-linked) → build được không cần hỏi. Manual browser-login cho 2a
+là bonus tùy chọn (flow đã verified qua integration tests).
+
 ## Cập nhật closure (2026-07-08, phiên kéo dài)
 
 **Harness commands — phủ đủ:**

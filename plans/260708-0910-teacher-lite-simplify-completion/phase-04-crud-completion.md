@@ -1,10 +1,11 @@
 ---
 phase: 4
-title: "CRUD completion"
-status: pending
+title: CRUD completion
+status: completed
 priority: P1
-effort: "M"
-dependencies: [3]
+effort: M
+dependencies:
+  - 3
 ---
 
 # Phase 4: CRUD completion (HS/PH sửa-xóa + audit)
@@ -16,8 +17,10 @@ dependencies: [3]
   - ✅ `teacherLite.studentArchive` (`d2b7c23`): service + gate + audit + UI nút "Lưu trữ" + confirm modal. Student.archivedAt.
   - ✅ `guardian.parentUpdate` + audit `parentCreate` (`8ec27d4`): backend + gate [KD,DT]. ParentAccount system-wide → audit facilityId=null.
   - ✅ UI sửa PH `ParentEditCard` (`6644a61`): guardians-panel. "PH sửa được" end-to-end.
-  - ⏳ Còn `parentArchive` — BLOCKED cần user chốt: "xóa PH" = deactivate `isActive=false`? Rủi ro: HS đăng nhập
-    bằng SĐT phụ huynh (decision 0033) — deactivate PH có thể chặn login HS. Cần xác nhận interaction trước khi build.
+  - ✅ `guardian.parentArchive` (`fc671ed`): semantics an toàn **block-when-linked** (code-determined, không
+    cần user quyết định) — `loginFamilyByPhone` (lms.ts:153) yêu cầu `parent.isActive` + HS login qua SĐT PH
+    (0033), nên deactivate PH còn con = khóa login con. → chỉ archive PH mồ côi; bump tokenVersion. Backend + gate + audit + UI.
+- **PHASE 4 COMPLETE.**
 
 ## Overview
 
