@@ -855,11 +855,14 @@ export function buildNavGroups({
   // Ẩn khỏi thanh nav teacher-lite (mọi role trên teacher surface, kể cả giám đốc) vì tác vụ đã gộp
   // chỗ khác hoặc ngoài phạm vi teacher-lite gọn. TẤT CẢ vẫn reachable qua direct-URL vì còn nằm
   // trong TEACHER_SURFACE_SECTIONS (bài học df2a153: ẩn nav ≠ xóa khỏi Set). Bật lại nav sau nếu cần.
-  //  - attendance/grading/classes: thao tác đã gộp vào "Lịch dạy" (calendar + session-detail).
+  //  - attendance/grading: thao tác đã gộp vào "Lịch dạy" (calendar + session-detail).
   //  - assessment(Học bạ)/levelup(Duyệt cấp độ)/meetings(Họp PH)/attendance-report(Báo cáo điểm danh)/
   //    2 cockpit: ngoài phạm vi teacher-lite tối giản (chỉ quản lý lớp/HS/PH/GV + lịch dạy).
+  // LƯU Ý: 'classes' KHÔNG ẩn — đó là hub quản lý lớp (danh sách lớp, gán giáo viên theo slot, buổi,
+  // học liệu) mà giám đốc/super_admin cần để quản lý lớp đã tạo. Item tự gate `!isTeacherOnly` nên
+  // giáo_viên vẫn không thấy; chỉ admin thấy "Lớp & học liệu".
   const teacherNavMergedIntoCalendar = new Set<SectionKey>([
-    'attendance', 'grading', 'classes',
+    'attendance', 'grading',
     'assessment', 'levelup', 'meetings', 'attendance-report',
     'edu-director-cockpit', 'biz-director-cockpit',
   ]);
