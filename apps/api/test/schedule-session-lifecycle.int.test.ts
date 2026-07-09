@@ -286,14 +286,16 @@ describe('schedule session lifecycle — status transitions and attendance', () 
     const session = sessionsForAttend[0];
     sessionIdsToClean.push(session.id);
 
-    // Mark attendance
-    const attendBefore = await caller.attendance.mark({
-      facilityId: FAC,
-      classSessionId: session.id,
-      enrollmentId: enroll.id,
-      status: 'present',
-      excused: false,
-    });
+    // Mark attendance. The session is generated for 2099-08-20 (far-future — required so
+    // generateSessions/conflict-detection fixtures below stay isolated) so it sits outside the
+    // attendance window gate (phase-02-attendance-gate-and-comment-lock.md) — seed directly via
+    // SUPER tx instead of the gated router; this test asserts the row survives batch
+    // cancellation (no cascade delete), not mark's own authz.
+    const attendBefore = await withRls(SUPER, (tx) =>
+      tx.attendance.create({
+        data: { facilityId: FAC, classSessionId: session.id, enrollmentId: enroll.id, status: 'present', excused: false },
+      }),
+    );
     expect(attendBefore.status).toBe('present');
     expect(attendBefore.classSessionId).toBe(session.id);
 

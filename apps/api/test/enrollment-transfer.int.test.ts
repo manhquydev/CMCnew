@@ -190,8 +190,18 @@ describe('enrollment.transfer', () => {
     // New class: 1 present + 1 absent. Combined with the old class's 1 present:
     // attended = 2 (old present + new present), total = 3 → rate = 2/3 ≈ 0.667.
     // If FinalGrade were mistakenly scoped to only the new enrollment, rate would be 1/2 = 0.5.
-    await staff.attendance.mark({ classSessionId: sessionNewAId, enrollmentId: newEnr.id, status: 'present' });
-    await staff.attendance.mark({ classSessionId: sessionNewBId, enrollmentId: newEnr.id, status: 'absent' });
+    // sessionNewA/B are dated oneDayAgo (past — deliberately, to exercise exercise-open's
+    // "session ended" gate elsewhere in this suite) so they sit outside the attendance window
+    // gate (phase-02-attendance-gate-and-comment-lock.md) — seed directly via SUPER tx instead
+    // of the gated router; this test asserts computeFinalGrade's rate math, not mark's own authz.
+    await withRls(SUPER, (tx) =>
+      tx.attendance.createMany({
+        data: [
+          { facilityId: FACILITY, classSessionId: sessionNewAId, enrollmentId: newEnr.id, status: 'present' },
+          { facilityId: FACILITY, classSessionId: sessionNewBId, enrollmentId: newEnr.id, status: 'absent' },
+        ],
+      }),
+    );
 
     const periodKey = uniq('XFER_PERIOD');
     await staff.assessment.computeFinalGrade({ studentId, program: 'UCREA' as never, periodKey });
@@ -210,9 +220,22 @@ describe('enrollment.transfer', () => {
   it('(c) attendance.mark on the transferred old enrollment is rejected', async () => {
     if (!dbReachable) return;
     const staff = await staffCaller();
+    // Use a session dated today with an all-day window so the attendance-window gate passes —
+    // otherwise a past session would be rejected by the window gate first and mask the guard this
+    // test actually proves (the transferred-enrollment guard). Assert the transferred-specific
+    // message, not just BAD_REQUEST, so the two rejection sources cannot be confused.
+    const todaySessionId = await withRls(SUPER, async (tx) => {
+      const s = await tx.classSession.create({
+        data: {
+          facilityId: FACILITY, classBatchId: batchOldId, sessionDate: new Date(),
+          startTime: '00:00', endTime: '23:59', status: 'confirmed', curriculumUnitId: unitOldId,
+        },
+      });
+      return s.id;
+    });
     await expect(
-      staff.attendance.mark({ classSessionId: sessionOldId, enrollmentId: enrollmentOldId, status: 'present' }),
-    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      staff.attendance.mark({ classSessionId: todaySessionId, enrollmentId: enrollmentOldId, status: 'present' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST', message: 'Học sinh đã rời lớp — không thể điểm danh' });
   });
 
   it('(d) M2 accepted: unsubmitted old-class exercise 403s after transfer, but old session still lists via sessionsForStudent', async () => {

@@ -20,6 +20,15 @@ import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
 
 const FACILITY = 1;
 
+// UTC-midnight of "today" in ICT (matches how ClassSession.sessionDate is stored) — used only
+// for sessionMain, whose markAll/mark calls go through the real router and must land inside the
+// attendance 15-min-before/end-of-ICT-day window (phase-02-attendance-gate-and-comment-lock.md).
+// startTime/endTime span the whole day so the window is open regardless of the actual run time.
+function ictTodayUtcMidnight(): Date {
+  const ict = new Date(Date.now() + 7 * 3600_000);
+  return new Date(Date.UTC(ict.getUTCFullYear(), ict.getUTCMonth(), ict.getUTCDate()));
+}
+
 let teacherAId: string;
 let teacherBId: string;
 let directorId: string;
@@ -124,12 +133,17 @@ beforeAll(async () => {
       });
       enrollmentE3Id = enrollmentE3.id;
 
-      // Fixed far-future dates (not "today"/"±1 day") — avoids collision with other test
-      // suites' relative-date fixtures and with the N3 month-boundary dates below.
+      // sessionMain's markAll/mark calls (test (a) below, and the authz-rejection test) go
+      // through the real router, so it must be dated "today" (ICT) to land inside the
+      // attendance window gate — startTime/endTime span the whole day so the window is open
+      // no matter when this suite runs. The other sessions below keep fixed far-future dates
+      // (avoids collision with other suites' relative-date fixtures + isolates N3 month-boundary
+      // math) — their attendance rows are seeded directly via SUPER tx, bypassing the gated
+      // router, since those tests exercise report aggregation, not mark/markAll's own logic.
       const sessionMain = await tx.classSession.create({
         data: {
-          facilityId: FACILITY, classBatchId: batchId, sessionDate: new Date(Date.UTC(2094, 2, 15)),
-          startTime: '18:00', endTime: '19:00', status: 'confirmed', teacherId: teacherAId,
+          facilityId: FACILITY, classBatchId: batchId, sessionDate: ictTodayUtcMidnight(),
+          startTime: '00:00', endTime: '23:59', status: 'confirmed', teacherId: teacherAId,
         },
       });
       sessionMainId = sessionMain.id;
@@ -251,13 +265,20 @@ describe('attendance.report', () => {
   it('(b) N4: teacher scope excludes another teacher\'s session; director sees facility-wide', async () => {
     if (!dbReachable) return;
     const teacherA = await staffCaller({ userId: teacherAId, roles: [Role.giao_vien], primaryRole: Role.giao_vien, isSuperAdmin: false, facilityIds: [FACILITY] });
-    const teacherB = await staffCaller({ userId: teacherBId, roles: [Role.giao_vien], primaryRole: Role.giao_vien, isSuperAdmin: false, facilityIds: [FACILITY] });
     const director = await staffCaller({ userId: directorId, roles: [Role.giam_doc_dao_tao], primaryRole: Role.giam_doc_dao_tao, isSuperAdmin: false, facilityIds: [FACILITY] });
 
     // teacherA already marked sessionMain (present/late) via markAll above.
-    // teacherB marks their own session (sessionOther) for the same two students.
-    await teacherB.attendance.mark({ classSessionId: sessionOtherId, enrollmentId: enrollmentE1Id, status: 'present' });
-    await teacherB.attendance.mark({ classSessionId: sessionOtherId, enrollmentId: enrollmentE2Id, status: 'absent' });
+    // sessionOther is dated far-future (isolation from other suites, see fixture comment) so
+    // it sits outside the attendance window gate — seed its rows directly via SUPER tx instead
+    // of the gated router; this test asserts report scoping, not mark's own authz.
+    await withRls(SUPER, (tx) =>
+      tx.attendance.createMany({
+        data: [
+          { facilityId: FACILITY, classSessionId: sessionOtherId, enrollmentId: enrollmentE1Id, status: 'present', markedById: teacherBId },
+          { facilityId: FACILITY, classSessionId: sessionOtherId, enrollmentId: enrollmentE2Id, status: 'absent', markedById: teacherBId },
+        ],
+      }),
+    );
 
     const reportA = await teacherA.attendance.report({ scope: 'class', id: batchId });
     // teacherA's scope: only sessionMain's 2 rows (present, late) — sessionOther excluded.
@@ -276,8 +297,17 @@ describe('attendance.report', () => {
     if (!dbReachable) return;
     const teacherA = await staffCaller({ userId: teacherAId, roles: [Role.giao_vien], primaryRole: Role.giao_vien, isSuperAdmin: false, facilityIds: [FACILITY] });
 
-    await teacherA.attendance.mark({ classSessionId: sessionJuneEndId, enrollmentId: enrollmentE1Id, status: 'present' });
-    await teacherA.attendance.mark({ classSessionId: sessionJulyStartId, enrollmentId: enrollmentE1Id, status: 'present' });
+    // sessionJuneEnd/sessionJulyStart are dated far-future (isolates the N3 month-boundary math)
+    // so they sit outside the attendance window gate — seed directly via SUPER tx; this test
+    // asserts report month-bucketing, not mark's own authz.
+    await withRls(SUPER, (tx) =>
+      tx.attendance.createMany({
+        data: [
+          { facilityId: FACILITY, classSessionId: sessionJuneEndId, enrollmentId: enrollmentE1Id, status: 'present', markedById: teacherAId },
+          { facilityId: FACILITY, classSessionId: sessionJulyStartId, enrollmentId: enrollmentE1Id, status: 'present', markedById: teacherAId },
+        ],
+      }),
+    );
 
     const report = await teacherA.attendance.report({ scope: 'term', id: termId });
     const byMonth = new Map((report as { byMonth: { month: string; total: number }[] }).byMonth.map((m) => [m.month, m.total]));
@@ -290,7 +320,14 @@ describe('attendance.report', () => {
     if (!dbReachable) return;
     const director = await staffCaller({ userId: directorId, roles: [Role.giam_doc_dao_tao], primaryRole: Role.giam_doc_dao_tao, isSuperAdmin: false, facilityIds: [FACILITY] });
 
-    await director.attendance.mark({ classSessionId: sessionMakeupId, enrollmentId: enrollmentE1Id, status: 'present' });
+    // sessionMakeup is dated far-future (isolates the N1 term) so it sits outside the
+    // attendance window gate — seed directly via SUPER tx; this test asserts report rate math,
+    // not mark's own authz.
+    await withRls(SUPER, (tx) =>
+      tx.attendance.create({
+        data: { facilityId: FACILITY, classSessionId: sessionMakeupId, enrollmentId: enrollmentE1Id, status: 'present', markedById: directorId },
+      }),
+    );
 
     const report = await director.attendance.report({ scope: 'student', id: studentE1Id, termId: n1TermId });
     expect(report.counts.total).toBe(1);

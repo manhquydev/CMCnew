@@ -17,6 +17,10 @@ import {
   teacherLiteStudentArchive,
   teacherLiteStudentArchiveInput,
 } from '../services/teacher-lite-crud.js';
+import {
+  enrollExistingStudentInput,
+  teacherLiteEnrollExistingStudent,
+} from '../services/teacher-lite-enroll-existing.js';
 
 export const teacherLiteRouter = router({
   createFamilyStudentAndEnroll: requirePermission('teacherLite', 'createFamilyStudentAndEnroll')
@@ -37,4 +41,7 @@ export const teacherLiteRouter = router({
   overviewStats: requirePermission('teacherLite', 'overviewStats')
     .input(teacherLiteOverviewStatsInput)
     .query(({ ctx, input }) => teacherLiteOverviewStats(ctx.session, input)),
+  enrollExistingStudent: requirePermission('teacherLite', 'enrollExistingStudent')
+    .input(enrollExistingStudentInput)
+    .mutation(({ ctx, input }) => teacherLiteEnrollExistingStudent(ctx.session, input)),
 });

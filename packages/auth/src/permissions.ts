@@ -91,6 +91,8 @@ export const PERMISSIONS: Record<string, Record<string, string[]>> = {
     studentArchive: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
     // Overview stat cards (bài chờ chấm / nhật ký chờ chốt) cho trang Hôm nay của giáo viên.
     overviewStats: ['giao_vien', 'giam_doc_dao_tao', 'giam_doc_kinh_doanh'],
+    // Ghi danh học sinh có sẵn trực tiếp vào lớp (bypass thu phí/CRM), giữ RLS+audit (quyết định 0040).
+    enrollExistingStudent: ['giam_doc_kinh_doanh', 'giam_doc_dao_tao'],
   },
 
   exercise: {

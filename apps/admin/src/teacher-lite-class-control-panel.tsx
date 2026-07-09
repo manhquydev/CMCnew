@@ -18,13 +18,14 @@ import {
   Title,
 } from '@mantine/core';
 import { DateInput } from '@mantine/dates';
-import { IconCalendar, IconPlus, IconX } from '@tabler/icons-react';
-import { notifyError, notifySuccess, parseApiDate, toApiDate, trpc, useSession } from '@cmc/ui';
+import { IconCalendar, IconPlus, IconUserPlus, IconX } from '@tabler/icons-react';
+import { notifyError, notifyInfo, notifySuccess, parseApiDate, toApiDate, trpc, useSession } from '@cmc/ui';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
 type ClassBatch = Awaited<ReturnType<typeof trpc.classBatch.list.query>>[number];
 type ClassSession = Awaited<ReturnType<typeof trpc.schedule.listSessions.query>>[number];
+type StudentRow = Awaited<ReturnType<typeof trpc.student.list.query>>[number];
 
 const DAYS = [
   { value: '1', label: 'T2' },
@@ -59,15 +60,21 @@ function estimateSessionCount(startDate: string, endDate: string, dayOfWeek: str
 export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => void }) {
   const { me } = useSession();
   const canManage = can(me.roles, me.isSuperAdmin, 'teacherLite', 'createClass');
+  const canEnrollExisting = can(me.roles, me.isSuperAdmin, 'teacherLite', 'enrollExistingStudent');
 
   const [step, setStep] = useState(0);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [batches, setBatches] = useState<ClassBatch[]>([]);
   const [sessions, setSessions] = useState<ClassSession[]>([]);
+  const [students, setStudents] = useState<StudentRow[]>([]);
+
+  const [showEnrollExisting, setShowEnrollExisting] = useState(false);
+  const [enrollClassId, setEnrollClassId] = useState<string | null>(null);
+  const [enrollStudentId, setEnrollStudentId] = useState<string | null>(null);
+  const [enrollBusy, setEnrollBusy] = useState(false);
 
   const [facilityId, setFacilityId] = useState<number | null>(me.facilityIds[0] ?? null);
-  const [courseId, setCourseId] = useState<string | null>(null);
   const [capacity, setCapacity] = useState<number | ''>('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -85,12 +92,12 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
 
   const load = useCallback(() => {
     trpc.facility.list.query().then(setFacilities).catch((e) => notifyError(e, 'Không tải được cơ sở'));
-    trpc.course.list.query().then((rows) => {
-      setCourses(rows);
-      setCourseId((current) => current ?? rows[0]?.id ?? null);
-    }).catch((e) => notifyError(e, 'Không tải được khóa học'));
+    trpc.course.list.query().then(setCourses).catch((e) => notifyError(e, 'Không tải được khóa học'));
     trpc.classBatch.list.query().then(setBatches).catch((e) => notifyError(e, 'Không tải được lớp'));
-  }, []);
+    if (canEnrollExisting) {
+      trpc.student.list.query().then(setStudents).catch((e) => notifyError(e, 'Không tải được học sinh'));
+    }
+  }, [canEnrollExisting]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -104,6 +111,11 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
       })
       .catch((e) => notifyError(e, 'Không tải được buổi học'));
   }, [sessionClassId]);
+
+  const autoCourse = courses
+    .filter((c) => c.unitCount > 0)
+    .sort((a, b) => a.code.localeCompare(b.code))[0] ?? null;
+  const courseId = autoCourse?.id ?? null;
 
   const filteredBatches = useMemo(
     () => batches.filter((b) => !facilityId || b.facilityId === facilityId),
@@ -195,6 +207,39 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
     }
   }
 
+  const enrollBatch = batches.find((b) => b.id === enrollClassId) ?? null;
+  const enrollableStudents = students.filter(
+    (s) => !enrollBatch || s.facilityId === enrollBatch.facilityId,
+  );
+
+  async function enrollExistingStudent() {
+    if (!enrollClassId || !enrollStudentId || !enrollBatch) {
+      notifyError('Chọn lớp và học sinh.', 'Thiếu thông tin');
+      return;
+    }
+    setEnrollBusy(true);
+    try {
+      const result = await trpc.teacherLite.enrollExistingStudent.mutate({
+        facilityId: enrollBatch.facilityId,
+        classBatchId: enrollClassId,
+        studentId: enrollStudentId,
+      });
+      notifySuccess('Đã ghi danh học sinh vào lớp.');
+      if (result.overCapacity) {
+        notifyInfo(
+          `Lớp đã vượt sĩ số (${result.enrolledCount}/${result.capacity}).`,
+          'Cảnh báo sĩ số',
+        );
+      }
+      setEnrollStudentId(null);
+      onChanged?.();
+    } catch (e) {
+      notifyError(e, 'Không ghi danh được học sinh');
+    } finally {
+      setEnrollBusy(false);
+    }
+  }
+
   if (!canManage) return null;
 
   return (
@@ -204,15 +249,28 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
           <IconCalendar size={18} />
           <Title order={5}>Tạo lớp học</Title>
         </Group>
-        <Button
-          size="xs"
-          variant={showCancel ? 'filled' : 'subtle'}
-          color="red"
-          leftSection={<IconX size={14} />}
-          onClick={() => setShowCancel((v) => !v)}
-        >
-          Hủy lớp / buổi
-        </Button>
+        <Group gap="xs">
+          {canEnrollExisting && (
+            <Button
+              size="xs"
+              variant={showEnrollExisting ? 'filled' : 'subtle'}
+              color="teal"
+              leftSection={<IconUserPlus size={14} />}
+              onClick={() => setShowEnrollExisting((v) => !v)}
+            >
+              Thêm học viên có sẵn
+            </Button>
+          )}
+          <Button
+            size="xs"
+            variant={showCancel ? 'filled' : 'subtle'}
+            color="red"
+            leftSection={<IconX size={14} />}
+            onClick={() => setShowCancel((v) => !v)}
+          >
+            Hủy lớp / buổi
+          </Button>
+        </Group>
       </Group>
 
       <Stepper active={step} onStepClick={setStep} size="sm" mb="lg">
@@ -231,14 +289,6 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
               value={facilityId ? String(facilityId) : null}
               onChange={(v) => setFacilityId(v ? Number(v) : null)}
             />
-            <Select
-              label="Khóa học"
-              withAsterisk
-              searchable
-              data={courses.map((c) => ({ value: c.id, label: `${c.code} – ${c.name}` }))}
-              value={courseId}
-              onChange={setCourseId}
-            />
             <NumberInput
               label="Sĩ số (tùy chọn)"
               min={1}
@@ -246,6 +296,13 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
               onChange={(v) => setCapacity(typeof v === 'number' ? v : '')}
             />
           </Group>
+          {autoCourse ? (
+            <Text size="sm" fw={500}>
+              Khung chương trình: {autoCourse.code} — {autoCourse.name} · {autoCourse.unitCount} unit / {autoCourse.totalSessions} buổi
+            </Text>
+          ) : (
+            <Text size="sm" c="red">Chưa có khung chương trình (chạy seed:curriculum)</Text>
+          )}
           <Group>
             <Button
               disabled={!facilityId || !courseId}
@@ -380,6 +437,46 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
           </Stack>
         </>
       )}
+
+      <Modal
+        opened={showEnrollExisting && canEnrollExisting}
+        onClose={() => setShowEnrollExisting(false)}
+        title="Thêm học viên có sẵn vào lớp"
+        centered
+      >
+        <Stack gap="md">
+          <Select
+            label="Chọn lớp"
+            withAsterisk
+            searchable
+            data={activeBatches.map((b) => ({ value: b.id, label: `${b.code} – ${b.name}` }))}
+            value={enrollClassId}
+            onChange={(v) => { setEnrollClassId(v); setEnrollStudentId(null); }}
+          />
+          <Select
+            label="Chọn học sinh"
+            withAsterisk
+            searchable
+            disabled={!enrollClassId}
+            data={enrollableStudents.map((s) => ({ value: s.id, label: `${s.studentCode} – ${s.fullName}` }))}
+            value={enrollStudentId}
+            onChange={setEnrollStudentId}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setShowEnrollExisting(false)} disabled={enrollBusy}>
+              Đóng
+            </Button>
+            <Button
+              color="teal"
+              loading={enrollBusy}
+              disabled={!enrollClassId || !enrollStudentId}
+              onClick={enrollExistingStudent}
+            >
+              Ghi danh
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Modal
         opened={confirmCancel !== null}

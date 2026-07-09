@@ -16,6 +16,15 @@ import { staffCaller, lmsCaller, withRls, SUPER, uniq, superAdminUserId } from '
 
 const FACILITY = 1;
 
+// UTC-midnight of "today" in ICT (matches how ClassSession.sessionDate is stored). Invariant 2's
+// attendance.mark calls go through the real router, so classSessionId must land inside the
+// attendance 15-min-before/end-of-ICT-day window (phase-02-attendance-gate-and-comment-lock.md).
+// startTime/endTime span the whole day so the window is open no matter when this suite runs.
+function ictTodayUtcMidnight(): Date {
+  const ict = new Date(Date.now() + 7 * 3600_000);
+  return new Date(Date.UTC(ict.getUTCFullYear(), ict.getUTCMonth(), ict.getUTCDate()));
+}
+
 // ── Shared fixtures ────────────────────────────────────────────────────────────
 
 let studentId: string;
@@ -195,14 +204,15 @@ beforeAll(async () => {
       });
       teacherBId = teacherB.id;
 
-      // Class session for batch A
+      // Class session for batch A — dated "today" (ICT) so Invariant 2's real attendance.mark
+      // calls land inside the attendance window gate (startTime/endTime span the whole day).
       const session = await tx.classSession.create({
         data: {
           facilityId: FACILITY,
           classBatchId,
-          sessionDate: new Date('2099-12-01'),
-          startTime: '08:00',
-          endTime: '10:00',
+          sessionDate: ictTodayUtcMidnight(),
+          startTime: '00:00',
+          endTime: '23:59',
           status: 'planned',
         },
       });

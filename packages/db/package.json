@@ -14,6 +14,7 @@
     "seed": "tsx src/seed.ts",
     "seed:bootstrap": "SEED_MODE=bootstrap tsx src/seed.ts",
     "seed:curriculum": "tsx src/seed-curriculum.ts",
+    "seed:exercises": "tsx src/seed-exercises.ts",
     "seed:demo": "tsx src/seed-demo.ts",
     "seed:lms": "tsx src/seed-lms.ts",
     "lint": "eslint src",

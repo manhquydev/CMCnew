@@ -28,7 +28,7 @@ import {
   Textarea,
   Title,
 } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { useDisclosure, useMediaQuery } from '@mantine/hooks';
 import { IconCircleCheck, IconClock, IconPencil, IconAlertCircle, IconStar, IconBook2, IconGift } from '@tabler/icons-react';
 import { ClimbView } from './climb-view';
 import { SessionEvidenceTab } from './session-evidence-tab';
@@ -384,9 +384,20 @@ export function ExerciseModal({
   }, [isGraded, opened, persistDraft]);
 
   const grade = submission?.grade;
+  // Mantine's `sm` breakpoint — below it the exercise modal goes fullScreen so the PDF gets the
+  // whole viewport instead of being squeezed inside a centered dialog on a small phone screen.
+  const isMobile = useMediaQuery('(max-width: 48em)');
 
   return (
-    <Modal opened={opened} onClose={handleClose} title={exercise.title} size="lg" radius="xl" centered>
+    <Modal
+      opened={opened}
+      onClose={handleClose}
+      title={exercise.title}
+      size={isMobile ? undefined : '90%'}
+      fullScreen={isMobile}
+      radius={isMobile ? 0 : 'xl'}
+      centered={!isMobile}
+    >
       <Stack>
         {exercise.description && (
           <Text size="sm" c="dimmed" style={{ whiteSpace: 'pre-wrap' }}>
@@ -432,6 +443,7 @@ export function ExerciseModal({
               onChange={setAnnotation}
               editable={!isGraded && autosaveState !== 'forbidden'}
               readOnlyLayers={teacherLayer ? [{ items: teacherLayer.items, opacity: 1 }] : []}
+              maxHeight={isMobile ? 'calc(100dvh - 320px)' : '65vh'}
             />
           </Stack>
         )}

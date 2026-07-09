@@ -133,10 +133,17 @@ export const sessionEvidenceRouter = router({
         });
         if (!session) throw new TRPCError({ code: 'NOT_FOUND' });
         assertTeachingSessionMutationAllowed(ctx.session, session);
-        const enrolled = new Set(session.batch.enrollments.map((e) => e.studentId));
+        // A comment is only meaningful for a student who actually attended (present/late) —
+        // absent or not-yet-marked students must be rejected server-side (the UI already
+        // filters render to present/late, this closes the matching server gap).
+        const presentOrLate = await tx.attendance.findMany({
+          where: { classSessionId: input.classSessionId, status: { in: ['present', 'late'] } },
+          select: { enrollment: { select: { studentId: true } } },
+        });
+        const attended = new Set(presentOrLate.map((a) => a.enrollment.studentId));
         for (const c of input.comments) {
-          if (!enrolled.has(c.studentId)) {
-            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nhận xét chỉ áp dụng cho học sinh đang học trong lớp' });
+          if (!attended.has(c.studentId)) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nhận xét chỉ áp dụng cho học sinh có mặt/đi muộn trong buổi học' });
           }
         }
         // A photoRef only passing the hex-shape regex doesn't mean the file is still on disk

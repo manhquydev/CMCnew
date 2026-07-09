@@ -1,10 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { API_URL, Chatter, notifyError, notifyInfo, notifySuccess, PdfAnnotator, trpc, uploadSessionPhoto, useSession, WorkflowStatusbar } from '@cmc/ui';
-import { Button, Center, Drawer, Group, Loader, Menu, Modal, NumberInput, Select, Stack, Tabs, Text, TextInput, Textarea } from '@mantine/core';
+import { Button, Center, Drawer, Group, Loader, Menu, Modal, NumberInput, Select, Stack, Tabs, Text, TextInput, Textarea, Tooltip } from '@mantine/core';
 import { can } from '@cmc/auth/permissions';
 import { effectiveSessionStatus, SESSION_STAGES, SESSION_TERMINAL } from './session-status';
 import { StudentDetailPanel } from './student-detail.js';
+
+/** Client-side mirror of the server's attendance window (attendance-window.ts): opens 15min
+ * before the session's scheduled start, closes at the end of that ICT calendar day. This is a
+ * convenience-only duplicate (KISS) — the server remains the enforcing source of truth. Follows
+ * the same local-browser-time convention as effectiveSessionStatus in ./session-status.ts (the
+ * admin app assumes the browser runs in ICT). */
+function attendanceWindowOpen(sessionDate: string | Date, startTime: string): boolean {
+  const day = dayjs(sessionDate).format('YYYY-MM-DD');
+  const opensAt = dayjs(`${day}T${startTime}`).subtract(15, 'minute');
+  const closesAt = dayjs(day).endOf('day');
+  const now = dayjs();
+  return !now.isBefore(opensAt) && !now.isAfter(closesAt);
+}
+
+function attendanceOpensAtLabel(sessionDate: string | Date, startTime: string): string {
+  const day = dayjs(sessionDate).format('YYYY-MM-DD');
+  return dayjs(`${day}T${startTime}`).subtract(15, 'minute').format('HH:mm');
+}
 
 type MySession = Awaited<ReturnType<typeof trpc.schedule.mySessions.query>>[number];
 type Enrollment = Awaited<ReturnType<typeof trpc.enrollment.listByBatch.query>>[number];
@@ -62,6 +80,7 @@ export interface SessionDetailProps {
 
 export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDetailProps) {
   const enabled = session.status !== 'cancelled';
+  const attendanceOpen = attendanceWindowOpen(session.sessionDate, session.startTime);
   const classSessionId = session.id;
   const classBatchId = session.classBatchId;
   const { me } = useSession();
@@ -415,10 +434,15 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
                 <div style={{ fontSize: 12, fontWeight: 600, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   {enrollments.length} học sinh
                 </div>
-                <Button size="xs" loading={markingAll} disabled={!enabled || enrollments.length === 0} onClick={markAll}
-                  style={{ background: C.brand, color: '#fff', border: 'none', borderRadius: 8, fontFamily: FONT }}>
-                  Có mặt tất cả
-                </Button>
+                <Tooltip
+                  label={`Mở điểm danh từ ${attendanceOpensAtLabel(session.sessionDate, session.startTime)}`}
+                  disabled={attendanceOpen}
+                >
+                  <Button size="xs" loading={markingAll} disabled={!enabled || !attendanceOpen || enrollments.length === 0} onClick={markAll}
+                    style={{ background: C.brand, color: '#fff', border: 'none', borderRadius: 8, fontFamily: FONT }}>
+                    Có mặt tất cả
+                  </Button>
+                </Tooltip>
               </div>
               {enrollments.length === 0 ? (
                 <div style={{ textAlign: 'center', color: C.muted, padding: 28, fontSize: 14, background: C.bg, borderRadius: 12 }}>
@@ -426,7 +450,7 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
                 </div>
               ) : enrollments.map(enr => (
                 <StudentRow key={enr.id} name={enr.student.fullName} current={marks[enr.id]?.status ?? null}
-                  disabled={!enabled} onMark={s => markSingle(enr.id, s)}
+                  disabled={!enabled || !attendanceOpen} onMark={s => markSingle(enr.id, s)}
                   onOpenStudent={() => setDrawerStudentId(enr.studentId)} />
               ))}
             </div>

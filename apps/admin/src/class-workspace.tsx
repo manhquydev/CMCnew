@@ -159,7 +159,10 @@ function CreateClassModal({
   onCreated: () => void;
 }) {
   const [opened, { open, close }] = useDisclosure(false);
-  const [courseId, setCourseId] = useState<string | null>(null);
+  const autoCourse = courses
+    .filter((c) => c.unitCount > 0)
+    .sort((a, b) => a.code.localeCompare(b.code))[0] ?? null;
+  const courseId = autoCourse?.id ?? null;
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   // True until the staff member manually edits "Kết thúc" — while true, the auto-estimate
@@ -209,7 +212,6 @@ function CreateClassModal({
   }
 
   function reset() {
-    setCourseId(null);
     setStartDate(null);
     setEndDate(null);
     setEndDateAuto(true);
@@ -221,7 +223,7 @@ function CreateClassModal({
 
   async function create() {
     if (!courseId) {
-      setErr('Chọn khung chương trình');
+      setErr('Chưa có khung chương trình — chạy seed:curriculum trước');
       return;
     }
     if (slots.some((s) => !s.day || !s.start || !s.end)) {
@@ -284,21 +286,13 @@ function CreateClassModal({
       </Button>
       <Modal opened={opened} onClose={close} title="Tạo lớp học" size="lg">
         <Stack>
-          <Select
-            label="Khung chương trình (khóa cứng)"
-            placeholder={courses.some((c) => c.unitCount > 0) ? 'Chọn chương trình → level' : 'Chưa có khung (chạy seed:curriculum)'}
-            searchable
-            // Chỉ cho chọn course đã có khung khóa cứng thật (unitCount>0) — course chưa seed
-            // curriculum không phải là "khung chương trình" hợp lệ để mở lớp theo.
-            data={courses
-              .filter((c) => c.unitCount > 0)
-              .map((c) => ({
-                value: c.id,
-                label: `${c.code} — ${c.name} · ${c.unitCount} unit / ${c.totalSessions} buổi`,
-              }))}
-            value={courseId}
-            onChange={setCourseId}
-          />
+          {autoCourse ? (
+            <Text size="sm" fw={500}>
+              Khung chương trình: {autoCourse.code} — {autoCourse.name} · {autoCourse.unitCount} unit / {autoCourse.totalSessions} buổi
+            </Text>
+          ) : (
+            <Text size="sm" c="red">Chưa có khung chương trình (chạy seed:curriculum)</Text>
+          )}
           <Text size="xs" c="dimmed">
             Mã lớp tự sinh theo định dạng [Cơ sở]-[Chương trình]-[Năm]-[STT] (vd HQ-UCR-26-0001)
             — hiển thị ngay sau khi tạo, không cần nhập tay.

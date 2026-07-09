@@ -20,6 +20,16 @@ import { staffCaller, withRls, SUPER, uniq } from './helpers.js';
 
 const FACILITY = 1;
 
+// UTC-midnight of "today" in ICT (matches how ClassSession.sessionDate is stored). The
+// markAll-skips-blocked/mark-rejects-blocked tests below go through the real router, so their
+// session must land inside the attendance window gate (phase-02-attendance-gate-and-comment-
+// lock.md) — startTime/endTime span the whole day so the window is open no matter when this
+// suite runs.
+function ictTodayUtcMidnight(): Date {
+  const ict = new Date(Date.now() + 7 * 3600_000);
+  return new Date(Date.UTC(ict.getUTCFullYear(), ict.getUTCMonth(), ict.getUTCDate()));
+}
+
 let courseId: string;
 let batchId: string;
 let teacherId: string;
@@ -326,8 +336,8 @@ describe('LMS lifecycle enforcement', () => {
 
         const session = await tx.classSession.create({
           data: {
-            facilityId: FACILITY, classBatchId: batchId, sessionDate: new Date(Date.UTC(2095, 2, 15)),
-            startTime: '18:00', endTime: '19:00', status: 'confirmed', teacherId,
+            facilityId: FACILITY, classBatchId: batchId, sessionDate: ictTodayUtcMidnight(),
+            startTime: '00:00', endTime: '23:59', status: 'confirmed', teacherId,
           },
         });
         sessionId = session.id;
