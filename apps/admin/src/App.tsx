@@ -122,7 +122,8 @@ const TH_STYLE: React.CSSProperties = {
 function defaultSection(me: Session, surface: AppSurface = 'erp'): SectionKey {
   if (surface === 'teacher') {
     if (me.roles.includes('giam_doc_dao_tao')) return 'edu-director-cockpit';
-    if (me.roles.includes('giao_vien')) return 'overview';
+    // Giáo viên vào thẳng "Lịch dạy" (calendar) — teacher-lite tối giản, nav cũng chỉ có mục này.
+    if (me.roles.includes('giao_vien')) return 'schedule';
     if (me.roles.includes('giam_doc_kinh_doanh')) return 'family-intake';
     if (me.isSuperAdmin) return 'overview';
     return 'profile';
