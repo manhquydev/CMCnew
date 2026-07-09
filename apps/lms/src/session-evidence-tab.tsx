@@ -8,6 +8,7 @@ import {
   Group,
   Image,
   Loader,
+  Modal,
   SimpleGrid,
   Stack,
   Text,
@@ -33,6 +34,8 @@ export function SessionEvidenceTab({
 }) {
   const [items, setItems] = useState<SessionEvidenceRow[] | null>(null);
   const [error, setError] = useState('');
+  // Ảnh đang xem phóng to (lightbox) — null = đóng.
+  const [lightbox, setLightbox] = useState<string | null>(null);
 
   useEffect(() => {
     if (!studentId) return;
@@ -66,6 +69,7 @@ export function SessionEvidenceTab({
   }
 
   return (
+    <>
     <Stack gap="xl">
       {items.map((item) => {
         const comment = item.comments[0];
@@ -94,14 +98,18 @@ export function SessionEvidenceTab({
                     .map((photo) => (
                       <Card key={photo.id} withBorder radius="md" p="xs">
                         <Stack gap={6}>
-                          {/* contain (not cover): evidence photos are often portrait — cover crops
-                              a tall photo down to a thin horizontal strip inside the fixed height. */}
+                          {/* Thumbnail đồng đều: khung tỉ lệ 4:3 + cover (không tràn/không letterbox
+                              xám). Bấm vào mở lightbox xem ảnh gốc đầy đủ (contain). */}
                           <Image
                             src={photoUrl(photo.photoRef)}
-                            h={220}
-                            fit="contain"
+                            fit="cover"
                             radius="sm"
-                            style={{ backgroundColor: 'var(--mantine-color-gray-1)' }}
+                            onClick={() => setLightbox(photo.photoRef)}
+                            style={{
+                              aspectRatio: '4 / 3',
+                              cursor: 'zoom-in',
+                              backgroundColor: 'var(--mantine-color-gray-1)',
+                            }}
                           />
                         </Stack>
                       </Card>
@@ -132,5 +140,24 @@ export function SessionEvidenceTab({
         );
       })}
     </Stack>
+
+    {/* Lightbox: xem ảnh gốc đầy đủ, không cắt (contain), tối đa 82vh. */}
+    <Modal
+      opened={lightbox !== null}
+      onClose={() => setLightbox(null)}
+      size="auto"
+      centered
+      padding="xs"
+      title="Ảnh buổi học"
+    >
+      {lightbox && (
+        <Image
+          src={photoUrl(lightbox)}
+          fit="contain"
+          style={{ maxHeight: '82vh', maxWidth: '86vw' }}
+        />
+      )}
+    </Modal>
+    </>
   );
 }
