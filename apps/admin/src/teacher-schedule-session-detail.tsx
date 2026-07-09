@@ -78,12 +78,18 @@ export interface SessionDetailProps {
   onChanged?: () => void;
 }
 
+const DIRECTOR_ROLES = ['giam_doc_dao_tao', 'giam_doc_kinh_doanh'];
+
 export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDetailProps) {
   const enabled = session.status !== 'cancelled';
-  const attendanceOpen = attendanceWindowOpen(session.sessionDate, session.startTime);
+  const { me } = useSession();
+  // Mirrors attendance.ts's bypassesAttendanceWindow: super_admin/directors correct rosters
+  // outside the 15-min-before to end-of-ICT-day window; the server remains the source of truth,
+  // this only avoids showing a disabled button they're actually allowed to use.
+  const bypassesWindow = me.isSuperAdmin || me.roles.some((r) => DIRECTOR_ROLES.includes(r));
+  const attendanceOpen = bypassesWindow || attendanceWindowOpen(session.sessionDate, session.startTime);
   const classSessionId = session.id;
   const classBatchId = session.classBatchId;
-  const { me } = useSession();
   const canCancel = can(me.roles, me.isSuperAdmin, 'teacherLite', 'cancelSession');
 
   // ── Attendance ──────────────────────────────────────────────────────────────
@@ -249,6 +255,23 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
     } catch (e) {
       notifyError(e, 'Không lưu được điểm danh');
       setMarks(m => { const n = { ...m }; if (prev === undefined) delete n[enrollmentId]; else n[enrollmentId] = prev; return n; });
+      return;
+    }
+    // A student flipped away from present/late can no longer have a per-student comment (the
+    // server drops it anyway, but the render filter below also stops showing an input to clear
+    // it) — prune the orphaned comment from client state right away so it never re-appears.
+    if (status !== 'present' && status !== 'late') {
+      const studentId = enrollments.find(en => en.id === enrollmentId)?.studentId;
+      if (studentId) {
+        setDraft(prevDraft => {
+          if (!(studentId in prevDraft.comments)) return prevDraft;
+          const remainingComments = { ...prevDraft.comments };
+          delete remainingComments[studentId];
+          const next = { ...prevDraft, comments: remainingComments };
+          scheduleSave(next);
+          return next;
+        });
+      }
     }
   }
 

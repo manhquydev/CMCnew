@@ -188,6 +188,33 @@ describe('schedule.editSlot', () => {
     expect(after[1]!.sessionDate.toISOString().slice(0, 10)).toBe('2095-01-14');
   });
 
+  it('applyToFuture never relocates a makeup session that coincidentally matches the slot day/time', async () => {
+    const batch = await makeBatch('ESL-MAKEUP');
+    const slot = await makeSlot(batch.id);
+    const regular = await makeSession(batch.id, FUTURE_TUESDAYS[0]!);
+    // A "buổi bù" a teacher scheduled on the same weekday/startTime as the slot — it does not
+    // belong to the slot and must be excluded from the mover (F4/isMakeup filter).
+    const makeup = await makeSession(batch.id, FUTURE_TUESDAYS[1]!, { startTime: '18:00', endTime: '19:00' });
+    await withRls(SUPER, (tx) => tx.classSession.update({ where: { id: makeup.id }, data: { isMakeup: true } }));
+
+    const caller = await staffCaller();
+    const res = await caller.schedule.editSlot({
+      slotId: slot.id,
+      startTime: '20:00',
+      endTime: '21:00',
+      applyToFuture: true,
+    });
+    expect(res.movedSessions).toBe(1); // only the regular session, not the makeup
+
+    const regularAfter = await withRls(SUPER, (tx) => tx.classSession.findUniqueOrThrow({ where: { id: regular.id } }));
+    expect(regularAfter.startTime).toBe('20:00');
+
+    const makeupAfter = await withRls(SUPER, (tx) => tx.classSession.findUniqueOrThrow({ where: { id: makeup.id } }));
+    expect(makeupAfter.startTime).toBe('18:00'); // untouched
+    expect(makeupAfter.endTime).toBe('19:00');
+    expect(makeupAfter.sessionDate.toISOString().slice(0, 10)).toBe(FUTURE_TUESDAYS[1]);
+  });
+
   it('recompute keeps the curriculum mapping correct after a reorder-eligible edit', async () => {
     await seedCurriculum(prisma, readFileSync(defaultCsvPath(), 'utf8'));
     const ucreaL1 = await withRls(SUPER, (tx) =>

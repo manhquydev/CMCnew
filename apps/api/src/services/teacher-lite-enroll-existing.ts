@@ -63,13 +63,16 @@ export async function teacherLiteEnrollExistingStudent(
         }
 
         // Unique key is (classBatchId, studentId) with NO archivedAt discriminator (schema.prisma:396),
-        // so a soft-archived prior enrollment still occupies the key. Any hit — active or archived —
-        // is a clean CONFLICT instead of a raw P2002 from `create`.
+        // so a soft-archived prior enrollment still occupies the key. A soft-archived hit is a clean
+        // CONFLICT (row is gone from the roster but the unique still blocks a fresh `create`). A
+        // surviving withdrawn/transferred/completed row (archivedAt still null) is reactivated
+        // instead — the student left the class and is coming back, not a duplicate enrollment.
+        // Only an already-active/reserved row is a genuine duplicate.
         const dup = await tx.enrollment.findUnique({
           where: { classBatchId_studentId: { classBatchId: input.classBatchId, studentId: input.studentId } },
-          select: { id: true },
+          select: { id: true, status: true, archivedAt: true },
         });
-        if (dup) {
+        if (dup?.archivedAt || (dup && (dup.status === 'active' || dup.status === 'reserved'))) {
           throw new TRPCError({ code: 'CONFLICT', message: 'Học sinh đã được ghi danh vào lớp này' });
         }
 
@@ -77,14 +80,39 @@ export async function teacherLiteEnrollExistingStudent(
           where: { classBatchId: input.classBatchId, status: 'active', archivedAt: null },
         });
 
-        const enrollment = await tx.enrollment.create({
-          data: {
+        let enrollment;
+        if (dup) {
+          enrollment = await tx.enrollment.update({
+            where: { id: dup.id },
+            data: { status: 'active' },
+          });
+          await logEvent(tx, {
             facilityId: input.facilityId,
-            classBatchId: input.classBatchId,
-            studentId: input.studentId,
-            status: 'active',
-          },
-        });
+            entityType: 'enrollment',
+            entityId: enrollment.id,
+            type: 'status_changed',
+            body: `teacher_lite: kích hoạt lại ghi danh vào lớp ${batch.code} (trạng thái trước: ${dup.status})`,
+            changes: [{ field: 'status', old: dup.status, new: 'active' }],
+            actorId: session.userId,
+          });
+        } else {
+          enrollment = await tx.enrollment.create({
+            data: {
+              facilityId: input.facilityId,
+              classBatchId: input.classBatchId,
+              studentId: input.studentId,
+              status: 'active',
+            },
+          });
+          await logEvent(tx, {
+            facilityId: input.facilityId,
+            entityType: 'enrollment',
+            entityId: enrollment.id,
+            type: 'created',
+            body: `teacher_lite: ghi danh học sinh có sẵn vào lớp ${batch.code}`,
+            actorId: session.userId,
+          });
+        }
 
         if (student.lifecycle !== 'active') {
           await tx.student.update({ where: { id: input.studentId }, data: { lifecycle: 'active' } });
@@ -98,15 +126,6 @@ export async function teacherLiteEnrollExistingStudent(
             actorId: session.userId,
           });
         }
-
-        await logEvent(tx, {
-          facilityId: input.facilityId,
-          entityType: 'enrollment',
-          entityId: enrollment.id,
-          type: 'created',
-          body: `teacher_lite: ghi danh học sinh có sẵn vào lớp ${batch.code}`,
-          actorId: session.userId,
-        });
 
         // Capacity = cảnh báo mềm (không chặn), same convention as enrollment.enroll.
         const enrolledCount = activeCount + 1;

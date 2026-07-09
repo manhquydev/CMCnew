@@ -38,6 +38,30 @@ function assertOwnedStudent(studentIds: string[], studentId: string) {
   }
 }
 
+/** Principal (parent/student LMS) field allowlist — explicit `select`, never `include`, on
+ * SessionEvidence so a new/renamed scalar (e.g. `internalNote`, the teacher's private note)
+ * never leaks to the family by default. Any field the LMS should show must be added here
+ * deliberately. */
+const PRINCIPAL_EVIDENCE_SELECT = {
+  id: true,
+  summary: true,
+  status: true,
+  publishedAt: true,
+  photos: {
+    select: { id: true, photoRef: true, sortOrder: true },
+    orderBy: [{ sortOrder: 'asc' as const }, { createdAt: 'asc' as const }],
+  },
+  classSession: {
+    select: {
+      id: true,
+      sessionDate: true,
+      startTime: true,
+      endTime: true,
+      batch: { select: { id: true, code: true, name: true, course: { select: { program: true, name: true } } } },
+    },
+  },
+};
+
 export const sessionEvidenceRouter = router({
   commentTemplate: requirePermission('sessionEvidence', 'commentTemplate').query(() => COMMENT_TEMPLATE),
 
@@ -133,19 +157,19 @@ export const sessionEvidenceRouter = router({
         });
         if (!session) throw new TRPCError({ code: 'NOT_FOUND' });
         assertTeachingSessionMutationAllowed(ctx.session, session);
-        // A comment is only meaningful for a student who actually attended (present/late) —
-        // absent or not-yet-marked students must be rejected server-side (the UI already
-        // filters render to present/late, this closes the matching server gap).
+        // A comment is only meaningful for a student who actually attended (present/late).
+        // Attendance can be corrected AFTER a comment was written (e.g. present -> absent),
+        // which would otherwise leave an orphaned comment the UI has no input to clear (it only
+        // renders inputs for present/late students) and every subsequent save would 400 forever.
+        // So: silently DROP comments for non-attended students here instead of rejecting the
+        // whole save — the intent (no comments for absent students) is preserved, but a stale
+        // comment can never brick saving the rest of the draft.
         const presentOrLate = await tx.attendance.findMany({
           where: { classSessionId: input.classSessionId, status: { in: ['present', 'late'] } },
           select: { enrollment: { select: { studentId: true } } },
         });
         const attended = new Set(presentOrLate.map((a) => a.enrollment.studentId));
-        for (const c of input.comments) {
-          if (!attended.has(c.studentId)) {
-            throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nhận xét chỉ áp dụng cho học sinh có mặt/đi muộn trong buổi học' });
-          }
-        }
+        const validComments = input.comments.filter((c) => attended.has(c.studentId));
         // A photoRef only passing the hex-shape regex doesn't mean the file is still on disk
         // (fabricated ref, or the store was wiped by a redeploy) — drop dead refs instead of
         // blocking the whole save (comments/summary are unrelated to a stale photo), and tell
@@ -164,12 +188,15 @@ export const sessionEvidenceRouter = router({
             createdById: ctx.session.userId,
             status: 'draft',
           },
+          // NOTE: status/publishedAt/publishedById are deliberately NOT set here. Editing an
+          // already-published evidence (typo fix, swap a photo, tweak a comment) must not
+          // silently un-publish it — that would drop it from the parent LMS (which filters
+          // status='published') with no notice, while the admin UI's "Đã đăng" badge still
+          // claims it's live. Publish/unpublish is an explicit action (see `publish` below),
+          // not a side effect of a draft save.
           update: {
             summary: input.summary || null,
             internalNote: input.internalNote || null,
-            status: 'draft',
-            publishedAt: null,
-            publishedById: null,
           },
         });
 
@@ -185,9 +212,9 @@ export const sessionEvidenceRouter = router({
         }
 
         await tx.sessionStudentComment.deleteMany({ where: { sessionEvidenceId: evidence.id } });
-        if (input.comments.length > 0) {
+        if (validComments.length > 0) {
           await tx.sessionStudentComment.createMany({
-            data: input.comments.map((c) => ({
+            data: validComments.map((c) => ({
               sessionEvidenceId: evidence.id,
               studentId: c.studentId,
               participation: c.participation ?? null,
@@ -285,15 +312,18 @@ export const sessionEvidenceRouter = router({
               },
             },
           },
-          include: {
-            photos: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+          select: {
+            ...PRINCIPAL_EVIDENCE_SELECT,
             comments: {
               where: { studentId: { in: studentIds } },
-              include: { student: { select: { id: true, fullName: true } } },
-            },
-            classSession: {
-              include: {
-                batch: { select: { id: true, code: true, name: true, course: { select: { program: true, name: true } } } },
+              select: {
+                id: true,
+                studentId: true,
+                participation: true,
+                strength: true,
+                needsImprovement: true,
+                teacherNote: true,
+                student: { select: { id: true, fullName: true } },
               },
             },
           },
@@ -322,15 +352,18 @@ export const sessionEvidenceRouter = router({
               },
             },
           },
-          include: {
-            photos: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] },
+          select: {
+            ...PRINCIPAL_EVIDENCE_SELECT,
             comments: {
               where: { studentId: input.studentId },
-              include: { student: { select: { id: true, fullName: true } } },
-            },
-            classSession: {
-              include: {
-                batch: { select: { id: true, code: true, name: true, course: { select: { program: true, name: true } } } },
+              select: {
+                id: true,
+                studentId: true,
+                participation: true,
+                strength: true,
+                needsImprovement: true,
+                teacherNote: true,
+                student: { select: { id: true, fullName: true } },
               },
             },
           },

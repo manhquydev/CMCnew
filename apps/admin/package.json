@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@cmc/auth": "workspace:*",
+    "@cmc/domain-academic": "workspace:*",
     "@cmc/domain-finance": "workspace:*",
     "@cmc/ui": "workspace:*",
     "@fontsource/inter": "^5.1.0",

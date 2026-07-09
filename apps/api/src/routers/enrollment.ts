@@ -62,26 +62,53 @@ export const enrollmentRouter = router({
       withRls(rlsContextOf(ctx.session), async (tx) => {
         const batch = await tx.classBatch.findUniqueOrThrow({ where: { id: input.classBatchId } });
         // Friendly guard before the DB unique([classBatchId, studentId]) fires a raw P2002 (→ 500).
-        // A frontend double-submit or re-enroll of an active student returns a clean CONFLICT instead.
+        // The unique key has no status/archivedAt component (schema.prisma:396), so a prior
+        // withdrawn/transferred/completed row (archivedAt still null) also hits this guard —
+        // reactivate it instead of blocking with a misleading "already enrolled" CONFLICT.
+        // Only an already-active/reserved row is a genuine duplicate.
         const dup = await tx.enrollment.findFirst({
           where: { classBatchId: input.classBatchId, studentId: input.studentId, archivedAt: null },
-          select: { id: true },
+          select: { id: true, status: true },
         });
-        if (dup) {
+        if (dup && (dup.status === 'active' || dup.status === 'reserved')) {
           throw new TRPCError({ code: 'CONFLICT', message: 'Học sinh đã được ghi danh vào lớp này' });
         }
         const activeCount = await tx.enrollment.count({
           where: { classBatchId: input.classBatchId, status: 'active', archivedAt: null },
         });
-        const enrollment = await tx.enrollment.create({
-          data: {
+        let enrollment;
+        if (dup) {
+          enrollment = await tx.enrollment.update({
+            where: { id: dup.id },
+            data: { status: 'active', opportunityId: input.opportunityId ?? undefined },
+          });
+          await logEvent(tx, {
             facilityId: input.facilityId,
-            classBatchId: input.classBatchId,
-            studentId: input.studentId,
-            status: 'active',
-            opportunityId: input.opportunityId,
-          },
-        });
+            entityType: 'enrollment',
+            entityId: enrollment.id,
+            type: 'status_changed',
+            body: `Kích hoạt lại ghi danh vào lớp ${batch.code} (trạng thái trước: ${dup.status})`,
+            changes: [{ field: 'status', old: dup.status, new: 'active' }],
+            actorId: ctx.session.userId,
+          });
+        } else {
+          enrollment = await tx.enrollment.create({
+            data: {
+              facilityId: input.facilityId,
+              classBatchId: input.classBatchId,
+              studentId: input.studentId,
+              status: 'active',
+              opportunityId: input.opportunityId,
+            },
+          });
+          await logEvent(tx, {
+            facilityId: input.facilityId,
+            entityType: 'enrollment',
+            entityId: enrollment.id,
+            type: 'created',
+            actorId: ctx.session.userId,
+          });
+        }
         // HS có enrollment → chuyển lifecycle sang active (chỉ khi chưa active; log transition).
         const student = await tx.student.findUniqueOrThrow({
           where: { id: input.studentId },
@@ -99,13 +126,6 @@ export const enrollmentRouter = router({
             actorId: ctx.session.userId,
           });
         }
-        await logEvent(tx, {
-          facilityId: input.facilityId,
-          entityType: 'enrollment',
-          entityId: enrollment.id,
-          type: 'created',
-          actorId: ctx.session.userId,
-        });
         // Notify both directors of this facility about the new enrollment.
         const facilityUsers = await tx.userFacility.findMany({
           where: { facilityId: input.facilityId },

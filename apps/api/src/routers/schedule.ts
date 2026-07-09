@@ -426,12 +426,16 @@ export const scheduleRouter = router({
           // Match on the slot's OLD (dayOfWeek, startTime) — a session has no slotId FK, so
           // this is the only way to identify "buổi thuộc slot này" among the batch's sessions.
           // getUTCDay matches enumerateSessions' convention (avoids ICT/UTC weekday drift).
+          // isMakeup: false — a makeup session (createMakeupSession) can coincidentally fall on
+          // the same weekday/startTime as this slot but does not belong to it; recomputeCurriculumMapping
+          // already excludes makeup sessions from the slot's regular set, so the mover must too.
           const candidates = await tx.classSession.findMany({
             where: {
               classBatchId: batch.id,
               status: { not: 'cancelled' },
               sessionDate: { gte: today },
               startTime: before.startTime,
+              isMakeup: false,
             },
           });
           const matching = candidates.filter((s) => s.sessionDate.getUTCDay() === before.dayOfWeek);

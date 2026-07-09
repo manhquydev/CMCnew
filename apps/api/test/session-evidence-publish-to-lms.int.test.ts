@@ -201,6 +201,7 @@ describe('sessionEvidence publish-to-LMS', () => {
     const draft = await staff.sessionEvidence.upsertDraft({
       classSessionId: sessionId,
       summary: 'Lớp hoàn thành thử thách nhóm và trình bày sản phẩm.',
+      internalNote: 'HS hay mất tập trung — ghi chú nội bộ, KHÔNG được lộ ra LMS phụ huynh.',
       photos: [{ ref: PHOTO_REF }],
       comments: [
         {
@@ -244,6 +245,8 @@ describe('sessionEvidence publish-to-LMS', () => {
     expect(visible.comments).toHaveLength(1);
     expect(visible.comments[0].studentId).toBe(studentAId);
     expect(visible.comments[0].teacherNote).toContain('chủ động');
+    // A1: the teacher's private internalNote must never reach the LMS payload.
+    expect(visible).not.toHaveProperty('internalNote');
 
     const detailA = await parentA.sessionEvidence.detailForPrincipal({
       sessionEvidenceId: publishedEvidenceId,
@@ -251,6 +254,7 @@ describe('sessionEvidence publish-to-LMS', () => {
     });
     expect(detailA.comments).toHaveLength(1);
     expect(detailA.comments[0].studentId).toBe(studentAId);
+    expect(detailA).not.toHaveProperty('internalNote');
 
     await expect(
       parentA.sessionEvidence.detailForPrincipal({
@@ -267,6 +271,38 @@ describe('sessionEvidence publish-to-LMS', () => {
     expect(detailB.comments).toHaveLength(1);
     expect(detailB.comments[0].studentId).toBe(studentBId);
     expect(detailB.comments[0].teacherNote).toContain('phối hợp');
+  });
+
+  it('C1: editing an already-published evidence preserves its published status', async () => {
+    if (!dbReachable) return;
+    const staff = await staffCaller({
+      userId: actorId,
+      roles: [Role.giao_vien],
+      primaryRole: Role.giao_vien,
+      isSuperAdmin: false,
+      facilityIds: [FACILITY],
+    });
+
+    // sessionId's evidence was published by the previous test.
+    const before = await withRls(SUPER, (tx) => tx.sessionEvidence.findUniqueOrThrow({ where: { classSessionId: sessionId } }));
+    expect(before.status).toBe('published');
+
+    const edited = await staff.sessionEvidence.upsertDraft({
+      classSessionId: sessionId,
+      summary: 'Lớp hoàn thành thử thách nhóm và trình bày sản phẩm (đã chỉnh sửa nhỏ).',
+      photos: [{ ref: PHOTO_REF }],
+      comments: [
+        { studentId: studentAId, participation: 'Tích cực', teacherNote: 'Con chủ động chia nhiệm vụ trong nhóm.' },
+      ],
+    });
+    expect(edited.status).toBe('published');
+    expect(edited.publishedAt).toBeTruthy();
+
+    const parentA = lmsCaller(parentSession(studentAId, 'Evidence Student A'));
+    const rowsA = await parentA.sessionEvidence.listForPrincipal({ studentId: studentAId });
+    const visible = rowsA.find((r) => r.id === publishedEvidenceId);
+    expect(visible).toBeTruthy();
+    expect(visible!.summary).toContain('đã chỉnh sửa nhỏ');
   });
 
   it('blocks staff outside the session facility before writing evidence', async () => {

@@ -21,6 +21,15 @@ function ictMonthKey(sessionDate: Date, endTime: string): string {
   return `${ict.getUTCFullYear()}-${String(ict.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
+const DIRECTOR_ROLES = ['giam_doc_dao_tao', 'giam_doc_kinh_doanh'] as const;
+
+/** super_admin and directors correct attendance outside the normal 15-min-before to
+ * end-of-ICT-day window (e.g. fixing a roster the morning after a forgotten evening class) —
+ * giao_vien stays gated to the window. User-approved (Q3, plan 260709-1514). */
+function bypassesAttendanceWindow(session: { isSuperAdmin: boolean; roles: readonly string[] }): boolean {
+  return session.isSuperAdmin || session.roles.some((r) => (DIRECTOR_ROLES as readonly string[]).includes(r));
+}
+
 export const attendanceRouter = router({
   listBySession: protectedProcedure
     .input(z.object({ classSessionId: z.string().uuid() }))
@@ -75,7 +84,9 @@ export const attendanceRouter = router({
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Buổi học đã hủy — không thể điểm danh' });
         }
         assertTeachingSessionMutationAllowed(ctx.session, session);
-        assertAttendanceWindowOpen(new Date(), session.sessionDate, session.startTime);
+        if (!bypassesAttendanceWindow(ctx.session)) {
+          assertAttendanceWindowOpen(new Date(), session.sessionDate, session.startTime);
+        }
         // A student who has left the class (withdrawn/transferred) must not receive new attendance marks.
         // active / completed / reserved stay markable (final-session and trial attendance are valid).
         if (enrollment.status === 'withdrawn' || enrollment.status === 'transferred') {
@@ -98,7 +109,10 @@ export const attendanceRouter = router({
           update: {
             status: input.status,
             excused: input.excused,
-            note: input.note,
+            // `?? null` (not the raw optional) so re-marking without a note explicitly clears
+            // any previously stored one instead of leaving a stale mismatched note behind
+            // (Prisma treats `undefined` as "leave unchanged", not "clear").
+            note: input.note ?? null,
             markedById: ctx.session.userId,
             markedAt: now,
           },
@@ -108,7 +122,7 @@ export const attendanceRouter = router({
             enrollmentId: input.enrollmentId,
             status: input.status,
             excused: input.excused,
-            note: input.note,
+            note: input.note ?? null,
             markedById: ctx.session.userId,
             markedAt: now,
           },
@@ -157,7 +171,9 @@ export const attendanceRouter = router({
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Buổi học đã hủy — không thể điểm danh' });
         }
         assertTeachingSessionMutationAllowed(ctx.session, session);
-        assertAttendanceWindowOpen(new Date(), session.sessionDate, session.startTime);
+        if (!bypassesAttendanceWindow(ctx.session)) {
+          assertAttendanceWindowOpen(new Date(), session.sessionDate, session.startTime);
+        }
         // Same left-class guard as `mark`: transferred/withdrawn enrollments are excluded from
         // the active set, so markAll never writes an attendance row for a student who has left.
         // Also excludes students whose lifecycle is blocked (on_hold/withdrawn/transferred) even
@@ -180,7 +196,9 @@ export const attendanceRouter = router({
             const override = overrideByEnrollment.get(e.id);
             const status = override?.status ?? input.defaultStatus;
             const excused = override?.excused ?? false;
-            const note = override?.note;
+            // `?? null` so a status change (e.g. "Có mặt tất cả") without a note override
+            // clears any previously stored note instead of leaving a stale mismatched one.
+            const note = override?.note ?? null;
             return tx.attendance.upsert({
               where: {
                 classSessionId_enrollmentId: {

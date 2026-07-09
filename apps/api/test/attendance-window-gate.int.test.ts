@@ -207,4 +207,39 @@ describe('attendance window gate', () => {
       teacher.attendance.markAll({ classSessionId: sessionCancelledId, defaultStatus: 'present', overrides: [] }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringContaining('đã hủy') });
   });
+
+  // Q3 (plan 260709-1514, user-approved): super_admin and directors correct rosters after the
+  // ICT-day cutoff — giao_vien stays gated. Reuses sessionYesterdayId (window closed since (c)).
+  it('Q3: a director (giam_doc_dao_tao) bypasses the window gate and can mark outside it', async () => {
+    if (!dbReachable) return;
+    const director = await staffCaller({
+      userId: teacherId,
+      roles: [Role.giam_doc_dao_tao],
+      primaryRole: Role.giam_doc_dao_tao,
+      isSuperAdmin: false,
+      facilityIds: [FACILITY],
+    });
+
+    const marked = await director.attendance.mark({ classSessionId: sessionYesterdayId, enrollmentId, status: 'present' });
+    expect(marked.status).toBe('present');
+    await director.attendance.markAll({ classSessionId: sessionYesterdayId, defaultStatus: 'present', overrides: [] });
+  });
+
+  it('Q3: super_admin bypasses the window gate and can mark outside it', async () => {
+    if (!dbReachable) return;
+    const admin = await staffCaller({ facilityIds: [] });
+
+    const marked = await admin.attendance.mark({ classSessionId: sessionYesterdayId, enrollmentId, status: 'present' });
+    expect(marked.status).toBe('present');
+    await admin.attendance.markAll({ classSessionId: sessionYesterdayId, defaultStatus: 'present', overrides: [] });
+  });
+
+  it('Q3: giao_vien (non-director) is still rejected outside the window', async () => {
+    if (!dbReachable) return;
+    const teacher = await staffCaller({ userId: teacherId, roles: [Role.giao_vien], primaryRole: Role.giao_vien, isSuperAdmin: false, facilityIds: [FACILITY] });
+
+    await expect(
+      teacher.attendance.mark({ classSessionId: sessionYesterdayId, enrollmentId, status: 'present' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringContaining('Ngoài giờ điểm danh') });
+  });
 });

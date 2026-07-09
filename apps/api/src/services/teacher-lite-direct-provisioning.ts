@@ -92,7 +92,13 @@ export async function createTeacherLiteFamilyStudentAndEnroll(
 
         let parent = parentByPhone ?? parentByEmail;
         const familyPasswordHash = await hashPassword(DEFAULT_STUDENT_PASSWORD);
+        // Tracks whether THIS call is the one that actually set the family login password —
+        // only then is it safe to surface/email the literal DEFAULT_STUDENT_PASSWORD. A returning
+        // family's real password may differ (self-service change, decision 0033 D5 never
+        // overwrites it), so claiming the default for them would hand out a dead credential.
+        let familyPasswordWasSet: boolean;
         if (!parent) {
+          familyPasswordWasSet = true;
           parent = await tx.parentAccount.create({
             data: {
               displayName: input.parentName,
@@ -108,6 +114,7 @@ export async function createTeacherLiteFamilyStudentAndEnroll(
           if (parent.phone && parent.phone !== loginPhone) {
             throw new TRPCError({ code: 'CONFLICT', message: 'Email PH đã gắn với số điện thoại khác' });
           }
+          familyPasswordWasSet = !parent.passwordHash;
           parent = await tx.parentAccount.update({
             where: { id: parent.id },
             data: {
@@ -120,11 +127,26 @@ export async function createTeacherLiteFamilyStudentAndEnroll(
 
         const guardians = await tx.guardian.findMany({
           where: { parentAccountId: parent.id },
-          include: { student: { select: { id: true, fullName: true, archivedAt: true } } },
+          include: {
+            student: { select: { id: true, fullName: true, dateOfBirth: true, archivedAt: true } },
+          },
         });
-        const matchedGuardian = guardians.find(
-          (g) => !g.student.archivedAt && sameName(g.student.fullName, input.studentName),
-        );
+        // Match on normalized name AND date of birth — name alone mis-attaches same-named
+        // siblings to one record (silent data loss) or duplicates a diacritic/whitespace variant
+        // of the same child. When BOTH sides have a DOB it must agree (disambiguates siblings
+        // sharing a name); when NEITHER side has a DOB, name alone still matches (preserves
+        // idempotent double-submit reuse for the common no-DOB intake). A one-sided DOB (one
+        // known, one missing) is treated as ambiguous and does NOT match — safer to create a new
+        // student than silently guess.
+        const matchedGuardian = guardians.find((g) => {
+          if (g.student.archivedAt) return false;
+          if (!sameName(g.student.fullName, input.studentName)) return false;
+          const existingDob = g.student.dateOfBirth;
+          const incomingDob = input.studentDob ?? null;
+          if (existingDob === null && incomingDob === null) return true;
+          if (existingDob === null || incomingDob === null) return false;
+          return existingDob.getTime() === incomingDob.getTime();
+        });
 
         let studentId = matchedGuardian?.student.id ?? null;
         let studentCode: string;
@@ -160,6 +182,15 @@ export async function createTeacherLiteFamilyStudentAndEnroll(
           studentCode = student.studentCode;
           if (student.lifecycle !== 'active') {
             await tx.student.update({ where: { id: studentId }, data: { lifecycle: 'active' } });
+            await logEvent(tx, {
+              facilityId: input.facilityId,
+              entityType: 'student',
+              entityId: studentId,
+              type: 'status_changed',
+              body: `Lifecycle: ${student.lifecycle}→active (teacher_lite_direct: ghi danh)`,
+              changes: [{ field: 'lifecycle', old: student.lifecycle, new: 'active' }],
+              actorId: session.userId,
+            });
           }
         }
 
@@ -181,13 +212,13 @@ export async function createTeacherLiteFamilyStudentAndEnroll(
 
         const existingEnrollment = await tx.enrollment.findUnique({
           where: { classBatchId_studentId: { classBatchId: input.classBatchId, studentId } },
-          select: { id: true, archivedAt: true },
+          select: { id: true, status: true, archivedAt: true },
         });
         let enrollmentId = existingEnrollment?.id ?? null;
         if (existingEnrollment?.archivedAt) {
           throw new TRPCError({ code: 'CONFLICT', message: 'Học sinh đã từng được ghi danh vào lớp này' });
         }
-        if (!enrollmentId) {
+        if (!existingEnrollment) {
           const enrollment = await tx.enrollment.create({
             data: {
               facilityId: input.facilityId,
@@ -205,6 +236,24 @@ export async function createTeacherLiteFamilyStudentAndEnroll(
             body: `teacher_lite_direct: ghi danh truc tiep vao lop ${batch.code}`,
             actorId: session.userId,
           });
+        } else if (
+          existingEnrollment.status !== 'active' &&
+          existingEnrollment.status !== 'reserved'
+        ) {
+          // Withdrawn/transferred/completed row with archivedAt still null (schema.prisma:396's
+          // unique key has no status column) — reactivate instead of silently returning a stale
+          // enrollment (the student would show on the roster but exercise access scopes
+          // status:'active', leaving them unable to do homework).
+          await tx.enrollment.update({ where: { id: existingEnrollment.id }, data: { status: 'active' } });
+          await logEvent(tx, {
+            facilityId: input.facilityId,
+            entityType: 'enrollment',
+            entityId: existingEnrollment.id,
+            type: 'status_changed',
+            body: `teacher_lite_direct: kích hoạt lại ghi danh vào lớp ${batch.code} (trạng thái trước: ${existingEnrollment.status})`,
+            changes: [{ field: 'status', old: existingEnrollment.status, new: 'active' }],
+            actorId: session.userId,
+          });
         }
 
         const facility = await tx.facility.findUniqueOrThrow({
@@ -217,6 +266,7 @@ export async function createTeacherLiteFamilyStudentAndEnroll(
           select: { id: true, loginCode: true },
         });
         const passwordHash = await hashPassword(DEFAULT_STUDENT_PASSWORD);
+        const studentAccountWasCreated = !existingAccount;
         const studentAccount =
           existingAccount ??
           (await tx.studentAccount.create({
@@ -228,6 +278,16 @@ export async function createTeacherLiteFamilyStudentAndEnroll(
             },
             select: { id: true, loginCode: true },
           }));
+
+        // The credential surfaced (email + return payload) is only trustworthy when THIS call is
+        // the one that actually set it: a fresh family password AND a fresh StudentAccount
+        // password (the break-glass loginCode fallback shares the same displayed value). A
+        // returning family/reused account may have a different real password (self-service
+        // change, decision 0033 D5 never overwrites it) — claiming DEFAULT_STUDENT_PASSWORD for
+        // them hands out a dead credential that fails phone-login.
+        const passwordWasSet = familyPasswordWasSet && studentAccountWasCreated;
+        const NOT_CHANGED_NOTICE = 'Không đổi — dùng mật khẩu gia đình hiện tại';
+        const displayedPassword = passwordWasSet ? DEFAULT_STUDENT_PASSWORD : NOT_CHANGED_NOTICE;
 
         if (input.sendEmail) {
           await enqueueEmail(tx, {
@@ -241,7 +301,7 @@ export async function createTeacherLiteFamilyStudentAndEnroll(
               studentName: input.studentName,
               familyPhone: loginPhone,
               loginCode: studentAccount.loginCode,
-              tempPassword: DEFAULT_STUDENT_PASSWORD,
+              tempPassword: displayedPassword,
             },
           });
         }
@@ -254,7 +314,8 @@ export async function createTeacherLiteFamilyStudentAndEnroll(
           lmsAccount: {
             familyPhone: loginPhone,
             loginCode: studentAccount.loginCode,
-            tempPassword: DEFAULT_STUDENT_PASSWORD,
+            tempPassword: displayedPassword,
+            passwordWasSet,
           },
         };
       },

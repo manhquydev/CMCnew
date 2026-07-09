@@ -2,7 +2,12 @@ import { TRPCError } from '@trpc/server';
 import { logEvent, logStatusChange } from '@cmc/audit';
 import { type RequestSession } from '@cmc/auth';
 import { Prisma, withRls } from '@cmc/db';
-import { enumerateSessions, detectConflicts, type SessionLike } from '@cmc/domain-academic';
+import {
+  enumerateSessions,
+  enumerateSessionsByCount,
+  detectConflicts,
+  type SessionLike,
+} from '@cmc/domain-academic';
 import { z } from 'zod';
 import { assertSlotRefsInFacility } from '../lib/slot-refs-guard.js';
 import { DOW_LABEL } from '../lib/day-of-week-label.js';
@@ -81,6 +86,12 @@ async function cancelFutureParentMeetings(
 /**
  * Sinh buổi học ban đầu từ 1..n khung lịch tuần — dùng chung bởi teacherLite.createClass
  * (1 slot) và classBatch.create (n slots), thay cho nút "Sinh buổi" thủ công.
+ *
+ * Two generation modes:
+ * - `sessionCount` set: generate exactly N sessions forward from `startDate` (curriculum-driven,
+ *   used by teacherLite.createClass — no manual endDate).
+ * - `sessionCount` unset: generate across [startDate, endDate] (range-based, used by
+ *   classBatch.create which still takes an explicit endDate).
  */
 export async function generateInitialSessions(
   tx: Prisma.TransactionClient,
@@ -90,16 +101,23 @@ export async function generateInitialSessions(
     courseId: string;
     startDate?: string;
     endDate?: string;
+    sessionCount?: number;
     slots?: z.infer<typeof slotSchema>[];
     actorId: string;
   },
 ) {
-  if (!args.slots || args.slots.length === 0 || !args.startDate || !args.endDate) {
-    return { created: 0, skipped: 0 };
+  if (!args.slots || args.slots.length === 0 || !args.startDate) {
+    return { created: 0, skipped: 0, lastSessionDate: undefined as string | undefined };
   }
 
-  const candidates = enumerateSessions(args.slots, args.startDate, args.endDate);
-  if (candidates.length === 0) return { created: 0, skipped: 0 };
+  const candidates =
+    args.sessionCount !== undefined
+      ? enumerateSessionsByCount(args.slots, args.startDate, args.sessionCount)
+      : args.endDate
+        ? enumerateSessions(args.slots, args.startDate, args.endDate)
+        : [];
+  if (candidates.length === 0) return { created: 0, skipped: 0, lastSessionDate: undefined as string | undefined };
+  const lastSessionDate = candidates[candidates.length - 1]!.sessionDate;
 
   const existing = await tx.classSession.findMany({
     where: { classBatchId: args.classBatchId },
@@ -107,7 +125,7 @@ export async function generateInitialSessions(
   });
   const existingKeys = new Set(existing.map((s) => `${dateKey(s.sessionDate)}|${s.startTime}`));
   const fresh = candidates.filter((c) => !existingKeys.has(`${c.sessionDate}|${c.startTime}`));
-  if (fresh.length === 0) return { created: 0, skipped: candidates.length };
+  if (fresh.length === 0) return { created: 0, skipped: candidates.length, lastSessionDate };
 
   const candidateDates = fresh.map((c) => new Date(c.sessionDate));
   const windowMin = candidateDates.reduce((a, b) => (a < b ? a : b));
@@ -162,7 +180,7 @@ export async function generateInitialSessions(
     body: `Tu dong sinh ${fresh.length} buoi hoc ban dau`,
     actorId: args.actorId,
   });
-  return { created: fresh.length, skipped: candidates.length - fresh.length };
+  return { created: fresh.length, skipped: candidates.length - fresh.length, lastSessionDate };
 }
 
 export async function createTeacherLiteClass(
@@ -182,10 +200,14 @@ export async function createTeacherLiteClass(
         const year = input.startDate
           ? new Date(input.startDate).getUTCFullYear()
           : new Date().getUTCFullYear();
-        const [facility, course] = await Promise.all([
+        const [facility, course, curriculumAgg] = await Promise.all([
           tx.facility.findUniqueOrThrow({ where: { id: input.facilityId }, select: { code: true } }),
           tx.course.findUniqueOrThrow({ where: { id: input.courseId }, select: { program: true } }),
+          tx.curriculumUnit.aggregate({ where: { courseId: input.courseId }, _sum: { sessions: true } }),
         ]);
+        // Số buổi luôn do khung chương trình quyết định (Σ curriculumUnit.sessions), không nhận
+        // ngày kết thúc thủ công — xem BUG 1 (server-truth session count).
+        const curriculumSessionCount = curriculumAgg._sum.sessions ?? 0;
         const code = await nextBatchCode(tx, input.facilityId, facility.code, course.program, year);
         const batch = await tx.classBatch.create({
           data: {
@@ -220,11 +242,19 @@ export async function createTeacherLiteClass(
               classBatchId: batch.id,
               courseId: batch.courseId,
               startDate: input.startDate,
-              endDate: input.endDate,
+              sessionCount: curriculumSessionCount,
               slots: input.slot ? [input.slot] : undefined,
               actorId: session.userId,
             })
-          : { created: 0, skipped: 0 };
+          : { created: 0, skipped: 0, lastSessionDate: undefined as string | undefined };
+
+        // Buổi cuối do khung chương trình sinh ra → set làm ngày kết thúc thực tế của lớp.
+        const finalBatch = sessions.lastSessionDate
+          ? await tx.classBatch.update({
+              where: { id: batch.id },
+              data: { endDate: new Date(sessions.lastSessionDate) },
+            })
+          : batch;
 
         await logEvent(tx, {
           facilityId: batch.facilityId,
@@ -237,7 +267,7 @@ export async function createTeacherLiteClass(
           actorId: session.userId,
         });
 
-        return { batch, sessions };
+        return { batch: finalBatch, sessions };
       },
     );
   } catch (error) {

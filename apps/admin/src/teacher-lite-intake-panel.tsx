@@ -52,6 +52,7 @@ export function TeacherLiteIntakePanel() {
     familyPhone: string;
     loginCode: string;
     tempPassword: string;
+    passwordWasSet: boolean;
   } | null>(null);
 
   const canCreate = can(me.roles, me.isSuperAdmin, 'teacherLite', 'createFamilyStudentAndEnroll');
@@ -239,16 +240,14 @@ export function TeacherLiteIntakePanel() {
           >
             <Stack gap={4}>
               <Group gap="xs">
-                <Badge size="sm" variant="outline" color="green">SĐT</Badge>
+                <Badge size="sm" variant="outline" color="green">SĐT đăng nhập</Badge>
                 <Text size="sm">{created.familyPhone}</Text>
               </Group>
               <Group gap="xs">
-                <Badge size="sm" variant="outline" color="blue">Mã dự phòng</Badge>
-                <Text size="sm">{created.loginCode}</Text>
-              </Group>
-              <Group gap="xs">
-                <Badge size="sm" variant="outline" color="orange">Mật khẩu mặc định</Badge>
-                <Text size="sm">{created.tempPassword}</Text>
+                <Badge size="sm" variant="outline" color={created.passwordWasSet ? 'orange' : 'gray'}>
+                  {created.passwordWasSet ? 'Mật khẩu mặc định' : 'Mật khẩu'}
+                </Badge>
+                <Text size="sm" c={created.passwordWasSet ? undefined : 'dimmed'}>{created.tempPassword}</Text>
               </Group>
             </Stack>
           </Alert>

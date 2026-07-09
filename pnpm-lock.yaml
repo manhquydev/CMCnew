@@ -47,6 +47,9 @@ importers:
       '@cmc/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@cmc/domain-academic':
+        specifier: workspace:*
+        version: link:../../packages/domain-academic
       '@cmc/domain-finance':
         specifier: workspace:*
         version: link:../../packages/domain-finance

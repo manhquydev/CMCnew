@@ -123,6 +123,22 @@ Phases 1–3 have **disjoint file ownership** (see below) → parallelizable. Ph
   and now get server BAD_REQUEST outside window with no client tooltip (server-truth OK; add mirror if
   those surfaces stay in active use).
 
+## Deploy + live-verify (2026-07-09)
+
+- **Deployed both envs via Jenkins:** dev (build #91, develop 5f9c667) + prod (build #45, main 42bed12
+  = tree-identical to develop) green + health-verified + prod smoke passed. No DB migration.
+- **Live browser-verify on devteacher.cmcvn.edu.vn** (staff password login via DB test accounts —
+  STAFF_PASSWORD_LOGIN=true, no SSO needed; created teacher-verify@dev.local + director-verify@dev.local
+  as giao_vien / giam_doc_dao_tao with pgcrypto bcrypt):
+  - **giao_vien**: nav shows ONLY "Lịch & buổi học" (→ schedule). No other sections. ✓ (acceptance #1)
+  - **director**: 5 teacher-lite groups only (Lịch & buổi học / Lớp & bài tập / Học viên / Tiếp nhận
+    học viên / Điều phối đào tạo); NO ERP groups (Tài chính/Nhân sự/CRM/Công ca); calendar renders. ✓
+- **Landing fix (follow-up commit a75e098):** giao_vien default landing was still `overview`; changed to
+  `schedule` so a teacher goes straight to the calendar (matches "vào thẳng lịch" + ERP-surface behavior).
+  Redeployed dev+prod.
+- **Dev test accounts left in place** (teacher-verify@ / director-verify@dev.local, pw VerifyDev@2026) for
+  future verification — dev only, not prod.
+
 ## Unresolved questions
 
 1. **#3 build-new vs reuse**: `enrollment.enroll` (enrollment.ts:51, gated `['sale','giam_doc_kinh_doanh']`)

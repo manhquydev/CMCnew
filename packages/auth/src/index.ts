@@ -46,6 +46,12 @@ export function rlsContextOf(session: RequestSession): RlsContext {
 // context (the user_facility table is itself RLS-protected).
 const SYSTEM_RLS: RlsContext = { facilityIds: [], isSuperAdmin: true };
 
+// Fixed bcrypt hash (rounds=10, matching @cmc/db's hashPassword cost) with no corresponding
+// plaintext password. Used to run a dummy verifyPassword compare when the account lookup misses
+// or is inactive, so the login response time does not reveal account existence (timing
+// side-channel — the missing/inactive branch previously returned before ever hashing).
+const DUMMY_PASSWORD_HASH = '$2a$10$6Btm02e12.9hB30BD5ZLZOjmmS1ht2tY2kma8SoaLj4RXn4y5W7Wa';
+
 function toSession(user: {
   id: string;
   displayName: string;
@@ -70,7 +76,12 @@ export async function login(
   const user = await withRls(SYSTEM_RLS, (tx) =>
     tx.appUser.findUnique({ where: { email }, include: { facilities: true } }),
   );
-  if (!user || !user.isActive) return null;
+  if (!user || !user.isActive) {
+    // Run a dummy compare so this branch's latency matches the "account exists, wrong
+    // password" branch below — otherwise the two are distinguishable by timing alone.
+    await verifyPassword(password, DUMMY_PASSWORD_HASH);
+    return null;
+  }
   if (!(await verifyPassword(password, user.passwordHash))) return null;
 
   const claims: SessionClaims = {

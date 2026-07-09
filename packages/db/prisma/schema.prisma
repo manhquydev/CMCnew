@@ -672,8 +672,8 @@ model GuardianLinkRequest {
 /// Global curriculum exercise asset. No RLS backstop; every write path must be app-layer gated.
 model Exercise {
   id                 String            @id @default(uuid()) @db.Uuid
-  curriculumUnitId   String?           @map("curriculum_unit_id") @db.Uuid
-  curriculumUnit     CurriculumUnit?   @relation(fields: [curriculumUnitId], references: [id], onDelete: Restrict)
+  curriculumUnitId   String            @map("curriculum_unit_id") @db.Uuid
+  curriculumUnit     CurriculumUnit    @relation(fields: [curriculumUnitId], references: [id], onDelete: Restrict)
   curriculumLessonId String?           @map("curriculum_lesson_id") @db.Uuid
   curriculumLesson   CurriculumLesson? @relation(fields: [curriculumLessonId], references: [id], onDelete: Restrict)
   title              String
