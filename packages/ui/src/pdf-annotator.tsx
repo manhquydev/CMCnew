@@ -278,7 +278,10 @@ export function PdfAnnotator({
     const ro = new ResizeObserver(applyFit);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+    // Depend on `loading`: outerRef only mounts after the loading/error guards clear, so a
+    // mount-time `[]` effect would run while outerRef is still null and never attach the observer.
+    // Re-running when loading flips to false attaches it exactly when the element exists.
+  }, [loading]);
 
   // Bumps a page to most-recently-used and evicts least-recently-used bitmaps past the cap.
   // Never evicts a page currently on screen (visiblePages) — a still-visible page must not go
