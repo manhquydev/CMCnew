@@ -1,7 +1,7 @@
 ---
 title: "Đơn giản hóa tạo lớp + Seed học liệu UCREA L1"
 description: "Auto-gán UCREA L1 khi tạo lớp (bỏ dropdown course) + seed 21 PDF từ hoc_lieu/3-4 tuổi vào Exercise"
-status: pending
+status: done
 priority: P2
 effort: 2h
 branch: develop
@@ -19,8 +19,8 @@ created: 2026-07-09
 
 | # | Phase | Est | Status | File |
 |---|-------|-----|--------|------|
-| 1 | Simplify class creation UI | 30m | pending | [phase-01](phase-01-simplify-class-creation.md) |
-| 2 | Seed exercise PDFs | 1h30m | pending | [phase-02](phase-02-seed-exercise-pdfs.md) |
+| 1 | Simplify class creation UI | 30m | done | [phase-01](phase-01-simplify-class-creation.md) |
+| 2 | Seed exercise PDFs | 1h30m | done | [phase-02](phase-02-seed-exercise-pdfs.md) |
 
 ## Dependencies
 

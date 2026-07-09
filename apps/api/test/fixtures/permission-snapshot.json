@@ -32,6 +32,7 @@
   "teacherLite.createClass": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "teacherLite.cancelClass": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "teacherLite.cancelSession": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
+  "teacherLite.enrollExistingStudent": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "exercise.upsert": ["giam_doc_kinh_doanh", "giam_doc_dao_tao"],
   "sessionEvidence.commentTemplate": ["giao_vien", "giam_doc_dao_tao"],
   "sessionEvidence.listByClass": ["giao_vien", "giam_doc_dao_tao"],

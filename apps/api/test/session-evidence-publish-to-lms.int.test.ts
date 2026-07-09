@@ -17,6 +17,8 @@ let courseId: string;
 let batchId: string;
 let studentAId: string;
 let studentBId: string;
+let enrollmentAId: string;
+let enrollmentBId: string;
 let sessionId: string;
 let draftSessionId: string;
 let validationSessionId: string;
@@ -85,6 +87,12 @@ describe('sessionEvidence publish-to-LMS', () => {
           { facilityId: FACILITY, classBatchId: batchId, studentId: studentBId, status: 'active' },
         ],
       });
+      const [enrollmentA, enrollmentB] = await Promise.all([
+        tx.enrollment.findFirstOrThrow({ where: { classBatchId: batchId, studentId: studentAId } }),
+        tx.enrollment.findFirstOrThrow({ where: { classBatchId: batchId, studentId: studentBId } }),
+      ]);
+      enrollmentAId = enrollmentA.id;
+      enrollmentBId = enrollmentB.id;
 
       const session = await tx.classSession.create({
         data: {
@@ -137,6 +145,16 @@ describe('sessionEvidence publish-to-LMS', () => {
         },
       });
       guardSessionId = guardSession.id;
+
+      // upsertDraft only accepts a comment for a present/late student (phase-02-attendance-
+      // gate-and-comment-lock.md) — seed both students present on every session this suite
+      // writes a comment for (this suite tests evidence publish, not mark's own authz).
+      await tx.attendance.createMany({
+        data: [sessionId, draftSessionId, validationSessionId, guardSessionId].flatMap((classSessionId) => [
+          { facilityId: FACILITY, classSessionId, enrollmentId: enrollmentAId, status: 'present' as const },
+          { facilityId: FACILITY, classSessionId, enrollmentId: enrollmentBId, status: 'present' as const },
+        ]),
+      });
       });
       dbReachable = true;
     } catch {
@@ -160,6 +178,7 @@ describe('sessionEvidence publish-to-LMS', () => {
         where: { sessionEvidenceId: { in: [publishedEvidenceId, draftEvidenceId, validationEvidenceId, guardEvidenceId].filter(Boolean) } },
       });
       await tx.sessionEvidence.deleteMany({ where: { id: { in: [publishedEvidenceId, draftEvidenceId, validationEvidenceId, guardEvidenceId].filter(Boolean) } } });
+      await tx.attendance.deleteMany({ where: { classSessionId: { in: [sessionId, draftSessionId, validationSessionId, guardSessionId].filter(Boolean) } } });
       await tx.classSession.deleteMany({ where: { id: { in: [sessionId, draftSessionId, validationSessionId, guardSessionId].filter(Boolean) } } });
       await tx.enrollment.deleteMany({ where: { classBatchId: batchId } });
       await tx.student.deleteMany({ where: { id: { in: [studentAId, studentBId].filter(Boolean) } } });

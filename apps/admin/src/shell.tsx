@@ -850,11 +850,17 @@ export function buildNavGroups({
     ['quan-tri', 4],
   ]);
 
-  // Điểm danh + Chấm bài đã gộp vào "Lịch dạy" (calendar + session-detail 4 tab) trên teacher
-  // surface — ẩn khỏi nav cho MỌI role (kể cả director/super_admin) để không lặp lại tác vụ. Vẫn
-  // reachable qua direct-URL vì còn trong TEACHER_SURFACE_SECTIONS. Báo cáo điểm danh + Học bạ là
-  // báo cáo (không trùng calendar) nên giữ hiển thị cho giám đốc.
-  const teacherNavMergedIntoCalendar = new Set<SectionKey>(['attendance', 'grading']);
+  // Ẩn khỏi thanh nav teacher-lite (mọi role trên teacher surface, kể cả giám đốc) vì tác vụ đã gộp
+  // chỗ khác hoặc ngoài phạm vi teacher-lite gọn. TẤT CẢ vẫn reachable qua direct-URL vì còn nằm
+  // trong TEACHER_SURFACE_SECTIONS (bài học df2a153: ẩn nav ≠ xóa khỏi Set). Bật lại nav sau nếu cần.
+  //  - attendance/grading/classes: thao tác đã gộp vào "Lịch dạy" (calendar + session-detail).
+  //  - assessment(Học bạ)/levelup(Duyệt cấp độ)/meetings(Họp PH)/attendance-report(Báo cáo điểm danh)/
+  //    2 cockpit: ngoài phạm vi teacher-lite tối giản (chỉ quản lý lớp/HS/PH/GV + lịch dạy).
+  const teacherNavMergedIntoCalendar = new Set<SectionKey>([
+    'attendance', 'grading', 'classes',
+    'assessment', 'levelup', 'meetings', 'attendance-report',
+    'edu-director-cockpit', 'biz-director-cockpit',
+  ]);
 
   return groups
     .flatMap((group) => {
@@ -868,6 +874,9 @@ export function buildNavGroups({
           label: teacherSurfaceLabels[item.key] ?? item.label,
           visible:
             isTeacherSurfaceActor &&
+            // Giáo viên (chỉ role giao_vien) chỉ thấy đúng "Lịch dạy" — mọi mục khác ẩn khỏi nav
+            // (vẫn direct-URL được). Giám đốc/super_admin giữ nav quản lý đầy đủ.
+            (!isTeacherOnly || item.key === 'schedule') &&
             TEACHER_SURFACE_SECTIONS.has(item.key) &&
             !teacherNavMergedIntoCalendar.has(item.key) &&
             (item.key === 'family-intake'

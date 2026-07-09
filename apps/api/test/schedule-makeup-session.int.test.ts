@@ -226,12 +226,19 @@ describe('schedule.createMakeupSession', () => {
     if (!dbReachable) return;
 
     const staff = await staffCaller();
-    const marked = await staff.attendance.mark({
-      classSessionId: makeupSessionId,
-      enrollmentId: attendeeEnrollmentId,
-      status: 'present',
-      excused: false,
-    });
+    // makeupSessionId is dated twoDaysAgo (past — deliberately, so the C1 Tier-A/B tests below
+    // can exercise the "session has ended" exercise-open gate) so it sits outside the attendance
+    // window gate (phase-02-attendance-gate-and-comment-lock.md) — seed directly via SUPER tx
+    // instead of the gated router; this test asserts the row is written and shows up in
+    // listBySession, not mark's own authz.
+    const marked = await withRls(SUPER, (tx) =>
+      tx.attendance.create({
+        data: {
+          facilityId: FACILITY, classSessionId: makeupSessionId, enrollmentId: attendeeEnrollmentId,
+          status: 'present', excused: false,
+        },
+      }),
+    );
     expect(marked.status).toBe('present');
     expect(marked.classSessionId).toBe(makeupSessionId);
 

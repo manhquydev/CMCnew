@@ -371,6 +371,18 @@ describe('onboarding → class → receipt → session evidence → LMS timeline
     );
     classSessionId = classSession.id;
 
+    // upsertDraft only accepts a comment for a present/late student (phase-02-attendance-gate-
+    // and-comment-lock.md) — seed the hero student's attendance directly via SUPER tx (this
+    // step tests evidence publish, not attendance.mark's own authz).
+    const heroEnrollment = await withRls(SUPER, (tx) =>
+      tx.enrollment.findFirstOrThrow({ where: { classBatchId: batchId, studentId: heroStudentId, archivedAt: null } }),
+    );
+    await withRls(SUPER, (tx) =>
+      tx.attendance.create({
+        data: { facilityId: FACILITY, classSessionId: classSession.id, enrollmentId: heroEnrollment.id, status: 'present' },
+      }),
+    );
+
     photoRef = await putSessionPhoto(Buffer.concat([PNG_MAGIC, Buffer.from(`timeline-${uniq('photo')}`)]));
 
     const teacher = await staffCaller({
