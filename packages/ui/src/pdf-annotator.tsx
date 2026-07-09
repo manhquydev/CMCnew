@@ -184,7 +184,9 @@ export function PdfAnnotator({
   const outerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [fitScale, setFitScale] = useState(1);
-  const fitAppliedRef = useRef(false);
+  // True once the user pinch-zooms away from the fit scale — while true the auto-fit (ResizeObserver)
+  // updates only the fit floor, never yanks the user's zoom back. Reset when they tap "Vừa khung".
+  const userZoomedRef = useRef(false);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -216,7 +218,11 @@ export function PdfAnnotator({
     visiblePages.current = new Set();
     rasterizing.current = new Set();
     docRef.current = null;
-    fitAppliedRef.current = false;
+    // New document: drop any prior pinch-zoom so it opens fitted (fitScale is width-derived and
+    // constant across docs, so no re-measure is needed — just reset the view to it).
+    userZoomedRef.current = false;
+    setScale((s) => (s === fitScale ? s : fitScale));
+    setOffset({ x: 0, y: 0 });
     (async () => {
       try {
         const res = await fetch(`${API_URL}/files/exercise/${pdfRef}`, { credentials: 'include' });
@@ -253,19 +259,26 @@ export function PdfAnnotator({
     };
   }, [pdfRef]);
 
-  // Fit the page to the container's width once it's known (mobile: shrink below RENDER_WIDTH so
-  // the whole page is visible instead of cropped by the pinch-container's overflow:hidden; desktop:
-  // container is already ≥ RENDER_WIDTH so this is a no-op, scale stays 1). Applied once per document
-  // load — does not fight a user who has since pinch-zoomed.
+  // Fit the page to the container's width. A ResizeObserver (not a one-shot measure) so a late
+  // layout, modal open animation, phone rotation, or split-view resize always re-fits — the earlier
+  // single `clientWidth` read could land before the container had its final width and then lock a
+  // wrong (too-wide → clipped) scale forever. Desktop: width ≥ RENDER_WIDTH so fit stays 1 (no-op).
+  // While the user has pinch-zoomed we only move the fit floor, never yank their zoom back.
   useEffect(() => {
-    if (dims.length === 0 || fitAppliedRef.current || !outerRef.current) return;
-    const containerWidth = outerRef.current.clientWidth;
-    if (containerWidth <= 0) return;
-    const fit = Math.min(1, containerWidth / RENDER_WIDTH);
-    fitAppliedRef.current = true;
-    setFitScale(fit);
-    setScale(fit);
-  }, [dims]);
+    const el = outerRef.current;
+    if (!el) return;
+    const applyFit = () => {
+      const w = el.clientWidth;
+      if (w <= 0) return;
+      const fit = Math.min(1, w / RENDER_WIDTH);
+      setFitScale(fit);
+      if (!userZoomedRef.current) setScale(fit);
+    };
+    applyFit();
+    const ro = new ResizeObserver(applyFit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   // Bumps a page to most-recently-used and evicts least-recently-used bitmaps past the cap.
   // Never evicts a page currently on screen (visiblePages) — a still-visible page must not go
@@ -472,6 +485,8 @@ export function PdfAnnotator({
       const mid = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
       const ratio = pinch.current.startDist === 0 ? 1 : dist / pinch.current.startDist;
       const nextScale = Math.min(MAX_SCALE, Math.max(fitScale, pinch.current.startScale * ratio));
+      // Mark as user-controlled once they zoom past fit, so a resize won't snap them back.
+      userZoomedRef.current = nextScale > fitScale + 0.01;
       setScale(nextScale);
       setOffset({
         x: pinch.current.startOffset.x + (mid.x - pinch.current.startMid.x),
@@ -486,6 +501,7 @@ export function PdfAnnotator({
   }
 
   function resetZoom() {
+    userZoomedRef.current = false;
     setScale(fitScale);
     setOffset({ x: 0, y: 0 });
   }
