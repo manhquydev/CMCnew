@@ -47,6 +47,7 @@ import { IconArrowLeft, IconSchool } from '@tabler/icons-react';
 import { AttendanceRoster } from './attendance-roster.js';
 import { StudentDetailPanel } from './student-detail.js';
 import { CourseExerciseManager } from './course-exercise-manager.js';
+import { pickDefaultCourse } from './lib/pick-default-course.js';
 
 // ─── Record-shell field row — mirrors student-detail.tsx's Field (160px right-aligned
 // label) so the class hub's Thông tin grid matches the shipped student hub. ──────
@@ -159,9 +160,7 @@ function CreateClassModal({
   onCreated: () => void;
 }) {
   const [opened, { open, close }] = useDisclosure(false);
-  const autoCourse = courses
-    .filter((c) => c.unitCount > 0)
-    .sort((a, b) => a.code.localeCompare(b.code))[0] ?? null;
+  const autoCourse = pickDefaultCourse(courses);
   const courseId = autoCourse?.id ?? null;
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);

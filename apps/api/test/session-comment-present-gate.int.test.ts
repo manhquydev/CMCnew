@@ -1,8 +1,11 @@
 /**
  * Integration test — sessionEvidence.upsertDraft comment lock: a per-student comment is only
- * accepted for a student marked present/late on that session (phase-02-attendance-gate-and-
- * comment-lock.md, requirement #2). Absent or unmarked students must be rejected server-side —
- * the UI already filters render to present/late, this closes the matching server gap.
+ * persisted for a student marked present/late on that session (phase-02-attendance-gate-and-
+ * comment-lock.md, requirement #2). Absent or unmarked students must be silently DROPPED
+ * server-side (not rejected — rejecting the whole save bricks it once attendance is corrected
+ * after a comment was written, since the UI has no input to clear an orphaned comment for a
+ * student no longer present/late). The UI already filters render to present/late; this closes
+ * the matching server gap without being able to brick the save.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Role } from '@cmc/auth';
@@ -147,27 +150,31 @@ describe('sessionEvidence.upsertDraft — present/late comment gate', () => {
     expect(saved.comments).toHaveLength(2);
   });
 
-  it('(b) rejects a comment for an absent student', async () => {
+  it('(b) drops (not rejects) a comment for an absent student, keeping the rest of the save', async () => {
     if (!dbReachable) return;
     const teacher = await staffCaller({ userId: teacherId, roles: [Role.giao_vien], primaryRole: Role.giao_vien, isSuperAdmin: false, facilityIds: [FACILITY] });
 
-    await expect(
-      teacher.sessionEvidence.upsertDraft({
-        classSessionId: sessionId,
-        comments: [{ studentId: studentAbsentId, teacherNote: 'Không nên có nhận xét' }],
-      }),
-    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    const saved = await teacher.sessionEvidence.upsertDraft({
+      classSessionId: sessionId,
+      summary: 'Tóm tắt vẫn được lưu dù có comment mồ côi',
+      comments: [
+        { studentId: studentPresentId, teacherNote: 'Vẫn được lưu' },
+        { studentId: studentAbsentId, teacherNote: 'Không nên có nhận xét' },
+      ],
+    });
+    expect(saved.summary).toBe('Tóm tắt vẫn được lưu dù có comment mồ côi');
+    expect(saved.comments).toHaveLength(1);
+    expect(saved.comments[0].studentId).toBe(studentPresentId);
   });
 
-  it('(c) rejects a comment for an unmarked student', async () => {
+  it('(c) drops (not rejects) a comment for an unmarked student', async () => {
     if (!dbReachable) return;
     const teacher = await staffCaller({ userId: teacherId, roles: [Role.giao_vien], primaryRole: Role.giao_vien, isSuperAdmin: false, facilityIds: [FACILITY] });
 
-    await expect(
-      teacher.sessionEvidence.upsertDraft({
-        classSessionId: sessionId,
-        comments: [{ studentId: studentUnmarkedId, teacherNote: 'Chưa điểm danh' }],
-      }),
-    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    const saved = await teacher.sessionEvidence.upsertDraft({
+      classSessionId: sessionId,
+      comments: [{ studentId: studentUnmarkedId, teacherNote: 'Chưa điểm danh' }],
+    });
+    expect(saved.comments).toHaveLength(0);
   });
 });

@@ -132,7 +132,10 @@ function defaultSection(me: Session, surface: AppSurface = 'erp'): SectionKey {
   if (me.roles.includes('giao_vien')) return 'schedule';
   if (me.roles.includes('sale') || me.roles.includes('ctv_mkt')) return 'crm';
   if (me.roles.includes('ke_toan')) return 'finance';
-  if (me.roles.includes('hr')) return 'hr';
+  // 'hr' section (HrPayrollSection → PayrollPanel) queries payroll.roster, which is
+  // directors-only (giam_doc_kinh_doanh/giam_doc_dao_tao) — routing hr there 403s on landing.
+  // Route to shift-registration instead, a section hr actually holds (shiftRegistration.list).
+  if (me.roles.includes('hr')) return 'shift-registration';
   if (me.roles.includes('cskh')) return 'cskh';
   // Biz-director-only lands on the Executive Cockpit (replaces 'overview' for this persona —
   // mirrors the isBizDirectorOnly strict single-role check in shell.tsx/buildNavGroups()).

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { can } from '@cmc/auth/permissions';
-import { uploadExercisePdf, trpc, useSession, notifyError, notifySuccess, StatusBadge, type StatusDef } from '@cmc/ui';
+import { uploadExercisePdf, trpc, useSession, notifyError, notifySuccess, StatusBadge, PdfAnnotator, type StatusDef } from '@cmc/ui';
 import {
   Button,
   Card,
@@ -16,6 +16,7 @@ import {
   Textarea,
   TextInput,
 } from '@mantine/core';
+import { IconEye } from '@tabler/icons-react';
 
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
 type CurriculumUnit = Awaited<ReturnType<typeof trpc.curriculum.listByCourse.query>>['units'][number];
@@ -197,6 +198,7 @@ function ExerciseEditor({
   const [status, setStatus] = useState<ExerciseStatus>((current?.status as ExerciseStatus | undefined) ?? 'published');
   const [pdf, setPdf] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
 
   async function save() {
     if (!title.trim()) {
@@ -244,13 +246,40 @@ function ExerciseEditor({
             { value: 'closed', label: 'Đã đóng' },
           ]}
         />
-        <TextInput label="PDF ref hiện tại" value={basePdfRef} onChange={(e) => setBasePdfRef(e.currentTarget.value)} />
+        <Group align="flex-end" gap="xs">
+          <TextInput
+            label="PDF ref hiện tại"
+            value={basePdfRef}
+            onChange={(e) => setBasePdfRef(e.currentTarget.value)}
+            style={{ flex: 1 }}
+          />
+          <Button
+            variant="light"
+            leftSection={<IconEye size={14} />}
+            disabled={!basePdfRef.trim()}
+            onClick={() => setPreviewing(true)}
+          >
+            Xem học liệu
+          </Button>
+        </Group>
         <FileInput label="Upload PDF mới" value={pdf} onChange={setPdf} accept="application/pdf" clearable />
         <Group justify="flex-end">
           <Button variant="subtle" onClick={onClose}>Hủy</Button>
           <Button onClick={save} loading={busy}>Lưu</Button>
         </Group>
       </Stack>
+      {previewing && basePdfRef.trim() && (
+        <Modal
+          opened
+          onClose={() => setPreviewing(false)}
+          title={`Học liệu hiện tại · ${lesson.lessonCode}`}
+          size="xl"
+          radius="xl"
+          centered
+        >
+          <PdfAnnotator pdfRef={basePdfRef.trim()} value={null} editable={false} maxHeight="75vh" />
+        </Modal>
+      )}
     </Modal>
   );
 }

@@ -714,9 +714,14 @@ export const financeRouter = router({
           // Existing student (renewal or explicit-link path): use the id already on the receipt.
           resolvedStudentId = receipt.studentId;
           // If parent info was also supplied, ensure guardian link exists (idempotent upsert).
+          // Normalize to the same canonical 84xxx value the new-student path uses below (decision
+          // 0033 D5) — matching on the raw receipt phone misses a ParentAccount stored canonically
+          // (e.g. receipt has "0912..." but the account is "84912...") and silently skips linking
+          // an existing family to a renewed/returning student.
           if (receipt.parentPhone) {
+            const normalizedPhone = normalizeLoginPhone(receipt.parentPhone) ?? receipt.parentPhone;
             const parentAcc = await tx.parentAccount.findFirst({
-              where: { phone: receipt.parentPhone },
+              where: { phone: normalizedPhone },
             });
             if (parentAcc) {
               await tx.guardian.upsert({

@@ -20,6 +20,7 @@ import {
 import { DateInput } from '@mantine/dates';
 import { IconCalendar, IconPlus, IconUserPlus, IconX } from '@tabler/icons-react';
 import { notifyError, notifyInfo, notifySuccess, parseApiDate, toApiDate, trpc, useSession } from '@cmc/ui';
+import { pickDefaultCourse } from './lib/pick-default-course.js';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
 type Course = Awaited<ReturnType<typeof trpc.course.list.query>>[number];
@@ -42,21 +43,6 @@ function sessionLabel(session: ClassSession) {
   return `${date} ${session.startTime}-${session.endTime} (${session.status})`;
 }
 
-function estimateSessionCount(startDate: string, endDate: string, dayOfWeek: string): number {
-  if (!startDate || !endDate) return 0;
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  if (start >= end) return 0;
-  const targetDay = Number(dayOfWeek);
-  let count = 0;
-  const cur = new Date(start);
-  while (cur <= end) {
-    if (cur.getDay() === targetDay) count++;
-    cur.setDate(cur.getDate() + 1);
-  }
-  return count;
-}
-
 export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => void }) {
   const { me } = useSession();
   const canManage = can(me.roles, me.isSuperAdmin, 'teacherLite', 'createClass');
@@ -77,7 +63,6 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
   const [facilityId, setFacilityId] = useState<number | null>(me.facilityIds[0] ?? null);
   const [capacity, setCapacity] = useState<number | ''>('');
   const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
   const [dayOfWeek, setDayOfWeek] = useState('1');
   const [startTime, setStartTime] = useState('18:00');
   const [endTime, setEndTime] = useState('19:30');
@@ -112,9 +97,7 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
       .catch((e) => notifyError(e, 'Không tải được buổi học'));
   }, [sessionClassId]);
 
-  const autoCourse = courses
-    .filter((c) => c.unitCount > 0)
-    .sort((a, b) => a.code.localeCompare(b.code))[0] ?? null;
+  const autoCourse = pickDefaultCourse(courses);
   const courseId = autoCourse?.id ?? null;
 
   const filteredBatches = useMemo(
@@ -122,10 +105,9 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
     [batches, facilityId],
   );
   const activeBatches = filteredBatches.filter((b) => b.status !== 'cancelled');
-  const estimatedSessions = estimateSessionCount(startDate, endDate, dayOfWeek);
 
   async function createClass() {
-    if (!facilityId || !courseId || !startDate || !endDate || !startTime || !endTime) {
+    if (!facilityId || !courseId || !startDate || !startTime || !endTime) {
       notifyError('Điền đủ cơ sở, khóa học, ngày và giờ học.', 'Thiếu thông tin');
       return;
     }
@@ -135,7 +117,6 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
         facilityId,
         courseId,
         startDate,
-        endDate,
         capacity: typeof capacity === 'number' ? capacity : undefined,
         slot: { dayOfWeek: Number(dayOfWeek), startTime, endTime },
         generateSessions: true,
@@ -317,22 +298,13 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
 
       {step === 1 && (
         <Stack gap="sm">
-          <Group grow align="flex-end">
-            <DateInput
-              label="Ngày bắt đầu"
-              withAsterisk
-              valueFormat="DD/MM/YYYY"
-              value={parseApiDate(startDate)}
-              onChange={(d) => setStartDate(toApiDate(d) ?? '')}
-            />
-            <DateInput
-              label="Ngày kết thúc"
-              withAsterisk
-              valueFormat="DD/MM/YYYY"
-              value={parseApiDate(endDate)}
-              onChange={(d) => setEndDate(toApiDate(d) ?? '')}
-            />
-          </Group>
+          <DateInput
+            label="Ngày bắt đầu"
+            withAsterisk
+            valueFormat="DD/MM/YYYY"
+            value={parseApiDate(startDate)}
+            onChange={(d) => setStartDate(toApiDate(d) ?? '')}
+          />
 
           <Box>
             <Text size="sm" fw={500} mb={6}>
@@ -366,9 +338,9 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
             />
           </Group>
 
-          {estimatedSessions > 0 && (
+          {autoCourse && autoCourse.totalSessions > 0 && (
             <Badge variant="light" color="blue" size="sm">
-              Ước tính {estimatedSessions} buổi học
+              Hệ thống tự sinh {autoCourse.totalSessions} buổi theo khung chương trình
             </Badge>
           )}
 
@@ -376,7 +348,7 @@ export function TeacherLiteClassControlPanel({ onChanged }: { onChanged?: () => 
             <Button variant="subtle" onClick={() => setStep(0)}>Quay lại</Button>
             <Button
               loading={busy}
-              disabled={!startDate || !endDate || !startTime || !endTime}
+              disabled={!startDate || !startTime || !endTime}
               onClick={createClass}
               leftSection={<IconPlus size={14} />}
             >

@@ -50,6 +50,40 @@ export function enumerateSessions(slots: SlotInput[], startDate: string, endDate
   return out;
 }
 
+/** Expand weekly slots forward from `startDate` until exactly `count` sessions are produced
+ * (round-robin across slots in ascending day-of-week order within each week). Used when the
+ * number of sessions is dictated by a fixed curriculum (Σ unit.sessions) rather than a manual
+ * end date. Safety-capped at 10 years forward to avoid an infinite loop with empty/invalid slots. */
+export function enumerateSessionsByCount(slots: SlotInput[], startDate: string, count: number): SessionLike[] {
+  if (count <= 0 || slots.length === 0) return [];
+  const start = new Date(`${startDate}T00:00:00Z`);
+  if (Number.isNaN(start.getTime())) {
+    throw new Error('Invalid startDate (expected YYYY-MM-DD)');
+  }
+  const sortedSlots = [...slots].sort((a, b) => a.dayOfWeek - b.dayOfWeek);
+  const out: SessionLike[] = [];
+  const maxIterationDays = 366 * 10;
+  const d = new Date(start);
+  for (let day = 0; out.length < count && day < maxIterationDays; day++) {
+    const dow = d.getUTCDay();
+    const iso = d.toISOString().slice(0, 10);
+    for (const s of sortedSlots) {
+      if (out.length >= count) break;
+      if (s.dayOfWeek === dow) {
+        out.push({
+          sessionDate: iso,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          roomId: s.roomId ?? null,
+          teacherId: s.teacherId ?? null,
+        });
+      }
+    }
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return out;
+}
+
 export interface ExpandableUnit {
   id: string;
   sessions: number;

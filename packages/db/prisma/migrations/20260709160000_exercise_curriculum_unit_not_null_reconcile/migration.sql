@@ -1,0 +1,15 @@
+-- Schema-drift reconciliation, not a behavior change.
+--
+-- `exercise.curriculum_unit_id` was already made NOT NULL by migration
+-- 20260702093200_exercise_unit_constraints and has stayed NOT NULL ever since
+-- (20260706175200_session_level_exercises only added the sibling
+-- curriculum_lesson_id column; it never touched this constraint). The Prisma
+-- schema model, however, still declared `curriculumUnitId String?` with an
+-- optional relation — schema/DB drift with no matching migration entry.
+--
+-- This migration brings the migration history in line with the corrected
+-- `packages/db/prisma/schema.prisma` (`curriculumUnitId String`, required
+-- relation). The column is already NOT NULL, so this statement is a no-op
+-- against the live database (verified via `prisma migrate diff` against dev)
+-- and does not touch data.
+ALTER TABLE "exercise" ALTER COLUMN "curriculum_unit_id" SET NOT NULL;

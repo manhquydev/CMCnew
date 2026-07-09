@@ -158,7 +158,7 @@ export const submissionRouter = router({
         };
         const current = await tx.submission.findUnique({
           where: { exerciseId_studentId: { exerciseId: input.exerciseId, studentId } },
-          select: { id: true, version: true },
+          select: { id: true, version: true, status: true },
         });
 
         if (!current) {
@@ -188,11 +188,20 @@ export const submissionRouter = router({
           });
         }
 
+        // Once a submission has left `draft` (submitted or graded) it is the record of what the
+        // student actually turned in / what the teacher graded — autosave (and any other save
+        // caller) must not be able to mutate it further, mirroring the guard `submit` already
+        // enforces before it flips the status.
+        if (current.status !== 'draft') {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Bài đã nộp hoặc đã chấm' });
+        }
+
         const updated = await tx.submission.updateMany({
           where: {
             exerciseId: input.exerciseId,
             studentId,
             version: input.version,
+            status: 'draft',
             archivedAt: null,
           },
           data: { ...data, version: { increment: 1 } },

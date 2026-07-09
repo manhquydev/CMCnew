@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { rangesOverlap } from './time.js';
-import { enumerateSessions, detectConflicts } from './schedule.js';
+import { enumerateSessions, enumerateSessionsByCount, detectConflicts } from './schedule.js';
 
 describe('rangesOverlap', () => {
   it('detects overlap', () => {
@@ -22,6 +22,48 @@ describe('enumerateSessions', () => {
     expect(sessions).toHaveLength(4); // 4 Mondays
     expect(sessions[0]!.sessionDate).toBe('2026-06-01');
     expect(sessions[3]!.sessionDate).toBe('2026-06-22');
+  });
+});
+
+describe('enumerateSessionsByCount', () => {
+  it('produces exactly N sessions on the matching weekday, starting on/after startDate', () => {
+    // 2026-06-01 is a Monday (dayOfWeek 1).
+    const sessions = enumerateSessionsByCount(
+      [{ dayOfWeek: 1, startTime: '18:00', endTime: '19:30' }],
+      '2026-06-01',
+      12,
+    );
+    expect(sessions).toHaveLength(12);
+    expect(sessions[0]!.sessionDate).toBe('2026-06-01');
+    expect(sessions[11]!.sessionDate).toBe('2026-08-17'); // 12th Monday from 2026-06-01
+    for (const s of sessions) {
+      expect(new Date(`${s.sessionDate}T00:00:00Z`).getUTCDay()).toBe(1);
+      expect(s.startTime).toBe('18:00');
+      expect(s.endTime).toBe('19:30');
+    }
+  });
+
+  it('round-robins across multiple weekly slots in ascending day-of-week order', () => {
+    // 2026-06-01 is a Monday; slot on Wed (3) and Mon (1), passed out of order.
+    const sessions = enumerateSessionsByCount(
+      [
+        { dayOfWeek: 3, startTime: '10:00', endTime: '11:00' },
+        { dayOfWeek: 1, startTime: '18:00', endTime: '19:30' },
+      ],
+      '2026-06-01',
+      4,
+    );
+    expect(sessions.map((s) => s.sessionDate)).toEqual([
+      '2026-06-01', // Mon
+      '2026-06-03', // Wed
+      '2026-06-08', // Mon
+      '2026-06-10', // Wed
+    ]);
+  });
+
+  it('returns empty array for zero/negative count or no slots', () => {
+    expect(enumerateSessionsByCount([{ dayOfWeek: 1, startTime: '18:00', endTime: '19:30' }], '2026-06-01', 0)).toHaveLength(0);
+    expect(enumerateSessionsByCount([], '2026-06-01', 5)).toHaveLength(0);
   });
 });
 

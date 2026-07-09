@@ -176,6 +176,43 @@ describe('Teacher Lite enroll existing student', () => {
     ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
+  it('reactivates a withdrawn enrollment instead of CONFLICT (Finding 4)', async () => {
+    if (!dbReachable) return;
+    const batch = await createClass(20);
+    const student = await createStudent();
+    const caller = await directorCaller(Role.giam_doc_dao_tao);
+
+    const first = await caller.teacherLite.enrollExistingStudent({
+      facilityId: FACILITY,
+      classBatchId: batch.id,
+      studentId: student.id,
+    });
+    expect(first.enrollment.status).toBe('active');
+
+    await withRls(SUPER, (tx) =>
+      tx.enrollment.update({ where: { id: first.enrollment.id }, data: { status: 'withdrawn' } }),
+    );
+
+    const second = await caller.teacherLite.enrollExistingStudent({
+      facilityId: FACILITY,
+      classBatchId: batch.id,
+      studentId: student.id,
+    });
+
+    expect(second.enrollment.id).toBe(first.enrollment.id);
+    expect(second.enrollment.status).toBe('active');
+
+    const proof = await withRls(SUPER, async (tx) => {
+      const enrollment = await tx.enrollment.findUniqueOrThrow({ where: { id: first.enrollment.id } });
+      const events = await tx.recordEvent.findMany({
+        where: { entityType: 'enrollment', entityId: first.enrollment.id },
+      });
+      return { enrollment, events };
+    });
+    expect(proof.enrollment.status).toBe('active');
+    expect(proof.events.some((e) => e.type === 'status_changed')).toBe(true);
+  });
+
   it('allows enrollment beyond capacity as a non-blocking soft warning', async () => {
     if (!dbReachable) return;
     const batch = await createClass(1);

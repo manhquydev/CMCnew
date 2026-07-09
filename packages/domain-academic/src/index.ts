@@ -12,6 +12,7 @@ export {
 } from './parent-meeting-cadence.js';
 export {
   enumerateSessions,
+  enumerateSessionsByCount,
   detectConflicts,
   assignUnitsToSessions,
   type SlotInput,
