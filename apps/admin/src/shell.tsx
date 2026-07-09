@@ -466,7 +466,9 @@ export function Shell({
             </Text>
           </Group>
           <Group gap="sm">
-            {surface === 'teacher' && (
+            {/* ERP đã đóng cho vận hành (chỉ teacher-lite + LMS). Cửa "Mở ERP đầy đủ" chỉ còn cho
+                super_admin làm break-glass — code/route ERP giữ nguyên, bật lại được. */}
+            {surface === 'teacher' && me.isSuperAdmin && (
               <Button
                 component="a"
                 href={erpHrefForSection(activeSection)}
