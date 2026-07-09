@@ -169,8 +169,8 @@ export function CloudCelebration({ title, reward, onClose }: { title: string; re
           <i key={i} style={{ '--r': p.r, background: p.color, animationDelay: p.delay } as CSSProperties} />
         ))}
       </div>
-      <img className="climb-celebrate__vfx" src="/garden/vfx/cloud-burst.png" alt="" />
-      <img className="climb-celebrate__pop" src="/garden/vfx/star-pop.png" alt="" />
+      {/* Bỏ 2 PNG VFX (cloud-burst / star-pop) — ảnh raster chưa xóa nền (nền đen) trông xấu khi
+          hiện trên overlay. Confetti CSS + sao vector + text đã đủ hiệu ứng chúc mừng sạch. */}
       <div className="climb-celebrate__rate">
         <IconStar size={24} fill="currentColor" stroke={1.5} />
         <IconStar size={32} fill="currentColor" stroke={1.5} style={{ margin: '0 8px', transform: 'translateY(-4px)' }} />
