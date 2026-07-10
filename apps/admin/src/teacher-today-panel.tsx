@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/vi';
-import { Center, Loader, Stack } from '@mantine/core';
+import { Center, Grid, Loader, SimpleGrid, Stack } from '@mantine/core';
 import { FacilityPicker, notifyError, trpc, useSession } from '@cmc/ui';
 
 type Facility = Awaited<ReturnType<typeof trpc.facility.list.query>>[number];
@@ -87,7 +87,7 @@ export function TeacherTodayPanel({
   return (
     <div
       style={{
-        padding: '26px 30px',
+        padding: 'clamp(16px, 4vw, 26px) clamp(16px, 5vw, 30px)',
         maxWidth: 1320,
         fontFamily: FONT,
         color: C.text,
@@ -99,6 +99,8 @@ export function TeacherTodayPanel({
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'flex-start',
+          flexWrap: 'wrap',
+          gap: 12,
           marginBottom: 28,
         }}
       >
@@ -120,14 +122,7 @@ export function TeacherTodayPanel({
       </div>
 
       {/* Stats row */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 16,
-          marginBottom: 28,
-        }}
-      >
+      <SimpleGrid cols={{ base: 2, sm: 4 }} spacing={16} mb={28}>
         <StatCard
           title="Buổi dạy hôm nay"
           value={loading ? '—' : String(activeSessions.length)}
@@ -168,19 +163,12 @@ export function TeacherTodayPanel({
           sub={stats ? (stats.pendingEvidence > 0 ? 'buổi chưa đăng' : 'đã đăng hết') : 'đang tải…'}
           accent={C.muted}
         />
-      </div>
+      </SimpleGrid>
 
-      {/* Two-column: tasks + timeline */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 280px',
-          gap: 20,
-          alignItems: 'start',
-        }}
-      >
+      {/* Two-column: tasks + timeline (stacks on mobile) */}
+      <Grid gutter={20} align="start">
         {/* Main: today's class list */}
-        <div>
+        <Grid.Col span={{ base: 12, md: 8 }}>
           <SectionLabel>Lớp của bạn hôm nay</SectionLabel>
           {loading ? (
             <Center py="xl">
@@ -219,10 +207,10 @@ export function TeacherTodayPanel({
               })}
             </Stack>
           )}
-        </div>
+        </Grid.Col>
 
         {/* Side: timeline */}
-        <div>
+        <Grid.Col span={{ base: 12, md: 4 }}>
           <SectionLabel>Lịch dạy hôm nay</SectionLabel>
           <div
             style={{
@@ -290,8 +278,8 @@ export function TeacherTodayPanel({
               })
             )}
           </div>
-        </div>
-      </div>
+        </Grid.Col>
+      </Grid>
     </div>
   );
 }

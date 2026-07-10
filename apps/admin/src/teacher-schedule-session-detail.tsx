@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { API_URL, Chatter, notifyError, notifyInfo, notifySuccess, PdfAnnotator, trpc, uploadSessionPhoto, useSession, WorkflowStatusbar } from '@cmc/ui';
-import { Button, Center, Drawer, Group, Loader, Menu, Modal, NumberInput, Select, Stack, Tabs, Text, TextInput, Textarea, Tooltip } from '@mantine/core';
+import { Button, Center, Drawer, Grid, Group, Image, Loader, Menu, Modal, NumberInput, Select, SimpleGrid, Stack, Tabs, Text, TextInput, Textarea, Tooltip } from '@mantine/core';
 import { can } from '@cmc/auth/permissions';
 import { effectiveSessionStatus, SESSION_STAGES, SESSION_TERMINAL } from './session-status';
 import { StudentDetailPanel } from './student-detail.js';
@@ -108,6 +108,8 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(0);
   const [evidencePublished, setEvidencePublished] = useState(false);
+  // Ảnh đang xem phóng to (lightbox) — null = đóng.
+  const [photoLightbox, setPhotoLightbox] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Clear pending debounce on unmount to prevent post-unmount API call (M1)
@@ -539,19 +541,27 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
             <div>
               <Text size="sm" fw={500} mb={8}>Ảnh lớp học</Text>
               {draft.photos.length > 0 && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
+                <SimpleGrid cols={{ base: 2, sm: 3 }} spacing={8} mb={10}>
                   {draft.photos.map(p => (
-                    <div key={p.ref} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', background: C.bg }}>
-                      <img src={`${API_URL}/files/session-photo/${p.ref}`} alt="" style={{ width: '100%', height: 90, objectFit: 'cover', display: 'block' }} />
+                    <div key={p.ref} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden' }}>
+                      {/* Thumbnail đồng đều: khung tỉ lệ 4:3 + cover (không khuyết/không méo trên
+                          mobile). Bấm vào mở lightbox xem ảnh gốc đầy đủ (contain). */}
+                      <Image
+                        src={`${API_URL}/files/session-photo/${p.ref}`}
+                        fit="cover"
+                        radius={8}
+                        onClick={() => setPhotoLightbox(p.ref)}
+                        style={{ aspectRatio: '4 / 3', cursor: 'zoom-in', backgroundColor: C.bg }}
+                      />
                       {enabled && (
                         <button onClick={() => updateDraft({ photos: draft.photos.filter(x => x.ref !== p.ref) })}
-                          style={{ position: 'absolute', top: 4, right: 4, background: C.danger, border: 'none', borderRadius: 4, color: '#fff', cursor: 'pointer', width: 20, height: 20, fontSize: 11, lineHeight: '20px', padding: 0 }}>
+                          style={{ position: 'absolute', top: 4, right: 4, background: C.danger, border: 'none', borderRadius: 4, color: '#fff', cursor: 'pointer', width: 22, height: 22, fontSize: 12, lineHeight: '22px', padding: 0 }}>
                           ✕
                         </button>
                       )}
                     </div>
                   ))}
-                </div>
+                </SimpleGrid>
               )}
               {enabled && (
                 <label style={{
@@ -570,9 +580,9 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
 
         {/* ── Tab 3: Chấm bài ── */}
         <Tabs.Panel value="grading" pt="sm">
-          <div style={{ display: 'grid', gridTemplateColumns: '40% 60%', gap: 16, minHeight: 280 }}>
+          <Grid gutter={16} style={{ minHeight: 280 }}>
             {/* Exercise list */}
-            <div>
+            <Grid.Col span={{ base: 12, md: 5 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Bài tập của lớp</div>
               {exercises.length === 0 ? (
                 <Text c="dimmed" size="sm">Chưa có bài tập nào</Text>
@@ -586,9 +596,9 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
                   <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{(ex as Record<string, unknown>).type as string ?? ''}</div>
                 </div>
               ))}
-            </div>
+            </Grid.Col>
             {/* Submission panel */}
-            <div>
+            <Grid.Col span={{ base: 12, md: 7 }}>
               {!selectedEx ? (
                 <div style={{ padding: 24, textAlign: 'center', color: C.muted, fontSize: 13 }}>Chọn bài tập để xem bài nộp</div>
               ) : submissions.length === 0 ? (
@@ -656,8 +666,8 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
                   </div>
                 );
               })()}
-            </div>
-          </div>
+            </Grid.Col>
+          </Grid>
         </Tabs.Panel>
 
         {/* ── Tab 4: Nhật ký ── */}
@@ -748,6 +758,24 @@ export function TeacherScheduleDetail({ session, onBack, onChanged }: SessionDet
             </Button>
           </Group>
         </Stack>
+      </Modal>
+
+      {/* Lightbox ảnh lớp học: xem ảnh gốc đầy đủ, không cắt (contain), tối đa 82vh. */}
+      <Modal
+        opened={photoLightbox !== null}
+        onClose={() => setPhotoLightbox(null)}
+        size="auto"
+        centered
+        padding="xs"
+        title="Ảnh buổi học"
+      >
+        {photoLightbox && (
+          <Image
+            src={`${API_URL}/files/session-photo/${photoLightbox}`}
+            fit="contain"
+            style={{ maxHeight: '82vh', maxWidth: '86vw' }}
+          />
+        )}
       </Modal>
     </div>
   );

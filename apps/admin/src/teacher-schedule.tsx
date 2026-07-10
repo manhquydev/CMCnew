@@ -274,11 +274,13 @@ const KANBAN_COLS = [
 
 function KanbanView({ sessions, onSelect }: { sessions: MySession[]; onSelect: (s: MySession) => void }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, alignItems: 'start' }}>
+    // flex + min-width (not a 4-col grid) so columns stay readable and the row scrolls
+    // horizontally on mobile instead of squeezing each column to an unusable ~90px.
+    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', overflowX: 'auto', paddingBottom: 4 }}>
       {KANBAN_COLS.map(col => {
         const cols = sessions.filter(s => col.statuses.includes(s.status));
         return (
-          <div key={col.label} style={{ background: C.bg, borderRadius: 12, padding: 12 }}>
+          <div key={col.label} style={{ background: C.bg, borderRadius: 12, padding: 12, flex: '1 1 220px', minWidth: 220 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: C.muted, marginBottom: 8 }}>{col.label} ({cols.length})</div>
             {cols.length === 0 ? (
               <div style={{ fontSize: 12, color: C.muted, textAlign: 'center', padding: 12 }}>—</div>
