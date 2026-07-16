@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./seed-curriculum": "./src/seed-curriculum.ts"
+    "./seed-curriculum": "./src/seed-curriculum.ts",
+    "./seed-gifts": "./src/seed-gifts.ts"
   },
   "scripts": {
     "generate": "prisma generate",

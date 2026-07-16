@@ -753,6 +753,11 @@ model Gift {
   createdAt     DateTime  @default(now()) @map("created_at")
   rewards       Reward[]
 
+  // Idempotency guard for the seed script (Phase 5, plan 260716-0856-lms-schedule-rewards-exercises):
+  // `name` written NFC-normalized so the constraint can't be bypassed by an equivalent but
+  // differently-encoded Unicode string. A pre-migration duplicate check is REQUIRED before
+  // applying this to any environment with existing data — see phase-05-seed-gifts-all-facilities.md.
+  @@unique([facilityId, name])
   @@index([facilityId])
   @@map("gift")
 }

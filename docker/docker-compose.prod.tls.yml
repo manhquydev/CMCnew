@@ -107,11 +107,15 @@ services:
       CALLIO_API_TOKEN:     ${CALLIO_API_TOKEN:-}
     volumes:
       # Host bind-mounts (NOT a named volume) — scripts/backup-db.sh tars these directly off
-      # the host filesystem (PDF_STORE_DIR/SESSION_PHOTO_STORE_DIR, see its own comment). Without
-      # these mounts, photo-store.ts/pdf-store.ts write into the container's writable layer only —
-      # lost on every redeploy (image rebuild recreates the container) and invisible to backups.
+      # the host filesystem (PDF_STORE_DIR/SESSION_PHOTO_STORE_DIR/GIFT_PHOTO_STORE_DIR, see its
+      # own comment). Without these mounts, photo-store.ts/pdf-store.ts/gift-photo-store.ts write
+      # into the container's writable layer only — lost on every redeploy (image rebuild
+      # recreates the container) and invisible to backups. gift-photo-store.ts defaults to disk
+      # (matches this stack's actual driver for every other blob store; no S3/MinIO is wired
+      # into this authoritative prod file for any store today).
       - ${CMC_BLOB_ROOT:-../.data}/pdf:/app/apps/api/.data/pdf
       - ${CMC_BLOB_ROOT:-../.data}/session-photos:/app/apps/api/.data/session-photos
+      - ${CMC_BLOB_ROOT:-../.data}/gift-photos:/app/apps/api/.data/gift-photos
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:4000/health || exit 1']
       interval: 10s

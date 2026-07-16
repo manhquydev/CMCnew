@@ -8,6 +8,7 @@ import {
   NotificationCenter,
   notifyError,
   notifySuccess,
+  giftImageSrc,
   type LmsPrincipal,
   type LiveNotification,
   type AnnotationData,
@@ -19,6 +20,7 @@ import {
   Card,
   Center,
   Group,
+  Image,
   Loader,
   Modal,
   SimpleGrid,
@@ -844,6 +846,44 @@ function CoursesTab({ refreshKey }: { refreshKey: number }) {
   );
 }
 
+// Fixed tile ratio so every gift photo occupies the same box regardless of the source photo's
+// own dimensions — without this, cards with a portrait photo vs. a landscape photo render at
+// different heights (image height = width / aspect-ratio), making the grid look uneven even
+// though each card is individually sized correctly to its own content.
+const GIFT_PHOTO_ASPECT_RATIO = '4 / 3';
+
+/** Gift card image: shows the resolved photo, or falls back to the placeholder icon when
+ * `src` is null (no photo set) or the image fails to load (e.g. a dev-reset blob wipe). */
+function GiftPhoto({ src }: { src: string | null }) {
+  const [broken, setBroken] = useState(false);
+  const boxStyle = {
+    aspectRatio: GIFT_PHOTO_ASPECT_RATIO,
+    borderRadius: 'var(--cmc-radius-kid)',
+    overflow: 'hidden',
+  } as const;
+  if (!src || broken) {
+    return (
+      <Center style={{ ...boxStyle, background: 'var(--cmc-brand-muted)' }}>
+        <IconGift size={40} color="var(--cmc-brand)" />
+      </Center>
+    );
+  }
+  return (
+    <Image
+      src={src}
+      w="100%"
+      fit="cover"
+      // A pixel `h` here would have the same "browser recomputes height from the photo's own
+      // aspect ratio once width is stretched" problem seen before (see git history) — pinning
+      // an explicit `aspect-ratio` instead makes every card's photo tile the same height,
+      // regardless of the source photo's own dimensions, and is immune to that recomputation.
+      style={{ ...boxStyle, flexShrink: 0 }}
+      onError={() => setBroken(true)}
+      alt=""
+    />
+  );
+}
+
 function RewardsTab({ refreshKey }: { refreshKey: number }) {
   const [balance, setBalance] = useState<number | null>(null);
   const [gifts, setGifts] = useState<Gift[]>([]);
@@ -940,7 +980,7 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
           <Text c="dimmed" style={{ fontFamily: 'var(--cmc-font-friendly)', fontWeight: 600 }}>Chưa có quà nào trong cửa hàng đổi thưởng.</Text>
         </Card>
       ) : (
-        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="xl">
+        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="xl" style={{ alignItems: 'start' }}>
           {gifts.map((g) => {
             const outOfStock = g.stock === 0;
             const notEnough = stars < g.starsRequired;
@@ -951,7 +991,8 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
                 className="cmc-clay-card"
                 p="xl"
               >
-                <Stack gap="xs" h="100%">
+                <Stack gap="xs">
+                  <GiftPhoto src={giftImageSrc(g.imageUrl)} />
                   <Group gap="xs" align="center">
                     <IconGift size={22} color="var(--cmc-brand)" style={{ filter: 'drop-shadow(0 2px 4px rgba(0, 113, 227, 0.15))' }} />
                     <Text fw={800} size="md" style={{ color: '#1C3D5A', fontFamily: 'var(--cmc-font-bubble)' }}>{g.name}</Text>
@@ -963,13 +1004,17 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
                   )}
                   <Group gap="xs" mt="xs">
                     <Badge color="yellow" variant="light" radius="xl" size="sm" style={{ fontFamily: 'var(--cmc-font-bubble)' }}>{g.starsRequired} sao</Badge>
-                    <Badge color={outOfStock ? 'red' : 'gray'} variant="light" radius="xl" size="sm" style={{ fontFamily: 'var(--cmc-font-friendly)' }}>
-                      {giftStockLabel(g.stock)}
-                    </Badge>
+                    {/* "Không giới hạn" (unlimited stock) is the default for every gift and adds
+                        no information — only show this badge when stock is actually limited. */}
+                    {g.stock !== -1 && (
+                      <Badge color={outOfStock ? 'red' : 'gray'} variant="light" radius="xl" size="sm" style={{ fontFamily: 'var(--cmc-font-friendly)' }}>
+                        {giftStockLabel(g.stock)}
+                      </Badge>
+                    )}
                   </Group>
                   <Button
                     className="cmc-clay-btn"
-                    mt="auto"
+                    mt="sm"
                     size="sm"
                     onClick={() => redeem(g)}
                     loading={redeemingId === g.id}
