@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "Hide Schedule HS+PH"
-status: pending
+status: done
 priority: P3
 dependencies: []
 ---
@@ -38,10 +38,10 @@ Nav + route đều dựa hash. Ẩn = xóa item khỏi mảng nav + xóa `'sched
 4. Chạy e2e → **xanh**.
 
 ## Success Criteria
-- [ ] `grep schedule apps/e2e` xử lý xong; không spec e2e nào vỡ vì xóa tab.
-- [ ] e2e `lms-schedule-hidden` xanh (đỏ trước khi sửa).
-- [ ] HS & PH không còn thấy "Lịch học & Nội dung".
-- [ ] `#schedule` gõ tay → fallback mặc định, không lỗi console.
+- [x] `grep schedule apps/e2e` xử lý xong; không spec e2e nào vỡ vì xóa tab.
+- [x] e2e `lms-schedule-hidden` xanh (đỏ trước khi sửa).
+- [x] HS & PH không còn thấy "Lịch học & Nội dung".
+- [x] `#schedule` gõ tay → fallback mặc định, không lỗi console.
 
 ## Risk Assessment
 - Rủi ro thấp. Không notification/deep-link nào trỏ `#schedule` (đã xác nhận grep). Đảo ngược = thêm lại item + entry Set.

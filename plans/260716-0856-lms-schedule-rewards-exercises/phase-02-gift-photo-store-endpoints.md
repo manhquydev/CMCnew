@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Gift Photo Store + Endpoints"
-status: pending
+status: done
 priority: P2
 dependencies: []
 ---
@@ -56,11 +56,11 @@ See `docs/decisions/0041-gift-photo-store-disk-driver.md`. The disk|s3 driver se
 5. Cập nhật ops: set `GIFT_PHOTO_STORE_DRIVER=s3` + bucket/prefix (tái dùng cấu hình pdf-store S3) trên prod; ghi rõ đã chốt. Dev để disk.
 
 ## Success Criteria
-- [ ] `gift-photo-upload.int.test.ts` phủ 200/403(role)/403(cross-facility)/401/400/413 và xanh (đỏ trước).
-- [ ] Store dùng driver seam của `pdf-store.ts` (disk|s3), không phải disk-only.
-- [ ] Không thêm entry `permissions.ts`.
-- [ ] Ops: prod `GIFT_PHOTO_STORE_DRIVER=s3` + bucket sẵn sàng (dev disk) — ghi rõ.
-- [ ] Suite API hiện có vẫn xanh.
+- [x] `gift-photo-upload.int.test.ts` phủ 200/403(role)/403(cross-facility)/401/400/413 và xanh (đỏ trước).
+- [x] Store dùng driver seam của `pdf-store.ts` (disk|s3), không phải disk-only.
+- [x] Không thêm entry `permissions.ts`.
+- [x] Ops: prod driver **đổi thành disk + bind-mount** (không phải s3, xem SUPERSEDED note trên) — bind-mount + ensure-blob-store-dirs.sh + backup-db.sh đã cập nhật, ghi rõ ở decision 0041.
+- [x] Suite API hiện có vẫn xanh (trừ 5 failure pre-existing không liên quan — xem báo cáo).
 
 ## Risk Assessment
 - Nếu prod quên set driver=s3 (rơi về disk trong container ephemeral) → ảnh 404 sau redeploy. Mitigation: xác nhận `GIFT_PHOTO_STORE_DRIVER=s3` + bucket trước Phase 5 prod.

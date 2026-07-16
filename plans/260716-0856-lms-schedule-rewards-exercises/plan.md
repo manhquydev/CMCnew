@@ -1,7 +1,7 @@
 ---
 title: "LMS: hide schedule, gift photos+upload+seed, exercises upcoming UX"
 description: ""
-status: pending
+status: in-progress
 priority: P2
 branch: "develop"
 tags: []
@@ -46,12 +46,12 @@ Ba yêu cầu LMS độc lập, làm test-first (TDD) để giữ nguyên hành 
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | [Hide Schedule HS+PH](./phase-01-hide-schedule-hs-ph.md) | Pending |
-| 2 | [Gift Photo Store + Endpoints](./phase-02-gift-photo-store-endpoints.md) | Pending |
-| 3 | [Gift Upload UI](./phase-03-gift-upload-ui.md) | Pending |
-| 4 | [Render Gift Image in LMS](./phase-04-render-gift-image-lms.md) | Pending |
-| 5 | [Seed Gifts All Facilities](./phase-05-seed-gifts-all-facilities.md) | Pending |
-| 6 | [Exercises Upcoming UX](./phase-06-exercises-upcoming-ux.md) | Pending |
+| 1 | [Hide Schedule HS+PH](./phase-01-hide-schedule-hs-ph.md) | Done |
+| 2 | [Gift Photo Store + Endpoints](./phase-02-gift-photo-store-endpoints.md) | Done |
+| 3 | [Gift Upload UI](./phase-03-gift-upload-ui.md) | Done |
+| 4 | [Render Gift Image in LMS](./phase-04-render-gift-image-lms.md) | Done (students only — parent has no gift catalog, user-confirmed scope) |
+| 5 | [Seed Gifts All Facilities](./phase-05-seed-gifts-all-facilities.md) | Dev done, **prod deferred** — awaiting user confirmation |
+| 6 | [Exercises Upcoming UX](./phase-06-exercises-upcoming-ux.md) | Done |
 
 ## Dependencies
 
@@ -132,3 +132,46 @@ Rà tình huống rìa. Nhóm A tự chốt (an toàn), Nhóm B user quyết.
 - Phase 2 cap 8MB + serve exact-ref; Phase 4 onError fallback — đã ghi.
 - Phase 1: xác nhận ẩn hẳn, không thêm việc bảo toàn nội dung.
 - Không mâu thuẫn. **Failed: 0.**
+
+## Nghiệm thu (post-cook) — 2026-07-16
+
+Commit `0feefac` trên `develop` (61 file). Cả 6 phase implement + test-first + code-review từng
+phase (5 sạch ngay, 1 tìm ra bug thật đã fix). Dev-verify trực tiếp qua browser cho mọi phase
+(không chỉ dựa vào test).
+
+### Kết quả thực tế vs kế hoạch
+
+| Phase | Kế hoạch | Thực tế | Lệch kế hoạch? |
+|---|---|---|---|
+| 1 | Ẩn schedule HS+PH | Đúng như kế hoạch | Không |
+| 2 | Store disk\|s3 + endpoint | Đúng, nhưng **prod driver đổi disk+bind-mount** (không phải S3) | Có — xem quyết định 0041 |
+| 3 | Upload UI admin | Đúng như kế hoạch | Không (review tìm 1 bug thật, đã fix — xem phase-03) |
+| 4 | HS+PH thấy ảnh | HS đúng; **PH ra khỏi scope** (không có gift catalog trong parent-view.tsx, user xác nhận bỏ) | Có — thu hẹp scope, user quyết |
+| 5 | Migration + seed dev+prod | Dev xong hoàn chỉnh; **prod deferred** đúng theo gate high-risk của plan | Không lệch — đúng kế hoạch (prod chờ xác nhận riêng) |
+| 6 | Upcoming UX count-only | Đúng như kế hoạch, xác nhận cả qua network payload thật | Không |
+
+### Vấn đề mới phát sinh sau triển khai
+
+1. **Ops S3→disk (Phase 2/5)** — giả định "mirror pdf-store S3" trong plan gốc đã stale vì
+   `docker-compose.prod.tls.yml` (file deploy thật) không có wiring S3/MinIO cho store nào. Đã
+   xử lý: xác nhận lại với user, ghi quyết định `docs/decisions/0041-gift-photo-store-disk-driver.md`,
+   annotate plan.md + phase-02 + phase-05. **Đã đóng, không còn treo.**
+2. **Vị trí seed CLI khác plan** — `packages/db` không thể import `putGiftPhoto` của `apps/api`
+   (sai hướng dependency); CLI ingest ảnh đặt ở `apps/api/scripts/seed-gifts.ts` thay vì
+   `packages/db` như plan gốc viết, theo đúng tiền lệ `migrate-pdf-blobs-to-s3.ts`. Core logic
+   (`seedGiftsCore`, `GIFT_DEFS`) vẫn ở `packages/db/src/seed-gifts.ts` như dự định. **Đã đóng.**
+3. **PH scope Phase 4** — parent-view.tsx không hề có gift catalog (chỉ balance/badge/leaderboard),
+   khác giả định trong plan. User xác nhận bỏ scope PH, chỉ làm HS. **Đã đóng.**
+4. **5 test suite fail không liên quan** — `director-user-create.int.test.ts` (STAFF_PASSWORD_LOGIN
+   env pre-existing) + 4 file payroll (`payroll-finalize`, `payroll-myslips-bulk`,
+   `payslip-commission-autofeed`, `salary-grade-change-audit` — đều fail ở `beforeAll` với lỗi
+   "Không tìm thấy nhân sự", tái hiện y hệt khi chạy độc lập, không liên quan file nào trong diff
+   phase này). Xác nhận là gap dữ liệu seed pre-existing trong dev DB, không phải regression từ
+   plan này. **Chưa xử lý — ngoài phạm vi plan, cần task riêng nếu muốn fix.**
+5. **Prod seed run** — migration + seed CHƯA chạy trên prod, đúng theo gate high-risk đã chốt từ
+   đầu. Trước khi chạy cần: (a) re-run tiền-kiểm trùng tên trên DB prod, (b) xác nhận bind-mount
+   `gift-photos` sẵn sàng trên host prod. **Đang treo, chờ user xác nhận riêng — không phải bug.**
+
+### Câu hỏi mở còn lại
+- Task riêng để điều tra 5 test suite fail pre-existing (mục 4) — có cần xử lý không, hay chấp nhận là nợ kỹ thuật đã biết?
+- Thời điểm chạy migration + seed prod (mục 5) — chờ lệnh user.

@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Gift Upload UI"
-status: pending
+status: done
 priority: P2
 dependencies: [2]
 ---
@@ -39,10 +39,10 @@ Thêm upload ảnh từ thiết bị vào panel quản lý quà (tạo + sửa).
 5. Lint/typecheck admin + ui xanh.
 
 ## Success Criteria
-- [ ] GĐKD upload ảnh từ máy khi tạo/sửa quà; `imageUrl` lưu ref.
-- [ ] Ô URL cũ vẫn dùng được.
-- [ ] Sửa số sao + thay ảnh hoạt động.
-- [ ] Lint/typecheck xanh; verify thủ công ghi rõ trong report (không có test render giả).
+- [x] GĐKD upload ảnh từ máy khi tạo/sửa quà; `imageUrl` lưu ref.
+- [x] Ô URL cũ vẫn dùng được.
+- [x] Sửa số sao + thay ảnh hoạt động.
+- [x] Lint/typecheck xanh; verify thủ công ghi rõ trong report (không có test render giả). Review tìm 1 bug thật (cross-record photo-ref leak khi upload dở dang rồi đổi gift khác) — đã fix bằng targetGiftId guard.
 
 ## Risk Assessment
 - Không có hạ tầng test component admin → dựa verify thủ công; nêu rõ, không tạo smoke test rỗng.

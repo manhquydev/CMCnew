@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Seed Gifts All Facilities"
-status: pending
+status: dev-done-prod-pending
 priority: P2
 dependencies: [2, 4]
 ---
@@ -49,10 +49,10 @@ dependencies: [2, 4]
 8. **Prod**: DỪNG — xác nhận user + chạy lại tiền-kiểm trùng tên (bước 2) trên chính DB prod + xác nhận thư mục bind-mount `gift-photos` đã sẵn sàng trên host (driver ảnh prod = **disk + bind-mount**, xem `docs/decisions/0041-gift-photo-store-disk-driver.md`) trước khi chạy. Sau xác nhận: chạy bằng owner/`DIRECT_URL`, log số bản ghi/ facility.
 
 ## Success Criteria
-- [ ] Migration `@@unique([facilityId, name])` applied (dev + prod-mirror).
-- [ ] `seed-gifts.int.test.ts` xanh: idempotent + sao×5 + không un-archive + không đè giá trị GĐKD.
-- [ ] Dev: mọi facility 21 quà đúng; HS thấy ảnh + sao đúng.
-- [ ] Prod chỉ chạy sau xác nhận user + driver ảnh sẵn sàng; log kết quả.
+- [x] Migration `@@unique([facilityId, name])` applied (dev). **Prod: CHƯA chạy** — chờ user xác nhận riêng (đúng gate high-risk của plan).
+- [x] `seed-gifts.int.test.ts` xanh: idempotent + sao×5 + không un-archive + không đè giá trị GĐKD.
+- [x] Dev: mọi facility (HQ, CS2) đủ 21/21 quà; verify trực tiếp trên browser — ảnh đúng, sao đúng, sort theo sao tăng dần. Seed chạy 2 lần xác nhận idempotent thật (không phải chỉ test).
+- [ ] **Prod: CHƯA chạy** — deferred, chờ user xác nhận riêng theo đúng gate của plan. Trước khi chạy: (1) re-run tiền-kiểm trùng tên trên DB prod, (2) xác nhận thư mục bind-mount `gift-photos` sẵn sàng trên host (driver đã đổi sang disk+bind-mount, xem decision 0041).
 
 ## Risk Assessment
 - **High-risk**: migration + ghi prod toàn cơ sở. Bắt buộc dev-verify + user-confirm + driver ảnh prod OK trước prod.

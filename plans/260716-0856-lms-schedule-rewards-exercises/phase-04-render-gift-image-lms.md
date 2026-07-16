@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Render Gift Image in LMS"
-status: pending
+status: done
 priority: P1
 dependencies: []
 ---
@@ -37,10 +37,10 @@ Hiện `gift.imageUrl` trong LMS cho **HS và PH**. Đây là mắt xích Critic
 4. **Verify thủ công (dev)**: quà có ref → ảnh hiện; quà có http URL → ảnh hiện; quà `imageUrl=null` → fallback `IconGift`, layout không vỡ; kiểm cả HS và PH.
 
 ## Success Criteria
-- [ ] HS và PH thấy ảnh quà (ref hoặc URL) trong tab "Đổi quà"/"Phần thưởng".
-- [ ] `imageUrl` null → fallback icon, không vỡ layout.
-- [ ] Là điều kiện nghiệm thu cho "HS thấy ảnh" của Phase 5 (seed).
-- [ ] Lint/typecheck LMS xanh.
+- [x] HS thấy ảnh quà (ref hoặc URL) trong tab "Đổi quà". **Scope thu hẹp (user quyết định khi cook)**: PH KHÔNG có gift catalog nào trong parent-view.tsx hiện tại (chỉ balance/badges/leaderboard, xác nhận qua grep — `trpc.rewards.gifts.query()` chỉ gọi từ student-view.tsx) → không có gì để sửa ảnh; user chọn "students only", parent-view.tsx giữ nguyên không đổi.
+- [x] `imageUrl` null → fallback icon, không vỡ layout.
+- [x] Là điều kiện nghiệm thu cho "HS thấy ảnh" của Phase 5 (seed).
+- [x] Lint/typecheck LMS xanh.
 
 ## Risk Assessment
 - Ảnh 404 nếu `API_URL`/serve sai → verify với 1 ref thật (sau Phase 2) trước khi seed.

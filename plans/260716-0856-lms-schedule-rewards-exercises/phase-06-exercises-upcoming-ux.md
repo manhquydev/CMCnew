@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Exercises Upcoming UX"
-status: pending
+status: done
 priority: P2
 dependencies: []
 ---
@@ -47,12 +47,12 @@ Sửa `/#exercises` (ClimbView): hiện ≤2 node "sắp tới" **khóa mờ** (
 5. Verify dev: HS chưa mở bài (có buổi sắp tới đã xếp) → ≤2 node khóa mờ; kiểm **network** không có title/id bài sắp tới; HS có bài đang làm → cuộn tới đúng node; node khóa click không mở; empty-state khi chưa xếp lịch buổi.
 
 ## Success Criteria
-- [ ] `exercise-upcoming-for-principal.int.test.ts` xanh (đỏ trước); payload chỉ `upcomingCount`; phủ CẢ lesson + unit.
-- [ ] `listForPrincipal` giữ nguyên shape.
-- [ ] Node khóa render KHÔNG title/reward/aria-title; không nộp được (assert client no title text).
-- [ ] Mở `#exercises` cuộn tới node current; `currentId===null` xử lý xác định.
-- [ ] Network LMS không chứa tên/id bài sắp tới (0038-safe).
-- [ ] Suite exercise/lms-lifecycle/security-invariants vẫn xanh.
+- [x] `exercise-upcoming-for-principal.int.test.ts` xanh (đỏ trước); payload chỉ `upcomingCount`; phủ CẢ lesson + unit.
+- [x] `listForPrincipal` giữ nguyên shape.
+- [x] Node khóa render KHÔNG title/reward/aria-title; không nộp được (assert client no title text) — xác nhận: locked node là `<div>` không phải `<button>`, không có element tương tác nào trong DOM.
+- [x] Mở `#exercises` cuộn tới node current; `currentId===null` xử lý xác định.
+- [x] Network LMS không chứa tên/id bài sắp tới (0038-safe) — xác nhận trực tiếp qua network payload thật: `{"upcomingCount":1}`, không có id/title/program.
+- [x] Suite exercise/lms-lifecycle/security-invariants vẫn xanh (8 file/26 test).
 
 ## Risk Assessment
 - **0038**: count-only + BeanNode locked (không title/reward) + assert API & client = ranh giới then chốt.
