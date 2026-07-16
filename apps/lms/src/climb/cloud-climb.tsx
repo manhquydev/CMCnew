@@ -1,9 +1,13 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { IconStar, IconMountain, IconCheck, IconClock } from '@tabler/icons-react';
+import { IconStar, IconMountain, IconCheck, IconClock, IconLock } from '@tabler/icons-react';
 import './cloud-climb.css';
 
-/** Visual state of a single exercise node on the climb. */
-export type NodeState = 'done' | 'current' | 'submitted' | 'upcoming';
+/** Visual state of a single exercise node on the climb. `locked` is distinct from `upcoming`:
+ * `upcoming` is a real, already-opened exercise the student hasn't started yet (has a title,
+ * a reward, is clickable). `locked` is a not-yet-opened placeholder — the server only ever
+ * sends a count (decision 0038 — exercise content opens only once its session has ended), so
+ * there is no title/reward/id to show and no click target. */
+export type NodeState = 'done' | 'current' | 'submitted' | 'upcoming' | 'locked';
 export type NodeSide = 'left' | 'right' | 'center';
 
 /** The three CMC programs — mirrors the Prisma `Program` enum the API serialises as strings.
@@ -83,16 +87,35 @@ interface BeanNodeProps {
   yPos: number;
   /** 1-based step shown on the button for not-yet-done nodes (homework is never hard-locked). */
   step: number;
-  title: string;
+  /** Not needed for `locked` nodes — there is no real exercise to name. */
+  title?: string;
   earnedStars?: number;
   reward?: number;
-  onClick: () => void;
+  onClick?: () => void;
+  /** Exercise id, exposed as `data-node-id` so the scroll-to-current effect can find this node
+   * without holding a ref per node. Omitted for `locked` nodes (nothing to scroll to). */
+  id?: string;
 }
 
 /** One lesson node: a floating cloud platform with a round status button + label. */
-export function BeanNode({ state, side, yPos, step, title, earnedStars, reward, onClick }: BeanNodeProps) {
+export function BeanNode({ state, side, yPos, step, title, earnedStars, reward, onClick, id }: BeanNodeProps) {
   const leftPct = side === 'left' ? '34%' : side === 'right' ? '66%' : '50%';
-  
+
+  if (state === 'locked') {
+    return (
+      <div className="climb-bnode climb-bnode--locked" style={{ bottom: yPos, left: leftPct }}>
+        <ClayCloudSVG className="climb-bnode__cloud" />
+        <div className="climb-bnode__btn climb-bnode__btn--locked" aria-hidden="true">
+          <IconLock size={22} stroke={3} />
+        </div>
+        <div className="climb-bnode__meta">
+          <strong>🔒 Bài tiếp theo</strong>
+          <span className="climb-bnode__stars">Mở sau buổi học tới</span>
+        </div>
+      </div>
+    );
+  }
+
   const glyph = state === 'done' ? (
     <IconCheck size={26} stroke={3} />
   ) : state === 'submitted' ? (
@@ -102,7 +125,7 @@ export function BeanNode({ state, side, yPos, step, title, earnedStars, reward, 
   );
 
   return (
-    <div className="climb-bnode" style={{ bottom: yPos, left: leftPct }}>
+    <div className="climb-bnode" style={{ bottom: yPos, left: leftPct }} data-node-id={id}>
       {state === 'current' && <span className="climb-bnode__here">Bạn ở đây</span>}
       <ClayCloudSVG className="climb-bnode__cloud" />
       <button

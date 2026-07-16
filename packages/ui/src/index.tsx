@@ -1,4 +1,4 @@
-export { trpc, API_URL, uploadExercisePdf, uploadSessionPhoto } from './client.js';
+export { trpc, API_URL, uploadExercisePdf, uploadSessionPhoto, uploadGiftPhoto, giftImageSrc } from './client.js';
 export type { AppRouter } from './client.js';
 export { useNotificationStream, type LiveNotification } from './notification-stream.js';
 export { notifyError, notifySuccess, notifyInfo, errorMessage } from './notify.js';

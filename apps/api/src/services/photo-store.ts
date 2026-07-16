@@ -24,7 +24,7 @@ function refToFile(ref: string): string {
   return path.join(storeDir(), ref);
 }
 
-function detectPhotoContentType(buf: Buffer): SessionPhotoContentType | null {
+export function detectPhotoContentType(buf: Buffer): SessionPhotoContentType | null {
   if (buf.subarray(0, JPEG_MAGIC.length).equals(JPEG_MAGIC)) return 'image/jpeg';
   if (buf.subarray(0, PNG_MAGIC.length).equals(PNG_MAGIC)) return 'image/png';
   if (

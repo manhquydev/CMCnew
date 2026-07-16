@@ -25,6 +25,13 @@ import {
   MAX_PDF_BYTES,
 } from './services/pdf-store.js';
 import { putSessionPhoto, readSessionPhoto, PhotoStoreError, MAX_SESSION_PHOTO_BYTES } from './services/photo-store.js';
+import {
+  putGiftPhoto,
+  readGiftPhoto,
+  GiftPhotoStoreError,
+  GiftPhotoStoreConfigError,
+  MAX_GIFT_PHOTO_BYTES,
+} from './services/gift-photo-store.js';
 import { renderReceiptHtml } from './services/receipt-html.js';
 import { runParentMeetingReminders } from './services/parent-meeting-reminder.js';
 import { generateParentMeetings } from './services/parent-meeting-cadence.js';
@@ -144,6 +151,53 @@ app.get('/files/session-photo/:ref', async (c) => {
 
   try {
     const { buffer, contentType } = await readSessionPhoto(ref);
+    c.header('Content-Type', contentType);
+    c.header('Cache-Control', 'private, max-age=3600');
+    return c.body(buffer as unknown as ArrayBuffer);
+  } catch {
+    return c.text('not found', 404);
+  }
+});
+
+// Upload gift catalog photos — gated to rewards.giftCreate (the sole actor,
+// giam_doc_kinh_doanh, that authors gifts). Serve is facility-scoped via a DB gate on Gift
+// (mirrors session-photo's ownership check) rather than "any authenticated principal" like
+// exercise PDFs, since gift photos are facility inventory, not a global curriculum asset.
+app.post('/upload/gift-photo', async (c) => {
+  const token = getCookie(c, COOKIE_NAME);
+  const session = token ? await resolveSession(token) : null;
+  if (!session) return c.text('unauthorized', 401);
+  if (!can(session.roles, session.isSuperAdmin, 'rewards', 'giftCreate')) {
+    return c.text('forbidden', 403);
+  }
+  const body = await c.req.arrayBuffer();
+  if (body.byteLength > MAX_GIFT_PHOTO_BYTES) return c.text('file too large', 413);
+  try {
+    const { ref } = await putGiftPhoto(Buffer.from(body));
+    return c.json({ ref });
+  } catch (e) {
+    if (e instanceof GiftPhotoStoreConfigError) throw e; // server misconfig — surface as 500
+    if (e instanceof GiftPhotoStoreError) return c.text(e.message, 400);
+    throw e;
+  }
+});
+
+app.get('/files/gift-photo/:ref', async (c) => {
+  const staffTok = getCookie(c, COOKIE_NAME);
+  const lmsTok = getCookie(c, LMS_COOKIE_NAME);
+  const staff = staffTok ? await resolveSession(staffTok) : null;
+  const lms = !staff && lmsTok ? await resolveLmsSession(lmsTok) : null;
+  if (!staff && !lms) return c.text('unauthorized', 401);
+
+  const ref = c.req.param('ref');
+  const rlsCtx = staff ? rlsContextOf(staff) : lmsRlsContextOf(lms!);
+  const visible = await withRls(rlsCtx, (tx) =>
+    tx.gift.findFirst({ where: { imageUrl: ref, archivedAt: null }, select: { id: true } }),
+  );
+  if (!visible) return c.text('forbidden', 403);
+
+  try {
+    const { buffer, contentType } = await readGiftPhoto(ref);
     c.header('Content-Type', contentType);
     c.header('Cache-Control', 'private, max-age=3600');
     return c.body(buffer as unknown as ArrayBuffer);

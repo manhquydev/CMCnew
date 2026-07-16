@@ -52,6 +52,7 @@ in code with no prior written decision, closing that exact gap. See
 | — (agent workflow adoption) | ClaudeKit wired into Harness as workflow layer | `docs/decisions/0009-ck-workflow-adoption.md` | N/A — infra |
 | — (agent operating playbook) | Daily session loop playbook (brownfield ck × Harness) | `docs/decisions/0017-daily-session-loop-playbook.md` | N/A — infra |
 | — (agent capability reference) | ClaudeKit capabilities reference | `docs/decisions/0018-ck-capabilities-reference.md` | N/A — infra |
+| `docker/docker-compose.prod.tls.yml`, `docker/docker-compose.prod.yml`, `apps/api/src/services/gift-photo-store.ts`, `scripts/ensure-blob-store-dirs.sh`, `scripts/backup-db.sh` | Gift-photo store uses disk driver + bind-mount in prod (supersedes original S3 plan) | `docs/decisions/0041-gift-photo-store-disk-driver.md` | Accepted |
 | — (CI/CD) | CI/CD observability (deploy marker + Jenkins visibility) | `docs/decisions/0019-cicd-observability.md` | N/A — infra |
 | — (TLS/edge infra) | Canonical origin TLS: self-signed cert behind Cloudflare Full | `docs/decisions/0029-canonical-origin-tls-self-signed-behind-cloudflare.md` | N/A — infra |
 | — (CI/CD environments) | Dev/prod CI/CD environment split with real SSO | `docs/decisions/0032-dev-prod-cicd-environment-split.md` | N/A — infra |

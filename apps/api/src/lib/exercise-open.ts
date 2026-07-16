@@ -176,6 +176,65 @@ export async function openedUnitIdsFor(
   return [...opened];
 }
 
+// Mirror of openedLessonIdsFor/openedUnitIdsFor for sessions that are SCHEDULED but have NOT
+// ended yet — feeds the "upcoming (locked)" node count (Phase 6). Only 'active' enrollments
+// count (unlike opened*, which also includes 'completed' for viewing PAST work) — a completed
+// enrollment has no bearing on work that hasn't opened yet. Non-makeup only, matching Tier A of
+// the opened-check (a not-yet-happened makeup session can't have been attended yet either).
+export async function upcomingLessonIdsFor(
+  tx: Prisma.TransactionClient,
+  studentIds: string[],
+  now: Date = new Date(),
+): Promise<string[]> {
+  if (studentIds.length === 0) return [];
+  const sessions = await tx.classSession.findMany({
+    where: {
+      status: { not: 'cancelled' },
+      curriculumLessonId: { not: null },
+      isMakeup: false,
+      batch: {
+        enrollments: {
+          some: { studentId: { in: studentIds }, status: 'active', archivedAt: null },
+        },
+      },
+    },
+    select: { curriculumLessonId: true, sessionDate: true, endTime: true },
+  });
+  const upcoming = new Set(
+    sessions
+      .filter((s) => s.curriculumLessonId && !sessionHasEnded(s.sessionDate, s.endTime, now))
+      .map((s) => s.curriculumLessonId!),
+  );
+  return [...upcoming];
+}
+
+export async function upcomingUnitIdsFor(
+  tx: Prisma.TransactionClient,
+  studentIds: string[],
+  now: Date = new Date(),
+): Promise<string[]> {
+  if (studentIds.length === 0) return [];
+  const sessions = await tx.classSession.findMany({
+    where: {
+      status: { not: 'cancelled' },
+      curriculumUnitId: { not: null },
+      isMakeup: false,
+      batch: {
+        enrollments: {
+          some: { studentId: { in: studentIds }, status: 'active', archivedAt: null },
+        },
+      },
+    },
+    select: { curriculumUnitId: true, sessionDate: true, endTime: true },
+  });
+  const upcoming = new Set(
+    sessions
+      .filter((s) => s.curriculumUnitId && !sessionHasEnded(s.sessionDate, s.endTime, now))
+      .map((s) => s.curriculumUnitId!),
+  );
+  return [...upcoming];
+}
+
 export async function openStudentIdsForLesson(
   tx: Prisma.TransactionClient,
   curriculumLessonId: string,

@@ -131,12 +131,17 @@ services:
       S3_SECRET_KEY:        ${S3_SECRET_KEY:-}
       S3_REGION:            ${S3_REGION:-}
       S3_FORCE_PATH_STYLE:  ${S3_FORCE_PATH_STYLE:-true}
+      # ── Gift-photo blob store driver (disk|s3) — same S3_* config/bucket as PDF above,
+      # distinct key prefix (gift-photos/) so refs never collide. Defaults to 'disk'.
+      GIFT_PHOTO_STORE_DRIVER: ${GIFT_PHOTO_STORE_DRIVER:-disk}
+      GIFT_PHOTO_STORE_DIR:    ${GIFT_PHOTO_STORE_DIR:-}
     volumes:
       # Host bind-mounts (matches docker-compose.prod.tls.yml + scripts/backup-db.sh, which
-      # tars these directly off the host filesystem). Without them photo-store.ts/pdf-store.ts
-      # write into the container's writable layer only — lost on every redeploy.
+      # tars these directly off the host filesystem). Without them photo-store.ts/pdf-store.ts/
+      # gift-photo-store.ts write into the container's writable layer only — lost on every redeploy.
       - ../.data/pdf:/app/apps/api/.data/pdf
       - ../.data/session-photos:/app/apps/api/.data/session-photos
+      - ../.data/gift-photos:/app/apps/api/.data/gift-photos
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:4000/health || exit 1']
       interval: 10s

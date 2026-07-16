@@ -18,7 +18,6 @@ import {
   IconGift,
   IconBook2,
   IconPhoto,
-  IconCalendarEvent,
 } from '@tabler/icons-react';
 import { NotificationCenter, useLmsSession, type LmsPrincipal } from '@cmc/ui';
 import { StudentView, type StudentTab } from './student-view';
@@ -31,7 +30,6 @@ const STUDENT_NAV: {
     group: 'HỌC TẬP',
     items: [
       { tab: 'courses', label: 'Khóa học', icon: <IconBook2 size={18} stroke={1.5} /> },
-      { tab: 'schedule', label: 'Lịch học & Nội dung', icon: <IconCalendarEvent size={18} stroke={1.5} /> },
       { tab: 'sessions', label: 'Điểm danh & buổi học', icon: <IconPhoto size={18} stroke={1.5} /> },
       { tab: 'exercises', label: 'Bài tập', icon: <IconClipboard size={18} stroke={1.5} /> },
       { tab: 'results', label: 'Kết quả học', icon: <IconChartBar size={18} stroke={1.5} /> },
@@ -63,7 +61,7 @@ interface StudentShellProps {
 }
 
 const ALL_STUDENT_TABS = new Set<string>([
-  'overview', 'courses', 'schedule', 'exercises', 'results', 'gradebook', 'badges', 'ranking', 'rewards', 'sessions',
+  'overview', 'courses', 'exercises', 'results', 'gradebook', 'badges', 'ranking', 'rewards', 'sessions',
 ]);
 
 export function StudentShell({ principal }: StudentShellProps) {

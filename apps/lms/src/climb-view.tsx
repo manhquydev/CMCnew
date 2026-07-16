@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Center, Loader } from '@mantine/core';
 import { trpc, notifyError } from '@cmc/ui';
 import { ExerciseModal } from './student-view';
@@ -44,6 +44,7 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [balance, setBalance] = useState<number>(0);
+  const [upcomingCount, setUpcomingCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState<Exercise | null>(null);
   const [celebrate, setCelebrate] = useState<{ title: string; reward: number } | null>(null);
@@ -52,14 +53,19 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [ex, subs, bal] = await Promise.all([
+      // Fetched in the SAME Promise.all as the opened exercises — splitting this into its own
+      // effect would let the scroll-to-current effect fire (and lock `didInitialScroll`) before
+      // the locked nodes exist, scrolling to the wrong spot on first load.
+      const [ex, subs, bal, upcoming] = await Promise.all([
         trpc.exercise.listForPrincipal.query(),
         trpc.submission.mine.query(),
         trpc.rewards.balance.query(),
+        trpc.exercise.upcomingForPrincipal.query(),
       ]);
       setExercises(ex);
       setSubmissions(subs);
       setBalance(bal);
+      setUpcomingCount(upcoming.upcomingCount);
     } catch (e) {
       notifyError(e, 'Tải bài tập thất bại');
     } finally {
@@ -113,15 +119,21 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
     [subByExercise, currentId],
   );
 
-  // Lay every node onto the beanstalk: index 0 at the bottom, climbing upward.
+  // Lay every node onto the beanstalk: index 0 at the bottom, climbing upward. Locked
+  // (not-yet-open) placeholders continue the same sequence above the real nodes so the ≤2
+  // capped count-only nodes read as "what's coming next", not a separate section.
   const layout = useMemo(() => {
-    const total = visible.length;
+    const total = visible.length + upcomingCount;
     const nodes = visible.map((ex, i) => ({
       ex,
       state: nodeState(ex),
       side: nodeSide(i, total),
       yPos: NODE_BASE + i * NODE_GAP,
     }));
+    const lockedNodes = Array.from({ length: upcomingCount }, (_, k) => {
+      const i = visible.length + k;
+      return { key: `locked-${k}`, side: nodeSide(i, total), yPos: NODE_BASE + i * NODE_GAP };
+    });
     let idx = 0;
     const signs = groups.map((g) => {
       const startIndex = idx;
@@ -134,17 +146,32 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
         yPos: Math.max(230, NODE_BASE + startIndex * NODE_GAP - 168),
       };
     });
-    return { nodes, signs, sceneHeight: Math.max(1100, total * NODE_GAP + SCENE_PAD) };
-  }, [visible, groups, subByExercise, nodeState]);
+    return { nodes, lockedNodes, signs, sceneHeight: Math.max(1100, total * NODE_GAP + SCENE_PAD) };
+  }, [visible, groups, subByExercise, nodeState, upcomingCount]);
 
-  // Start the climb at the ground (bottom) ONCE on first load — never yank the student back
-  // on later refreshes (e.g. after submitting an exercise partway up the climb).
+  // Scroll to the "current" node (the one the student should act on) ONCE on first load —
+  // never yank the student back on later refreshes (e.g. after submitting partway up the
+  // climb). useLayoutEffect (not useEffect) so this runs before paint, avoiding a visible jump.
+  // currentId === null means every opened exercise is done: fall back to the most recently
+  // done node so the student still lands near the top of what they've climbed, or the ground
+  // if nothing is opened yet at all.
   const didInitialScroll = useRef(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (loading || didInitialScroll.current || !rootRef.current) return;
-    rootRef.current.scrollTop = rootRef.current.scrollHeight;
+    const root = rootRef.current;
+    let targetId = currentId;
+    if (targetId === null) {
+      const doneIds = visible.filter((ex) => isDone(subByExercise.get(ex.id))).map((ex) => ex.id);
+      targetId = doneIds.at(-1) ?? null;
+    }
+    const target = targetId ? root.querySelector<HTMLElement>(`[data-node-id="${targetId}"]`) : null;
+    if (target) {
+      target.scrollIntoView({ block: 'center' });
+    } else {
+      root.scrollTop = root.scrollHeight;
+    }
     didInitialScroll.current = true;
-  }, [loading]);
+  }, [loading, currentId, visible, subByExercise]);
 
   function handleSubmitted(ex: Exercise) {
     // The modal already awaited onChanged (= load) before calling this, so just celebrate.
@@ -169,18 +196,24 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
         <ClimbAmbient />
         <div className="climb-ground" />
 
-        {visible.length === 0 ? (
+        {visible.length === 0 && upcomingCount === 0 ? (
           <div className="climb-empty">
             Bài tập sẽ tự mở sau khi lớp học xong bài tương ứng. Khi có bài đã mở, các tầng mây sẽ xuất hiện ở đây.
           </div>
         ) : (
           <>
+            {visible.length === 0 && upcomingCount > 0 && (
+              <div className="climb-empty" style={{ bottom: NODE_BASE - 140 }}>
+                Chưa có bài nào mở, nhưng bài tiếp theo đang chờ sau buổi học tới. Cố lên nhé!
+              </div>
+            )}
             {layout.signs.map((s) => (
               <ProgramSign key={s.program} program={s.program} doneCount={s.doneCount} total={s.total} yPos={s.yPos} />
             ))}
             {layout.nodes.map((n, i) => (
               <BeanNode
                 key={n.ex.id}
+                id={n.ex.id}
                 state={n.state}
                 side={n.side}
                 yPos={n.yPos}
@@ -190,6 +223,9 @@ export function ClimbView({ refreshKey }: { refreshKey: number }) {
                 reward={n.ex.starReward}
                 onClick={() => setActive(n.ex)}
               />
+            ))}
+            {layout.lockedNodes.map((n, k) => (
+              <BeanNode key={n.key} state="locked" side={n.side} yPos={n.yPos} step={visible.length + k + 1} />
             ))}
           </>
         )}

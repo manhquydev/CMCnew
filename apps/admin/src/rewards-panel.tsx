@@ -1,10 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
-import { trpc, notifyError, notifySuccess, StatusBadge, InitialsAvatar, type StatusDef } from '@cmc/ui';
+import {
+  trpc,
+  notifyError,
+  notifySuccess,
+  StatusBadge,
+  InitialsAvatar,
+  uploadGiftPhoto,
+  giftImageSrc,
+  type StatusDef,
+} from '@cmc/ui';
 import {
   Badge,
   Button,
   Card,
+  FileInput,
   Group,
+  Image,
   Loader,
   Modal,
   NumberInput,
@@ -17,6 +28,7 @@ import {
   Title,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
+import { IconPhoto } from '@tabler/icons-react';
 
 const PROGRAMS = [
   { value: 'UCREA', label: 'UCREA' },
@@ -36,6 +48,7 @@ const GIFT_STATUS_MAP: Record<string, StatusDef> = {
 
 function GiftCreateCard({ facilities }: { facilities: { id: number; code: string; name: string }[] }) {
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const form = useForm({
     initialValues: {
       facilityId: '',
@@ -51,6 +64,21 @@ function GiftCreateCard({ facilities }: { facilities: { id: number; code: string
       starsRequired: (v) => (v <= 0 ? 'Số sao phải > 0' : null),
     },
   });
+
+  async function uploadPhoto(file: File | null) {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const ref = await uploadGiftPhoto(file);
+      form.setFieldValue('imageUrl', ref);
+    } catch (e) {
+      notifyError(e, 'Tải ảnh quà thất bại');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const previewSrc = giftImageSrc(form.values.imageUrl);
 
   async function create(values: typeof form.values) {
     setBusy(true);
@@ -110,12 +138,23 @@ function GiftCreateCard({ facilities }: { facilities: { id: number; code: string
             />
             <TextInput
               label="URL hình ảnh (tùy chọn)"
-              placeholder="https://..."
+              placeholder="https://... (hoặc tải ảnh lên bên dưới)"
               {...form.getInputProps('imageUrl')}
             />
           </Group>
+          <Group grow align="flex-end">
+            <FileInput
+              label="Tải ảnh quà lên (tùy chọn)"
+              placeholder="Chọn ảnh JPEG, PNG hoặc WebP"
+              leftSection={<IconPhoto size={16} />}
+              accept="image/jpeg,image/png,image/webp"
+              disabled={uploading || busy}
+              onChange={(file) => void uploadPhoto(file)}
+            />
+            {previewSrc && <Image src={previewSrc} h={64} w={64} fit="cover" radius="sm" />}
+          </Group>
           <Group mt="xs">
-            <Button type="submit" loading={busy}>
+            <Button type="submit" loading={busy} disabled={uploading}>
               Tạo quà
             </Button>
           </Group>
@@ -137,6 +176,7 @@ function GiftEditModal({
   onSaved: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const form = useForm({
     initialValues: {
       name: gift?.name ?? '',
@@ -159,6 +199,26 @@ function GiftEditModal({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gift?.id]);
+
+  async function uploadPhoto(file: File | null) {
+    if (!file) return;
+    // Capture which gift this upload is for — the modal stays mounted and can swap to a
+    // different gift (via `gift?.id`-keyed resync above) while the upload is in flight, so a
+    // late-resolving upload for a PREVIOUS gift must not overwrite the now-loaded one.
+    const targetGiftId = gift?.id;
+    setUploading(true);
+    try {
+      const ref = await uploadGiftPhoto(file);
+      if (gift?.id !== targetGiftId) return;
+      form.setFieldValue('imageUrl', ref);
+    } catch (e) {
+      notifyError(e, 'Tải ảnh quà thất bại');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const previewSrc = giftImageSrc(form.values.imageUrl);
 
   async function save(values: typeof form.values) {
     if (!gift) return;
@@ -188,12 +248,27 @@ function GiftEditModal({
           <TextInput label="Tên quà" withAsterisk {...form.getInputProps('name')} />
           <NumberInput label="Số sao cần đổi" withAsterisk min={1} {...form.getInputProps('starsRequired')} />
           <Select label="Chương trình (tùy chọn)" data={PROGRAMS} clearable {...form.getInputProps('program')} />
-          <TextInput label="URL hình ảnh (tùy chọn)" placeholder="https://..." {...form.getInputProps('imageUrl')} />
+          <TextInput
+            label="URL hình ảnh (tùy chọn)"
+            placeholder="https://... (hoặc tải ảnh lên bên dưới)"
+            {...form.getInputProps('imageUrl')}
+          />
+          <Group grow align="flex-end">
+            <FileInput
+              label="Thay ảnh quà (tùy chọn)"
+              placeholder="Chọn ảnh JPEG, PNG hoặc WebP"
+              leftSection={<IconPhoto size={16} />}
+              accept="image/jpeg,image/png,image/webp"
+              disabled={uploading || busy}
+              onChange={(file) => void uploadPhoto(file)}
+            />
+            {previewSrc && <Image src={previewSrc} h={64} w={64} fit="cover" radius="sm" />}
+          </Group>
           <Group justify="flex-end">
             <Button variant="default" onClick={onClose}>
               Huỷ
             </Button>
-            <Button type="submit" loading={busy}>
+            <Button type="submit" loading={busy} disabled={uploading}>
               Lưu
             </Button>
           </Group>

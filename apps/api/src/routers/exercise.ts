@@ -2,7 +2,12 @@ import { z } from 'zod';
 import { withRls, ExerciseStatus, ExerciseType } from '@cmc/db';
 import { rlsContextOf, lmsRlsContextOf } from '@cmc/auth';
 import { logEvent } from '@cmc/audit';
-import { openedLessonIdsFor, openedUnitIdsFor } from '../lib/exercise-open.js';
+import {
+  openedLessonIdsFor,
+  openedUnitIdsFor,
+  upcomingLessonIdsFor,
+  upcomingUnitIdsFor,
+} from '../lib/exercise-open.js';
 import { notifyForExercise } from '../services/exercise-open-notify.js';
 import { router, protectedProcedure, lmsProcedure, requirePermission } from '../trpc.js';
 
@@ -152,6 +157,41 @@ export const exerciseRouter = router({
         orderBy: [{ curriculumLesson: { orderGlobal: 'asc' } }, { curriculumUnit: { orderGlobal: 'asc' } }, { type: 'asc' }],
       });
       return rows.map(flattenExercise);
+    }),
+  ),
+
+  // LMS: count-only signal for the "upcoming (locked)" UX (Phase 6, plan
+  // 260716-0856-lms-schedule-rewards-exercises). Decision 0038 gates exercise CONTENT on an
+  // ended session — this endpoint must never expose id/title/program for not-yet-opened work,
+  // only how many are coming (capped at 2), so it deliberately returns a bare count rather than
+  // reusing exerciseSelect/flattenExercise.
+  upcomingForPrincipal: lmsProcedure.query(({ ctx }) =>
+    withRls(lmsRlsContextOf(ctx.lms), async (tx) => {
+      const [openedLessonIds, openedUnitIds, upcomingLessonIds, upcomingUnitIds] = await Promise.all([
+        openedLessonIdsFor(tx, ctx.lms.studentIds),
+        openedUnitIdsFor(tx, ctx.lms.studentIds),
+        upcomingLessonIdsFor(tx, ctx.lms.studentIds),
+        upcomingUnitIdsFor(tx, ctx.lms.studentIds),
+      ]);
+      const openedLessonSet = new Set(openedLessonIds);
+      const openedUnitSet = new Set(openedUnitIds);
+      // A lesson/unit with BOTH an ended session (already opened) and a separate future session
+      // must not be double-counted here — its exercise already surfaces via listForPrincipal.
+      const candidateLessonIds = upcomingLessonIds.filter((id) => !openedLessonSet.has(id));
+      const candidateUnitIds = upcomingUnitIds.filter((id) => !openedUnitSet.has(id));
+      if (candidateLessonIds.length === 0 && candidateUnitIds.length === 0) return { upcomingCount: 0 };
+
+      const count = await tx.exercise.count({
+        where: {
+          status: 'published',
+          archivedAt: null,
+          OR: [
+            { curriculumLessonId: { in: candidateLessonIds } },
+            { curriculumLessonId: null, curriculumUnitId: { in: candidateUnitIds } },
+          ],
+        },
+      });
+      return { upcomingCount: Math.min(count, 2) };
     }),
   ),
 

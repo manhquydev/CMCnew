@@ -177,11 +177,21 @@
   color: #ffffff; 
   border-color: rgba(255, 255, 255, 0.85); 
 }
-.climb-bnode__btn--upcoming { 
-  background: linear-gradient(135deg, #cbd5e1 0%, #e2e8f0 100%); 
-  color: #64748b; 
-  border-color: rgba(255, 255, 255, 0.8); 
+.climb-bnode__btn--upcoming {
+  background: linear-gradient(135deg, #cbd5e1 0%, #e2e8f0 100%);
+  color: #64748b;
+  border-color: rgba(255, 255, 255, 0.8);
   box-shadow: inset -3px -3px 6px rgba(0, 0, 0, 0.08), inset 3px 3px 6px rgba(255, 255, 255, 0.2);
+}
+
+/* Locked = not-yet-open work (Phase 6 count-only UX) — dimmer than --upcoming since there is
+   nothing to click; the whole node fades, not just the badge. */
+.climb-bnode--locked { opacity: 0.55; }
+.climb-bnode__btn--locked {
+  background: linear-gradient(135deg, #e2e8f0 0%, #f1f5f9 100%);
+  color: #94a3b8;
+  border-color: rgba(255, 255, 255, 0.6);
+  cursor: default;
 }
 
 .climb-bnode__meta {

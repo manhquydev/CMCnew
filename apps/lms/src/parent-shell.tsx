@@ -14,7 +14,6 @@ import {
   IconBell,
   IconStar,
   IconPhoto,
-  IconCalendarEvent,
   IconUserCircle,
 } from '@tabler/icons-react';
 import { NotificationCenter, useLmsSession, type LmsPrincipal } from '@cmc/ui';
@@ -22,7 +21,6 @@ import { ParentView, type ParentTab } from './parent-view';
 
 const PARENT_NAV: { tab: ParentTab; label: string; icon: React.ReactNode }[] = [
   { tab: 'overview', label: 'Tổng quan', icon: <IconHome size={18} stroke={1.5} /> },
-  { tab: 'schedule', label: 'Lịch học & Nội dung', icon: <IconCalendarEvent size={18} stroke={1.5} /> },
   { tab: 'sessions', label: 'Điểm danh & buổi học', icon: <IconPhoto size={18} stroke={1.5} /> },
   { tab: 'gradebook', label: 'Học bạ', icon: <IconReport size={18} stroke={1.5} /> },
   { tab: 'notifications', label: 'Thông báo', icon: <IconBell size={18} stroke={1.5} /> },
@@ -34,7 +32,7 @@ interface ParentShellProps {
   principal: LmsPrincipal;
 }
 
-const ALL_PARENT_TABS = new Set<string>(['overview', 'schedule', 'sessions', 'gradebook', 'notifications', 'rewards', 'profile']);
+const ALL_PARENT_TABS = new Set<string>(['overview', 'sessions', 'gradebook', 'notifications', 'rewards', 'profile']);
 
 export function ParentShell({ principal }: ParentShellProps) {
   const { logout } = useLmsSession();

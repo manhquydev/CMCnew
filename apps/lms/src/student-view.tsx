@@ -8,6 +8,7 @@ import {
   NotificationCenter,
   notifyError,
   notifySuccess,
+  giftImageSrc,
   type LmsPrincipal,
   type LiveNotification,
   type AnnotationData,
@@ -19,6 +20,7 @@ import {
   Card,
   Center,
   Group,
+  Image,
   Loader,
   Modal,
   SimpleGrid,
@@ -844,6 +846,23 @@ function CoursesTab({ refreshKey }: { refreshKey: number }) {
   );
 }
 
+/** Gift card image: shows the resolved photo, or falls back to the placeholder icon when
+ * `src` is null (no photo set) or the image fails to load (e.g. a dev-reset blob wipe). */
+function GiftPhoto({ src }: { src: string | null }) {
+  const [broken, setBroken] = useState(false);
+  const boxStyle = { height: 120, borderRadius: 'var(--cmc-radius-kid)', overflow: 'hidden' } as const;
+  if (!src || broken) {
+    return (
+      <Center style={{ ...boxStyle, background: 'var(--cmc-brand-muted)' }}>
+        <IconGift size={40} color="var(--cmc-brand)" />
+      </Center>
+    );
+  }
+  return (
+    <Image src={src} h={120} fit="cover" style={{ borderRadius: 'var(--cmc-radius-kid)' }} onError={() => setBroken(true)} alt="" />
+  );
+}
+
 function RewardsTab({ refreshKey }: { refreshKey: number }) {
   const [balance, setBalance] = useState<number | null>(null);
   const [gifts, setGifts] = useState<Gift[]>([]);
@@ -952,6 +971,7 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
                 p="xl"
               >
                 <Stack gap="xs" h="100%">
+                  <GiftPhoto src={giftImageSrc(g.imageUrl)} />
                   <Group gap="xs" align="center">
                     <IconGift size={22} color="var(--cmc-brand)" style={{ filter: 'drop-shadow(0 2px 4px rgba(0, 113, 227, 0.15))' }} />
                     <Text fw={800} size="md" style={{ color: '#1C3D5A', fontFamily: 'var(--cmc-font-bubble)' }}>{g.name}</Text>
