@@ -846,11 +846,21 @@ function CoursesTab({ refreshKey }: { refreshKey: number }) {
   );
 }
 
+// Fixed tile ratio so every gift photo occupies the same box regardless of the source photo's
+// own dimensions — without this, cards with a portrait photo vs. a landscape photo render at
+// different heights (image height = width / aspect-ratio), making the grid look uneven even
+// though each card is individually sized correctly to its own content.
+const GIFT_PHOTO_ASPECT_RATIO = '4 / 3';
+
 /** Gift card image: shows the resolved photo, or falls back to the placeholder icon when
  * `src` is null (no photo set) or the image fails to load (e.g. a dev-reset blob wipe). */
 function GiftPhoto({ src }: { src: string | null }) {
   const [broken, setBroken] = useState(false);
-  const boxStyle = { height: 120, borderRadius: 'var(--cmc-radius-kid)', overflow: 'hidden' } as const;
+  const boxStyle = {
+    aspectRatio: GIFT_PHOTO_ASPECT_RATIO,
+    borderRadius: 'var(--cmc-radius-kid)',
+    overflow: 'hidden',
+  } as const;
   if (!src || broken) {
     return (
       <Center style={{ ...boxStyle, background: 'var(--cmc-brand-muted)' }}>
@@ -861,15 +871,13 @@ function GiftPhoto({ src }: { src: string | null }) {
   return (
     <Image
       src={src}
-      h={120}
       w="100%"
       fit="cover"
-      // Stack (flex column, align-items:stretch) stretches this img's width to fill the
-      // card — with only `h` pinned and `w` left implicit, the browser recomputes height from
-      // the photo's own intrinsic aspect ratio once width is stretched, silently overriding
-      // `h={120}` (observed: a near-square photo rendered ~326px tall instead of 120). Pinning
-      // both dimensions explicitly (plus flexShrink:0) stops that recomputation.
-      style={{ borderRadius: 'var(--cmc-radius-kid)', flexShrink: 0 }}
+      // A pixel `h` here would have the same "browser recomputes height from the photo's own
+      // aspect ratio once width is stretched" problem seen before (see git history) — pinning
+      // an explicit `aspect-ratio` instead makes every card's photo tile the same height,
+      // regardless of the source photo's own dimensions, and is immune to that recomputation.
+      style={{ ...boxStyle, flexShrink: 0 }}
       onError={() => setBroken(true)}
       alt=""
     />
@@ -996,9 +1004,13 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
                   )}
                   <Group gap="xs" mt="xs">
                     <Badge color="yellow" variant="light" radius="xl" size="sm" style={{ fontFamily: 'var(--cmc-font-bubble)' }}>{g.starsRequired} sao</Badge>
-                    <Badge color={outOfStock ? 'red' : 'gray'} variant="light" radius="xl" size="sm" style={{ fontFamily: 'var(--cmc-font-friendly)' }}>
-                      {giftStockLabel(g.stock)}
-                    </Badge>
+                    {/* "Không giới hạn" (unlimited stock) is the default for every gift and adds
+                        no information — only show this badge when stock is actually limited. */}
+                    {g.stock !== -1 && (
+                      <Badge color={outOfStock ? 'red' : 'gray'} variant="light" radius="xl" size="sm" style={{ fontFamily: 'var(--cmc-font-friendly)' }}>
+                        {giftStockLabel(g.stock)}
+                      </Badge>
+                    )}
                   </Group>
                   <Button
                     className="cmc-clay-btn"
