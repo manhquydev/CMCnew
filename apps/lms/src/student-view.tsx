@@ -859,7 +859,20 @@ function GiftPhoto({ src }: { src: string | null }) {
     );
   }
   return (
-    <Image src={src} h={120} fit="cover" style={{ borderRadius: 'var(--cmc-radius-kid)' }} onError={() => setBroken(true)} alt="" />
+    <Image
+      src={src}
+      h={120}
+      w="100%"
+      fit="cover"
+      // Stack (flex column, align-items:stretch) stretches this img's width to fill the
+      // card — with only `h` pinned and `w` left implicit, the browser recomputes height from
+      // the photo's own intrinsic aspect ratio once width is stretched, silently overriding
+      // `h={120}` (observed: a near-square photo rendered ~326px tall instead of 120). Pinning
+      // both dimensions explicitly (plus flexShrink:0) stops that recomputation.
+      style={{ borderRadius: 'var(--cmc-radius-kid)', flexShrink: 0 }}
+      onError={() => setBroken(true)}
+      alt=""
+    />
   );
 }
 
@@ -959,7 +972,7 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
           <Text c="dimmed" style={{ fontFamily: 'var(--cmc-font-friendly)', fontWeight: 600 }}>Chưa có quà nào trong cửa hàng đổi thưởng.</Text>
         </Card>
       ) : (
-        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="xl">
+        <SimpleGrid cols={{ base: 1, sm: 2, md: 3 }} spacing="xl" style={{ alignItems: 'start' }}>
           {gifts.map((g) => {
             const outOfStock = g.stock === 0;
             const notEnough = stars < g.starsRequired;
@@ -970,7 +983,7 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
                 className="cmc-clay-card"
                 p="xl"
               >
-                <Stack gap="xs" h="100%">
+                <Stack gap="xs">
                   <GiftPhoto src={giftImageSrc(g.imageUrl)} />
                   <Group gap="xs" align="center">
                     <IconGift size={22} color="var(--cmc-brand)" style={{ filter: 'drop-shadow(0 2px 4px rgba(0, 113, 227, 0.15))' }} />
@@ -989,7 +1002,7 @@ function RewardsTab({ refreshKey }: { refreshKey: number }) {
                   </Group>
                   <Button
                     className="cmc-clay-btn"
-                    mt="auto"
+                    mt="sm"
                     size="sm"
                     onClick={() => redeem(g)}
                     loading={redeemingId === g.id}

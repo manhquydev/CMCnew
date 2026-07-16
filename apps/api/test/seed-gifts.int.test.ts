@@ -6,6 +6,13 @@ import { withRls, SUPER, uniq, superAdminUserId } from './helpers.js';
 // duplicate rows via @@unique([facilityId, name])), apply the Session 2 sao=file-number×5
 // mapping (baked into GIFT_DEFS), keep the two "Sticker" entries distinct, and NEVER un-archive
 // or overwrite a director's prior edits on re-run (create-if-absent only, `update: {}`).
+//
+// IMPORTANT: this test reuses the real GIFT_DEFS names (by design — it's testing the actual
+// production data shape). An EARLIER version of this test ran against `facility.findFirst()`
+// (whichever facility happened to be seeded first) and both mutated AND deleted rows by those
+// exact names — which collided with and destroyed the real seeded gifts once
+// `apps/api/scripts/seed-gifts.ts` had actually been run for real against that same facility.
+// This test MUST always run against its own throwaway facility, never a real one.
 let dbReachable = false;
 let facilityId: number;
 
@@ -13,8 +20,9 @@ beforeAll(async () => {
   try {
     await superAdminUserId();
     dbReachable = true;
-    const facility = await withRls(SUPER, (tx) => tx.facility.findFirst({ select: { id: true } }));
-    if (!facility) throw new Error('no seeded facility to test against');
+    const facility = await withRls(SUPER, (tx) =>
+      tx.facility.create({ data: { code: uniq('SEEDGIFT_FAC'), name: 'seed-gifts test facility' } }),
+    );
     facilityId = facility.id;
   } catch {
     console.warn('DB not reachable - seed-gifts tests skipped');
@@ -23,9 +31,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (!dbReachable) return;
-  await withRls(SUPER, (tx) =>
-    tx.gift.deleteMany({ where: { facilityId, name: { in: GIFT_DEFS.map((g) => g.name) } } }),
-  );
+  await withRls(SUPER, async (tx) => {
+    await tx.gift.deleteMany({ where: { facilityId } });
+    await tx.facility.delete({ where: { id: facilityId } });
+  });
 });
 
 function fakeRefFor(name: string): string {
