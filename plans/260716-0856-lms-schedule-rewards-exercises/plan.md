@@ -1,7 +1,7 @@
 ---
 title: "LMS: hide schedule, gift photos+upload+seed, exercises upcoming UX"
 description: ""
-status: in-progress
+status: completed
 priority: P2
 branch: "develop"
 tags: []
@@ -50,7 +50,7 @@ Ba yêu cầu LMS độc lập, làm test-first (TDD) để giữ nguyên hành 
 | 2 | [Gift Photo Store + Endpoints](./phase-02-gift-photo-store-endpoints.md) | Done |
 | 3 | [Gift Upload UI](./phase-03-gift-upload-ui.md) | Done |
 | 4 | [Render Gift Image in LMS](./phase-04-render-gift-image-lms.md) | Done (students only — parent has no gift catalog, user-confirmed scope) |
-| 5 | [Seed Gifts All Facilities](./phase-05-seed-gifts-all-facilities.md) | Dev done, **prod deferred** — awaiting user confirmation |
+| 5 | [Seed Gifts All Facilities](./phase-05-seed-gifts-all-facilities.md) | Done — prod seed run 2026-07-16, verified idempotent on real prod DB |
 | 6 | [Exercises Upcoming UX](./phase-06-exercises-upcoming-ux.md) | Done |
 
 ## Dependencies

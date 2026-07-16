@@ -1,7 +1,7 @@
 ---
 phase: 5
 title: "Seed Gifts All Facilities"
-status: dev-done-prod-pending
+status: done
 priority: P2
 dependencies: [2, 4]
 ---
@@ -49,10 +49,11 @@ dependencies: [2, 4]
 8. **Prod**: DỪNG — xác nhận user + chạy lại tiền-kiểm trùng tên (bước 2) trên chính DB prod + xác nhận thư mục bind-mount `gift-photos` đã sẵn sàng trên host (driver ảnh prod = **disk + bind-mount**, xem `docs/decisions/0041-gift-photo-store-disk-driver.md`) trước khi chạy. Sau xác nhận: chạy bằng owner/`DIRECT_URL`, log số bản ghi/ facility.
 
 ## Success Criteria
-- [x] Migration `@@unique([facilityId, name])` applied (dev). **Prod: CHƯA chạy** — chờ user xác nhận riêng (đúng gate high-risk của plan).
+- [x] Migration `@@unique([facilityId, name])` applied (dev + **prod**, verified via `pg_indexes` on `cmcnew-prod-postgres-1`: `gift_facility_id_name_key` present).
 - [x] `seed-gifts.int.test.ts` xanh: idempotent + sao×5 + không un-archive + không đè giá trị GĐKD.
 - [x] Dev: mọi facility (HQ, CS2) đủ 21/21 quà; verify trực tiếp trên browser — ảnh đúng, sao đúng, sort theo sao tăng dần. Seed chạy 2 lần xác nhận idempotent thật (không phải chỉ test).
-- [ ] **Prod: CHƯA chạy** — deferred, chờ user xác nhận riêng theo đúng gate của plan. Trước khi chạy: (1) re-run tiền-kiểm trùng tên trên DB prod, (2) xác nhận thư mục bind-mount `gift-photos` sẵn sàng trên host (driver đã đổi sang disk+bind-mount, xem decision 0041).
+- [x] **Prod: đã chạy** (2026-07-16, user xác nhận riêng). Tiền-kiểm trùng tên: 0 dòng trùng. Bind-mount `gift-photos` đã active đúng destination. Kết quả: facility `LD` (id=1, facility DUY NHẤT hiện có trên prod) 21/21 gifts, chạy lại lần 2 vẫn 21 (không 42) — idempotent xác nhận thật trên DB prod, không chỉ test.
+  - **Gap phát hiện khi chạy prod (chưa có trong plan gốc)**: `apps/api/Dockerfile` không `COPY` thư mục `assets/` gốc repo vào image → container prod thiếu nguồn ảnh để script ingest (dù đích ghi — thư mục bind-mount — vẫn đúng). Khắc phục tạm thời bằng `docker cp` 21 ảnh vào container (ephemeral, mất khi container tái tạo lần deploy sau — không ảnh hưởng vì ảnh đã ingest xong nằm ở bind-mount, không cần lại assets/ nữa trừ khi cần seed thêm facility mới). Cũng phát hiện `gift-photos` bind-mount trên host bị `root:root` (chưa từng chown) → `EACCES` khi container chạy user `cmc` (uid 100/gid 101); đã `chown -R 100:101`. **Follow-up chưa làm**: thêm `assets/` vào `Dockerfile` COPY + thêm `gift-photos` chown vào `scripts/ensure-blob-store-dirs.sh` để lần seed facility mới sau này không cần thao tác tay.
 
 ## Risk Assessment
 - **High-risk**: migration + ghi prod toàn cơ sở. Bắt buộc dev-verify + user-confirm + driver ảnh prod OK trước prod.
